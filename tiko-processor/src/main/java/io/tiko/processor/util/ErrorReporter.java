@@ -128,4 +128,13 @@ public final class ErrorReporter {
             "Ensure each qualifier is unique within a type"
         );
     }
+
+    public void ambiguousProviders(Element element, String type, String providers, String simpleTypeName) {
+        error(
+            element,
+            "Multiple unnamed providers for type " + type + ": " + providers,
+            "Add @Named(\"...\") to each and use container.get(" + simpleTypeName + ".class, \"name\")",
+            "Keep one provider unnamed as the default and give the others @Component(name = \"...\") or @Produces(name = \"...\")"
+        );
+    }
 }

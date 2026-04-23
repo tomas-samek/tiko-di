@@ -600,18 +600,33 @@ public final class ContainerGenerator {
                 .addParameter(classType, "type")
                 .returns(typeVar);
 
-        // Generate if-else chain for each component
+        // Generate if-else chain for each component.
+        // Named components match only their concrete class; unnamed components also match
+        // their implemented interface (the "default" for that interface).
         boolean first = true;
         for (ComponentModel component : context.getActiveComponents()) {
             TypeName componentType = ClassName.get(component.getTypeElement());
             String getterName = "get" + component.getClassName();
+            boolean includeInterface = component.getName().isEmpty()
+                    && component.getImplementedInterface().isPresent();
 
-            if (first) {
-                method.beginControlFlow("if (type == $T.class)", componentType);
-                first = false;
+            if (includeInterface) {
+                TypeName ifaceType = TypeName.get(component.getImplementedInterface().get());
+                if (first) {
+                    method.beginControlFlow(
+                            "if (type == $T.class || type == $T.class)", componentType, ifaceType);
+                } else {
+                    method.nextControlFlow(
+                            "else if (type == $T.class || type == $T.class)", componentType, ifaceType);
+                }
             } else {
-                method.nextControlFlow("else if (type == $T.class)", componentType);
+                if (first) {
+                    method.beginControlFlow("if (type == $T.class)", componentType);
+                } else {
+                    method.nextControlFlow("else if (type == $T.class)", componentType);
+                }
             }
+            first = false;
             method.addStatement("return (T) $L()", getterName);
         }
 

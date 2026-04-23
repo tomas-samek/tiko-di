@@ -448,6 +448,12 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
             valid = false;
         }
 
+        // Detect ambiguous unnamed providers (two+ @Components/@Produces for same type)
+        AmbiguityValidator ambiguityValidator = new AmbiguityValidator(context);
+        if (!ambiguityValidator.validate()) {
+            valid = false;
+        }
+
         return valid;
     }
 
