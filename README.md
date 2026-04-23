@@ -629,20 +629,30 @@ mvn clean install -pl tiko-api
 
 ### Current Status: Alpha
 
-- ✅ Core API design complete
-- ✅ Module structure established
-- ✅ Annotation definitions
-- 🚧 Annotation processor (in progress)
-- 🚧 Runtime container (in progress)
-- 🚧 Event system (in progress)
+Core DI is functional end-to-end. The annotation processor generates factories, a container implementation per module, and proxies for cross-scope injection. The pieces below are implemented and covered by integration tests in `tiko-examples/01_basic_di`.
+
+- ✅ Core API design
+- ✅ Module structure
+- ✅ Annotation processor: `@Component`, `@Produces`, `@EventHandler` collection and validation
+- ✅ Dependency graph validation, circular-dependency detection, scope rules
+- ✅ Compile-time ambiguity detection for unnamed providers of the same type
+- ✅ Code generation: per-component factories, `TikoContainerImpl`, cross-scope proxies, event registry
+- ✅ Runtime container: constructor injection, SINGLETON/REQUEST/EVENT/PROTOTYPE scopes, `@PostConstruct`/`@PreDestroy`, scope management (`runInRequestScope`/`runInEventScope` + `supplyIn*`)
+- ✅ Container lookup API: `get(Class)`, `get(Class, String)` with interface dispatch, `getProvider(...)` (lazy, scope-preserving)
+- ✅ `@Produces` factory methods: instance + static, named + unnamed, with dependency injection
+- ✅ In-memory event bus (`tiko-event-local`) with `@EventHandler` subscription
+- ✅ Multi-module aggregation via `AggregatingContainer` + `META-INF/tiko/` metadata
+- 🚧 Lifecycle events (`ApplicationStartedEvent`, `RequestStartedEvent`, etc.) — types defined, publishing wiring not yet verified
+- 🚧 `@EventTrigger` chains (declarative event workflows, guards, spread)
 
 ### Planned Features
 
 - **Phase 1** (Current)
-    - Complete annotation processor with full validation
-    - Runtime container with all scopes
-    - In-memory event bus
-    - Comprehensive test suite
+    - Complete lifecycle-event publishing and verify `@EventTrigger` codegen
+    - Validator polish (see known gaps below)
+    - `module-info`-compatible module naming so multi-module apps can split API and impl modules cleanly
+    - `container.pick(Class)` fluent API for multi-axis lookup (name + module + profile)
+    - Cross-module ambiguity detection surfaced at container startup
 
 - **Phase 2** (Next)
     - Kafka event bus integration
@@ -656,11 +666,16 @@ mvn clean install -pl tiko-api
     - GraalVM native image optimization
     - IDE plugin for better developer experience
 
+### Known Limitations
+
+- Two README-documented `@Produces` patterns trip the current validator: a `@Component` class with a static `@Produces` returning the same type is rejected, and private constructor parameters on a `@Component` are treated as injectable dependencies. Both are compile-time false positives and will be fixed in the validator-polish pass.
+- `container.get(Class, String)` uses `isAssignableFrom` matching; `container.get(Class)` uses exact class or exact implemented-interface matching. The asymmetry is intentional for now but may be unified in Phase 1.
+
 ## Philosophy
 
 Tiko is built on these principles:
 
-1. **Compile-time safety** - Catch all errors before runtime
+1. **Compile-time safety** - Catch all errors the compiler can see. The only runtime exceptions Tiko throws fire at container startup - never during `container.get(...)` in a running application.
 2. **Simplicity** - Minimal concepts, intuitive API
 3. **Explicitness** - No magic, generated code is readable
 4. **Performance** - Zero reflection, fast startup, low memory
@@ -700,9 +715,9 @@ Inspired by the best aspects of existing DI frameworks:
 
 ## Contact
 
-Tomas Samek - [GitHub](https://github.com/jerry-samek)
+Tomas Samek - [GitHub](https://github.com/tomas-samek)
 
-Project Link: [https://github.com/jerry-samek/tiko](https://github.com/jerry-samek/tiko)
+Project Link: [https://github.com/tomas-samek/tiko-di](https://github.com/tomas-samek/tiko-di)
 
 ---
 
