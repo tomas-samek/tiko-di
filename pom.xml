@@ -33,6 +33,7 @@
         <javapoet.version>0.1.0</javapoet.version>
         <slf4j.version>2.0.9</slf4j.version>
         <junit.version>5.10.1</junit.version>
+        <compile-testing.version>0.21.0</compile-testing.version>
     </properties>
 
     <dependencyManagement>
@@ -125,6 +126,12 @@
                 <groupId>org.mockito</groupId>
                 <artifactId>mockito-junit-jupiter</artifactId>
                 <version>5.7.0</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.google.testing.compile</groupId>
+                <artifactId>compile-testing</artifactId>
+                <version>${compile-testing.version}</version>
                 <scope>test</scope>
             </dependency>
         </dependencies>

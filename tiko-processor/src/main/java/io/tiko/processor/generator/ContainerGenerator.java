@@ -5,6 +5,7 @@ import io.tiko.Container;
 import io.tiko.EventBus;
 import io.tiko.Scope;
 import io.tiko.processor.model.ComponentModel;
+import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
 import io.tiko.processor.util.ProcessorContext;
 
@@ -238,9 +239,100 @@ public final class ContainerGenerator {
             }
         }
 
-        // TODO: Add getters for factory methods
+        for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
+            methods.add(createFactoryMethodGetter(factory));
+        }
 
         return methods;
+    }
+
+    /**
+     * Creates a public getter for a @Produces factory method. The getter applies the
+     * method's scope (singleton cache / request / event / prototype) around a call to
+     * the factory method itself (instance or static).
+     */
+    private MethodSpec createFactoryMethodGetter(FactoryMethodModel factory) {
+        TypeName returnType = TypeName.get(factory.getReturnType());
+        String methodName = factoryGetterName(factory);
+        String storageKey = factory.getComponentKey();
+        String callExpr = buildFactoryCallExpression(factory);
+
+        MethodSpec.Builder method = MethodSpec.methodBuilder(methodName)
+                .addModifiers(Modifier.PUBLIC)
+                .returns(returnType);
+
+        switch (factory.getScope()) {
+            case SINGLETON -> method.addStatement(
+                    "return ($T) singletons.computeIfAbsent($S, k -> $L)",
+                    returnType, storageKey, callExpr);
+            case REQUEST -> method.addStatement(
+                    "return ($T) requestScoped.get().computeIfAbsent($S, k -> $L)",
+                    returnType, storageKey, callExpr);
+            case EVENT -> method.addStatement(
+                    "return ($T) eventScoped.get().computeIfAbsent($S, k -> $L)",
+                    returnType, storageKey, callExpr);
+            case PROTOTYPE -> method.addStatement("return $L", callExpr);
+        }
+
+        return method.build();
+    }
+
+    /**
+     * Builds the expression that invokes the factory method, including dependency resolution.
+     * Instance methods are called on the declaring @Component singleton; static methods are called directly.
+     */
+    private String buildFactoryCallExpression(FactoryMethodModel factory) {
+        List<String> args = new ArrayList<>();
+        for (DependencyModel dep : factory.getDependencies()) {
+            args.add(generateContainerGetCall(dep));
+        }
+        String argList = String.join(", ", args);
+        String declaringClassName = factory.getDeclaringClass().getSimpleName().toString();
+
+        if (factory.isStatic()) {
+            return String.format("%s.%s(%s)", declaringClassName, factory.getMethodName(), argList);
+        } else {
+            return String.format("get%s().%s(%s)", declaringClassName, factory.getMethodName(), argList);
+        }
+    }
+
+    /**
+     * Resolves a dependency to an inline expression callable from within the container class.
+     * Mirrors {@link ComponentFactoryGenerator#generateContainerGetCall} but emits unqualified
+     * calls (no "container." prefix) since we are inside the container itself.
+     */
+    private String generateContainerGetCall(DependencyModel dependency) {
+        String typeName = dependency.isProvider()
+                ? dependency.getUnwrappedType().get().toString()
+                : dependency.getTypeName();
+
+        Object provider = context.findComponentOrFactory(dependency.getDependencyKey()).orElse(null);
+
+        String call;
+        if (provider instanceof FactoryMethodModel factoryDep) {
+            call = factoryGetterName(factoryDep) + "()";
+        } else if (provider instanceof ComponentModel component) {
+            String methodName = "get" + component.getClassName();
+            call = dependency.getQualifier()
+                    .map(q -> methodName + "(\"" + q + "\")")
+                    .orElse(methodName + "()");
+        } else {
+            String methodName = "get" + simpleClassName(typeName);
+            call = dependency.getQualifier()
+                    .map(q -> methodName + "(\"" + q + "\")")
+                    .orElse(methodName + "()");
+        }
+
+        return dependency.isProvider() ? "() -> " + call : call;
+    }
+
+    private static String factoryGetterName(FactoryMethodModel factory) {
+        return "produce_" + factory.getFactoryIdentifier();
+    }
+
+    private static String simpleClassName(String qualifiedName) {
+        int lastDot = qualifiedName.lastIndexOf('.');
+        return lastDot >= 0 ? qualifiedName.substring(lastDot + 1) : qualifiedName;
     }
 
     /**
@@ -523,7 +615,21 @@ public final class ContainerGenerator {
             method.addStatement("return (T) $L()", getterName);
         }
 
-        if (!context.getActiveComponents().isEmpty()) {
+        // Unnamed factory-produced components (named ones are only reachable via get(Class, String))
+        for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
+            if (factory.getName() != null && !factory.getName().isEmpty()) continue;
+            TypeName producedType = TypeName.get(factory.getReturnType());
+
+            if (first) {
+                method.beginControlFlow("if (type == $T.class)", producedType);
+                first = false;
+            } else {
+                method.nextControlFlow("else if (type == $T.class)", producedType);
+            }
+            method.addStatement("return (T) $L()", factoryGetterName(factory));
+        }
+
+        if (!first) {
             method.endControlFlow();
         }
 
@@ -536,7 +642,8 @@ public final class ContainerGenerator {
     }
 
     /**
-     * Creates get(Class, String) method.
+     * Creates get(Class, String) method. Dispatches by (name + assignable type)
+     * so lookup by concrete class or implemented interface both work.
      */
     private MethodSpec createGetWithNameMethod() {
         TypeVariableName typeVar = TypeVariableName.get("T");
@@ -545,20 +652,76 @@ public final class ContainerGenerator {
                 typeVar
         );
 
-        return MethodSpec.methodBuilder("get")
+        MethodSpec.Builder method = MethodSpec.methodBuilder("get")
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
+                .addAnnotation(AnnotationSpec.builder(SuppressWarnings.class)
+                        .addMember("value", "$S", "unchecked")
+                        .build())
                 .addTypeVariable(typeVar)
                 .addParameter(classType, "type")
                 .addParameter(String.class, "name")
-                .returns(typeVar)
-                .addStatement("throw new $T($S)", UnsupportedOperationException.class,
-                    "get(Class, String) not yet implemented")
-                .build();
+                .returns(typeVar);
+
+        List<ComponentModel> named = context.getActiveComponents().stream()
+                .filter(c -> c.getName().isPresent())
+                .toList();
+
+        boolean first = true;
+        for (ComponentModel component : named) {
+            TypeName componentType = ClassName.get(component.getTypeElement());
+            String getterName = "get" + component.getClassName();
+            String componentName = component.getName().get();
+
+            if (first) {
+                method.beginControlFlow(
+                        "if ($S.equals(name) && type.isAssignableFrom($T.class))",
+                        componentName, componentType);
+                first = false;
+            } else {
+                method.nextControlFlow(
+                        "else if ($S.equals(name) && type.isAssignableFrom($T.class))",
+                        componentName, componentType);
+            }
+            method.addStatement("return (T) $L()", getterName);
+        }
+
+        // Named factory-produced components
+        for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
+            if (factory.getName() == null || factory.getName().isEmpty()) continue;
+            TypeName producedType = TypeName.get(factory.getReturnType());
+            String factoryName = factory.getName();
+
+            if (first) {
+                method.beginControlFlow(
+                        "if ($S.equals(name) && type.isAssignableFrom($T.class))",
+                        factoryName, producedType);
+                first = false;
+            } else {
+                method.nextControlFlow(
+                        "else if ($S.equals(name) && type.isAssignableFrom($T.class))",
+                        factoryName, producedType);
+            }
+            method.addStatement("return (T) $L()", factoryGetterName(factory));
+        }
+
+        if (!first) {
+            method.endControlFlow();
+        }
+
+        method.addStatement(
+                "throw new $T($S + name + $S + type.getName())",
+                IllegalArgumentException.class,
+                "No component found for name '",
+                "' and type: ");
+
+        return method.build();
     }
 
     /**
-     * Creates getProvider(Class) method.
+     * Creates getProvider(Class) method — a lazy handle that delegates to get(type)
+     * on each invocation, so scope semantics (singleton cache, request/event resolution,
+     * prototype re-creation) are preserved.
      */
     private MethodSpec createGetProviderMethod() {
         TypeVariableName typeVar = TypeVariableName.get("T");
@@ -577,8 +740,7 @@ public final class ContainerGenerator {
                 .addTypeVariable(typeVar)
                 .addParameter(classType, "type")
                 .returns(providerType)
-                .addStatement("throw new $T($S)", UnsupportedOperationException.class,
-                    "getProvider(Class) not yet implemented")
+                .addStatement("return () -> get(type)")
                 .build();
     }
 
@@ -603,8 +765,7 @@ public final class ContainerGenerator {
                 .addParameter(classType, "type")
                 .addParameter(String.class, "name")
                 .returns(providerType)
-                .addStatement("throw new $T($S)", UnsupportedOperationException.class,
-                    "getProvider(Class, String) not yet implemented")
+                .addStatement("return () -> get(type, name)")
                 .build();
     }
 
