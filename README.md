@@ -2,7 +2,8 @@
 
 > A modern, compile-time dependency injection framework for Java 17+ with event-driven architecture
 
-[![Java](https://img.shields.io/badge/Java-17+-blue.svg)](https://www.oracle.com/java/)
+[![Build](https://github.com/tomas-samek/tiko-di/actions/workflows/maven.yml/badge.svg?branch=main)](https://github.com/tomas-samek/tiko-di/actions/workflows/maven.yml)
+[![Java](https://img.shields.io/badge/Java-17%20%7C%2021%20%7C%2025%20%7C%2026-blue.svg)](https://www.oracle.com/java/)
 [![Maven](https://img.shields.io/badge/Maven-3.8+-red.svg)](https://maven.apache.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
