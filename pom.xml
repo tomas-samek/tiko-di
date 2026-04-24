@@ -6,7 +6,7 @@
 
     <groupId>io.tiko</groupId>
     <artifactId>tiko-parent</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
     <packaging>pom</packaging>
 
     <name>Tiko DI</name>
@@ -143,11 +143,13 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
-                    <version>3.11.0</version>
+                    <version>3.13.0</version>
                     <configuration>
                         <source>17</source>
                         <target>17</target>
                         <release>17</release>
+                        <!-- Explicit opt-in required for JDK 23+ (silent skip otherwise) -->
+                        <proc>full</proc>
                     </configuration>
                 </plugin>
                 <plugin>

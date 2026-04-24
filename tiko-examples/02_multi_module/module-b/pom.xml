@@ -8,7 +8,7 @@
     <parent>
         <groupId>io.tiko</groupId>
         <artifactId>02_multi_module</artifactId>
-        <version>1.0-SNAPSHOT</version>
+        <version>0.1.0</version>
     </parent>
 
     <artifactId>module-b</artifactId>

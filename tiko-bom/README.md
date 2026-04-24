@@ -26,7 +26,7 @@ Add the Tiko BOM to your project's `dependencyManagement` section:
         <dependency>
             <groupId>io.tiko</groupId>
             <artifactId>tiko-bom</artifactId>
-            <version>1.0-SNAPSHOT</version>
+            <version>0.1.0</version>
             <type>pom</type>
             <scope>import</scope>
         </dependency>
@@ -111,7 +111,7 @@ The BOM manages versions for:
 
     <groupId>com.example</groupId>
     <artifactId>my-app</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
@@ -124,7 +124,7 @@ The BOM manages versions for:
             <dependency>
                 <groupId>io.tiko</groupId>
                 <artifactId>tiko-bom</artifactId>
-                <version>1.0-SNAPSHOT</version>
+                <version>0.1.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -179,7 +179,7 @@ The BOM has its own version properties to avoid circular dependency issues:
 ```xml
 <!-- tiko-bom/pom.xml -->
 <properties>
-    <tiko.version>1.0-SNAPSHOT</tiko.version>
+    <tiko.version>0.1.0</tiko.version>
     <auto-service.version>1.1.1</auto-service.version>
     <!-- ... etc -->
 </properties>

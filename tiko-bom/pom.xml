@@ -7,7 +7,7 @@
 
     <groupId>io.tiko</groupId>
     <artifactId>tiko-bom</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
     <packaging>pom</packaging>
 
     <name>Tiko DI - BOM</name>
@@ -15,7 +15,7 @@
 
     <properties>
         <!-- Tiko DI version -->
-        <tiko.version>1.0-SNAPSHOT</tiko.version>
+        <tiko.version>0.1.0</tiko.version>
 
         <!-- Third-party dependency versions -->
         <auto-service.version>1.1.1</auto-service.version>
