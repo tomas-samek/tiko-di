@@ -48,9 +48,13 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_args: "--model claude-opus-4-7"
+          # Use the built-in /review slash command so the action runs on the
+          # review pipeline (buffers inline comments and posts them at the end)
+          # instead of in free-form agent mode where comments are never buffered.
           prompt: |
-            Review the diff for this pull request and post inline comments where
-            you find concrete issues. Focus on:
+            /review
+
+            Focus on:
               - Correctness bugs and missing edge cases
               - Public API changes (tiko-api): backward compatibility, naming, Javadoc completeness
               - Annotation processor: validation gaps, generated-code soundness, error message quality
