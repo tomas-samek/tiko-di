@@ -195,9 +195,10 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
             if (constructor == null) {
                 context.getErrorReporter().error(
                         typeElement,
-                        "@Component must have exactly one constructor annotated with @Inject or a single constructor",
+                        "@Component must have an @Inject-annotated constructor or a single public constructor",
                         "Add @Inject annotation to a constructor",
-                        "Ensure only one constructor exists if not using @Inject"
+                        "Ensure only one public constructor exists if not using @Inject",
+                        "If instantiation goes through a static @Produces factory, no usable constructor is required"
                 );
                 return null;
             }
@@ -241,38 +242,42 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
     }
 
     /**
-     * Finds the constructor to use for injection.
+     * Finds the constructor to use for injection. Selection rule:
+     *   1. an @Inject-annotated constructor (any visibility) wins; or
+     *   2. the sole public constructor when no @Inject is present.
+     * Constructors that are not public and not @Inject-annotated are ignored — their
+     * parameters are not injection points (issue #7).
      */
     private ExecutableElement findInjectConstructor(TypeElement typeElement) {
-        List<ExecutableElement> constructors = new ArrayList<>();
+        List<ExecutableElement> publicConstructors = new ArrayList<>();
         ExecutableElement injectConstructor = null;
 
         for (Element element : typeElement.getEnclosedElements()) {
-            if (element.getKind() == ElementKind.CONSTRUCTOR) {
-                ExecutableElement constructor = (ExecutableElement) element;
-                constructors.add(constructor);
+            if (element.getKind() != ElementKind.CONSTRUCTOR) continue;
+            ExecutableElement constructor = (ExecutableElement) element;
 
-                if (constructor.getAnnotation(Inject.class) != null) {
-                    if (injectConstructor != null) {
-                        context.getErrorReporter().error(
-                                typeElement,
-                                "Multiple constructors annotated with @Inject"
-                        );
-                        return null;
-                    }
-                    injectConstructor = constructor;
+            if (constructor.getAnnotation(Inject.class) != null) {
+                if (injectConstructor != null) {
+                    context.getErrorReporter().error(
+                            typeElement,
+                            "Multiple constructors annotated with @Inject"
+                    );
+                    return null;
                 }
+                injectConstructor = constructor;
+            }
+
+            if (constructor.getModifiers().contains(Modifier.PUBLIC)) {
+                publicConstructors.add(constructor);
             }
         }
 
-        // If @Inject found, use it
         if (injectConstructor != null) {
             return injectConstructor;
         }
 
-        // Otherwise, require exactly one constructor
-        if (constructors.size() == 1) {
-            return constructors.get(0);
+        if (publicConstructors.size() == 1) {
+            return publicConstructors.get(0);
         }
 
         return null;
