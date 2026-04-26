@@ -81,6 +81,22 @@ public interface Container extends AutoCloseable {
     <T> Provider<T> getProvider(Class<T> type, String name);
 
     /**
+     * Entry point for the multi-axis lookup builder. Use {@link Pick#withName(String)}
+     * to add a qualifier and one of {@link Pick#resolve()},
+     * {@link Pick#asProvider()}, {@link Pick#orDefault(Object)} as the terminal.
+     *
+     * <p>{@code container.pick(Type.class).resolve()} with no filters is equivalent
+     * to {@link #get(Class)}.
+     *
+     * @param type the class of the component
+     * @param <T>  the type of the component
+     * @return a fluent builder
+     */
+    default <T> Pick<T> pick(Class<T> type) {
+        return new DefaultPick<>(this, type);
+    }
+
+    /**
      * Executes the given runnable within a request scope.
      * <p>
      * Request-scoped beans created during execution will be destroyed
