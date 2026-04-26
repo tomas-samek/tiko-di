@@ -11,6 +11,7 @@ import javax.lang.model.element.TypeElement;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Generates factory classes for @Component annotated classes.
@@ -120,11 +121,16 @@ public final class ComponentFactoryGenerator {
             }
         }
 
-        // Create instance
-        if (parameterNames.isEmpty()) {
+        // Create instance — via static @Produces factory method if present, else constructor.
+        Optional<ExecutableElement> staticFactory = component.getStaticFactoryMethod();
+        String params = String.join(", ", parameterNames);
+        if (staticFactory.isPresent()) {
+            String factoryMethodName = staticFactory.get().getSimpleName().toString();
+            methodBuilder.addStatement(
+                    "$T instance = $T.$L($L)", componentClass, componentClass, factoryMethodName, params);
+        } else if (parameterNames.isEmpty()) {
             methodBuilder.addStatement("$T instance = new $T()", componentClass, componentClass);
         } else {
-            String params = String.join(", ", parameterNames);
             methodBuilder.addStatement("$T instance = new $T($L)", componentClass, componentClass, params);
         }
 

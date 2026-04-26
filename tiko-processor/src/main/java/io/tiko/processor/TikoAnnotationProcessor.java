@@ -178,20 +178,31 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
     private ComponentModel buildComponentModel(TypeElement typeElement) {
         Component annotation = typeElement.getAnnotation(Component.class);
 
-        // Find @Inject constructor
-        ExecutableElement constructor = findInjectConstructor(typeElement);
-        if (constructor == null) {
-            context.getErrorReporter().error(
-                    typeElement,
-                    "@Component must have exactly one constructor annotated with @Inject or a single constructor",
-                    "Add @Inject annotation to a constructor",
-                    "Ensure only one constructor exists if not using @Inject"
-            );
-            return null;
-        }
+        // Detect a self-@Produces method: a static @Produces method on this class
+        // returning this class with the same qualifier name. When present, it acts
+        // as the bean's instantiation strategy (replaces the constructor call).
+        ExecutableElement staticFactoryMethod = findSelfStaticFactory(typeElement, annotation.name());
 
-        // Build dependencies from constructor parameters
-        List<DependencyModel> dependencies = buildDependencies(constructor);
+        ExecutableElement constructor;
+        List<DependencyModel> dependencies;
+        if (staticFactoryMethod != null) {
+            // Static factory governs instantiation; constructor is optional.
+            constructor = findInjectConstructor(typeElement);  // may be null when private/multiple
+            dependencies = buildDependencies(staticFactoryMethod);
+        } else {
+            // Standard path: require a usable constructor.
+            constructor = findInjectConstructor(typeElement);
+            if (constructor == null) {
+                context.getErrorReporter().error(
+                        typeElement,
+                        "@Component must have exactly one constructor annotated with @Inject or a single constructor",
+                        "Add @Inject annotation to a constructor",
+                        "Ensure only one constructor exists if not using @Inject"
+                );
+                return null;
+            }
+            dependencies = buildDependencies(constructor);
+        }
 
         // Find @PostConstruct and @PreDestroy methods
         List<ExecutableElement> postConstructMethods = findAnnotatedMethods(typeElement, PostConstruct.class);
@@ -209,9 +220,15 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
                 .name(annotation.name())
                 .profiles(Arrays.asList(annotation.profiles()))
                 .dependencies(dependencies)
-                .constructor(constructor)
                 .postConstructMethods(postConstructMethods)
                 .preDestroyMethods(preDestroyMethods);
+
+        if (constructor != null) {
+            builder.constructor(constructor);
+        }
+        if (staticFactoryMethod != null) {
+            builder.staticFactoryMethod(staticFactoryMethod);
+        }
 
         implementedInterface.ifPresent(builder::implementedInterface);
 
@@ -332,11 +349,51 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
                 continue;
             }
 
+            // Skip a self-@Produces method already absorbed by its @Component model
+            // (static method on the component class returning that class with matching qualifier).
+            if (isSelfStaticFactory(methodElement)) {
+                continue;
+            }
+
             FactoryMethodModel factory = buildFactoryMethodModel(methodElement);
             if (factory != null) {
                 context.registerFactoryMethod(factory);
             }
         }
+    }
+
+    /**
+     * Returns the static @Produces method on {@code typeElement} that returns the same
+     * type with a qualifier matching {@code componentName}, if present. Used so the
+     * factory method becomes the component's instantiation strategy instead of a
+     * competing provider.
+     */
+    private ExecutableElement findSelfStaticFactory(TypeElement typeElement, String componentName) {
+        for (Element element : typeElement.getEnclosedElements()) {
+            if (element.getKind() != ElementKind.METHOD) continue;
+            ExecutableElement method = (ExecutableElement) element;
+            Produces produces = method.getAnnotation(Produces.class);
+            if (produces == null) continue;
+            if (!method.getModifiers().contains(Modifier.STATIC)) continue;
+            if (!processingEnv.getTypeUtils().isSameType(method.getReturnType(), typeElement.asType())) continue;
+            if (!Objects.equals(produces.name(), componentName)) continue;
+            return method;
+        }
+        return null;
+    }
+
+    /**
+     * Predicate form of {@link #findSelfStaticFactory} for use during factory collection.
+     */
+    private boolean isSelfStaticFactory(ExecutableElement methodElement) {
+        if (!methodElement.getModifiers().contains(Modifier.STATIC)) return false;
+        Element enclosing = methodElement.getEnclosingElement();
+        if (!(enclosing instanceof TypeElement declaringType)) return false;
+        Component componentAnnotation = declaringType.getAnnotation(Component.class);
+        if (componentAnnotation == null) return false;
+        if (!processingEnv.getTypeUtils().isSameType(methodElement.getReturnType(), declaringType.asType())) return false;
+        Produces produces = methodElement.getAnnotation(Produces.class);
+        return produces != null && Objects.equals(produces.name(), componentAnnotation.name());
     }
 
     /**
