@@ -36,6 +36,7 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
+      id-token: write
 
     steps:
       - uses: actions/checkout@v4
@@ -46,8 +47,8 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_model: claude-opus-4-7
-          direct_prompt: |
+          claude_args: "--model claude-opus-4-7"
+          prompt: |
             Review the diff for this pull request and post inline comments where
             you find concrete issues. Focus on:
               - Correctness bugs and missing edge cases
