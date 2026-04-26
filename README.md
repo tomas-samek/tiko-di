@@ -19,7 +19,7 @@ event-driven capabilities that work seamlessly across local and distributed depl
 - 🎯 **No Reflection** - Pure generated code, GraalVM native image ready
 - 🔄 **Event-Driven** - Transparent local/distributed event handling
 - 🚀 **Fast Startup** - No classpath scanning or runtime proxy generation
-- 📦 **Lightweight** - Core runtime ~100KB with zero dependencies
+- 📦 **Lightweight** - Core runtime targets ~100KB with zero dependencies beyond `tiko-api`
 - 🔍 **Clear Errors** - Compile-time errors suggest fixes, not just report problems
 - ☕ **Modern Java** - Leverages Java 17+ features (records, sealed classes, pattern matching)
 
@@ -140,7 +140,7 @@ ls target/generated-sources/annotations/io/tiko/generated/
 
 If that directory is empty or missing, processing was skipped — re-check the compiler plugin version and the `<annotationProcessorPaths>` / `annotationProcessor` declaration.
 
-### 30-Second Example
+### Quick Example
 
 ```java
 // 1. Define your components
@@ -148,6 +148,7 @@ If that directory is empty or missing, processing was skipped — re-check the c
 public class UserRepository {
   public User findById(String id) {
     // Database access...
+    return null; // simplified for the example
   }
 }
 
@@ -323,6 +324,26 @@ public class DataService {
 }
 ```
 
+### Fluent Lookup with `pick()`
+
+`container.get(Class)` and `container.get(Class, String)` are the 80% shortcuts. For anything else — a fallback when the bean is missing, a lazy `Provider`, or future axes — go through `container.pick(Class)`:
+
+```java
+// Same as container.get(Greeter.class)
+Greeter g = container.pick(Greeter.class).resolve();
+
+// Named lookup — same as container.get(Greeter.class, "english")
+Greeter english = container.pick(Greeter.class).withName("english").resolve();
+
+// Lazy Provider that re-resolves each call (preserves scope semantics)
+Provider<Greeter> p = container.pick(Greeter.class).withName("spanish").asProvider();
+
+// Fallback when the bean is absent — no IllegalArgumentException
+Greeter french = container.pick(Greeter.class)
+    .withName("french")
+    .orDefault(new NoopGreeter());
+```
+
 ### Lifecycle Hooks
 
 ```java
@@ -359,15 +380,11 @@ public class RequestContext {
 }
 
 // Usage
-container.
-
-runInRequestScope(() ->{
-RequestContext ctx = container.get(RequestContext.class);
-    System.out.
-
-println("Request ID: "+ctx.getRequestId());
+container.runInRequestScope(() -> {
+    RequestContext ctx = container.get(RequestContext.class);
+    System.out.println("Request ID: " + ctx.getRequestId());
     // ctx is automatically cleaned up when scope exits
-    });
+});
 ```
 
 ### Event Handling
@@ -641,7 +658,7 @@ public void onOrderShipped(ShipmentResult shipment, Event<?> eventWrapper) {
 
 ## Modules
 
-### tiko-api (~30KB)
+### tiko-api (target ~30KB)
 
 Core annotations and interfaces. This is the only compile-time dependency your code needs.
 
@@ -649,7 +666,7 @@ Core annotations and interfaces. This is the only compile-time dependency your c
 
 Annotation processor that runs at compile-time to validate dependencies and generate code.
 
-### tiko-runtime (~100KB)
+### tiko-runtime (target ~100KB)
 
 Minimal runtime container implementation. Zero dependencies beyond tiko-api.
 
@@ -676,8 +693,8 @@ Kafka-backed event bus for distributed systems.
 
 ```bash
 # Clone the repository
-git clone https://github.com/jerrysamek/tiko.git
-cd tiko
+git clone https://github.com/tomas-samek/tiko-di.git
+cd tiko-di
 
 # Build all modules
 mvn clean install
@@ -709,23 +726,21 @@ Core DI is functional end-to-end. The annotation processor generates factories, 
 - ✅ `@Produces` factory methods: instance + static, named + unnamed, with dependency injection
 - ✅ In-memory event bus (`tiko-event-local`) with `@EventHandler` subscription
 - ✅ Multi-module aggregation via `AggregatingContainer` + `META-INF/tiko/` metadata
-- 🚧 Lifecycle events (`ApplicationStartedEvent`, `RequestStartedEvent`, etc.) — types defined, publishing wiring not yet verified
-- 🚧 `@EventTrigger` chains (declarative event workflows, guards, spread)
+- ✅ `container.pick(Class)` fluent API for multi-axis lookup (`withName`, `resolve`, `asProvider`, `orDefault`)
+- 🚧 Lifecycle events (`ApplicationStartedEvent`, `RequestStartedEvent`, etc.) — types defined; publishing wiring tracked in [#4](https://github.com/tomas-samek/tiko-di/issues/4)
+- 🚧 `@EventTrigger` chains (declarative event workflows, guards, spread) — tracked in [#5](https://github.com/tomas-samek/tiko-di/issues/5)
 
 ### Planned Features
 
 - **Phase 1** (Current)
-    - Complete lifecycle-event publishing and verify `@EventTrigger` codegen
-    - Validator polish (see known gaps below)
-    - `module-info`-compatible module naming so multi-module apps can split API and impl modules cleanly
-    - `container.pick(Class)` fluent API for multi-axis lookup (name + module + profile)
-    - Cross-module ambiguity detection surfaced at container startup
+    - Complete lifecycle-event publishing and verify `@EventTrigger` codegen ([#4](https://github.com/tomas-samek/tiko-di/issues/4), [#5](https://github.com/tomas-samek/tiko-di/issues/5))
+    - Refactor `02_multi_module` example into api + impl + app with runtime-scope DI ([#6](https://github.com/tomas-samek/tiko-di/issues/6))
 
 - **Phase 2** (Next)
     - Kafka event bus integration
     - Configuration injection (`@Value`)
     - Conditional beans
-    - Profiles support
+    - Profile isolation: compile-time `forbidProfiles` validation + Maven source-root convention to keep test-only `@Component`s out of prod jars
 
 - **Phase 3** (Future)
     - AOP/Interceptors
@@ -735,8 +750,8 @@ Core DI is functional end-to-end. The annotation processor generates factories, 
 
 ### Known Limitations
 
-- Two README-documented `@Produces` patterns trip the current validator: a `@Component` class with a static `@Produces` returning the same type is rejected, and private constructor parameters on a `@Component` are treated as injectable dependencies. Both are compile-time false positives and will be fixed in the validator-polish pass.
 - `container.get(Class, String)` uses `isAssignableFrom` matching; `container.get(Class)` uses exact class or exact implemented-interface matching. The asymmetry is intentional for now but may be unified in Phase 1.
+- Open issues are tracked in [GitHub Issues](https://github.com/tomas-samek/tiko-di/issues).
 
 ## Philosophy
 
