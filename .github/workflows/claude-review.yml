@@ -1,0 +1,60 @@
+# Automated AI code review on pull requests using Anthropic's Claude.
+#
+# Setup (one-time):
+#   1. Create an API key at https://console.anthropic.com/
+#   2. Add it as a repository secret named ANTHROPIC_API_KEY
+#      (Settings → Secrets and variables → Actions → New repository secret)
+#
+# The job runs on every PR opened or updated against main and posts review
+# comments inline on the diff. It also responds to follow-up requests when
+# a reviewer mentions @claude in a PR comment or review.
+
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+jobs:
+  review:
+    name: Claude review
+    runs-on: ubuntu-latest
+
+    # Only run the comment-triggered jobs when @claude is mentioned, to avoid
+    # firing on every drive-by comment.
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
+
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Claude code review
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: "--model claude-opus-4-7"
+          prompt: |
+            Review the diff for this pull request and post inline comments where
+            you find concrete issues. Focus on:
+              - Correctness bugs and missing edge cases
+              - Public API changes (tiko-api): backward compatibility, naming, Javadoc completeness
+              - Annotation processor: validation gaps, generated-code soundness, error message quality
+              - Test coverage: are new code paths actually exercised?
+              - Style consistency with the rest of the repo
+
+            Skip nits and praise. If the PR looks solid, say so in one sentence.
