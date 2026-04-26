@@ -28,6 +28,7 @@ public final class ComponentModel {
     private final List<ExecutableElement> preDestroyMethods;
     private final TypeMirror implementedInterface;  // For proxy generation (nullable)
     private final boolean requiresProxy;
+    private final ExecutableElement staticFactoryMethod;  // Optional self-@Produces (nullable)
 
     private ComponentModel(Builder builder) {
         this.typeElement = builder.typeElement;
@@ -43,6 +44,7 @@ public final class ComponentModel {
         this.preDestroyMethods = List.copyOf(builder.preDestroyMethods);
         this.implementedInterface = builder.implementedInterface;
         this.requiresProxy = builder.requiresProxy;
+        this.staticFactoryMethod = builder.staticFactoryMethod;
     }
 
     public static Builder builder() {
@@ -102,6 +104,10 @@ public final class ComponentModel {
         return requiresProxy;
     }
 
+    public Optional<ExecutableElement> getStaticFactoryMethod() {
+        return Optional.ofNullable(staticFactoryMethod);
+    }
+
     /**
      * Returns the unique key for this component (qualified name + optional name qualifier).
      */
@@ -125,6 +131,7 @@ public final class ComponentModel {
         private List<ExecutableElement> preDestroyMethods = new ArrayList<>();
         private TypeMirror implementedInterface;
         private boolean requiresProxy = false;
+        private ExecutableElement staticFactoryMethod;
 
         private Builder() {
         }
@@ -209,9 +216,17 @@ public final class ComponentModel {
             return this;
         }
 
+        public Builder staticFactoryMethod(ExecutableElement staticFactoryMethod) {
+            this.staticFactoryMethod = staticFactoryMethod;
+            return this;
+        }
+
         public ComponentModel build() {
-            if (typeElement == null || qualifiedName == null || constructor == null) {
-                throw new IllegalStateException("TypeElement, qualifiedName, and constructor are required");
+            if (typeElement == null || qualifiedName == null) {
+                throw new IllegalStateException("TypeElement and qualifiedName are required");
+            }
+            if (constructor == null && staticFactoryMethod == null) {
+                throw new IllegalStateException("Either constructor or staticFactoryMethod is required");
             }
             return new ComponentModel(this);
         }
