@@ -303,6 +303,37 @@ public class OrderService {
 }
 ```
 
+### Typed Configuration
+
+```java
+@Configuration(prefix = "db")
+public record DbConfig(
+    String url,
+    @Default("10") int maxConnections,
+    Optional<Duration> connectTimeout
+) {}
+
+@Component(scope = Scope.SINGLETON)
+public class UserRepository {
+    @Inject
+    public UserRepository(DbConfig config) {
+        // config.url(), config.maxConnections(), config.connectTimeout()
+    }
+}
+
+// At startup:
+Container container = Tiko.create(ConfigSources.classpath("config.yaml"));
+```
+
+```yaml
+db:
+  url: ${DB_URL:jdbc:postgres://localhost/example}
+  maxConnections: 20
+  connectTimeout: PT5S
+```
+
+YAML mismatches (missing required keys, wrong types, unknown keys) fail at container startup with a single report listing every problem — never partway through serving requests.
+
 ### Named Qualifiers
 
 ```java
@@ -735,10 +766,10 @@ Core DI is functional end-to-end. The annotation processor generates factories, 
 - **Phase 1** (Current)
     - Complete lifecycle-event publishing and verify `@EventTrigger` codegen ([#4](https://github.com/tomas-samek/tiko-di/issues/4), [#5](https://github.com/tomas-samek/tiko-di/issues/5))
     - Refactor `02_multi_module` example into api + impl + app with runtime-scope DI ([#6](https://github.com/tomas-samek/tiko-di/issues/6))
+    - Configuration injection (`@Configuration` records, YAML-backed, generated binders) — see [#15](https://github.com/tomas-samek/tiko-di/issues/15)
 
 - **Phase 2** (Next)
     - Kafka event bus integration
-    - Configuration injection (`@Value`)
     - Conditional beans
     - Profile isolation: compile-time `forbidProfiles` validation + Maven source-root convention to keep test-only `@Component`s out of prod jars
 
