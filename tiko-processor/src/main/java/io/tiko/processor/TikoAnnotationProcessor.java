@@ -100,10 +100,11 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
 
         try {
             // Check if we have anything to process
-            if (context.getComponents().isEmpty() && context.getFactoryMethods().isEmpty()) {
+            if (context.getComponents().isEmpty() && context.getFactoryMethods().isEmpty()
+                    && context.getConfigurations().isEmpty()) {
                 processingEnv.getMessager().printMessage(
                         Diagnostic.Kind.WARNING,
-                        "Tiko DI: No components or factories found to process!"
+                        "Tiko DI: No components, factories, or configurations found to process!"
                 );
                 return false;
             }
@@ -449,10 +450,9 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
 
     /**
      * Collects all @Configuration records.
-     * Implemented in Task 11 via ConfigurationCollector.
      */
     private void collectConfigurations(RoundEnvironment roundEnv) {
-        // Implemented in Task 11 via ConfigurationCollector.
+        new io.tiko.processor.config.ConfigurationCollector(context).collect(roundEnv);
     }
 
     /**
@@ -524,6 +524,13 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         // Detect ambiguous unnamed providers (two+ @Components/@Produces for same type)
         AmbiguityValidator ambiguityValidator = new AmbiguityValidator(context);
         if (!ambiguityValidator.validate()) {
+            valid = false;
+        }
+
+        // Validate @Configuration records
+        io.tiko.processor.config.ConfigurationValidator configValidator =
+            new io.tiko.processor.config.ConfigurationValidator(context, processingEnv.getTypeUtils());
+        if (!configValidator.validate()) {
             valid = false;
         }
 

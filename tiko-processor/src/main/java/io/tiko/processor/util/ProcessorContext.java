@@ -3,6 +3,7 @@ package io.tiko.processor.util;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.FactoryMethodModel;
 import io.tiko.processor.model.EventHandlerModel;
+import io.tiko.processor.config.ConfigurationModel;
 
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.Messager;
@@ -32,6 +33,7 @@ public final class ProcessorContext {
     private final Map<String, ComponentModel> components = new HashMap<>();
     private final Map<String, FactoryMethodModel> factoryMethods = new HashMap<>();
     private final List<EventHandlerModel> eventHandlers = new ArrayList<>();
+    private final List<ConfigurationModel> configurations = new ArrayList<>();
 
     // Active profiles (for filtering components during generation)
     private final List<String> activeProfiles;
@@ -121,6 +123,14 @@ public final class ProcessorContext {
 
     public List<EventHandlerModel> getEventHandlers() {
         return List.copyOf(eventHandlers);
+    }
+
+    public void registerConfiguration(ConfigurationModel cfg) {
+        configurations.add(cfg);
+    }
+
+    public List<ConfigurationModel> getConfigurations() {
+        return List.copyOf(configurations);
     }
 
     /**
