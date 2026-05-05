@@ -3,6 +3,7 @@ package io.tiko.processor;
 import com.google.auto.service.AutoService;
 import io.tiko.Scope;
 import io.tiko.annotations.*;
+import io.tiko.annotations.Configuration;
 import io.tiko.processor.generator.*;
 import io.tiko.processor.model.*;
 import io.tiko.processor.util.ProcessorContext;
@@ -52,7 +53,8 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         return Set.of(
                 Component.class.getCanonicalName(),
                 Produces.class.getCanonicalName(),
-                EventHandler.class.getCanonicalName()
+                EventHandler.class.getCanonicalName(),
+                Configuration.class.getCanonicalName()
         );
     }
 
@@ -77,6 +79,7 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
             collectComponents(roundEnv);
             collectFactoryMethods(roundEnv);
             collectEventHandlers(roundEnv);
+            collectConfigurations(roundEnv);
 
             processingEnv.getMessager().printMessage(
                     Diagnostic.Kind.NOTE,
@@ -442,6 +445,14 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
                 context.registerEventHandler(handler);
             }
         }
+    }
+
+    /**
+     * Collects all @Configuration records.
+     * Implemented in Task 11 via ConfigurationCollector.
+     */
+    private void collectConfigurations(RoundEnvironment roundEnv) {
+        // Implemented in Task 11 via ConfigurationCollector.
     }
 
     /**
