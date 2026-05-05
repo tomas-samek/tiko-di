@@ -27,6 +27,7 @@ public final class AggregatingContainer implements Container {
     private final EventBus sharedEventBus;
     private final List<Container> moduleContainers;
     private final Map<Class<?>, Container> componentToContainerMap;
+    private final Map<Class<?>, Container> configToContainer = new ConcurrentHashMap<>();
 
     /**
      * Creates an aggregating container by discovering all module containers on the classpath.
@@ -108,10 +109,37 @@ public final class AggregatingContainer implements Container {
                 }
             }
         }
+
+        // Load configs.txt mappings (one entry per @Configuration record)
+        String configsPath = resourcePath.replace("container.properties", "configs.txt");
+        URL configsUrl = new URL(resourceUrl.getProtocol(), resourceUrl.getHost(),
+            resourceUrl.getPort(), configsPath);
+        try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(configsUrl.openStream()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty() || line.startsWith("#")) continue;
+                int eq = line.indexOf('=');
+                if (eq > 0) {
+                    String fqn = line.substring(0, eq).trim();
+                    try {
+                        Class<?> typeClass = Class.forName(fqn, false, classLoader);
+                        configToContainer.put(typeClass, moduleContainer);
+                    } catch (ClassNotFoundException e) {
+                        // Module declared a config record class that's not on the classpath — surface a clear failure.
+                        throw new IllegalStateException("Configuration record " + fqn + " referenced in configs.txt is not on the classpath", e);
+                    }
+                }
+            }
+        } catch (java.io.IOException ignored) {
+            // No configs.txt for this module — fine, this module has no @Configuration records.
+        }
     }
 
     @Override
     public <T> T get(Class<T> type) {
+        Container ccfg = configToContainer.get(type);
+        if (ccfg != null) return ccfg.get(type);
         Container container = componentToContainerMap.get(type);
         if (container == null) {
             throw new IllegalArgumentException(
@@ -208,6 +236,28 @@ public final class AggregatingContainer implements Container {
             } catch (Exception e) {
                 // Log but continue shutting down other containers
                 System.err.println("Error shutting down module container: " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Distributes bound configuration records to the module containers that own them.
+     *
+     * @param configs map from config record class to bound instance
+     * @throws IllegalStateException if a config type is not owned by any known module
+     */
+    public void injectConfigs(java.util.Map<Class<?>, Object> configs) {
+        for (java.util.Map.Entry<Class<?>, Object> e : configs.entrySet()) {
+            Container target = configToContainer.get(e.getKey());
+            if (target == null) {
+                throw new IllegalStateException("No module owns config type " + e.getKey().getName()
+                    + ". Discovered config types: " + configToContainer.keySet());
+            }
+            try {
+                target.getClass().getMethod("injectConfigs", java.util.Map.class)
+                    .invoke(target, java.util.Map.of(e.getKey(), e.getValue()));
+            } catch (Exception ex) {
+                throw new IllegalStateException("Failed to inject config " + e.getKey().getName(), ex);
             }
         }
     }
