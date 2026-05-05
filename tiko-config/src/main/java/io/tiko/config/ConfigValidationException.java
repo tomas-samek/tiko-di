@@ -12,6 +12,8 @@ import java.util.List;
  */
 public final class ConfigValidationException extends RuntimeException {
 
+    // transient because ConfigError is intentionally an internal, non-Serializable type;
+    // the formatted message in super(...) survives serialization regardless.
     private final transient List<ConfigError> errors;
 
     public ConfigValidationException(String source, List<ConfigError> errors) {
@@ -21,6 +23,6 @@ public final class ConfigValidationException extends RuntimeException {
 
     /** The raw error list, in the order they were accumulated. */
     public List<ConfigError> errors() {
-        return errors;
+        return errors == null ? List.of() : errors;
     }
 }

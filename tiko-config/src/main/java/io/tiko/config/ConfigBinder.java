@@ -16,6 +16,10 @@ public interface ConfigBinder<T> {
     /**
      * Walks {@code root} at {@link #prefix()}, binds, and returns the constructed
      * record. Errors are accumulated into {@code ctx} rather than thrown.
+     *
+     * @param root the entire YAML document tree (not pre-walked to {@link #prefix()});
+     *             the binder is responsible for navigating to its own section.
+     * @param ctx  per-bind-call accumulator for errors and field reads
      */
     T bind(Map<String, Object> root, BindContext ctx);
 }
