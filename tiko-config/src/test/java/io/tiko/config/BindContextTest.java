@@ -1,6 +1,7 @@
 // tiko-config/src/test/java/io/tiko/config/BindContextTest.java
 package io.tiko.config;
 
+import io.tiko.config.internal.ConfigError;
 import io.tiko.config.internal.coercers.Coercers;
 import io.tiko.config.internal.coercers.TypeCoercer;
 import org.junit.jupiter.api.Test;
@@ -38,9 +39,20 @@ class BindContextTest {
         int port = ctx.requireScalar(node, "port", "db.port", intC, 0);
         assertThat(port).isEqualTo(8080);
 
-        int missing = ctx.requireScalar(node, "host", "db.host", Coercers.stringCoercer().getClass() == intC.getClass() ? intC : intC, 0);
+        int missing = ctx.requireScalar(node, "host", "db.host", intC, 0);
         assertThat(ctx.hasErrors()).isTrue();
         assertThat(missing).isZero();
+    }
+
+    @Test
+    void requireScalar_reports_path_prefixed_error_on_coercion_failure() {
+        BindContext ctx = new BindContext("c.yaml");
+        Map<String, Object> node = new LinkedHashMap<>(Map.of("port", "ten"));
+        int v = ctx.requireScalar(node, "port", "db.port", Coercers.intCoercer(), 0);
+        assertThat(v).isZero();
+        assertThat(ctx.errors()).singleElement()
+            .extracting(ConfigError::message)
+            .asString().startsWith("db.port ").contains("expected integer");
     }
 
     @Test
