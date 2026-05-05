@@ -15,6 +15,6 @@ public record ConfigurationModel(
     String prefix,               // @Configuration#prefix
     List<ConfigFieldModel> fields
 ) {
-    public String binderSimpleName() { return simpleName + "ConfigBinder"; }
+    public String binderSimpleName() { return simpleName + "Binder"; }
     public String binderQualifiedName() { return "io.tiko.generated.config." + binderSimpleName(); }
 }

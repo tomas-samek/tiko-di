@@ -575,6 +575,14 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         EventRegistryGenerator eventRegistryGenerator = new EventRegistryGenerator(context);
         eventRegistryGenerator.generate();
 
+        // Generate per-record ConfigBinder classes
+        io.tiko.processor.config.ConfigBinderGenerator configBinderGen =
+            new io.tiko.processor.config.ConfigBinderGenerator(
+                processingEnv.getFiler(), processingEnv.getMessager());
+        for (io.tiko.processor.config.ConfigurationModel cfg : context.getConfigurations()) {
+            configBinderGen.generate(cfg);
+        }
+
         // Generate container (must be last)
         processingEnv.getMessager().printMessage(
                 Diagnostic.Kind.NOTE,
