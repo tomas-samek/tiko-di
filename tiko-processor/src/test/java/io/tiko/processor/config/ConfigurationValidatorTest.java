@@ -91,4 +91,41 @@ class ConfigurationValidatorTest {
         assertThat(c).failed();
         assertThat(c).hadErrorContaining("@Default('abc') on int field 'v'");
     }
+
+    @Test
+    void recursiveRecord_emitsError() {
+        JavaFileObject a = JavaFileObjects.forSourceLines(
+            "io.example.A",
+            "package io.example;",
+            "import io.tiko.annotations.Configuration;",
+            "@Configuration(prefix = \"a\")",
+            "public record A(B b) {}"
+        );
+        JavaFileObject b = JavaFileObjects.forSourceLines(
+            "io.example.B",
+            "package io.example;",
+            "public record B(A a) {}"
+        );
+        Compilation c = Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(a, b);
+        assertThat(c).failed();
+        assertThat(c).hadErrorContaining("Recursive record reference");
+    }
+
+    @Test
+    void nonRecursiveNestedRecords_succeed() {
+        JavaFileObject outer = JavaFileObjects.forSourceLines(
+            "io.example.Outer",
+            "package io.example;",
+            "import io.tiko.annotations.Configuration;",
+            "@Configuration(prefix = \"outer\")",
+            "public record Outer(Inner inner) {}"
+        );
+        JavaFileObject inner = JavaFileObjects.forSourceLines(
+            "io.example.Inner",
+            "package io.example;",
+            "public record Inner(int v) {}"
+        );
+        Compilation c = Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(outer, inner);
+        assertThat(c).succeeded();
+    }
 }

@@ -15,6 +15,7 @@ import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
+import javax.lang.model.util.Types;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -72,23 +73,46 @@ public final class ConfigurationCollector {
      * Builds a map from record component name to its canonical constructor parameter.
      * @Default and @Key target ElementType.PARAMETER, so they appear on constructor params,
      * not on RECORD_COMPONENT elements.
+     *
+     * <p>Matches by both arity and per-parameter type to avoid picking a non-canonical
+     * constructor that coincidentally has the same number of parameters but different types.
      */
     private Map<String, VariableElement> buildCanonicalCtorParamMap(TypeElement type) {
-        Map<String, VariableElement> map = new HashMap<>();
+        Types types = ctx.getTypeUtils();
+
+        List<VariableElement> components = type.getEnclosedElements().stream()
+            .filter(e -> e.getKind() == ElementKind.RECORD_COMPONENT)
+            .map(e -> (VariableElement) e)
+            .toList();
+
         for (Element member : type.getEnclosedElements()) {
             if (member.getKind() != ElementKind.CONSTRUCTOR) continue;
             ExecutableElement ctor = (ExecutableElement) member;
-            // The canonical constructor has the same parameter count as the record components.
-            long componentCount = type.getEnclosedElements().stream()
-                .filter(e -> e.getKind() == ElementKind.RECORD_COMPONENT)
-                .count();
-            if (ctor.getParameters().size() != componentCount) continue;
-            for (VariableElement param : ctor.getParameters()) {
+            List<? extends VariableElement> params = ctor.getParameters();
+
+            // Must have the same arity as the record component list.
+            if (params.size() != components.size()) continue;
+
+            // Every (component, parameter) pair must have the same type.
+            boolean allMatch = true;
+            for (int i = 0; i < components.size(); i++) {
+                if (!types.isSameType(components.get(i).asType(), params.get(i).asType())) {
+                    allMatch = false;
+                    break;
+                }
+            }
+            if (!allMatch) continue;
+
+            // This is the canonical constructor.
+            Map<String, VariableElement> map = new HashMap<>();
+            for (VariableElement param : params) {
                 map.put(param.getSimpleName().toString(), param);
             }
-            break; // only one canonical constructor
+            return map;
         }
-        return map;
+
+        // Defensive fallback: no canonical constructor matched (should not happen for valid records).
+        return new HashMap<>();
     }
 
     private ConfigFieldModel buildField(VariableElement comp, VariableElement ctorParam) {
