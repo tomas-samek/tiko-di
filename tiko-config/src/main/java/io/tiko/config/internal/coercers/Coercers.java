@@ -25,7 +25,10 @@ public final class Coercers {
     public static TypeCoercer<Integer> intCoercer() {
         return v -> {
             if (v instanceof Integer i) return i;
-            if (v instanceof Long l) return Math.toIntExact(l);
+            if (v instanceof Long l) {
+                try { return Math.toIntExact(l); }
+                catch (ArithmeticException e) { throw new CoercionException("expected integer, got long " + l + " (out of int range)"); }
+            }
             if (v instanceof String s) try { return Integer.parseInt(s.trim()); }
                 catch (NumberFormatException e) { throw new CoercionException("expected integer, got string \"" + s + "\""); }
             throw new CoercionException("expected integer, got " + describe(v));
@@ -117,6 +120,7 @@ public final class Coercers {
 
     public static <E extends Enum<E>> TypeCoercer<E> enumCoercer(Class<E> type) {
         return v -> {
+            if (v == null) throw new CoercionException("expected " + type.getSimpleName() + ", got null");
             String s = stringCoercer().coerce(v);
             try { return Enum.valueOf(type, s); }
             catch (IllegalArgumentException e) {

@@ -95,5 +95,26 @@ class CoercersTest {
             .hasMessageContaining("expected one of [RED, BLUE]");
     }
 
+    @Test
+    void int_coercer_rejects_long_overflow() {
+        assertThatThrownBy(() -> Coercers.intCoercer().coerce(((long) Integer.MAX_VALUE) + 1L))
+            .isInstanceOf(CoercionException.class)
+            .hasMessageContaining("out of int range");
+    }
+
+    @Test
+    void enum_coercer_rejects_null_input() {
+        assertThatThrownBy(() -> Coercers.enumCoercer(TestKind.class).coerce(null))
+            .isInstanceOf(CoercionException.class)
+            .hasMessageContaining("got null");
+    }
+
+    @Test
+    void byte_coercer_rejects_out_of_range() {
+        assertThatThrownBy(() -> Coercers.byteCoercer().coerce(200))
+            .isInstanceOf(CoercionException.class)
+            .hasMessageContaining("out of byte range");
+    }
+
     enum TestKind { RED, BLUE }
 }
