@@ -1,0 +1,39 @@
+package io.tiko.config;
+
+import io.tiko.config.internal.ConfigError;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+class ConfigValidationExceptionTest {
+
+    @Test
+    void formats_multiple_errors_as_numbered_report() {
+        List<ConfigError> errors = List.of(
+            ConfigError.at("config.yaml", 5, 7,  "db.url is required but missing"),
+            ConfigError.at("config.yaml", 6, 18, "db.maxConnections expected integer, got string \"ten\"")
+        );
+
+        ConfigValidationException ex = new ConfigValidationException("config.yaml", errors);
+
+        assertThat(ex.getMessage())
+            .contains("2 problem(s) in config.yaml")
+            .contains("1. config.yaml:5:7")
+            .contains("db.url is required but missing")
+            .contains("2. config.yaml:6:18")
+            .contains("db.maxConnections expected integer");
+    }
+
+    @Test
+    void single_error_reports_singular_problem_count() {
+        List<ConfigError> errors = List.of(
+            ConfigError.at("c.yaml", 1, 1, "boom")
+        );
+        assertThatThrownBy(() -> { throw new ConfigValidationException("c.yaml", errors); })
+            .isInstanceOf(ConfigValidationException.class)
+            .hasMessageContaining("1 problem(s) in c.yaml");
+    }
+}
