@@ -585,6 +585,15 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
             }
         }
 
+        // Generate ConfigBinderRegistry and configs.txt manifest
+        List<io.tiko.processor.config.ConfigurationModel> configs = context.getConfigurations();
+        // containerClassName already computed above; extract the hash suffix from it
+        String hashSuffix = containerClassName.substring(containerClassName.lastIndexOf('_') + 1);
+        io.tiko.processor.config.ConfigBinderRegistryGenerator regGen =
+            new io.tiko.processor.config.ConfigBinderRegistryGenerator(processingEnv.getFiler(), hashSuffix);
+        regGen.generate(configs);
+        new io.tiko.processor.config.ConfigManifestWriter(processingEnv.getFiler(), regGen.registryClassFqn()).write(configs);
+
         // Generate container (must be last)
         processingEnv.getMessager().printMessage(
                 Diagnostic.Kind.NOTE,
