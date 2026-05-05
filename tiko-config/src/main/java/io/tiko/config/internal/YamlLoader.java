@@ -4,7 +4,9 @@ import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /** SnakeYAML-backed loader that produces a {@code Map<String, Object>} tree. */
@@ -30,11 +32,19 @@ public final class YamlLoader {
     private static Map<String, Object> stringKeyed(Map<Object, Object> in) {
         Map<String, Object> out = new LinkedHashMap<>(in.size());
         for (Map.Entry<Object, Object> e : in.entrySet()) {
-            String k = e.getKey().toString();
-            Object v = e.getValue();
-            if (v instanceof Map<?, ?> nested) v = stringKeyed((Map<Object, Object>) nested);
-            out.put(k, v);
+            out.put(e.getKey().toString(), normalize(e.getValue()));
         }
         return out;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Object normalize(Object v) {
+        if (v instanceof Map<?, ?> nested) return stringKeyed((Map<Object, Object>) nested);
+        if (v instanceof List<?> list) {
+            List<Object> out = new ArrayList<>(list.size());
+            for (Object item : list) out.add(normalize(item));
+            return out;
+        }
+        return v;
     }
 }

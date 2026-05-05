@@ -53,4 +53,27 @@ class YamlLoaderTest {
         assertThatThrownBy(() -> YamlLoader.load(new ByteArrayInputStream(yaml.getBytes(StandardCharsets.UTF_8))))
             .isInstanceOf(RuntimeException.class);
     }
+
+    @Test
+    void enforces_string_keys_on_maps_inside_lists() {
+        // YAML allows non-string keys in mappings; SnakeYAML faithfully produces them
+        // (e.g. integer keys). After load(), every map — even ones nested inside lists —
+        // must use String keys so downstream BindContext.requireSection cast is safe.
+        String yaml = """
+                servers:
+                  - 1: alpha
+                    2: beta
+                """;
+        Map<String, Object> tree = YamlLoader.load(new ByteArrayInputStream(yaml.getBytes(StandardCharsets.UTF_8)));
+        List<?> servers = (List<?>) tree.get("servers");
+        assertThat(servers).hasSize(1);
+        Map<?, ?> firstServer = (Map<?, ?>) servers.get(0);
+        // Every key must be a String — fails before the fix because Integer keys leak through.
+        for (Object k : firstServer.keySet()) {
+            assertThat(k).isInstanceOf(String.class);
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> firstServerTyped = (Map<String, Object>) firstServer;
+        assertThat(firstServerTyped).containsEntry("1", "alpha").containsEntry("2", "beta");
+    }
 }
