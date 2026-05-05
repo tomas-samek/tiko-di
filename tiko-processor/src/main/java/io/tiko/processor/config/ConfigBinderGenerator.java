@@ -24,8 +24,8 @@ import java.util.Set;
  * Generates {@code <Record>ConfigBinder.java} for each {@code @Configuration} record.
  *
  * <p>Nested record fields are not yet supported by the codegen (v1 scope limit). When such a
- * field is encountered the generator skips binder generation for that record and emits a NOTE.
- * This keeps the compilation clean while deferring nested-record binding to a follow-up task.
+ * field is encountered the generator emits a compile-time ERROR — compilation fails with a clear
+ * message rather than succeeding silently and then crashing at runtime.
  */
 public final class ConfigBinderGenerator {
 
@@ -40,9 +40,36 @@ public final class ConfigBinderGenerator {
     }
 
     /**
-     * Attempts to generate a binder for {@code cfg}. If any field uses an unsupported type
-     * (e.g. a nested record), generation is skipped and a NOTE is emitted — the compilation
-     * succeeds but no binder is written.
+     * Returns {@code true} if a binder can be generated for {@code cfg}, {@code false} if any
+     * field uses an unsupported type (e.g. a nested record). In the latter case, a compile-time
+     * ERROR is emitted per offending field so the developer gets a clear message.
+     */
+    public boolean canGenerate(ConfigurationModel cfg) {
+        boolean ok = true;
+        for (ConfigFieldModel f : cfg.fields()) {
+            TypeMirror inner = unwrapOptional(f.type());
+            if (inner.getKind() == javax.lang.model.type.TypeKind.DECLARED) {
+                TypeElement el = (TypeElement) ((DeclaredType) inner).asElement();
+                if (el.getKind() == ElementKind.RECORD) {
+                    messager.printMessage(Diagnostic.Kind.ERROR,
+                        "@Configuration record '" + cfg.simpleName() + "' uses nested record types"
+                            + " in fields, which are not yet supported in v1.\n"
+                            + "  Field '" + f.fieldName() + "' has type '" + el.getSimpleName() + "' (a record).\n"
+                            + "Suggested fixes:\n"
+                            + "  1. Mark the nested record as a separate @Configuration"
+                                + " with its own prefix.\n"
+                            + "  2. Wait for nested-record codegen support in a follow-up release.",
+                        f.element());
+                    ok = false;
+                }
+            }
+        }
+        return ok;
+    }
+
+    /**
+     * Generates a binder for {@code cfg}. Callers must invoke {@link #canGenerate} first;
+     * this method assumes all fields are supported.
      */
     public void generate(ConfigurationModel cfg) throws IOException {
         ClassName recordType = ClassName.get(cfg.packageName(), cfg.simpleName());
@@ -72,18 +99,7 @@ public final class ConfigBinderGenerator {
             String fullPath = cfg.prefix() + "." + f.yamlKey();
             TypeMirror inner = unwrapOptional(f.type());
 
-            CodeBlock coercer;
-            try {
-                coercer = coercerExpr(inner);
-            } catch (IllegalArgumentException e) {
-                // Nested records and other unsupported types are a v1 scope gap.
-                // Skip binder generation for this record rather than crashing.
-                messager.printMessage(Diagnostic.Kind.NOTE,
-                    "Tiko DI: Skipping binder generation for " + cfg.qualifiedName()
-                        + " — field '" + f.fieldName() + "' uses unsupported type ("
-                        + e.getMessage() + "). Nested record binding is planned for a future task.");
-                return;
-            }
+            CodeBlock coercer = coercerExpr(inner);
 
             TypeName javaType = TypeName.get(f.type());
 

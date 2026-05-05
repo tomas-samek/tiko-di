@@ -112,7 +112,7 @@ class ConfigurationValidatorTest {
     }
 
     @Test
-    void nonRecursiveNestedRecords_succeed() {
+    void nonRecursiveNestedRecords_failWithUnsupportedV1Codegen() {
         JavaFileObject outer = JavaFileObjects.forSourceLines(
             "io.example.Outer",
             "package io.example;",
@@ -126,6 +126,7 @@ class ConfigurationValidatorTest {
             "public record Inner(int v) {}"
         );
         Compilation c = Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(outer, inner);
-        assertThat(c).succeeded();
+        assertThat(c).failed();
+        assertThat(c).hadErrorContaining("nested record");
     }
 }

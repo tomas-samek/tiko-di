@@ -580,7 +580,9 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
             new io.tiko.processor.config.ConfigBinderGenerator(
                 processingEnv.getFiler(), processingEnv.getMessager());
         for (io.tiko.processor.config.ConfigurationModel cfg : context.getConfigurations()) {
-            configBinderGen.generate(cfg);
+            if (configBinderGen.canGenerate(cfg)) {
+                configBinderGen.generate(cfg);
+            }
         }
 
         // Generate container (must be last)
