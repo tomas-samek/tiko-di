@@ -156,25 +156,39 @@ public final class ComponentFactoryGenerator {
         String dependencyKey = dependency.getDependencyKey();
         Object provider = context.findComponentOrFactory(dependencyKey).orElse(null);
 
-        String className;
         if (provider instanceof ComponentModel component) {
             // Use the actual component class name, not the interface
-            className = component.getClassName();
+            String className = component.getClassName();
+            String methodName = "get" + className;
+            if (dependency.getQualifier().isPresent()) {
+                String qualifier = dependency.getQualifier().get();
+                return String.format("container.%s(\"%s\")", methodName, qualifier);
+            } else {
+                return String.format("container.%s()", methodName);
+            }
         } else if (provider instanceof io.tiko.processor.model.FactoryMethodModel factory) {
             // Use the factory's return type
-            className = getSimpleClassName(factory.getReturnTypeName());
+            String className = getSimpleClassName(factory.getReturnTypeName());
+            String methodName = "get" + className;
+            if (dependency.getQualifier().isPresent()) {
+                String qualifier = dependency.getQualifier().get();
+                return String.format("container.%s(\"%s\")", methodName, qualifier);
+            } else {
+                return String.format("container.%s()", methodName);
+            }
+        } else if (provider instanceof io.tiko.processor.config.ConfigurationModel) {
+            // @Configuration records are stored in configSingletons and retrieved via container.get(Class)
+            return String.format("container.get(%s.class)", typeName);
         } else {
             // Fallback to the requested type name
-            className = getSimpleClassName(typeName);
-        }
-
-        String methodName = "get" + className;
-
-        if (dependency.getQualifier().isPresent()) {
-            String qualifier = dependency.getQualifier().get();
-            return String.format("container.%s(\"%s\")", methodName, qualifier);
-        } else {
-            return String.format("container.%s()", methodName);
+            String className = getSimpleClassName(typeName);
+            String methodName = "get" + className;
+            if (dependency.getQualifier().isPresent()) {
+                String qualifier = dependency.getQualifier().get();
+                return String.format("container.%s(\"%s\")", methodName, qualifier);
+            } else {
+                return String.format("container.%s()", methodName);
+            }
         }
     }
 

@@ -135,6 +135,8 @@ public final class ProcessorContext {
 
     /**
      * Looks up a component or factory by its key (typeName or typeName#qualifier).
+     * Also matches {@code @Configuration} records, which are injected as SINGLETON beans
+     * by the runtime after config binding.
      */
     public Optional<Object> findComponentOrFactory(String key) {
         // First try exact match
@@ -145,9 +147,17 @@ public final class ProcessorContext {
             return Optional.of(factoryMethods.get(key));
         }
 
-        // Try to find by interface implementation
-        // Extract type name without qualifier
+        // @Configuration records are bound by the runtime and registered as SINGLETON beans;
+        // treat them as resolvable so that DependencyGraphValidator doesn't reject them.
         String typeName = key.contains("#") ? key.substring(0, key.indexOf("#")) : key;
+        for (io.tiko.processor.config.ConfigurationModel cfg : configurations) {
+            if (cfg.qualifiedName().equals(typeName)) {
+                return Optional.of(cfg);
+            }
+        }
+
+        // Try to find by interface implementation
+        // Extract qualifier
         String qualifier = key.contains("#") ? key.substring(key.indexOf("#") + 1) : "";
 
         // Look for a component that implements this interface

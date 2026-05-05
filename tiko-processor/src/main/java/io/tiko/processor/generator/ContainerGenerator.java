@@ -350,6 +350,9 @@ public final class ContainerGenerator {
             call = dependency.getQualifier()
                     .map(q -> methodName + "(\"" + q + "\")")
                     .orElse(methodName + "()");
+        } else if (provider instanceof io.tiko.processor.config.ConfigurationModel) {
+            // @Configuration records are stored in configSingletons and retrieved via get(Class)
+            call = "get(" + typeName + ".class)";
         } else {
             String methodName = "get" + simpleClassName(typeName);
             call = dependency.getQualifier()
