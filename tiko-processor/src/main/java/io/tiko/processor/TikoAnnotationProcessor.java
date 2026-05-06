@@ -13,9 +13,12 @@ import io.tiko.processor.validation.*;
 import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.*;
+import javax.lang.model.type.MirroredTypesException;
 import javax.lang.model.type.TypeMirror;
 import javax.tools.Diagnostic;
 import java.util.*;
+import io.tiko.EventTriggerGuard;
+import io.tiko.processor.model.EventTriggerModel;
 
 /**
  * Main annotation processor for Tiko DI.
@@ -479,6 +482,8 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         boolean hasEventWrapper = parameters.size() > 1 &&
                 typeUtil.getQualifiedName(parameters.get(1).asType()).equals("io.tiko.Event");
 
+        List<EventTriggerModel> eventTriggers = collectEventTriggers(methodElement);
+
         return EventHandlerModel.builder()
                 .methodElement(methodElement)
                 .declaringClass(declaringClass)
@@ -487,7 +492,47 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
                 .eventTypeName(eventTypeName)
                 .async(annotation.async())
                 .hasEventWrapper(hasEventWrapper)
+                .eventTriggers(eventTriggers)
                 .build();
+    }
+
+    /**
+     * Pulls every {@code @EventTrigger} annotation off a method (handles the implicit
+     * {@code @EventTriggers} container that the compiler synthesises when the user
+     * declares multiple). Default {@code AlwaysAllow} guards are dropped — codegen
+     * treats an empty guard list as "always allow".
+     */
+    private List<EventTriggerModel> collectEventTriggers(ExecutableElement methodElement) {
+        List<EventTrigger> raw = new ArrayList<>();
+        EventTriggers container = methodElement.getAnnotation(EventTriggers.class);
+        if (container != null) {
+            raw.addAll(Arrays.asList(container.value()));
+        } else {
+            EventTrigger single = methodElement.getAnnotation(EventTrigger.class);
+            if (single != null) raw.add(single);
+        }
+
+        String alwaysAllowName = EventTriggerGuard.AlwaysAllow.class.getCanonicalName();
+        List<EventTriggerModel> models = new ArrayList<>(raw.size());
+        for (EventTrigger trigger : raw) {
+            List<TypeMirror> guardMirrors;
+            try {
+                trigger.guard();
+                guardMirrors = List.of();
+            } catch (MirroredTypesException e) {
+                guardMirrors = new ArrayList<>(e.getTypeMirrors());
+            }
+            // Strip the default AlwaysAllow so codegen can skip the guard call entirely.
+            guardMirrors.removeIf(m -> typeUtil.getQualifiedName(m).equals(alwaysAllowName));
+
+            models.add(EventTriggerModel.builder()
+                    .eventName(trigger.eventName())
+                    .async(trigger.async())
+                    .spread(trigger.spread())
+                    .guardClasses(guardMirrors)
+                    .build());
+        }
+        return models;
     }
 
     /**
