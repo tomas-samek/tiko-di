@@ -11,7 +11,10 @@ import io.tiko.processor.util.ProcessorContext;
 
 import javax.lang.model.element.Modifier;
 import java.io.IOException;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -50,6 +53,7 @@ public final class ContainerGenerator {
         containerBuilder.addField(createRequestScopeField());
         containerBuilder.addField(createEventScopeField());
         containerBuilder.addField(createEventBusField());
+        containerBuilder.addField(createStartedAtField());
         containerBuilder.addField(createConfigSingletonsField());
         containerBuilder.addFields(createFactoryFields());
 
@@ -155,6 +159,14 @@ public final class ContainerGenerator {
      */
     private FieldSpec createEventBusField() {
         return FieldSpec.builder(EventBus.class, "eventBus", Modifier.PRIVATE, Modifier.FINAL)
+                .build();
+    }
+
+    /**
+     * Tracks when start() ran so shutdown() can publish ApplicationEndingEvent with uptime.
+     */
+    private FieldSpec createStartedAtField() {
+        return FieldSpec.builder(Instant.class, "startedAt", Modifier.PRIVATE, Modifier.VOLATILE)
                 .build();
     }
 
@@ -479,6 +491,13 @@ public final class ContainerGenerator {
         return method.build();
     }
 
+    private static final ClassName REQUEST_STARTED = ClassName.get("io.tiko.events", "RequestStartedEvent");
+    private static final ClassName REQUEST_ENDING  = ClassName.get("io.tiko.events", "RequestEndingEvent");
+    private static final ClassName EVENT_STARTED   = ClassName.get("io.tiko.events", "EventStartedEvent");
+    private static final ClassName EVENT_ENDING    = ClassName.get("io.tiko.events", "EventEndingEvent");
+    private static final ClassName APP_STARTED     = ClassName.get("io.tiko.events", "ApplicationStartedEvent");
+    private static final ClassName APP_ENDING      = ClassName.get("io.tiko.events", "ApplicationEndingEvent");
+
     /**
      * Creates runInRequestScope method.
      */
@@ -487,9 +506,16 @@ public final class ContainerGenerator {
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
                 .addParameter(Runnable.class, "task")
+                .addStatement("$T __requestId = $T.randomUUID().toString()", String.class, UUID.class)
+                .addStatement("$T __requestStart = $T.now()", Instant.class, Instant.class)
+                .addStatement("eventBus.publish(new $T(__requestId, __requestStart))", REQUEST_STARTED)
                 .beginControlFlow("try")
                 .addStatement("task.run()")
                 .nextControlFlow("finally")
+                .addStatement("$T __requestEnd = $T.now()", Instant.class, Instant.class)
+                .addStatement(
+                        "eventBus.publish(new $T(__requestId, __requestEnd, $T.between(__requestStart, __requestEnd)))",
+                        REQUEST_ENDING, Duration.class)
                 .addStatement("requestScoped.get().clear()")
                 .endControlFlow()
                 .build();
@@ -511,9 +537,16 @@ public final class ContainerGenerator {
                 .addTypeVariable(typeVar)
                 .addParameter(supplierType, "supplier")
                 .returns(typeVar)
+                .addStatement("$T __requestId = $T.randomUUID().toString()", String.class, UUID.class)
+                .addStatement("$T __requestStart = $T.now()", Instant.class, Instant.class)
+                .addStatement("eventBus.publish(new $T(__requestId, __requestStart))", REQUEST_STARTED)
                 .beginControlFlow("try")
                 .addStatement("return supplier.get()")
                 .nextControlFlow("finally")
+                .addStatement("$T __requestEnd = $T.now()", Instant.class, Instant.class)
+                .addStatement(
+                        "eventBus.publish(new $T(__requestId, __requestEnd, $T.between(__requestStart, __requestEnd)))",
+                        REQUEST_ENDING, Duration.class)
                 .addStatement("requestScoped.get().clear()")
                 .endControlFlow()
                 .build();
@@ -527,9 +560,16 @@ public final class ContainerGenerator {
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
                 .addParameter(Runnable.class, "task")
+                .addStatement("$T __eventId = $T.randomUUID().toString()", String.class, UUID.class)
+                .addStatement("$T __eventStart = $T.now()", Instant.class, Instant.class)
+                .addStatement("eventBus.publish(new $T(__eventId, __eventStart))", EVENT_STARTED)
                 .beginControlFlow("try")
                 .addStatement("task.run()")
                 .nextControlFlow("finally")
+                .addStatement("$T __eventEnd = $T.now()", Instant.class, Instant.class)
+                .addStatement(
+                        "eventBus.publish(new $T(__eventId, __eventEnd, $T.between(__eventStart, __eventEnd)))",
+                        EVENT_ENDING, Duration.class)
                 .addStatement("eventScoped.get().clear()")
                 .endControlFlow()
                 .build();
@@ -551,9 +591,16 @@ public final class ContainerGenerator {
                 .addTypeVariable(typeVar)
                 .addParameter(supplierType, "supplier")
                 .returns(typeVar)
+                .addStatement("$T __eventId = $T.randomUUID().toString()", String.class, UUID.class)
+                .addStatement("$T __eventStart = $T.now()", Instant.class, Instant.class)
+                .addStatement("eventBus.publish(new $T(__eventId, __eventStart))", EVENT_STARTED)
                 .beginControlFlow("try")
                 .addStatement("return supplier.get()")
                 .nextControlFlow("finally")
+                .addStatement("$T __eventEnd = $T.now()", Instant.class, Instant.class)
+                .addStatement(
+                        "eventBus.publish(new $T(__eventId, __eventEnd, $T.between(__eventStart, __eventEnd)))",
+                        EVENT_ENDING, Duration.class)
                 .addStatement("eventScoped.get().clear()")
                 .endControlFlow()
                 .build();
@@ -575,6 +622,9 @@ public final class ContainerGenerator {
             }
         }
 
+        method.addStatement("this.startedAt = $T.now()", Instant.class);
+        method.addStatement("eventBus.publish(new $T(this.startedAt))", APP_STARTED);
+
         return method.build();
     }
 
@@ -585,6 +635,13 @@ public final class ContainerGenerator {
         MethodSpec.Builder method = MethodSpec.methodBuilder("shutdown")
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class);
+
+        method.addComment("Publish ApplicationEndingEvent before tearing things down");
+        method.addStatement("$T __endTimestamp = $T.now()", Instant.class, Instant.class);
+        method.addStatement(
+                "$T __uptime = (this.startedAt != null) ? $T.between(this.startedAt, __endTimestamp) : $T.ZERO",
+                Duration.class, Duration.class, Duration.class);
+        method.addStatement("eventBus.publish(new $T(__endTimestamp, __uptime))", APP_ENDING);
 
         method.addComment("Call @PreDestroy on all SINGLETON components");
 

@@ -1,7 +1,8 @@
 package io.tiko.processor.model;
 
 import javax.lang.model.type.TypeMirror;
-import java.util.Optional;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Represents an @EventTrigger annotation on an event handler.
@@ -12,13 +13,13 @@ public final class EventTriggerModel {
     private final String eventName;
     private final boolean async;
     private final boolean spread;
-    private final TypeMirror guardClass;  // EventTriggerGuard implementation
+    private final List<TypeMirror> guardClasses;
 
     private EventTriggerModel(Builder builder) {
         this.eventName = builder.eventName;
         this.async = builder.async;
         this.spread = builder.spread;
-        this.guardClass = builder.guardClass;
+        this.guardClasses = List.copyOf(builder.guardClasses);
     }
 
     public static Builder builder() {
@@ -37,19 +38,24 @@ public final class EventTriggerModel {
         return spread;
     }
 
-    public Optional<TypeMirror> getGuardClass() {
-        return Optional.ofNullable(guardClass);
+    /**
+     * The guards declared on the annotation, in declaration order. Empty when only the
+     * default {@code AlwaysAllow} is declared (callers don't need to instantiate that
+     * — codegen treats an empty list as "no guard").
+     */
+    public List<TypeMirror> getGuardClasses() {
+        return guardClasses;
     }
 
     public boolean hasGuard() {
-        return guardClass != null;
+        return !guardClasses.isEmpty();
     }
 
     public static final class Builder {
         private String eventName;
         private boolean async = false;
         private boolean spread = false;
-        private TypeMirror guardClass;
+        private List<TypeMirror> guardClasses = new ArrayList<>();
 
         private Builder() {
         }
@@ -69,8 +75,13 @@ public final class EventTriggerModel {
             return this;
         }
 
-        public Builder guardClass(TypeMirror guardClass) {
-            this.guardClass = guardClass;
+        public Builder guardClasses(List<TypeMirror> guardClasses) {
+            this.guardClasses = new ArrayList<>(guardClasses);
+            return this;
+        }
+
+        public Builder addGuardClass(TypeMirror guardClass) {
+            this.guardClasses.add(guardClass);
             return this;
         }
 
