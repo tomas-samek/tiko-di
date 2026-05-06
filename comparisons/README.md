@@ -74,27 +74,32 @@ iter,create_ns,first_get_a_ns,first_get_b_ns,close_ns,total_ns
 _Filled by hand after a fresh `analyze.ps1` run. Numbers are machine-specific — Java 21.0.9, Windows 11, default G1GC.
 Re-run locally; don't take these as gospel._
 
-Currently only `plain` and `tiko` are wired up; the other four land in follow-up issues (#29 Spring, #30 Guice, #31
-Dagger, #32 Micronaut).
+Three of six wired up so far. The other three land in follow-up issues (#30 Guice, #31 Dagger, #32 Micronaut).
 
 ### Wall time (cold JVM, ms)
 
 | framework                        |  n |   min | median |   max |
 |----------------------------------|---:|------:|-------:|------:|
-| _jvm baseline (`java -version`)_ | 10 |  94.2 |   95.8 | 101.1 |
-| plain                            | 10 | 155.8 |  169.7 | 178.7 |
-| tiko                             | 10 | 181.7 |  186.1 | 203.9 |
+| _jvm baseline (`java -version`)_ | 10 |  93.6 |   95.8 | 113.9 |
+| plain                            | 10 | 155.9 |  169.0 | 173.4 |
+| tiko                             | 10 | 168.5 |  183.7 | 187.9 |
+| spring                           | 10 | 427.3 |  435.6 | 439.7 |
 
 ### Internal phases — median ms (cold iter=0)
 
 | framework |  n | create | first_get_a | first_get_b | close | total |
 |-----------|---:|-------:|------------:|------------:|------:|------:|
-| plain     | 10 |    0.0 |        33.4 |         1.3 |   0.0 |  34.7 |
-| tiko      | 10 |   24.6 |        23.2 |         0.7 |   0.8 |  49.1 |
+| plain     | 10 |    0.0 |        33.5 |         1.3 |   0.0 |  34.8 |
+| tiko      | 10 |   24.2 |        22.7 |         0.7 |   0.7 |  48.5 |
+| spring    | 10 |  299.0 |         0.3 |         0.0 |   1.0 | 300.3 |
 
-Reading: Tiko adds about 16 ms over the no-DI floor at the wall-time level, of which ~25 ms is `Tiko.create()` (
-aggregator + per-module container construction + classpath scan) and the remaining `first_get_*` work is comparable to
-plain. The full picture only becomes interesting once Spring/Guice/Dagger/Micronaut land.
+> **Apples-to-apples is `total`, not `create`.** Tiko defers `@PostConstruct` to first access in multi-module mode, splitting cost between `create_ns` and `first_get_*_ns`. Spring eagerly runs everything during context construction. Comparing only `create_ns` would unfairly flatter the lazy framework.
+
+Reading:
+
+- **Plain** is the floor — about 73 ms over `java -version` for class loading + the actual `new` calls.
+- **Tiko** adds ~14 ms over plain at the wall-time level (and ~14 ms by `total_ns` too). The internal breakdown shows where it lives: `Tiko.create()` is ~24 ms (aggregator + per-module container construction + classpath scan), then `first_get_a` is ~23 ms which is essentially the same UserRepository/UserService construction that plain pays during its first `get`. So Tiko's *added* cost over plain is the create step plus a tiny close step; the rest of the work is workload, not framework.
+- **Spring** is ~2.4× slower wall-clock than Tiko on cold start. Almost all of the cost lives in `create_ns` because `AnnotationConfigApplicationContext` does `@ComponentScan`, classpath reflection, and eagerly instantiates every singleton (including `@PostConstruct`) before returning. After that, `getBean` is essentially free — but the user has already paid the bill.
 
 ## Caveats
 
