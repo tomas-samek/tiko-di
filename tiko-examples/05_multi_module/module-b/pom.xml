@@ -17,7 +17,7 @@
     <dependencies>
         <!-- Module dependency for event types -->
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.tiko.examples</groupId>
             <artifactId>module-a</artifactId>
             <version>${project.version}</version>
         </dependency>
