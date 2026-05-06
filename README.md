@@ -52,6 +52,13 @@ Add to your `pom.xml`:
         <artifactId>tiko-event-local</artifactId>
         <version>0.1.0</version>
     </dependency>
+
+    <!-- YAML configuration injection (optional, only if you use @Configuration) -->
+    <dependency>
+        <groupId>io.tiko</groupId>
+        <artifactId>tiko-config</artifactId>
+        <version>0.1.0</version>
+    </dependency>
 </dependencies>
 
 <build>
@@ -211,6 +218,15 @@ public class Main {
 - `@Produces(scope, name, profiles)` - Marks factory methods that create components
     - Supports both instance methods (separate factory component) and static methods (same class)
     - Use for: validation, complex initialization, third-party classes, private constructors
+
+**Configuration (YAML-backed records):**
+
+- `@Configuration(prefix)` - Marks a record as a YAML-backed configuration root, registered as a `SINGLETON`-scoped bean
+    - `prefix` - top-level YAML key under which this record's data is read
+- `@Default(value)` - Supplies a default for a record component when the corresponding YAML key is absent. Parsed at compile time using the same coercer the runtime uses, so a malformed default fails the build
+- `@Key(value)` - Overrides the field-name → YAML-key mapping (e.g. for kebab-case YAML keys)
+
+See [Typed Configuration](#typed-configuration) below for an end-to-end example.
 
 ### Scope Rules
 
@@ -703,6 +719,10 @@ Annotation processor that runs at compile-time to validate dependencies and gene
 
 Minimal runtime container implementation. Zero dependencies beyond tiko-api.
 
+### tiko-config
+
+YAML-backed configuration injection — `@Configuration` records, generated per-record binders, runtime helpers. The only module that depends on SnakeYAML. Required when your project uses `@Configuration`; not pulled otherwise.
+
 ### tiko-event-api
 
 Event system abstractions (EventBus, EventHandler, Subscription).
@@ -760,6 +780,7 @@ Core DI is functional end-to-end. The annotation processor generates factories, 
 - ✅ In-memory event bus (`tiko-event-local`) with `@EventHandler` subscription
 - ✅ Multi-module aggregation via `AggregatingContainer` + `META-INF/tiko/` metadata
 - ✅ `container.pick(Class)` fluent API for multi-axis lookup (`withName`, `resolve`, `asProvider`, `orDefault`)
+- ✅ Configuration injection v1: `@Configuration` records with typed YAML binding, generated per-record binders, `${VAR}` interpolation, layered `ConfigSources`, strict-mode validation — see [#15](https://github.com/tomas-samek/tiko-di/issues/15)
 - 🚧 Lifecycle events (`ApplicationStartedEvent`, `RequestStartedEvent`, etc.) — types defined; publishing wiring tracked in [#4](https://github.com/tomas-samek/tiko-di/issues/4)
 - 🚧 `@EventTrigger` chains (declarative event workflows, guards, spread) — tracked in [#5](https://github.com/tomas-samek/tiko-di/issues/5)
 
@@ -768,10 +789,10 @@ Core DI is functional end-to-end. The annotation processor generates factories, 
 - **Phase 1** (Current)
     - Complete lifecycle-event publishing and verify `@EventTrigger` codegen ([#4](https://github.com/tomas-samek/tiko-di/issues/4), [#5](https://github.com/tomas-samek/tiko-di/issues/5))
     - Refactor `02_multi_module` example into api + impl + app with runtime-scope DI ([#6](https://github.com/tomas-samek/tiko-di/issues/6))
-    - Configuration injection (`@Configuration` records, YAML-backed, generated binders) — see [#15](https://github.com/tomas-samek/tiko-di/issues/15)
 
-- **Phase 2** (Next)
+- **Phase 2** (Next) — Configuration & distributed events
     - Kafka event bus integration
+    - Configuration follow-ups: nested-record codegen ([#17](https://github.com/tomas-samek/tiko-di/issues/17)), cross-module aggregation example ([#18](https://github.com/tomas-samek/tiko-di/issues/18)), YAML `file:line:col` error anchoring ([#19](https://github.com/tomas-samek/tiko-di/issues/19))
     - Conditional beans
     - Profile isolation: compile-time `forbidProfiles` validation + Maven source-root convention to keep test-only `@Component`s out of prod jars
 
