@@ -47,24 +47,47 @@ public final class ConfigBinderGenerator {
     public boolean canGenerate(ConfigurationModel cfg) {
         boolean ok = true;
         for (ConfigFieldModel f : cfg.fields()) {
-            TypeMirror inner = unwrapOptional(f.type());
-            if (inner.getKind() == javax.lang.model.type.TypeKind.DECLARED) {
-                TypeElement el = (TypeElement) ((DeclaredType) inner).asElement();
-                if (el.getKind() == ElementKind.RECORD) {
-                    messager.printMessage(Diagnostic.Kind.ERROR,
-                        "@Configuration record '" + cfg.simpleName() + "' uses nested record types"
-                            + " in fields, which are not yet supported in v1.\n"
-                            + "  Field '" + f.fieldName() + "' has type '" + el.getSimpleName() + "' (a record).\n"
-                            + "Suggested fixes:\n"
-                            + "  1. Mark the nested record as a separate @Configuration"
-                                + " with its own prefix.\n"
-                            + "  2. Wait for nested-record codegen support in a follow-up release.",
-                        f.element());
-                    ok = false;
-                }
+            String unsupported = findUnsupportedNestedRecord(f.type());
+            if (unsupported != null) {
+                messager.printMessage(Diagnostic.Kind.ERROR,
+                    "Field '" + f.fieldName() + "' contains nested record '" + unsupported
+                        + "', which is not yet supported by codegen in v1. "
+                        + "Suggested fixes: 1. Mark the nested record as a separate @Configuration "
+                        + "with its own prefix; 2. Wait for nested-record codegen support in a "
+                        + "follow-up release.",
+                    f.element());
+                ok = false;
             }
         }
         return ok;
+    }
+
+    /**
+     * Returns the simple name of the first nested record found in {@code type}'s
+     * structure (recursing through Optional/List/Map type arguments), or null if none.
+     */
+    private String findUnsupportedNestedRecord(TypeMirror type) {
+        if (type.getKind() != javax.lang.model.type.TypeKind.DECLARED) return null;
+        DeclaredType dt = (DeclaredType) type;
+        TypeElement el = (TypeElement) dt.asElement();
+        String fqn = el.getQualifiedName().toString();
+
+        if (el.getKind() == ElementKind.RECORD) {
+            return el.getSimpleName().toString();
+        }
+
+        // Recurse into Optional<X>, List<X>, Map<String,X> type arguments.
+        if (fqn.equals("java.util.Optional") || fqn.equals("java.util.List")) {
+            if (!dt.getTypeArguments().isEmpty()) {
+                return findUnsupportedNestedRecord(dt.getTypeArguments().get(0));
+            }
+        }
+        if (fqn.equals("java.util.Map")) {
+            if (dt.getTypeArguments().size() >= 2) {
+                return findUnsupportedNestedRecord(dt.getTypeArguments().get(1));
+            }
+        }
+        return null;
     }
 
     /**

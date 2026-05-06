@@ -118,7 +118,9 @@ public final class Tiko {
             if (moduleCount <= 1) {
                 container.getClass().getMethod("start").invoke(container);
             }
-            // Multi-module: AggregatingContainer's constructor already invoked start() per module.
+            // Multi-module: per-module containers are constructed lazily by the aggregator;
+            // their `start()` is not invoked eagerly here. Singletons initialise on first get().
+            // (This is pre-existing behaviour from the multi-module work, not introduced by config injection.)
 
             return container;
         } catch (RuntimeException e) {

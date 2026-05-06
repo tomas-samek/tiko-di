@@ -129,4 +129,24 @@ class ConfigurationValidatorTest {
         assertThat(c).failed();
         assertThat(c).hadErrorContaining("nested record");
     }
+
+    @Test
+    void recordInsideList_failsWithUnsupportedV1Codegen() {
+        JavaFileObject outer = JavaFileObjects.forSourceLines(
+            "io.example.Outer",
+            "package io.example;",
+            "import java.util.List;",
+            "import io.tiko.annotations.Configuration;",
+            "@Configuration(prefix = \"outer\")",
+            "public record Outer(List<Inner> inners) {}"
+        );
+        JavaFileObject inner = JavaFileObjects.forSourceLines(
+            "io.example.Inner",
+            "package io.example;",
+            "public record Inner(int v) {}"
+        );
+        Compilation c = Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(outer, inner);
+        assertThat(c).failed();
+        assertThat(c).hadErrorContaining("nested record");
+    }
 }

@@ -332,6 +332,8 @@ db:
   connectTimeout: PT5S
 ```
 
+> **v1 limitation:** nested records inside fields, lists, and maps are not yet supported by the generated binder. Declare nested record sections as separate `@Configuration` records with their own `prefix`, or wait for nested-record codegen support in a follow-up release.
+
 YAML mismatches (missing required keys, wrong types, unknown keys) fail at container startup with a single report listing every problem — never partway through serving requests.
 
 ### Named Qualifiers

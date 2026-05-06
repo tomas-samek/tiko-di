@@ -164,12 +164,12 @@ Used by `AggregatingContainer` for cross-module aggregation. Also the input the 
 - `UUID`, `URI`, `Path` (string-parsed).
 - `BigDecimal`, `Pattern`, `Charset`.
 - Enums (case-sensitive name match against the YAML scalar).
-- `List<X>` where `X` is any leaf type (primitives/boxed, `String`, time/UUID/URI/Path/etc., enums) **or a record** (covers the common `servers: [{host, port}, ...]` pattern).
-- `Map<String,X>` where `X` is any leaf type or a record.
-- **Nested records** as direct field types — bound recursively. Plain records work; `@Configuration` is *not* required for nested records (it marks top-level records that own a YAML root prefix). A child binder is generated for each distinct nested record type.
-- `Optional<X>` wrapping any of the above.
+- `List<X>` where `X` is any leaf type (primitives/boxed, `String`, time/UUID/URI/Path/etc., enums). v1 does **not** support `List<Record>` — declare nested record sections as separate `@Configuration` records.
+- `Map<String,X>` where `X` is any leaf type. v1 does **not** support `Map<String,Record>` — same workaround as List.
+- **Nested records** as direct field types are recognised by validation but **not** supported by v1 codegen — the processor emits a clear compile-time error directing users to declare them as separate top-level `@Configuration` records. Nested-record codegen is a deferred enhancement.
+- `Optional<X>` wrapping any of the above leaf types (not `Optional<Record>` or `Optional<List<Record>>`).
 
-`@Configuration` is the **top-level marker**: it tells the processor "this record gets its own root section in the YAML, identified by `prefix`." Nested records are bound in-place under their containing field's name and need no annotation. Nested collections of nested collections (`List<List<X>>`, `Map<String, List<X>>`) are out of scope for v1 — declare an intermediate record if you need that shape.
+`@Configuration` is the **top-level marker**: it tells the processor "this record gets its own root section in the YAML, identified by `prefix`."
 
 No public `TypeCoercer<T>` SPI in v1. Users needing other types declare a `String` field and parse in their service. The internal registry is shaped for additive SPI exposure later.
 
