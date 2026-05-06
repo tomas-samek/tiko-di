@@ -9,17 +9,16 @@
 
 ## Why Tiko?
 
-Tiko combines the compile-time safety of Dagger with the simplicity of lightweight DI frameworks, while adding unique
-event-driven capabilities that work seamlessly across local and distributed deployments.
+Tiko combines compile-time validation with a small surface area, and treats the event bus as a first-class part of the container — the same `@EventHandler` and `@EventTrigger` code is designed to work against either in-memory or distributed buses.
 
 ### Key Features
 
 - ⚡ **Zero Runtime DI Exceptions** - All dependency errors caught at compile-time
-- 🪶 **Minimal API** - Learn in 15 minutes, no complex concepts
+- 🪶 **Minimal API** — Small surface area, few core concepts
 - 🎯 **No Reflection** - Pure generated code, GraalVM native image ready
 - 🔄 **Event-Driven** - Transparent local/distributed event handling
 - 🚀 **Fast Startup** - No classpath scanning or runtime proxy generation
-- 📦 **Lightweight** - Core runtime targets ~100KB with zero dependencies beyond `tiko-api`
+- 📦 **Lightweight** — Minimal runtime with zero dependencies beyond `tiko-api`. Generated code scales with the size of your project (typically a few KB per `@Component`).
 - 🔍 **Clear Errors** - Compile-time errors suggest fixes, not just report problems
 - ☕ **Modern Java** - Leverages Java 17+ features (records, sealed classes, pattern matching)
 
@@ -491,8 +490,7 @@ public class AnalyticsService {
 }
 ```
 
-**The power:** Same code works with in-memory events OR Kafka/distributed events. Just swap the implementation via
-configuration!
+The same handler code is intended to work against any `EventBus` implementation — the in-memory bus ships today; a Kafka-backed bus is on the Phase 2 roadmap.
 
 ### Lifecycle Events
 
@@ -714,14 +712,14 @@ public void onOrderShipped(ShipmentResult shipment, Event<?> eventWrapper) {
 | Reflection at Runtime | None         | Heavy    | Medium  | None         | Minimal      |
 | Startup Time          | Very Fast    | Slow     | Medium  | Very Fast    | Very Fast    |
 | API Complexity        | Simple       | Complex  | Medium  | Complex      | Medium       |
-| Runtime Size          | ~100KB       | ~5MB     | ~700KB  | ~50KB        | ~10MB        |
-| Event System          | Built-in     | Built-in | None    | None         | Built-in     |
-| Learning Curve        | 15 min       | Days     | Hours   | Hours        | Hours        |
+| Runtime Size          | Lightweight  | Heavy    | Medium  | Lightweight  | Heavy        |
+| Event System          | First-class  | Built-in | External| External     | Built-in     |
+| Learning Curve        | Quick        | Steep    | Moderate| Moderate     | Moderate     |
 | Boilerplate           | Minimal      | Medium   | Medium  | High         | Low          |
 
 ## Modules
 
-### tiko-api (target ~30KB)
+### tiko-api
 
 Core annotations and interfaces. This is the only compile-time dependency your code needs.
 
@@ -729,7 +727,7 @@ Core annotations and interfaces. This is the only compile-time dependency your c
 
 Annotation processor that runs at compile-time to validate dependencies and generate code.
 
-### tiko-runtime (target ~100KB)
+### tiko-runtime
 
 Minimal runtime container implementation. Zero dependencies beyond tiko-api.
 
@@ -780,7 +778,9 @@ mvn clean install -pl tiko-api
 
 ### Current Status: Alpha
 
-Core DI is functional end-to-end. The annotation processor generates factories, a container implementation per module, and proxies for cross-scope injection. The pieces below are implemented and covered by integration tests in `tiko-examples/01_basic_di`.
+Core DI, configuration injection, lifecycle events, and `@EventTrigger` chains are functional end-to-end. The annotation processor generates factories, a container implementation per module, and proxies for cross-scope injection. The pieces below are implemented and covered by integration tests in `tiko-examples/01_basic_di`.
+
+The framework is suitable for early-adopter experimentation. Production use should wait for Phase 2 — see Roadmap below for planned work.
 
 - ✅ Core API design
 - ✅ Module structure
@@ -865,12 +865,12 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 
-Inspired by the best aspects of existing DI frameworks:
+Built on lessons learned from existing DI frameworks:
 
-- **Dagger 2** - Compile-time validation approach
-- **Guice** - Clean, type-safe API design
-- **Spring** - Comprehensive feature set and ecosystem thinking
-- **Micronaut** - Cloud-native optimization strategies
+- **Dagger 2** — compile-time validation approach
+- **Guice** — clean, type-safe API design
+- **Spring** — comprehensive feature set and ecosystem thinking
+- **Micronaut** — cloud-native optimization strategies
 
 ## Contact
 
@@ -880,4 +880,4 @@ Project Link: [https://github.com/tomas-samek/tiko-di](https://github.com/tomas-
 
 ---
 
-**Tiko** - Dependency Injection done right. Finally.
+**Tiko** — Compile-time dependency injection for Java 17+, with first-class event handling.
