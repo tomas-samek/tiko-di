@@ -186,6 +186,20 @@ public class Main {
 
 **That's it!** The annotation processor validates all dependencies at compile-time and generates the wiring code.
 
+## Runnable Examples
+
+Five worked examples ship under [`tiko-examples/`](./tiko-examples/README.md), each a self-contained Maven project demonstrating one slice of the framework:
+
+| # | Module | Demonstrates |
+|---|--------|--------------|
+| 01 | [`01_basic_di`](./tiko-examples/01_basic_di) | `@Component`, scopes, cross-scope proxies, `@Produces`, `@Named`, `Provider<T>`, `pick()` |
+| 02 | [`02_config`](./tiko-examples/02_config) | `@Configuration` records, layered `ConfigSources`, `${VAR}` interpolation |
+| 03 | [`03_events`](./tiko-examples/03_events) | Lifecycle events, `@EventTrigger` chains with guards/spread/async, `Event<?>` origin tracking |
+| 04 | [`04_api_impl`](./tiko-examples/04_api_impl) | API/impl split — app compiles against an interface jar, impl supplied at runtime |
+| 05 | [`05_multi_module`](./tiko-examples/05_multi_module) | Multi-module aggregation via `AggregatingContainer` |
+
+See [`tiko-examples/README.md`](./tiko-examples/README.md) for run commands.
+
 ## Core Concepts
 
 ### Annotations
@@ -781,14 +795,15 @@ Core DI is functional end-to-end. The annotation processor generates factories, 
 - ✅ Multi-module aggregation via `AggregatingContainer` + `META-INF/tiko/` metadata
 - ✅ `container.pick(Class)` fluent API for multi-axis lookup (`withName`, `resolve`, `asProvider`, `orDefault`)
 - ✅ Configuration injection v1: `@Configuration` records with typed YAML binding, generated per-record binders, `${VAR}` interpolation, layered `ConfigSources`, strict-mode validation — see [#15](https://github.com/tomas-samek/tiko-di/issues/15)
-- 🚧 Lifecycle events (`ApplicationStartedEvent`, `RequestStartedEvent`, etc.) — types defined; publishing wiring tracked in [#4](https://github.com/tomas-samek/tiko-di/issues/4)
-- 🚧 `@EventTrigger` chains (declarative event workflows, guards, spread) — tracked in [#5](https://github.com/tomas-samek/tiko-di/issues/5)
+- ✅ Lifecycle events (`ApplicationStartedEvent`, `RequestStartedEvent`, etc.) — automatically published around `start()`/`shutdown()` and every `runIn*Scope`/`supplyIn*Scope` ([#4](https://github.com/tomas-samek/tiko-di/issues/4))
+- ✅ `@EventTrigger` chains — declarative event workflows with return-as-payload, guards, spread, async, and full origin tracking via `Event<?>` ([#5](https://github.com/tomas-samek/tiko-di/issues/5))
+- ✅ API/impl split example — consumer compiles against an interface-only api jar, impl loaded via runtime-scope Maven dep ([#6](https://github.com/tomas-samek/tiko-di/issues/6))
 
 ### Planned Features
 
-- **Phase 1** (Current)
-    - Complete lifecycle-event publishing and verify `@EventTrigger` codegen ([#4](https://github.com/tomas-samek/tiko-di/issues/4), [#5](https://github.com/tomas-samek/tiko-di/issues/5))
-    - Refactor `02_multi_module` example into api + impl + app with runtime-scope DI ([#6](https://github.com/tomas-samek/tiko-di/issues/6))
+- **Phase 1** — alpha completion ✅ done
+    - Lifecycle-event publishing and `@EventTrigger` codegen ([#4](https://github.com/tomas-samek/tiko-di/issues/4), [#5](https://github.com/tomas-samek/tiko-di/issues/5))
+    - API/impl split example with runtime-scope DI ([#6](https://github.com/tomas-samek/tiko-di/issues/6))
 
 - **Phase 2** (Next) — Configuration & distributed events
     - Kafka event bus integration

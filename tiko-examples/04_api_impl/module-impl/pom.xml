@@ -6,39 +6,41 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.tiko</groupId>
-        <artifactId>02_multi_module</artifactId>
+        <groupId>io.tiko.examples</groupId>
+        <artifactId>04_api_impl</artifactId>
         <version>0.1.0</version>
     </parent>
 
-    <artifactId>module-b</artifactId>
-    <name>Module B - Notification Service</name>
+    <artifactId>module-impl</artifactId>
+    <name>04 - API/Impl :: impl</name>
+    <description>@Component classes implementing the api. Annotation processor runs here.</description>
 
     <dependencies>
-        <!-- Module dependency for event types -->
         <dependency>
-            <groupId>io.tiko</groupId>
-            <artifactId>module-a</artifactId>
+            <groupId>io.tiko.examples</groupId>
+            <artifactId>module-api</artifactId>
             <version>${project.version}</version>
         </dependency>
 
-        <!-- Tiko dependencies -->
         <dependency>
             <groupId>io.tiko</groupId>
             <artifactId>tiko-api</artifactId>
             <version>${project.version}</version>
         </dependency>
+
         <dependency>
             <groupId>io.tiko</groupId>
             <artifactId>tiko-processor</artifactId>
             <version>${project.version}</version>
             <scope>provided</scope>
         </dependency>
+
         <dependency>
             <groupId>io.tiko</groupId>
             <artifactId>tiko-runtime</artifactId>
             <version>${project.version}</version>
         </dependency>
+
         <dependency>
             <groupId>io.tiko</groupId>
             <artifactId>tiko-event-local</artifactId>

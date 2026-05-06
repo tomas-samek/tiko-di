@@ -2,17 +2,19 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
-         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.tiko</groupId>
-        <artifactId>02_multi_module</artifactId>
+        <groupId>io.tiko.examples</groupId>
+        <artifactId>tiko-examples</artifactId>
         <version>0.1.0</version>
     </parent>
 
-    <artifactId>module-a</artifactId>
-    <name>Module A - User Service</name>
+    <artifactId>03_events</artifactId>
+    <packaging>jar</packaging>
+    <name>03 - Events Example</name>
+    <description>Demonstrates lifecycle events and @EventTrigger chains with origin tracking</description>
 
     <dependencies>
         <dependency>
@@ -20,21 +22,37 @@
             <artifactId>tiko-api</artifactId>
             <version>${project.version}</version>
         </dependency>
+
         <dependency>
             <groupId>io.tiko</groupId>
             <artifactId>tiko-processor</artifactId>
             <version>${project.version}</version>
             <scope>provided</scope>
         </dependency>
+
         <dependency>
             <groupId>io.tiko</groupId>
             <artifactId>tiko-runtime</artifactId>
             <version>${project.version}</version>
         </dependency>
+
         <dependency>
             <groupId>io.tiko</groupId>
             <artifactId>tiko-event-local</artifactId>
             <version>${project.version}</version>
         </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
+
 </project>
