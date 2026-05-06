@@ -721,21 +721,22 @@ public void onOrderShipped(ShipmentResult shipment, Event<?> eventWrapper) {
 
 ### Measured cold-start (this section is data, not marketing)
 
-The `comparisons/` directory in this repo holds six self-contained, side-by-side implementations of the same four-singleton, two-module workload — one each for plain Java (no DI), Tiko, Dagger 2, Guice, Spring, and Micronaut (`micronaut-inject` only). Median of 10 cold JVM invocations, default JVM, default GC, Java 21, on a development laptop. **These numbers move on different hardware** — re-run locally before drawing conclusions.
+The `comparisons/` directory in this repo holds seven self-contained, side-by-side implementations of the same four-singleton, two-module workload — one each for plain Java (no DI), Tiko, Dagger 2, Avaje Inject, Guice, Spring, and Micronaut (`micronaut-inject` only). Median of 10 cold JVM invocations, default JVM, default GC, Java 21, on a development laptop. **These numbers move on different hardware** — re-run locally before drawing conclusions.
 
 | Framework | Wall-clock (ms) | `total_ns` (ms) | Style |
 |---|---:|---:|---|
-| _jvm baseline (`java -version`)_ | 98 | — | — |
-| plain (no DI) | 169 | 35 | floor reference |
-| **dagger** | **171** | **40** | compile-time |
-| **tiko** | **185** | **47** | compile-time |
-| guice | 341 | 210 | runtime, reflection |
-| micronaut (inject-only) | 405 | 272 | compile-time, eager |
-| spring | 441 | 303 | runtime, reflection + scan |
+| _jvm baseline (`java -version`)_ | 95 | — | — |
+| plain (no DI) | 168 | 35 | floor reference |
+| **dagger** | **171** | **41** | compile-time, lazy |
+| **tiko** | **185** | **50** | compile-time, lazy |
+| avaje | 214 | 102 | compile-time, eager |
+| guice | 339 | 208 | runtime, reflection, lazy |
+| micronaut (inject-only) | 434 | 290 | compile-time, eager + AOP |
+| spring | 441 | 305 | runtime, reflection, eager |
 
-The `total_ns` column sums the four phases the bench measures (`create + first_get_a + first_get_b + close`) and is the apples-to-apples comparison: it accounts for both eager (Spring, Micronaut) and lazy (Tiko, Guice, Dagger) initialisation strategies. See `comparisons/README.md` for full per-phase tables, methodology, caveats, and how to reproduce.
+The `total_ns` column sums the four phases the bench measures (`create + first_get_a + first_get_b + close`) and is the apples-to-apples comparison: it accounts for both eager (Avaje, Spring, Micronaut) and lazy (Tiko, Guice, Dagger) initialisation strategies. See `comparisons/README.md` for full per-phase tables, methodology, caveats, and how to reproduce.
 
-The honest reading: compile-time DI is necessary but not sufficient for fast startup — Micronaut is also compile-time but eagerly service-loads every `BeanDefinition` and pulls in `micronaut-aop`, putting it with the runtime crowd. Dagger's lean code generation makes it the cheapest DI framework here; Tiko sits ~7 ms behind Dagger (the gap is mostly Tiko's multi-module aggregator scan).
+The honest reading: the dominant axis is **lazy vs eager init**, not "compile-time vs runtime." Three clusters emerge — lean compile-time-lazy (plain, Dagger, Tiko at 35–50 ms `total_ns`), compile-time-eager (Avaje at 102 ms — generated wiring but eagerly constructs every bean), and the runtime/eager-with-overhead crowd (Guice, Micronaut, Spring at 208–305 ms). Tiko sits ~9 ms behind Dagger; the gap is mostly Tiko's multi-module aggregator scan.
 
 ## Modules
 

@@ -98,7 +98,7 @@ function Run-JvmBaseline {
 # Reset wall.csv per run.
 Set-Content -Path (Join-Path $resultsDir 'wall.csv') -Value 'name,sample,wall_ms'
 
-$frameworks = @('plain', 'tiko', 'dagger', 'guice', 'spring', 'micronaut')
+$frameworks = @('plain', 'tiko', 'dagger', 'avaje', 'micronaut', 'guice', 'hk2', 'spring')
 if ($Only) { $frameworks = $frameworks | Where-Object { $Only -contains $_ } }
 
 Write-Host "Running comparisons (samples=$Samples, iter=$Iter)..." -ForegroundColor Green
