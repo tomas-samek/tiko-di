@@ -28,6 +28,8 @@ Tiko combines compile-time validation with a small surface area, and treats the 
 
 Add to your `pom.xml`:
 
+> **Note:** Tiko is not yet on Maven Central — publication is tracked as Phase 5. For now, build from source (see [Building from Source](#building-from-source)) and the artifacts will be available in your local Maven repository.
+
 ```xml
 
 <dependencies>
@@ -801,11 +803,7 @@ The framework is suitable for early-adopter experimentation. Production use shou
 
 ### Planned Features
 
-- **Phase 1** — alpha completion ✅ done
-    - Lifecycle-event publishing and `@EventTrigger` codegen ([#4](https://github.com/tomas-samek/tiko-di/issues/4), [#5](https://github.com/tomas-samek/tiko-di/issues/5))
-    - API/impl split example with runtime-scope DI ([#6](https://github.com/tomas-samek/tiko-di/issues/6))
-
-- **Phase 2** (Next) — Configuration & distributed events
+- **Phase 2** (Current) — Configuration & distributed events
     - Kafka event bus integration
     - Configuration follow-ups: nested-record codegen ([#17](https://github.com/tomas-samek/tiko-di/issues/17)), cross-module aggregation example ([#18](https://github.com/tomas-samek/tiko-di/issues/18)), YAML `file:line:col` error anchoring ([#19](https://github.com/tomas-samek/tiko-di/issues/19))
     - Conditional beans
@@ -827,7 +825,7 @@ The framework is suitable for early-adopter experimentation. Production use shou
 
 ### Known Limitations
 
-- `container.get(Class, String)` uses `isAssignableFrom` matching; `container.get(Class)` uses exact class or exact implemented-interface matching. The asymmetry is intentional for now but may be unified in Phase 1.
+- `container.get(Class, String)` uses `isAssignableFrom` matching; `container.get(Class)` uses exact class or exact implemented-interface matching. The asymmetry is intentional for now but may be unified in a future release.
 - Open issues are tracked in [GitHub Issues](https://github.com/tomas-samek/tiko-di/issues).
 
 ## Philosophy
