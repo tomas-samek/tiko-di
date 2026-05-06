@@ -11,6 +11,7 @@
         <version>0.1.0</version>
     </parent>
 
+    <groupId>io.tiko.examples</groupId>
     <artifactId>tiko-examples</artifactId>
     <packaging>pom</packaging>
     <name>Tiko DI - Examples</name>
