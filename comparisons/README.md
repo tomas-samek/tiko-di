@@ -9,19 +9,20 @@ default JVM, default GC. Not steady-state. Not native-image. Not memory.
 
 ## Lineup
 
-| Project     | Wiring                                        | DI style            |
-|-------------|-----------------------------------------------|---------------------|
-| `plain`     | manual `new` chain in `Main`                  | none — floor cost   |
-| `tiko`      | `Tiko.create()`                               | compile-time        |
-| `dagger`    | `DaggerAppComponent.create()`                 | compile-time        |
-| `guice`     | `Guice.createInjector(...)`                   | runtime, reflection |
-| `spring`    | `new AnnotationConfigApplicationContext(...)` | runtime, reflection |
-| `micronaut` | `BeanContext.run()` (inject-only)             | compile-time        |
+| Project     | Wiring                                        | DI style                     |
+|-------------|-----------------------------------------------|------------------------------|
+| `plain`     | manual `new` chain in `Main`                  | none — floor cost            |
+| `tiko`      | `Tiko.create()`                               | compile-time, lazy           |
+| `dagger`    | `DaggerAppComponent.create()`                 | compile-time, lazy           |
+| `avaje`     | `BeanScope.builder().build()`                 | compile-time, eager          |
+| `guice`     | `Guice.createInjector(...)`                   | runtime, reflection, lazy    |
+| `spring`    | `new AnnotationConfigApplicationContext(...)` | runtime, reflection, eager   |
+| `micronaut` | `BeanContext.run()` (inject-only)             | compile-time, eager          |
 
 Each project is its own self-contained Maven multi-module build (own parent pom, no relation to the root reactor).
 `mvn install` at the repo root does **not** descend into `comparisons/`.
 
-## Components (identical across all six)
+## Components (identical across all seven)
 
 - **Module A**
     - `UserRepository` — singleton; `@PostConstruct` seeds two users with a `println` per save
@@ -74,43 +75,52 @@ iter,create_ns,first_get_a_ns,first_get_b_ns,close_ns,total_ns
 _Filled by hand after a fresh `analyze.ps1` run. Numbers are machine-specific — Java 21.0.9, Windows 11, default G1GC.
 Re-run locally; don't take these as gospel._
 
-All six frameworks wired up.
+Seven frameworks wired up. (HK2 lands in #40 to round out runtime-reflection.)
 
 ### Wall time (cold JVM, ms)
 
 | framework                        |  n |   min | median |   max |
 |----------------------------------|---:|------:|-------:|------:|
-| _jvm baseline (`java -version`)_ | 10 |  96.4 |   97.9 | 107.4 |
-| plain                            | 10 | 144.9 |  168.9 | 177.2 |
-| dagger                           | 10 | 154.0 |  170.8 | 219.3 |
-| tiko                             | 10 | 170.8 |  184.7 | 189.6 |
-| guice                            | 10 | 327.0 |  341.3 | 387.7 |
-| micronaut                        | 10 | 390.2 |  404.8 | 418.9 |
-| spring                           | 10 | 431.6 |  440.7 | 466.9 |
+| _jvm baseline (`java -version`)_ | 10 |  93.5 |   94.6 | 101.0 |
+| plain                            | 10 | 162.1 |  168.3 | 172.1 |
+| dagger                           | 10 | 155.2 |  170.9 | 203.0 |
+| tiko                             | 10 | 177.4 |  185.2 | 188.4 |
+| avaje                            | 10 | 210.0 |  214.2 | 221.8 |
+| guice                            | 10 | 314.5 |  338.8 | 436.9 |
+| micronaut                        | 10 | 405.0 |  434.1 | 563.8 |
+| spring                           | 10 | 429.9 |  440.8 | 458.2 |
 
 ### Internal phases — median ms (cold iter=0)
 
 | framework |  n | create | first_get_a | first_get_b | close | total |
 |-----------|---:|-------:|------------:|------------:|------:|------:|
-| plain     | 10 |    0.0 |        33.5 |         1.3 |   0.0 |  34.9 |
-| dagger    | 10 |   11.3 |        27.9 |         0.8 |   0.0 |  40.2 |
-| tiko      | 10 |   24.0 |        22.1 |         0.6 |   0.7 |  46.8 |
-| guice     | 10 |  189.8 |        22.7 |         0.3 |   0.0 | 209.7 |
-| micronaut | 10 |  247.4 |        16.0 |         0.7 |   7.3 | 271.9 |
-| spring    | 10 |  301.9 |         0.3 |         0.1 |   1.0 | 303.2 |
+| plain     | 10 |    0.0 |        33.5 |         1.3 |   0.0 |  34.7 |
+| dagger    | 10 |   11.5 |        28.4 |         0.9 |   0.0 |  40.8 |
+| tiko      | 10 |   25.8 |        23.5 |         0.6 |   0.7 |  50.2 |
+| avaje     | 10 |  101.7 |         0.0 |         0.0 |   0.0 | 101.7 |
+| guice     | 10 |  187.1 |        20.4 |         0.3 |   0.0 | 208.4 |
+| micronaut | 10 |  266.6 |        16.5 |         0.7 |   7.6 | 290.4 |
+| spring    | 10 |  303.7 |         0.3 |         0.1 |   1.0 | 305.2 |
 
-> **Apples-to-apples is `total`, not `create`.** Tiko, Dagger, and Guice defer `@PostConstruct` (or its workaround) to first access — the cost splits between `create_ns` and `first_get_*_ns`. Spring and Micronaut eagerly run everything during context construction. Comparing only `create_ns` would unfairly flatter the lazy frameworks.
+> **Apples-to-apples is `total`, not `create`.** Tiko, Dagger, and Guice defer `@PostConstruct` (or its workaround) to first access — the cost splits between `create_ns` and `first_get_*_ns`. Avaje, Spring, and Micronaut eagerly run everything during context construction. Comparing only `create_ns` would unfairly flatter the lazy frameworks.
 
 Reading:
 
-- **Plain** is the floor — about 71 ms over `java -version` for class loading + the actual `new` calls.
-- **Dagger** lands ~5 ms above plain on `total_ns` — the cheapest DI framework here. `DaggerAppComponent.create()` is essentially a constructor call: no module-discovery scan, no aggregator. On wall time Dagger is **statistically tied with plain** on this machine.
-- **Tiko** adds ~12 ms over plain on `total_ns`, ~7 ms more than Dagger. Both are compile-time. The difference is `Tiko.create()` (24 ms) vs `DaggerAppComponent.create()` (11 ms): Tiko's multi-module aggregator does a `META-INF/tiko/container.properties` scan to discover module containers, which Dagger doesn't need because the `@Component` interface lists modules explicitly at compile time.
-- **Guice** is ~170 ms above Tiko on `total_ns`. Most of it is `Guice.createInjector(...)` — runtime reflection plus cglib to generate enhanced subclasses for AOP/scoping, even though we don't use either. Lazy `@Provides @Singleton` means beans are constructed on first `getInstance(...)`, so the cost still splits across `create + first_get_a`.
-- **Micronaut** (using only `micronaut-inject` + `micronaut-context`, no full framework) is ~62 ms above Guice on `total_ns` despite being compile-time DI. The interesting finding: compile-time DI ≠ fast startup on its own. Micronaut generates `BeanDefinition` classes at compile time, but `BeanContext.run()` still service-loads them via `META-INF/micronaut/...`, instantiates them eagerly, and pulls in `micronaut-aop` even when no aspects are used. It's also the only framework here that does meaningful work in `close()` (~7 ms) — graceful shutdown is on by default.
-- **Spring** tops the chart at ~303 ms `total_ns`. Almost all of it lives in `create_ns` because `AnnotationConfigApplicationContext` does `@ComponentScan`, classpath reflection, and eager instantiation of every singleton (including `@PostConstruct`) before returning. After that, `getBean` is essentially free — but the bill is paid.
+- **Plain** is the floor — about 74 ms over `java -version` for class loading + the actual `new` calls.
+- **Dagger** lands ~6 ms above plain on `total_ns` — the cheapest DI framework here. `DaggerAppComponent.create()` is essentially a constructor call: no module-discovery scan, no aggregator. On wall time Dagger is **statistically tied with plain** on this machine.
+- **Tiko** adds ~16 ms over plain on `total_ns`, ~10 ms more than Dagger. Both are compile-time and lazy. The difference is `Tiko.create()` (26 ms) vs `DaggerAppComponent.create()` (12 ms): Tiko's multi-module aggregator does a `META-INF/tiko/container.properties` scan to discover module containers, which Dagger doesn't need because the `@Component` interface lists modules explicitly at compile time.
+- **Avaje** sits at ~102 ms `total_ns` — between Tiko and Guice. Compile-time like Tiko/Dagger, but **eager** by default: `BeanScope.builder().build()` constructs every singleton before returning, so all the `@PostConstruct` work lands in `create_ns` and `first_get_*` are essentially Map lookups (~10 µs each). The shape is identical to Spring's, just much cheaper because the wiring is generated, not reflective.
+- **Guice** is ~107 ms above Avaje on `total_ns`. Most of it is `Guice.createInjector(...)` — runtime reflection plus cglib to generate enhanced subclasses for AOP/scoping, even though we don't use either. Lazy `@Provides @Singleton` means beans are constructed on first `getInstance(...)`, so the cost still splits across `create + first_get_a`.
+- **Micronaut** (using only `micronaut-inject` + `micronaut-context`, no full framework) is ~82 ms above Guice on `total_ns` despite being compile-time DI. The interesting finding: compile-time DI ≠ fast startup on its own. Micronaut generates `BeanDefinition` classes at compile time, but `BeanContext.run()` still service-loads them via `META-INF/micronaut/...`, instantiates them eagerly, and pulls in `micronaut-aop` even when no aspects are used. It's also the only framework here that does meaningful work in `close()` (~7 ms) — graceful shutdown is on by default.
+- **Spring** tops the chart at ~305 ms `total_ns`. Almost all of it lives in `create_ns` because `AnnotationConfigApplicationContext` does `@ComponentScan`, classpath reflection, and eager instantiation of every singleton (including `@PostConstruct`) before returning. After that, `getBean` is essentially free — but the bill is paid.
 
-The runtime/reflection/scan frameworks (Spring, Guice, Micronaut) cluster in the 200–300 ms `total_ns` band; the compile-time + lean ones (Dagger, Tiko, plain) cluster in the 35–47 ms band. Micronaut is the surprise — compile-time, but its eager init + service-loader scan land it with the runtime crowd.
+Three clusters emerge:
+
+- **Lean compile-time, lazy** (35–50 ms): plain, dagger, tiko
+- **Compile-time, eager** (102 ms): avaje — the cleanest demonstration that "compile-time" alone doesn't predict cost; eagerness adds ~50 ms even when wiring is generated
+- **Runtime/reflection or eager-with-overhead** (208–305 ms): guice, micronaut, spring
+
+Avaje is the bridge: same compile-time wiring as Tiko/Dagger, same eager init as Spring/Micronaut, and the result lands cleanly between them. That answers the question of which axis matters more: it's not "compile-time vs runtime" — it's "lazy vs eager," with reflection vs codegen as a secondary multiplier.
 
 ## Caveats
 

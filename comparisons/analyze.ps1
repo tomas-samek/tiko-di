@@ -80,7 +80,7 @@ Get-ChildItem $ResultsDir -Filter '*.csv' | Where-Object { $_.Name -ne 'wall.csv
 }
 
 # Print table
-$frameworks = @('plain', 'tiko', 'dagger', 'guice', 'spring', 'micronaut') |
+$frameworks = @('plain', 'tiko', 'dagger', 'avaje', 'micronaut', 'guice', 'hk2', 'spring') |
     Where-Object { $wallByName.ContainsKey($_) -or $benchByName.ContainsKey($_) }
 $jvm = if ($wallByName.ContainsKey('jvm')) { Stats ($wallByName['jvm'].ToArray()) } else { $null }
 
