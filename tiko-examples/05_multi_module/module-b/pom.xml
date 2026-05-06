@@ -7,14 +7,22 @@
 
     <parent>
         <groupId>io.tiko</groupId>
-        <artifactId>02_multi_module</artifactId>
+        <artifactId>05_multi_module</artifactId>
         <version>0.1.0</version>
     </parent>
 
-    <artifactId>module-a</artifactId>
-    <name>Module A - User Service</name>
+    <artifactId>module-b</artifactId>
+    <name>Module B - Notification Service</name>
 
     <dependencies>
+        <!-- Module dependency for event types -->
+        <dependency>
+            <groupId>io.tiko</groupId>
+            <artifactId>module-a</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- Tiko dependencies -->
         <dependency>
             <groupId>io.tiko</groupId>
             <artifactId>tiko-api</artifactId>

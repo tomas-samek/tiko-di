@@ -2,32 +2,42 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
-                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
         <groupId>io.tiko</groupId>
-        <artifactId>tiko-examples</artifactId>
+        <artifactId>04_api_impl</artifactId>
         <version>0.1.0</version>
     </parent>
 
-    <artifactId>03_config</artifactId>
-    <packaging>jar</packaging>
-    <name>03 - Configuration Injection Example</name>
-    <description>End-to-end demo of typed YAML configuration injection</description>
+    <artifactId>apiimpl-app</artifactId>
+    <name>04 - API/Impl :: app</name>
+    <description>Application entry point. Compiles against module-api only; module-impl is on the runtime classpath.</description>
 
     <dependencies>
+        <!-- API surface: compile-scope. The app references only interfaces and DTOs from here. -->
         <dependency>
             <groupId>io.tiko</groupId>
-            <artifactId>tiko-api</artifactId>
+            <artifactId>module-api</artifactId>
             <version>${project.version}</version>
+        </dependency>
+
+        <!--
+          Implementation: runtime scope. The app cannot see *Impl classes at compile time —
+          the container resolves them via interface dispatch in get(Class) at runtime.
+        -->
+        <dependency>
+            <groupId>io.tiko</groupId>
+            <artifactId>module-impl</artifactId>
+            <version>${project.version}</version>
+            <scope>runtime</scope>
         </dependency>
 
         <dependency>
             <groupId>io.tiko</groupId>
-            <artifactId>tiko-processor</artifactId>
+            <artifactId>tiko-api</artifactId>
             <version>${project.version}</version>
-            <scope>provided</scope>
         </dependency>
 
         <dependency>
@@ -41,24 +51,5 @@
             <artifactId>tiko-event-local</artifactId>
             <version>${project.version}</version>
         </dependency>
-
-        <dependency>
-            <groupId>io.tiko</groupId>
-            <artifactId>tiko-config</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.assertj</groupId>
-            <artifactId>assertj-core</artifactId>
-            <scope>test</scope>
-        </dependency>
     </dependencies>
-
 </project>

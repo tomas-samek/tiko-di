@@ -11,9 +11,9 @@
         <version>0.1.0</version>
     </parent>
 
-    <artifactId>02_multi_module</artifactId>
+    <artifactId>05_multi_module</artifactId>
     <packaging>pom</packaging>
-    <name>Multi-Module Example</name>
+    <name>05 - Multi-Module Aggregation Example</name>
 
     <modules>
         <module>module-a</module>

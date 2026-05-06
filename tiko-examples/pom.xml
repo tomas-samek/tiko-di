@@ -18,9 +18,10 @@
 
     <modules>
         <module>01_basic_di</module>
-        <module>02_multi_module</module>
-        <module>03_config</module>
-        <module>04_events</module>
+        <module>02_config</module>
+        <module>03_events</module>
+        <module>04_api_impl</module>
+        <module>05_multi_module</module>
     </modules>
 
 </project>

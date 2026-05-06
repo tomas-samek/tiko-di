@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.tiko</groupId>
+        <artifactId>tiko-examples</artifactId>
+        <version>0.1.0</version>
+    </parent>
+
+    <artifactId>04_api_impl</artifactId>
+    <packaging>pom</packaging>
+    <name>04 - API/Impl Split Example</name>
+    <description>Consumer compiles against an interface-only api jar; the impl jar is loaded at runtime via interface dispatch in container.get(Class).</description>
+
+    <modules>
+        <module>module-api</module>
+        <module>module-impl</module>
+        <module>app</module>
+    </modules>
+</project>
