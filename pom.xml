@@ -17,6 +17,7 @@
         <module>tiko-api</module>
         <module>tiko-processor</module>
         <module>tiko-runtime</module>
+        <module>tiko-config</module>
         <module>tiko-event-api</module>
         <module>tiko-event-local</module>
         <module>tiko-examples</module>
@@ -34,6 +35,7 @@
         <slf4j.version>2.0.9</slf4j.version>
         <junit.version>5.10.1</junit.version>
         <compile-testing.version>0.21.0</compile-testing.version>
+        <snakeyaml.version>2.3</snakeyaml.version>
     </properties>
 
     <dependencyManagement>
@@ -58,6 +60,16 @@
                 <groupId>io.tiko</groupId>
                 <artifactId>tiko-event-local</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.tiko</groupId>
+                <artifactId>tiko-config</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.yaml</groupId>
+                <artifactId>snakeyaml</artifactId>
+                <version>${snakeyaml.version}</version>
             </dependency>
 
             <!-- Annotation processing -->

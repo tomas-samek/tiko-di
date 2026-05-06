@@ -20,6 +20,11 @@
             <groupId>io.tiko</groupId>
             <artifactId>tiko-api</artifactId>
         </dependency>
+        <dependency>
+            <groupId>io.tiko</groupId>
+            <artifactId>tiko-config</artifactId>
+            <scope>provided</scope>
+        </dependency>
 
         <!-- Annotation processing -->
         <dependency>

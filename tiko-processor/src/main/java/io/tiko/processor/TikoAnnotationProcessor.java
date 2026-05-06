@@ -3,6 +3,7 @@ package io.tiko.processor;
 import com.google.auto.service.AutoService;
 import io.tiko.Scope;
 import io.tiko.annotations.*;
+import io.tiko.annotations.Configuration;
 import io.tiko.processor.generator.*;
 import io.tiko.processor.model.*;
 import io.tiko.processor.util.ProcessorContext;
@@ -52,7 +53,8 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         return Set.of(
                 Component.class.getCanonicalName(),
                 Produces.class.getCanonicalName(),
-                EventHandler.class.getCanonicalName()
+                EventHandler.class.getCanonicalName(),
+                Configuration.class.getCanonicalName()
         );
     }
 
@@ -77,6 +79,7 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
             collectComponents(roundEnv);
             collectFactoryMethods(roundEnv);
             collectEventHandlers(roundEnv);
+            collectConfigurations(roundEnv);
 
             processingEnv.getMessager().printMessage(
                     Diagnostic.Kind.NOTE,
@@ -97,10 +100,11 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
 
         try {
             // Check if we have anything to process
-            if (context.getComponents().isEmpty() && context.getFactoryMethods().isEmpty()) {
+            if (context.getComponents().isEmpty() && context.getFactoryMethods().isEmpty()
+                    && context.getConfigurations().isEmpty()) {
                 processingEnv.getMessager().printMessage(
                         Diagnostic.Kind.WARNING,
-                        "Tiko DI: No components or factories found to process!"
+                        "Tiko DI: No components, factories, or configurations found to process!"
                 );
                 return false;
             }
@@ -445,6 +449,13 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
     }
 
     /**
+     * Collects all @Configuration records.
+     */
+    private void collectConfigurations(RoundEnvironment roundEnv) {
+        new io.tiko.processor.config.ConfigurationCollector(context).collect(roundEnv);
+    }
+
+    /**
      * Builds an EventHandlerModel from an @EventHandler method.
      */
     private EventHandlerModel buildEventHandlerModel(ExecutableElement methodElement) {
@@ -516,6 +527,13 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
             valid = false;
         }
 
+        // Validate @Configuration records
+        io.tiko.processor.config.ConfigurationValidator configValidator =
+            new io.tiko.processor.config.ConfigurationValidator(context, processingEnv.getTypeUtils());
+        if (!configValidator.validate()) {
+            valid = false;
+        }
+
         return valid;
     }
 
@@ -556,6 +574,25 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         );
         EventRegistryGenerator eventRegistryGenerator = new EventRegistryGenerator(context);
         eventRegistryGenerator.generate();
+
+        // Generate per-record ConfigBinder classes
+        io.tiko.processor.config.ConfigBinderGenerator configBinderGen =
+            new io.tiko.processor.config.ConfigBinderGenerator(
+                processingEnv.getFiler(), processingEnv.getMessager());
+        for (io.tiko.processor.config.ConfigurationModel cfg : context.getConfigurations()) {
+            if (configBinderGen.canGenerate(cfg)) {
+                configBinderGen.generate(cfg);
+            }
+        }
+
+        // Generate ConfigBinderRegistry and configs.txt manifest
+        List<io.tiko.processor.config.ConfigurationModel> configs = context.getConfigurations();
+        // containerClassName already computed above; extract the hash suffix from it
+        String hashSuffix = containerClassName.substring(containerClassName.lastIndexOf('_') + 1);
+        io.tiko.processor.config.ConfigBinderRegistryGenerator regGen =
+            new io.tiko.processor.config.ConfigBinderRegistryGenerator(processingEnv.getFiler(), hashSuffix);
+        regGen.generate(configs);
+        new io.tiko.processor.config.ConfigManifestWriter(processingEnv.getFiler(), regGen.registryClassFqn()).write(configs);
 
         // Generate container (must be last)
         processingEnv.getMessager().printMessage(

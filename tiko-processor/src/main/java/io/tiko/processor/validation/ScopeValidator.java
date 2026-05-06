@@ -194,12 +194,15 @@ public final class ScopeValidator {
 
     /**
      * Gets the scope from a component or factory method model.
+     * {@code @Configuration} records are always SINGLETON-scoped.
      */
     private Scope getScope(Object componentOrFactory) {
         if (componentOrFactory instanceof ComponentModel) {
             return ((ComponentModel) componentOrFactory).getScope();
         } else if (componentOrFactory instanceof FactoryMethodModel) {
             return ((FactoryMethodModel) componentOrFactory).getScope();
+        } else if (componentOrFactory instanceof io.tiko.processor.config.ConfigurationModel) {
+            return Scope.SINGLETON;
         }
         throw new IllegalArgumentException("Unknown type: " + componentOrFactory.getClass());
     }

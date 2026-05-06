@@ -19,6 +19,7 @@
     <modules>
         <module>01_basic_di</module>
         <module>02_multi_module</module>
+        <module>03_config</module>
     </modules>
 
 </project>

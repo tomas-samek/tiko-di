@@ -50,6 +50,7 @@ public final class ContainerGenerator {
         containerBuilder.addField(createRequestScopeField());
         containerBuilder.addField(createEventScopeField());
         containerBuilder.addField(createEventBusField());
+        containerBuilder.addField(createConfigSingletonsField());
         containerBuilder.addFields(createFactoryFields());
 
         // Add constructor
@@ -75,6 +76,9 @@ public final class ContainerGenerator {
         // Add get methods
         containerBuilder.addMethod(createGetMethod());
         containerBuilder.addMethod(createGetWithNameMethod());
+
+        // Add config injection method
+        containerBuilder.addMethod(createInjectConfigsMethod());
 
         // Add EventBus getter
         containerBuilder.addMethod(createGetEventBusMethod());
@@ -152,6 +156,36 @@ public final class ContainerGenerator {
     private FieldSpec createEventBusField() {
         return FieldSpec.builder(EventBus.class, "eventBus", Modifier.PRIVATE, Modifier.FINAL)
                 .build();
+    }
+
+    /**
+     * Field: Map&lt;Class&lt;?&gt;, Object&gt; configSingletons — populated by injectConfigs().
+     */
+    private FieldSpec createConfigSingletonsField() {
+        ParameterizedTypeName mapType = ParameterizedTypeName.get(
+            ClassName.get(Map.class),
+            ParameterizedTypeName.get(ClassName.get(Class.class), WildcardTypeName.subtypeOf(Object.class)),
+            ClassName.get(Object.class)
+        );
+        return FieldSpec.builder(mapType, "configSingletons", Modifier.PRIVATE, Modifier.FINAL)
+            .initializer("new $T<>()", ConcurrentHashMap.class)
+            .build();
+    }
+
+    /**
+     * public void injectConfigs(Map&lt;Class&lt;?&gt;, Object&gt; configs) — populates the configSingletons map.
+     */
+    private MethodSpec createInjectConfigsMethod() {
+        ParameterizedTypeName mapType = ParameterizedTypeName.get(
+            ClassName.get(Map.class),
+            ParameterizedTypeName.get(ClassName.get(Class.class), WildcardTypeName.subtypeOf(Object.class)),
+            ClassName.get(Object.class)
+        );
+        return MethodSpec.methodBuilder("injectConfigs")
+            .addModifiers(Modifier.PUBLIC)
+            .addParameter(mapType, "configs")
+            .addStatement("this.configSingletons.putAll(configs)")
+            .build();
     }
 
     /**
@@ -316,6 +350,9 @@ public final class ContainerGenerator {
             call = dependency.getQualifier()
                     .map(q -> methodName + "(\"" + q + "\")")
                     .orElse(methodName + "()");
+        } else if (provider instanceof io.tiko.processor.config.ConfigurationModel) {
+            // @Configuration records are stored in configSingletons and retrieved via get(Class)
+            call = "get(" + typeName + ".class)";
         } else {
             String methodName = "get" + simpleClassName(typeName);
             call = dependency.getQualifier()
@@ -599,6 +636,11 @@ public final class ContainerGenerator {
                 .addTypeVariable(typeVar)
                 .addParameter(classType, "type")
                 .returns(typeVar);
+
+        // Check config singletons first — config records take precedence over DI components
+        method.beginControlFlow("if (configSingletons.containsKey(type))");
+        method.addStatement("return type.cast(configSingletons.get(type))");
+        method.endControlFlow();
 
         // Generate if-else chain for each component.
         // Named components match only their concrete class; unnamed components also match

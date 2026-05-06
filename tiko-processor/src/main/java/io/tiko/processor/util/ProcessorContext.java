@@ -3,6 +3,7 @@ package io.tiko.processor.util;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.FactoryMethodModel;
 import io.tiko.processor.model.EventHandlerModel;
+import io.tiko.processor.config.ConfigurationModel;
 
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.Messager;
@@ -32,6 +33,7 @@ public final class ProcessorContext {
     private final Map<String, ComponentModel> components = new HashMap<>();
     private final Map<String, FactoryMethodModel> factoryMethods = new HashMap<>();
     private final List<EventHandlerModel> eventHandlers = new ArrayList<>();
+    private final List<ConfigurationModel> configurations = new ArrayList<>();
 
     // Active profiles (for filtering components during generation)
     private final List<String> activeProfiles;
@@ -123,8 +125,18 @@ public final class ProcessorContext {
         return List.copyOf(eventHandlers);
     }
 
+    public void registerConfiguration(ConfigurationModel cfg) {
+        configurations.add(cfg);
+    }
+
+    public List<ConfigurationModel> getConfigurations() {
+        return List.copyOf(configurations);
+    }
+
     /**
      * Looks up a component or factory by its key (typeName or typeName#qualifier).
+     * Also matches {@code @Configuration} records, which are injected as SINGLETON beans
+     * by the runtime after config binding.
      */
     public Optional<Object> findComponentOrFactory(String key) {
         // First try exact match
@@ -135,9 +147,17 @@ public final class ProcessorContext {
             return Optional.of(factoryMethods.get(key));
         }
 
-        // Try to find by interface implementation
-        // Extract type name without qualifier
+        // @Configuration records are bound by the runtime and registered as SINGLETON beans;
+        // treat them as resolvable so that DependencyGraphValidator doesn't reject them.
         String typeName = key.contains("#") ? key.substring(0, key.indexOf("#")) : key;
+        for (io.tiko.processor.config.ConfigurationModel cfg : configurations) {
+            if (cfg.qualifiedName().equals(typeName)) {
+                return Optional.of(cfg);
+            }
+        }
+
+        // Try to find by interface implementation
+        // Extract qualifier
         String qualifier = key.contains("#") ? key.substring(key.indexOf("#") + 1) : "";
 
         // Look for a component that implements this interface
