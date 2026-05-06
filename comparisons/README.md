@@ -80,26 +80,26 @@ Three of six wired up so far. The other three land in follow-up issues (#30 Guic
 
 | framework                        |  n |   min | median |   max |
 |----------------------------------|---:|------:|-------:|------:|
-| _jvm baseline (`java -version`)_ | 10 | 100.5 |  104.3 | 106.6 |
-| plain                            | 10 | 160.9 |  173.6 | 221.0 |
-| tiko                             | 10 | 175.6 |  198.9 | 227.6 |
-| spring                           | 10 | 447.4 |  491.6 | 554.9 |
+| _jvm baseline (`java -version`)_ | 10 |  93.6 |   95.8 | 113.9 |
+| plain                            | 10 | 155.9 |  169.0 | 173.4 |
+| tiko                             | 10 | 168.5 |  183.7 | 187.9 |
+| spring                           | 10 | 427.3 |  435.6 | 439.7 |
 
 ### Internal phases — median ms (cold iter=0)
 
 | framework |  n | create | first_get_a | first_get_b | close | total |
 |-----------|---:|-------:|------------:|------------:|------:|------:|
-| plain     | 10 |    0.0 |        37.2 |         1.4 |   0.0 |  38.6 |
-| tiko      | 10 |   27.3 |        24.7 |         0.7 |   0.7 |  53.1 |
-| spring    | 10 |  331.6 |         0.3 |         0.1 |   1.1 | 333.1 |
+| plain     | 10 |    0.0 |        33.5 |         1.3 |   0.0 |  34.8 |
+| tiko      | 10 |   24.2 |        22.7 |         0.7 |   0.7 |  48.5 |
+| spring    | 10 |  299.0 |         0.3 |         0.0 |   1.0 | 300.3 |
 
 > **Apples-to-apples is `total`, not `create`.** Tiko defers `@PostConstruct` to first access in multi-module mode, splitting cost between `create_ns` and `first_get_*_ns`. Spring eagerly runs everything during context construction. Comparing only `create_ns` would unfairly flatter the lazy framework.
 
 Reading:
 
-- **Plain** is the floor — about 70 ms over `java -version` for class loading + the actual `new` calls.
-- **Tiko** adds ~25 ms over plain at the wall-time level. Roughly half of that is `Tiko.create()` (aggregator + per-module container construction + classpath scan); the rest is in the first `get(...)` calls because Tiko's multi-module mode initialises singletons lazily on first access.
-- **Spring** is ~3× slower wall-clock than Tiko on cold start. Almost all of the cost lives in `create_ns` because `AnnotationConfigApplicationContext` does `@ComponentScan`, classpath reflection, and eagerly instantiates every singleton (including `@PostConstruct`) before returning. After that, `getBean` is essentially free — but the user has already paid the bill.
+- **Plain** is the floor — about 73 ms over `java -version` for class loading + the actual `new` calls.
+- **Tiko** adds ~14 ms over plain at the wall-time level (and ~14 ms by `total_ns` too). The internal breakdown shows where it lives: `Tiko.create()` is ~24 ms (aggregator + per-module container construction + classpath scan), then `first_get_a` is ~23 ms which is essentially the same UserRepository/UserService construction that plain pays during its first `get`. So Tiko's *added* cost over plain is the create step plus a tiny close step; the rest of the work is workload, not framework.
+- **Spring** is ~2.4× slower wall-clock than Tiko on cold start. Almost all of the cost lives in `create_ns` because `AnnotationConfigApplicationContext` does `@ComponentScan`, classpath reflection, and eagerly instantiates every singleton (including `@PostConstruct`) before returning. After that, `getBean` is essentially free — but the user has already paid the bill.
 
 ## Caveats
 
