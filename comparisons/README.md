@@ -74,37 +74,38 @@ iter,create_ns,first_get_a_ns,first_get_b_ns,close_ns,total_ns
 _Filled by hand after a fresh `analyze.ps1` run. Numbers are machine-specific — Java 21.0.9, Windows 11, default G1GC.
 Re-run locally; don't take these as gospel._
 
-Four of six wired up so far. The other two land in follow-up issues (#31 Dagger, #32 Micronaut).
+Five of six wired up so far. The last one lands in #32 (Micronaut).
 
 ### Wall time (cold JVM, ms)
 
-| framework                        |  n |   min | median |     max |
-|----------------------------------|---:|------:|-------:|--------:|
-| _jvm baseline (`java -version`)_ | 10 | 100.4 |  108.4 |   121.8 |
-| plain                            | 10 | 158.5 |  169.9 |   245.3 |
-| tiko                             | 10 | 174.9 |  200.9 |   666.6 |
-| guice                            | 10 | 345.7 |  366.9 |   402.5 |
-| spring                           | 10 | 447.6 |  466.0 | 1,051.8 |
+| framework                        |  n |   min | median |   max |
+|----------------------------------|---:|------:|-------:|------:|
+| _jvm baseline (`java -version`)_ | 10 |  92.6 |   94.3 | 102.9 |
+| plain                            | 10 | 162.8 |  170.2 | 178.6 |
+| tiko                             | 10 | 162.0 |  183.7 | 188.3 |
+| dagger                           | 10 | 167.8 |  170.3 | 187.4 |
+| guice                            | 10 | 318.5 |  342.8 | 359.4 |
+| spring                           | 10 | 433.6 |  445.0 | 513.4 |
 
 ### Internal phases — median ms (cold iter=0)
 
 | framework |  n | create | first_get_a | first_get_b | close | total |
 |-----------|---:|-------:|------------:|------------:|------:|------:|
-| plain     | 10 |    0.0 |        35.9 |         1.3 |   0.0 |  37.2 |
-| tiko      | 10 |   26.6 |        23.6 |         0.7 |   0.7 |  51.5 |
-| guice     | 10 |  197.3 |        22.4 |         0.3 |   0.0 | 220.8 |
-| spring    | 10 |  327.1 |         0.3 |         0.1 |   1.0 | 328.3 |
+| plain     | 10 |    0.0 |        33.4 |         1.3 |   0.0 |  34.7 |
+| tiko      | 10 |   24.5 |        23.1 |         0.7 |   0.7 |  49.0 |
+| dagger    | 10 |   11.8 |        28.5 |         0.8 |   0.0 |  41.1 |
+| guice     | 10 |  186.9 |        20.2 |         0.2 |   0.0 | 207.1 |
+| spring    | 10 |  306.8 |         0.3 |         0.1 |   1.0 | 308.2 |
 
-> **Apples-to-apples is `total`, not `create`.** Tiko and Guice defer `@PostConstruct` (or its workaround) to first access — the cost splits between `create_ns` and `first_get_*_ns`. Spring eagerly runs everything during context construction. Comparing only `create_ns` would unfairly flatter the lazy frameworks.
+> **Apples-to-apples is `total`, not `create`.** Tiko, Dagger, and Guice defer `@PostConstruct` (or its workaround) to first access — the cost splits between `create_ns` and `first_get_*_ns`. Spring eagerly runs everything during context construction. Comparing only `create_ns` would unfairly flatter the lazy frameworks.
 
 Reading:
 
-- **Plain** is the floor — about 62 ms over `java -version` for class loading + the actual `new` calls.
-- **Tiko** adds ~14 ms over plain at the `total_ns` level. The internal breakdown shows where it lives: `Tiko.create()` is ~27 ms (aggregator + per-module container construction + classpath scan), then `first_get_a` is ~24 ms which is essentially the same UserRepository/UserService construction that plain pays during its first `get`. So Tiko's *added* cost over plain is the create step plus a tiny close step; the rest of the work is workload, not framework.
-- **Guice** lands ~170 ms above Tiko on `total_ns`. Most of that is `Guice.createInjector(...)` — Guice does runtime reflection and uses cglib to generate enhanced subclasses for AOP/scoping, even though we don't use either. With `@Provides @Singleton`, beans are constructed lazily on first `getInstance(...)`, so the cost still splits across `create + first_get_a` (the second `getInstance` for an already-resolved type is essentially free).
-- **Spring** is ~2.3× slower wall-clock than Tiko on cold start. Almost all of the cost lives in `create_ns` because `AnnotationConfigApplicationContext` does `@ComponentScan`, classpath reflection, and eagerly instantiates every singleton (including `@PostConstruct`) before returning. After that, `getBean` is essentially free — but the user has already paid the bill.
-
-Tail values (`max` column) are noisy on a few samples — one warmup-pause JVM can land at 600+ ms while the other nine cluster within 50 ms. Trust the median.
+- **Plain** is the floor — about 76 ms over `java -version` for class loading + the actual `new` calls.
+- **Tiko** adds ~14 ms over plain at the `total_ns` level. The internal breakdown shows where it lives: `Tiko.create()` is ~25 ms (aggregator + per-module container construction + classpath scan), then `first_get_a` is ~23 ms which is essentially the same UserRepository/UserService construction that plain pays during its first `get`. So Tiko's *added* cost over plain is the create step plus a tiny close step; the rest of the work is workload, not framework.
+- **Dagger** lands ~6 ms above plain — the cheapest DI framework here by a clear margin, and ~8 ms cheaper than Tiko on `total_ns`. Both are compile-time, but Dagger's generated code is leaner: `DaggerAppComponent.create()` is essentially a constructor call, no module-discovery scan, no aggregator. That's the gap on `create_ns` (12 ms vs 25 ms). On wall time Dagger is **statistically tied with plain** on this machine.
+- **Guice** lands ~170 ms above Dagger on `total_ns`. Most of that is `Guice.createInjector(...)` — Guice does runtime reflection and uses cglib to generate enhanced subclasses for AOP/scoping, even though we don't use either. With `@Provides @Singleton`, beans are constructed lazily on first `getInstance(...)`, so the cost still splits across `create + first_get_a` (the second `getInstance` for an already-resolved type is essentially free).
+- **Spring** is ~2.4× slower wall-clock than Tiko on cold start. Almost all of the cost lives in `create_ns` because `AnnotationConfigApplicationContext` does `@ComponentScan`, classpath reflection, and eagerly instantiates every singleton (including `@PostConstruct`) before returning. After that, `getBean` is essentially free — but the user has already paid the bill.
 
 ## Caveats
 
