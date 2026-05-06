@@ -93,6 +93,8 @@ Three of six wired up so far. The other three land in follow-up issues (#30 Guic
 | tiko      | 10 |   27.3 |        24.7 |         0.7 |   0.7 |  53.1 |
 | spring    | 10 |  331.6 |         0.3 |         0.1 |   1.1 | 333.1 |
 
+> **Apples-to-apples is `total`, not `create`.** Tiko defers `@PostConstruct` to first access in multi-module mode, splitting cost between `create_ns` and `first_get_*_ns`. Spring eagerly runs everything during context construction. Comparing only `create_ns` would unfairly flatter the lazy framework.
+
 Reading:
 
 - **Plain** is the floor — about 70 ms over `java -version` for class loading + the actual `new` calls.
