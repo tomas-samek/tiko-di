@@ -796,11 +796,19 @@ Core DI is functional end-to-end. The annotation processor generates factories, 
     - Conditional beans
     - Profile isolation: compile-time `forbidProfiles` validation + Maven source-root convention to keep test-only `@Component`s out of prod jars
 
-- **Phase 3** (Future)
+- **Phase 3** (Next) — Onboarding & tooling
+    - Maven archetype: quickstart starter (basic + AI-assistant-aware variant)
+    - Machine-readable topology + config schema, plus an MCP server so AI agents can introspect the wiring
+
+- **Phase 4** (Future) — Runtime hardening
     - AOP/Interceptors
     - Metrics and monitoring hooks
     - GraalVM native image optimization
-    - IDE plugin for better developer experience
+
+- **Phase 5** (Future) — Publish to Maven Central
+    - Sonatype Central Portal namespace verification for `io.tiko`
+    - GPG signing, `central-publishing-maven-plugin`, POM metadata polish
+    - Javadoc + sources jars, BOM publication, GitHub Actions release workflow
 
 ### Known Limitations
 
