@@ -169,6 +169,26 @@ public interface Container extends AutoCloseable {
     }
 
     /**
+     * Returns the executor used for asynchronous event dispatch
+     * ({@code @EventHandler(async = true)} and {@code @EventTrigger(async = true)}).
+     *
+     * <p>This is either the user-supplied {@link java.util.concurrent.ExecutorService}
+     * passed via {@code TikoOptions.eventExecutor(...)}, or the framework's default
+     * bounded {@link java.util.concurrent.ThreadPoolExecutor}. The returned executor
+     * is alive for the lifetime of the container.
+     *
+     * <p>You may submit your own tasks to this executor if you want to share thread
+     * resources with the framework. Mutating its state (e.g. calling
+     * {@code shutdown()}) is your responsibility, but doing so on the framework's
+     * default executor will cause undefined behaviour during subsequent event
+     * dispatch — prefer supplying your own via {@code TikoOptions} if you need
+     * lifecycle control.
+     *
+     * @return the event executor (never {@code null})
+     */
+    java.util.concurrent.ExecutorService getEventExecutor();
+
+    /**
      * Closes the container and releases all resources.
      * <p>
      * This method is called automatically when using try-with-resources.
