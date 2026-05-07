@@ -24,10 +24,12 @@ public final class TikoOptions {
 
     private final ConfigSource configSource;
     private final ErrorHandler errorHandler;
+    private final java.util.concurrent.ExecutorService eventExecutor;
 
     private TikoOptions(Builder b) {
         this.configSource = b.configSource;
         this.errorHandler = b.errorHandler;
+        this.eventExecutor = b.eventExecutor;
     }
 
     /**
@@ -44,6 +46,16 @@ public final class TikoOptions {
         return errorHandler;
     }
 
+    /**
+     * @return the user-supplied event executor, or {@code null} to use the framework default
+     *         (a bounded {@link java.util.concurrent.ThreadPoolExecutor}). When user-supplied,
+     *         the user owns the executor's lifecycle — {@code Container.shutdown()} does not
+     *         stop it.
+     */
+    public java.util.concurrent.ExecutorService eventExecutor() {
+        return eventExecutor;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -52,6 +64,7 @@ public final class TikoOptions {
 
         private ConfigSource configSource;
         private ErrorHandler errorHandler;
+        private java.util.concurrent.ExecutorService eventExecutor;
 
         private Builder() {}
 
@@ -62,6 +75,11 @@ public final class TikoOptions {
 
         public Builder errorHandler(ErrorHandler handler) {
             this.errorHandler = Objects.requireNonNull(handler, "errorHandler");
+            return this;
+        }
+
+        public Builder eventExecutor(java.util.concurrent.ExecutorService executor) {
+            this.eventExecutor = Objects.requireNonNull(executor, "eventExecutor");
             return this;
         }
 
