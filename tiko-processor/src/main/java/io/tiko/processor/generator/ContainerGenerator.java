@@ -54,6 +54,8 @@ public final class ContainerGenerator {
         containerBuilder.addField(createEventScopeField());
         containerBuilder.addField(createEventBusField());
         containerBuilder.addField(createErrorHandlerField());
+        containerBuilder.addField(createEventExecutorField());
+        containerBuilder.addField(createOwnsEventExecutorField());
         containerBuilder.addField(createStartedAtField());
         containerBuilder.addField(createConfigSingletonsField());
         containerBuilder.addFields(createFactoryFields());
@@ -90,6 +92,9 @@ public final class ContainerGenerator {
 
         // Add ErrorHandler getter
         containerBuilder.addMethod(createGetErrorHandlerMethod());
+
+        // Add EventExecutor getter
+        containerBuilder.addMethod(createGetEventExecutorMethod());
 
         TypeSpec containerClass = containerBuilder.build();
 
@@ -175,6 +180,25 @@ public final class ContainerGenerator {
     }
 
     /**
+     * Creates the ExecutorService eventExecutor field.
+     */
+    private FieldSpec createEventExecutorField() {
+        return FieldSpec.builder(
+                ClassName.get("java.util.concurrent", "ExecutorService"),
+                "eventExecutor",
+                Modifier.PRIVATE, Modifier.FINAL)
+            .build();
+    }
+
+    /**
+     * Creates the boolean ownsEventExecutor field (true when the container created the executor itself).
+     */
+    private FieldSpec createOwnsEventExecutorField() {
+        return FieldSpec.builder(TypeName.BOOLEAN, "ownsEventExecutor", Modifier.PRIVATE, Modifier.FINAL)
+            .build();
+    }
+
+    /**
      * Tracks when start() ran so shutdown() can publish ApplicationEndingEvent with uptime.
      */
     private FieldSpec createStartedAtField() {
@@ -252,8 +276,13 @@ public final class ContainerGenerator {
                 .addModifiers(Modifier.PUBLIC)
                 .addParameter(EventBus.class, "eventBus")
                 .addParameter(ClassName.get("io.tiko", "ErrorHandler"), "errorHandler")
+                .addParameter(ClassName.get("java.util.concurrent", "ExecutorService"), "userEventExecutor")
                 .addStatement("this.eventBus = eventBus")
-                .addStatement("this.errorHandler = errorHandler");
+                .addStatement("this.errorHandler = errorHandler")
+                .addStatement(
+                    "this.eventExecutor = userEventExecutor != null ? userEventExecutor : "
+                    + "io.tiko.runtime.DefaultEventExecutorFactory.create()")
+                .addStatement("this.ownsEventExecutor = (userEventExecutor == null)");
 
         // Initialize factory fields
         for (ComponentModel component : context.getActiveComponents()) {
@@ -685,6 +714,20 @@ public final class ContainerGenerator {
             }
         }
 
+        method.addComment("Shut down framework-owned event executor (#43); user-supplied executors are not touched");
+        method.beginControlFlow("if (this.ownsEventExecutor)");
+        method.addStatement("this.eventExecutor.shutdown()");
+        method.beginControlFlow("try");
+        method.beginControlFlow("if (!this.eventExecutor.awaitTermination(10, $T.SECONDS))",
+            ClassName.get("java.util.concurrent", "TimeUnit"));
+        method.addStatement("this.eventExecutor.shutdownNow()");
+        method.endControlFlow();
+        method.nextControlFlow("catch ($T __ie)", InterruptedException.class);
+        method.addStatement("$T.currentThread().interrupt()", Thread.class);
+        method.addStatement("this.eventExecutor.shutdownNow()");
+        method.endControlFlow();
+        method.endControlFlow();
+
         return method.build();
     }
 
@@ -919,6 +962,18 @@ public final class ContainerGenerator {
                 .addModifiers(Modifier.PUBLIC)
                 .returns(ClassName.get("io.tiko", "ErrorHandler"))
                 .addStatement("return this.errorHandler")
+                .build();
+    }
+
+    /**
+     * Creates getEventExecutor() — public accessor delegating to Container.getEventExecutor().
+     */
+    private MethodSpec createGetEventExecutorMethod() {
+        return MethodSpec.methodBuilder("getEventExecutor")
+                .addModifiers(Modifier.PUBLIC)
+                .addAnnotation(Override.class)
+                .returns(ClassName.get("java.util.concurrent", "ExecutorService"))
+                .addStatement("return this.eventExecutor")
                 .build();
     }
 
