@@ -213,6 +213,15 @@ public final class AggregatingContainer implements Container {
     }
 
     @Override
+    public java.util.concurrent.ExecutorService getEventExecutor() {
+        // Delegate to first module container (all should have the same executor via TikoOptions)
+        if (moduleContainers.isEmpty()) {
+            throw new IllegalStateException("No module containers available");
+        }
+        return moduleContainers.get(0).getEventExecutor();
+    }
+
+    @Override
     public void runInRequestScope(Runnable task) {
         // Execute in all module containers
         for (Container container : moduleContainers) {
