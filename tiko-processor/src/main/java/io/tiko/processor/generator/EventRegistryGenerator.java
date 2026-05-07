@@ -13,6 +13,9 @@ import javax.lang.model.type.TypeMirror;
 import javax.tools.Diagnostic;
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
 
 /**
  * Generates the EventRegistry class that registers all @EventHandler methods.
@@ -66,7 +69,7 @@ public final class EventRegistryGenerator {
             FieldSpec info = FieldSpec.builder(eventHandlerInfo, "HANDLER_INFO_" + i,
                             Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
                     .initializer("new $T($T.class, $S, $T.class, $L)", eventHandlerInfo, declaring,
-                            handler.getMethodName(), eventClass, false)
+                            handler.getMethodName(), eventClass, handler.isAsync())
                     .build();
             registry.addField(info);
         }
@@ -109,12 +112,23 @@ public final class EventRegistryGenerator {
     /**
      * The per-handler helper. Centralises chain-context bookkeeping and trigger logic so
      * the lambdas in {@code registerHandlers} stay one-liners.
+     *
+     * <p>Async handlers ({@code @EventHandler(async = true)}) submit the invocation to the
+     * container's event executor via {@link CompletableFuture#runAsync} and route any
+     * exceptional completion to the container's {@link io.tiko.ErrorHandler} via
+     * {@code whenComplete}. Sync handlers keep the original inline try/catch behaviour.
      */
     private MethodSpec createDispatcherMethod(EventHandlerModel handler, int index) {
         ClassName containerClass = ClassName.get(GENERATED_PACKAGE, context.getContainerClassName());
         ClassName eventClass = ClassName.bestGuess(handler.getEventTypeName());
         ClassName declaringClass = ClassName.bestGuess(handler.getDeclaringClass().getQualifiedName().toString());
         String getterName = "get" + handler.getDeclaringClass().getSimpleName().toString();
+
+        ClassName errorHandler = ClassName.get("io.tiko", "ErrorHandler");
+        ClassName eventHandlerError = ClassName.get("io.tiko", "EventHandlerError");
+        ClassName completableFutureClass = ClassName.get(CompletableFuture.class);
+        ClassName completionExceptionClass = ClassName.get(CompletionException.class);
+        ClassName executorServiceClass = ClassName.get(ExecutorService.class);
 
         MethodSpec.Builder method = MethodSpec.methodBuilder(dispatcherName(handler, index))
                 .addModifiers(Modifier.PRIVATE, Modifier.STATIC)
@@ -135,10 +149,6 @@ public final class EventRegistryGenerator {
         boolean returnsValue = returnType.getKind() != TypeKind.VOID;
         boolean captureResult = hasTriggers && returnsValue;
 
-        String invocation = handler.hasEventWrapper()
-                ? "__handler." + handler.getMethodName() + "(event, __wrapper)"
-                : "__handler." + handler.getMethodName() + "(event)";
-
         if (hasTriggers && !returnsValue) {
             context.getMessager().printMessage(
                     Diagnostic.Kind.WARNING,
@@ -146,30 +156,73 @@ public final class EventRegistryGenerator {
                     handler.getMethodElement());
         }
 
-        ClassName errorHandler = ClassName.get("io.tiko", "ErrorHandler");
-        ClassName eventHandlerError = ClassName.get("io.tiko", "EventHandlerError");
+        String invocation = handler.hasEventWrapper()
+                ? "__handler." + handler.getMethodName() + "(event, __wrapper)"
+                : "__handler." + handler.getMethodName() + "(event)";
 
-        method.beginControlFlow("try");
-        if (captureResult) {
-            method.addStatement("$T __result = $L", TypeName.get(returnType), invocation);
-        } else {
-            method.addStatement(invocation);
-        }
+        if (handler.isAsync()) {
+            // Async dispatch: submit handler invocation to executor, route exceptional
+            // completion to ErrorHandler via whenComplete.
+            method.addStatement("$T __exec = container.getEventExecutor()", executorServiceClass);
+            method.addStatement("$T __err = container.getErrorHandler()", errorHandler);
+            method.addStatement("final $T<?> __asyncWrapper = __wrapper", Event.class);
 
-        if (captureResult) {
-            for (EventTriggerModel trigger : handler.getEventTriggers()) {
-                emitTrigger(method, trigger);
+            // Build the runAsync body
+            CodeBlock.Builder runBody = CodeBlock.builder();
+            runBody.addStatement("$T<?> __asyncPrev = $T.enter(__asyncWrapper)", Event.class, CHAIN_CONTEXT);
+            runBody.beginControlFlow("try");
+            if (captureResult) {
+                runBody.addStatement("$T __result = $L", TypeName.get(returnType), invocation);
+                for (EventTriggerModel trigger : handler.getEventTriggers()) {
+                    emitTriggerInto(runBody, trigger);
+                }
+            } else {
+                runBody.addStatement(invocation);
             }
-        }
+            runBody.nextControlFlow("finally");
+            runBody.addStatement("$T.exit(__asyncPrev)", CHAIN_CONTEXT);
+            runBody.endControlFlow();
 
-        method.nextControlFlow("catch ($T __t)", Exception.class);
-        method.addStatement("$T __err = container.getErrorHandler()", errorHandler);
-        method.beginControlFlow("try");
-        method.addStatement("__err.onError(new $T(HANDLER_INFO_$L, event, __t))", eventHandlerError, index);
-        method.nextControlFlow("catch ($T __inner)", Exception.class);
-        method.addStatement("$T.logErrorHandlerFailure(__inner)", CHAIN_CONTEXT);
-        method.endControlFlow();
-        method.endControlFlow();
+            // Build the whenComplete body
+            CodeBlock.Builder wcBody = CodeBlock.builder();
+            wcBody.beginControlFlow("if (__t != null)");
+            wcBody.addStatement(
+                    "$T __cause = (__t instanceof $T && __t.getCause() != null) ? __t.getCause() : __t",
+                    Throwable.class, completionExceptionClass);
+            wcBody.beginControlFlow("try");
+            wcBody.addStatement("__err.onError(new $T(HANDLER_INFO_$L, event, __cause))",
+                    eventHandlerError, index);
+            wcBody.nextControlFlow("catch ($T __inner)", Exception.class);
+            wcBody.addStatement("$T.logErrorHandlerFailure(__inner)", CHAIN_CONTEXT);
+            wcBody.endControlFlow();
+            wcBody.endControlFlow();
+
+            method.addCode(CodeBlock.builder()
+                    .add("$T.runAsync(() -> {\n$L}, __exec).whenComplete((__r, __t) -> {\n$L});\n",
+                            completableFutureClass, runBody.build(), wcBody.build())
+                    .build());
+
+        } else {
+            // Sync dispatch: inline try/catch, error routed immediately.
+            method.beginControlFlow("try");
+            if (captureResult) {
+                method.addStatement("$T __result = $L", TypeName.get(returnType), invocation);
+                for (EventTriggerModel trigger : handler.getEventTriggers()) {
+                    emitTrigger(method, trigger);
+                }
+            } else {
+                method.addStatement(invocation);
+            }
+            method.nextControlFlow("catch ($T __t)", Exception.class);
+            method.addStatement("$T __err = container.getErrorHandler()", errorHandler);
+            method.beginControlFlow("try");
+            method.addStatement("__err.onError(new $T(HANDLER_INFO_$L, event, __t))",
+                    eventHandlerError, index);
+            method.nextControlFlow("catch ($T __inner)", Exception.class);
+            method.addStatement("$T.logErrorHandlerFailure(__inner)", CHAIN_CONTEXT);
+            method.endControlFlow();
+            method.endControlFlow();
+        }
 
         method.nextControlFlow("finally");
         method.addStatement("$T.exit(__previous)", CHAIN_CONTEXT);
@@ -179,8 +232,8 @@ public final class EventRegistryGenerator {
     }
 
     /**
-     * Emits the publish call for one {@code @EventTrigger}, including any guard checks and
-     * the appropriate sync/async + spread/single variant.
+     * Emits the publish call for one {@code @EventTrigger} into a {@link MethodSpec.Builder},
+     * including any guard checks and the appropriate sync/async + spread/single variant.
      */
     private void emitTrigger(MethodSpec.Builder method, EventTriggerModel trigger) {
         String publishHelper;
@@ -207,6 +260,38 @@ public final class EventRegistryGenerator {
         method.beginControlFlow("if (" + condition + ")", args);
         method.addStatement("$T.$L(eventBus, __result, __wrapper)", CHAIN_CONTEXT, publishHelper);
         method.endControlFlow();
+    }
+
+    /**
+     * Emits the publish call for one {@code @EventTrigger} into a {@link CodeBlock.Builder}
+     * (used inside async lambda bodies where {@link MethodSpec.Builder} is not available).
+     * Mirrors {@link #emitTrigger(MethodSpec.Builder, EventTriggerModel)} exactly.
+     */
+    private void emitTriggerInto(CodeBlock.Builder block, EventTriggerModel trigger) {
+        String publishHelper;
+        if (trigger.isAsync()) {
+            publishHelper = trigger.isSpread() ? "publishSpreadAsync" : "publishAsync";
+        } else {
+            publishHelper = trigger.isSpread() ? "publishSpreadWithOrigin" : "publishWithOrigin";
+        }
+
+        if (!trigger.hasGuard()) {
+            block.addStatement("$T.$L(eventBus, __result, __asyncWrapper)", CHAIN_CONTEXT, publishHelper);
+            return;
+        }
+
+        // AND of guard.shouldTrigger(__result, event) for each declared guard.
+        StringBuilder condition = new StringBuilder();
+        Object[] args = new Object[trigger.getGuardClasses().size()];
+        for (int i = 0; i < trigger.getGuardClasses().size(); i++) {
+            if (i > 0) condition.append(" && ");
+            condition.append("new $T().shouldTrigger(__result, event)");
+            args[i] = ClassName.get(trigger.getGuardClasses().get(i));
+        }
+
+        block.beginControlFlow("if (" + condition + ")", args);
+        block.addStatement("$T.$L(eventBus, __result, __asyncWrapper)", CHAIN_CONTEXT, publishHelper);
+        block.endControlFlow();
     }
 
     private static String dispatcherName(EventHandlerModel handler, int index) {
