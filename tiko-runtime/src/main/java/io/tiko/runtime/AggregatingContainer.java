@@ -1,6 +1,7 @@
 package io.tiko.runtime;
 
 import io.tiko.Container;
+import io.tiko.ErrorHandler;
 import io.tiko.EventBus;
 import io.tiko.Provider;
 
@@ -25,6 +26,7 @@ import java.util.function.Supplier;
 public final class AggregatingContainer implements Container {
 
     private final EventBus sharedEventBus;
+    private final ErrorHandler errorHandler;
     private final List<Container> moduleContainers;
     private final Map<Class<?>, Container> componentToContainerMap;
     private final Map<Class<?>, Container> configToContainer = new ConcurrentHashMap<>();
@@ -36,7 +38,19 @@ public final class AggregatingContainer implements Container {
      * @throws IllegalStateException if container discovery or initialization fails
      */
     public AggregatingContainer(EventBus eventBus) {
+        this(eventBus, ctx -> {});
+    }
+
+    /**
+     * Creates an aggregating container with a custom error handler.
+     *
+     * @param eventBus     shared event bus instance passed to all module containers
+     * @param errorHandler error handler for event handler exceptions
+     * @throws IllegalStateException if container discovery or initialization fails
+     */
+    public AggregatingContainer(EventBus eventBus, ErrorHandler errorHandler) {
         this.sharedEventBus = eventBus;
+        this.errorHandler = errorHandler;
         this.moduleContainers = new ArrayList<>();
         this.componentToContainerMap = new ConcurrentHashMap<>();
 
@@ -86,10 +100,17 @@ public final class AggregatingContainer implements Container {
                 "Missing 'impl' property in " + resourceUrl);
         }
 
-        // Load and instantiate the container
+        // Load and instantiate the container — try 2-arg (EventBus, ErrorHandler) first,
+        // fall back to legacy 1-arg for backward compatibility.
         Class<?> containerClass = Class.forName(implClassName, true, classLoader);
-        Constructor<?> constructor = containerClass.getDeclaredConstructor(EventBus.class);
-        Container moduleContainer = (Container) constructor.newInstance(sharedEventBus);
+        Container moduleContainer;
+        try {
+            Constructor<?> constructor = containerClass.getDeclaredConstructor(EventBus.class, ErrorHandler.class);
+            moduleContainer = (Container) constructor.newInstance(sharedEventBus, errorHandler);
+        } catch (NoSuchMethodException nsm) {
+            Constructor<?> constructor = containerClass.getDeclaredConstructor(EventBus.class);
+            moduleContainer = (Container) constructor.newInstance(sharedEventBus);
+        }
 
         moduleContainers.add(moduleContainer);
 

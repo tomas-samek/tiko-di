@@ -43,6 +43,18 @@
             <artifactId>javapoet</artifactId>
         </dependency>
 
+        <!-- Runtime deps needed so compile-testing can compile generated EventRegistry sources -->
+        <dependency>
+            <groupId>io.tiko</groupId>
+            <artifactId>tiko-runtime</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+
         <!-- Testing -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>

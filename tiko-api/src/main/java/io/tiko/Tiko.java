@@ -17,37 +17,37 @@ public final class Tiko {
     private Tiko() {}
 
     /**
-     * Creates a new container instance.
-     * <p>
-     * Automatically detects single-module vs multi-module scenarios:
-     * <ul>
-     *   <li>Single module: Direct instantiation of generated container</li>
-     *   <li>Multiple modules: Uses AggregatingContainer to coordinate across modules</li>
-     * </ul>
-     * <p>
-     * Fails fast if {@code @Configuration} records are declared but no {@link ConfigSource}
-     * was provided. Use {@link #create(ConfigSource)} in that case.
+     * Creates a container with all-default options.
      *
-     * @return a new container instance
-     * @throws IllegalStateException if the generated container class cannot be found or instantiated,
-     *                               or if {@code @Configuration} records are declared without a source
+     * <p>Equivalent to {@code Tiko.create(TikoOptions.builder().build())}.
      */
     public static Container create() {
-        failIfConfigsMissingSource();
-        return createInternal(null);
+        return create(TikoOptions.builder().build());
     }
 
     /**
-     * Creates a new container instance with the given configuration source.
-     * The source is loaded, interpolated, and bound to all declared {@code @Configuration}
-     * records before the container is started.
+     * Creates a container with the given configuration source. Equivalent to
+     * {@code Tiko.create(TikoOptions.builder().configSource(source).build())}.
      *
      * @param source the configuration source, never {@code null}
-     * @return a new container instance
-     * @throws IllegalStateException if the generated container class cannot be found or instantiated
      */
     public static Container create(ConfigSource source) {
-        return createInternal(java.util.Objects.requireNonNull(source, "source"));
+        return create(TikoOptions.builder()
+            .configSource(java.util.Objects.requireNonNull(source, "source"))
+            .build());
+    }
+
+    /**
+     * Creates a container with the supplied options.
+     *
+     * @param options framework knobs (config source, error handler, ...). Never {@code null}.
+     */
+    public static Container create(TikoOptions options) {
+        java.util.Objects.requireNonNull(options, "options");
+        if (options.configSource() == null) {
+            failIfConfigsMissingSource();
+        }
+        return createInternal(options);
     }
 
     /**
@@ -82,13 +82,19 @@ public final class Tiko {
         } catch (java.io.IOException ignored) { /* no manifest — no configs declared */ }
     }
 
-    private static Container createInternal(ConfigSource source) {
+    private static Container createInternal(TikoOptions options) {
         try {
-            // 1. Create EventBus instance
+            // 1. Resolve the ErrorHandler — user-supplied or the default Slf4jWarnErrorHandler.
+            ErrorHandler errorHandler = options.errorHandler();
+            if (errorHandler == null) {
+                errorHandler = resolveDefaultErrorHandler();
+            }
+
+            // 2. Create EventBus instance (still no-arg; the bus does not take ErrorHandler).
             Class<?> eventBusClass = Class.forName("io.tiko.event.local.LocalEventBus");
             EventBus eventBus = (EventBus) eventBusClass.getDeclaredConstructor().newInstance();
 
-            // 2. Detect single vs multi-module scenario
+            // 3. Detect single vs multi-module scenario
             ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
             if (classLoader == null) classLoader = Tiko.class.getClassLoader();
 
@@ -98,23 +104,31 @@ public final class Tiko {
 
             Container container;
             if (moduleCount > 1) {
-                // Multi-module: Use AggregatingContainer
+                // Multi-module: AggregatingContainer — try 2-arg constructor first,
+                // fall back to legacy 1-arg if not present (multi-module ErrorHandler wiring
+                // lands in a follow-up PR; out of scope here).
                 Class<?> aggregatingClass = Class.forName("io.tiko.runtime.AggregatingContainer");
-                container = (Container) aggregatingClass
-                    .getDeclaredConstructor(EventBus.class)
-                    .newInstance(eventBus);
+                try {
+                    container = (Container) aggregatingClass
+                        .getDeclaredConstructor(EventBus.class, ErrorHandler.class)
+                        .newInstance(eventBus, errorHandler);
+                } catch (NoSuchMethodException nsm) {
+                    container = (Container) aggregatingClass
+                        .getDeclaredConstructor(EventBus.class)
+                        .newInstance(eventBus);
+                }
             } else {
                 // Single module: Direct instantiation (does NOT call start yet)
-                container = createSingleModuleContainer(eventBus);
+                container = createSingleModuleContainer(eventBus, errorHandler);
             }
 
-            // 3. Inject config singletons before start(), so @PostConstruct can use them
-            if (source != null) {
-                java.util.Map<Class<?>, Object> bound = bindConfigs(source, classLoader);
+            // 4. Inject config singletons before start(), so @PostConstruct can use them
+            if (options.configSource() != null) {
+                java.util.Map<Class<?>, Object> bound = bindConfigs(options.configSource(), classLoader);
                 container.getClass().getMethod("injectConfigs", java.util.Map.class).invoke(container, bound);
             }
 
-            // 4. Start the container (initialize all SINGLETON components)
+            // 5. Start the container (initialize all SINGLETON components)
             if (moduleCount <= 1) {
                 container.getClass().getMethod("start").invoke(container);
             }
@@ -130,6 +144,26 @@ public final class Tiko {
                 "Tiko container implementation not found. Did you include tiko-processor in your annotation processor path?", e);
         } catch (Exception e) {
             throw new IllegalStateException("Failed to create container instance", e);
+        }
+    }
+
+    /**
+     * Reflectively builds an {@code Slf4jWarnErrorHandler} from {@code tiko-event-local}.
+     * Kept reflective so {@code tiko-api} stays free of the slf4j dependency.
+     */
+    private static ErrorHandler resolveDefaultErrorHandler() {
+        try {
+            Class<?> defaultClass = Class.forName("io.tiko.event.local.Slf4jWarnErrorHandler");
+            java.lang.reflect.Constructor<?> ctor = defaultClass.getDeclaredConstructor();
+            ctor.setAccessible(true);
+            return (ErrorHandler) ctor.newInstance();
+        } catch (ClassNotFoundException e) {
+            // Bus implementation not on the classpath — return a minimal no-op so we do not
+            // crash users who have somehow excluded tiko-event-local. This will also be
+            // surfaced when EventBus construction fails downstream.
+            return ctx -> {};
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to construct default ErrorHandler", e);
         }
     }
 
@@ -174,34 +208,31 @@ public final class Tiko {
      * Creates a single-module container. Does NOT call start() — that is done in createInternal
      * after injectConfigs() runs.
      */
-    private static Container createSingleModuleContainer(EventBus eventBus) throws Exception {
+    private static Container createSingleModuleContainer(EventBus eventBus, ErrorHandler errorHandler) throws Exception {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
         if (classLoader == null) classLoader = Tiko.class.getClassLoader();
 
         var resources = classLoader.getResources("META-INF/tiko/container.properties");
+        Class<?> implClass;
         if (resources.hasMoreElements()) {
             var props = new java.util.Properties();
             try (var input = resources.nextElement().openStream()) {
                 props.load(input);
             }
             String implClassName = props.getProperty("impl");
-            Class<?> implClass = Class.forName(implClassName);
-            Container container = (Container) implClass.getDeclaredConstructor(EventBus.class).newInstance(eventBus);
-
-            registerEventHandlers(eventBus, container, implClass);
-
-            // NOTE: do NOT call start() here — createInternal calls it AFTER injectConfigs
-            return container;
+            implClass = Class.forName(implClassName);
         } else {
-            // Fallback to the old hardcoded class name for backward compatibility
-            Class<?> implClass = Class.forName("io.tiko.generated.TikoContainerImpl");
-            Container container = (Container) implClass.getDeclaredConstructor(EventBus.class).newInstance(eventBus);
-
-            registerEventHandlers(eventBus, container, implClass);
-
-            // NOTE: do NOT call start() here — createInternal calls it AFTER injectConfigs
-            return container;
+            implClass = Class.forName("io.tiko.generated.TikoContainerImpl");
         }
+
+        Container container = (Container) implClass
+            .getDeclaredConstructor(EventBus.class, ErrorHandler.class)
+            .newInstance(eventBus, errorHandler);
+
+        registerEventHandlers(eventBus, container, implClass);
+
+        // NOTE: do NOT call start() here — createInternal calls it AFTER injectConfigs
+        return container;
     }
 
     /**

@@ -53,6 +53,7 @@ public final class ContainerGenerator {
         containerBuilder.addField(createRequestScopeField());
         containerBuilder.addField(createEventScopeField());
         containerBuilder.addField(createEventBusField());
+        containerBuilder.addField(createErrorHandlerField());
         containerBuilder.addField(createStartedAtField());
         containerBuilder.addField(createConfigSingletonsField());
         containerBuilder.addFields(createFactoryFields());
@@ -86,6 +87,9 @@ public final class ContainerGenerator {
 
         // Add EventBus getter
         containerBuilder.addMethod(createGetEventBusMethod());
+
+        // Add ErrorHandler getter
+        containerBuilder.addMethod(createGetErrorHandlerMethod());
 
         TypeSpec containerClass = containerBuilder.build();
 
@@ -163,6 +167,14 @@ public final class ContainerGenerator {
     }
 
     /**
+     * Creates the ErrorHandler field.
+     */
+    private FieldSpec createErrorHandlerField() {
+        return FieldSpec.builder(ClassName.get("io.tiko", "ErrorHandler"), "errorHandler", Modifier.PRIVATE, Modifier.FINAL)
+                .build();
+    }
+
+    /**
      * Tracks when start() ran so shutdown() can publish ApplicationEndingEvent with uptime.
      */
     private FieldSpec createStartedAtField() {
@@ -233,13 +245,15 @@ public final class ContainerGenerator {
     }
 
     /**
-     * Creates the constructor that initializes factories and event bus.
+     * Creates the constructor that initializes factories, event bus, and error handler.
      */
     private MethodSpec createConstructor() {
         MethodSpec.Builder constructor = MethodSpec.constructorBuilder()
                 .addModifiers(Modifier.PUBLIC)
                 .addParameter(EventBus.class, "eventBus")
-                .addStatement("this.eventBus = eventBus");
+                .addParameter(ClassName.get("io.tiko", "ErrorHandler"), "errorHandler")
+                .addStatement("this.eventBus = eventBus")
+                .addStatement("this.errorHandler = errorHandler");
 
         // Initialize factory fields
         for (ComponentModel component : context.getActiveComponents()) {
@@ -896,6 +910,19 @@ public final class ContainerGenerator {
     }
 
     /**
+     * Creates getErrorHandler method — public accessor on the generated impl class for the
+     * generated dispatcher to invoke. Not added to the Container interface (intentionally
+     * not user-facing).
+     */
+    private MethodSpec createGetErrorHandlerMethod() {
+        return MethodSpec.methodBuilder("getErrorHandler")
+                .addModifiers(Modifier.PUBLIC)
+                .returns(ClassName.get("io.tiko", "ErrorHandler"))
+                .addStatement("return this.errorHandler")
+                .build();
+    }
+
+    /**
      * Converts class name to factory field name.
      * e.g., "MessageService" -> "messageServiceFactory"
      */
@@ -945,7 +972,8 @@ public final class ContainerGenerator {
                 .openWriter()) {
 
             for (ComponentModel component : context.getActiveComponents()) {
-                writer.write(component.getTypeElement().getQualifiedName().toString());
+                // Use binary name (with '$' for nested classes) so Class.forName() works at runtime
+                writer.write(context.getElementUtils().getBinaryName(component.getTypeElement()).toString());
                 writer.write("\n");
             }
         }

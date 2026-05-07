@@ -494,6 +494,25 @@ public class AnalyticsService {
 
 The same handler code is intended to work against any `EventBus` implementation — the in-memory bus ships today; a Kafka-backed bus is on the Phase 2 roadmap.
 
+### Error handling
+
+If an `@EventHandler` method throws, the exception is routed to the configured `ErrorHandler` (default: logs at WARN via slf4j). It does not propagate to the publisher and does not prevent other handlers from running.
+
+Override the default to wire metrics, alerts, or custom logging:
+
+```java
+TikoOptions opts = TikoOptions.builder()
+    .errorHandler(ctx -> {
+        switch (ctx) {
+            case EventHandlerError e -> metrics.eventHandlerError(e.handler());
+        }
+    })
+    .build();
+try (Container container = Tiko.create(opts)) { ... }
+```
+
+The hook is for observability — exceptions are an error path, not a control-flow primitive. To branch on handler outcomes, return a typed result from your `@EventHandler` and chain the next event with `@EventTrigger` (optionally guarded by an `EventTriggerGuard`).
+
 ### Lifecycle Events
 
 The container automatically publishes lifecycle events that you can subscribe to for metrics, logging, tracing, and cleanup. These events allow you to keep side effects separate from your main business logic.

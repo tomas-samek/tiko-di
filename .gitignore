@@ -40,3 +40,6 @@ build/
 /.claude/
 /.idea/
 /.mvn/
+
+### Git worktrees ###
+.worktrees/

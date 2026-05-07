@@ -33,6 +33,19 @@ public final class EventChainContext {
     private EventChainContext() {}
 
     /**
+     * Last-resort logging when an {@code ErrorHandler.onError} implementation itself throws.
+     * Called exclusively from generated {@code EventRegistry} code. Kept here so the
+     * generated source never directly imports slf4j (examples typically don't declare
+     * slf4j-api as a compile-scope dependency).
+     *
+     * @param inner the exception thrown by the user's ErrorHandler implementation
+     */
+    public static void logErrorHandlerFailure(Throwable inner) {
+        org.slf4j.LoggerFactory.getLogger("io.tiko.events")
+            .error("ErrorHandler.onError threw", inner);
+    }
+
+    /**
      * Wraps {@code payload} in an {@link Event}, chaining its origin to the wrapper currently
      * being delivered on this thread (if any).
      */
