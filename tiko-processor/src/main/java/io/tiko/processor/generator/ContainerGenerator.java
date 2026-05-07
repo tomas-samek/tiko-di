@@ -972,7 +972,8 @@ public final class ContainerGenerator {
                 .openWriter()) {
 
             for (ComponentModel component : context.getActiveComponents()) {
-                writer.write(component.getTypeElement().getQualifiedName().toString());
+                // Use binary name (with '$' for nested classes) so Class.forName() works at runtime
+                writer.write(context.getElementUtils().getBinaryName(component.getTypeElement()).toString());
                 writer.write("\n");
             }
         }
