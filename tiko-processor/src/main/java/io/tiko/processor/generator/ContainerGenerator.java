@@ -910,7 +910,9 @@ public final class ContainerGenerator {
     }
 
     /**
-     * Creates getErrorHandler method — package-private accessor for the generated dispatcher.
+     * Creates getErrorHandler method — public accessor on the generated impl class for the
+     * generated dispatcher to invoke. Not added to the Container interface (intentionally
+     * not user-facing).
      */
     private MethodSpec createGetErrorHandlerMethod() {
         return MethodSpec.methodBuilder("getErrorHandler")
