@@ -55,6 +55,22 @@ public final class EventRegistryGenerator {
 
         registry.addMethod(createRegisterMethod(eventHandlers));
 
+        ClassName eventHandlerInfo = ClassName.get("io.tiko", "EventHandlerInfo");
+
+        // Emit one HANDLER_INFO_<n> static constant per handler
+        for (int i = 0; i < eventHandlers.size(); i++) {
+            EventHandlerModel handler = eventHandlers.get(i);
+            ClassName declaring = ClassName.bestGuess(handler.getDeclaringClass().getQualifiedName().toString());
+            ClassName eventClass = ClassName.bestGuess(handler.getEventTypeName());
+
+            FieldSpec info = FieldSpec.builder(eventHandlerInfo, "HANDLER_INFO_" + i,
+                            Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
+                    .initializer("new $T($T.class, $S, $T.class, $L)", eventHandlerInfo, declaring,
+                            handler.getMethodName(), eventClass, false)
+                    .build();
+            registry.addField(info);
+        }
+
         // Emit one private helper per handler
         for (int i = 0; i < eventHandlers.size(); i++) {
             registry.addMethod(createDispatcherMethod(eventHandlers.get(i), i));
@@ -123,12 +139,6 @@ public final class EventRegistryGenerator {
                 ? "__handler." + handler.getMethodName() + "(event, __wrapper)"
                 : "__handler." + handler.getMethodName() + "(event)";
 
-        if (captureResult) {
-            method.addStatement("$T __result = $L", TypeName.get(returnType), invocation);
-        } else {
-            method.addStatement(invocation);
-        }
-
         if (hasTriggers && !returnsValue) {
             context.getMessager().printMessage(
                     Diagnostic.Kind.WARNING,
@@ -136,11 +146,32 @@ public final class EventRegistryGenerator {
                     handler.getMethodElement());
         }
 
+        ClassName errorHandler = ClassName.get("io.tiko", "ErrorHandler");
+        ClassName eventHandlerError = ClassName.get("io.tiko", "EventHandlerError");
+        ClassName loggerFactory = ClassName.get("org.slf4j", "LoggerFactory");
+
+        method.beginControlFlow("try");
+        if (captureResult) {
+            method.addStatement("$T __result = $L", TypeName.get(returnType), invocation);
+        } else {
+            method.addStatement(invocation);
+        }
+
         if (captureResult) {
             for (EventTriggerModel trigger : handler.getEventTriggers()) {
                 emitTrigger(method, trigger);
             }
         }
+
+        method.nextControlFlow("catch ($T __t)", Exception.class);
+        method.addStatement("$T __err = container.getErrorHandler()", errorHandler);
+        method.beginControlFlow("try");
+        method.addStatement("__err.onError(new $T(HANDLER_INFO_$L, event, __t))", eventHandlerError, index);
+        method.nextControlFlow("catch ($T __inner)", Exception.class);
+        method.addStatement("$T.getLogger($S).error($S, __inner)",
+                loggerFactory, "io.tiko.events", "ErrorHandler.onError threw");
+        method.endControlFlow();
+        method.endControlFlow();
 
         method.nextControlFlow("finally");
         method.addStatement("$T.exit(__previous)", CHAIN_CONTEXT);
