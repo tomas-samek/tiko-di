@@ -104,22 +104,28 @@ public final class Tiko {
 
             Container container;
             if (moduleCount > 1) {
-                // Multi-module: AggregatingContainer — try 2-arg constructor first,
-                // fall back to legacy 1-arg if not present (multi-module ErrorHandler wiring
-                // lands in a follow-up PR; out of scope here).
+                // Multi-module: AggregatingContainer — try 3-arg constructor first,
+                // fall back to 2-arg, then legacy 1-arg (multi-module executor wiring is
+                // out of scope; each per-module container builds its own default executor).
                 Class<?> aggregatingClass = Class.forName("io.tiko.runtime.AggregatingContainer");
                 try {
                     container = (Container) aggregatingClass
-                        .getDeclaredConstructor(EventBus.class, ErrorHandler.class)
-                        .newInstance(eventBus, errorHandler);
-                } catch (NoSuchMethodException nsm) {
-                    container = (Container) aggregatingClass
-                        .getDeclaredConstructor(EventBus.class)
-                        .newInstance(eventBus);
+                        .getDeclaredConstructor(EventBus.class, ErrorHandler.class, java.util.concurrent.ExecutorService.class)
+                        .newInstance(eventBus, errorHandler, options.eventExecutor());
+                } catch (NoSuchMethodException nsm3) {
+                    try {
+                        container = (Container) aggregatingClass
+                            .getDeclaredConstructor(EventBus.class, ErrorHandler.class)
+                            .newInstance(eventBus, errorHandler);
+                    } catch (NoSuchMethodException nsm2) {
+                        container = (Container) aggregatingClass
+                            .getDeclaredConstructor(EventBus.class)
+                            .newInstance(eventBus);
+                    }
                 }
             } else {
                 // Single module: Direct instantiation (does NOT call start yet)
-                container = createSingleModuleContainer(eventBus, errorHandler);
+                container = createSingleModuleContainer(eventBus, errorHandler, options.eventExecutor());
             }
 
             // 4. Inject config singletons before start(), so @PostConstruct can use them
@@ -208,7 +214,9 @@ public final class Tiko {
      * Creates a single-module container. Does NOT call start() — that is done in createInternal
      * after injectConfigs() runs.
      */
-    private static Container createSingleModuleContainer(EventBus eventBus, ErrorHandler errorHandler) throws Exception {
+    private static Container createSingleModuleContainer(
+            EventBus eventBus, ErrorHandler errorHandler,
+            java.util.concurrent.ExecutorService userEventExecutor) throws Exception {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
         if (classLoader == null) classLoader = Tiko.class.getClassLoader();
 
@@ -226,8 +234,8 @@ public final class Tiko {
         }
 
         Container container = (Container) implClass
-            .getDeclaredConstructor(EventBus.class, ErrorHandler.class)
-            .newInstance(eventBus, errorHandler);
+            .getDeclaredConstructor(EventBus.class, ErrorHandler.class, java.util.concurrent.ExecutorService.class)
+            .newInstance(eventBus, errorHandler, userEventExecutor);
 
         registerEventHandlers(eventBus, container, implClass);
 
