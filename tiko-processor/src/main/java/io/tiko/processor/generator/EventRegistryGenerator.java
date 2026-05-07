@@ -167,11 +167,7 @@ public final class EventRegistryGenerator {
         method.beginControlFlow("try");
         method.addStatement("__err.onError(new $T(HANDLER_INFO_$L, event, __t))", eventHandlerError, index);
         method.nextControlFlow("catch ($T __inner)", Exception.class);
-        method.addStatement("$T.getLogger($S).log($T.SEVERE, $S, __inner)",
-                ClassName.get("java.util.logging", "Logger"),
-                "io.tiko.events",
-                ClassName.get("java.util.logging", "Level"),
-                "ErrorHandler.onError threw");
+        method.addStatement("$T.logErrorHandlerFailure(__inner)", CHAIN_CONTEXT);
         method.endControlFlow();
         method.endControlFlow();
 
