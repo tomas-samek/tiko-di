@@ -63,9 +63,14 @@ import java.lang.annotation.Target;
  * }
  * }</pre>
  *
- * <p><strong>Error Handling:</strong> If an event handler throws an exception,
- * it does not prevent other handlers from executing. The exception is logged
- * and can be accessed via error handling hooks.</p>
+ * <p><strong>Error handling:</strong> If a handler throws, the exception is routed
+ * to the configured {@link io.tiko.ErrorHandler} (default: slf4j WARN). It does not
+ * propagate to the publisher and does not prevent other handlers from running.
+ * Async handler exceptions are routed identically.
+ *
+ * <p>The hook is for observability — do not throw from a handler to signal business
+ * state. Use {@link EventTrigger} together with {@link io.tiko.EventTriggerGuard}
+ * to branch on outcomes; throwing is an error path, not a control-flow primitive.</p>
  *
  * <p><strong>Ordering:</strong> Event handlers execute in registration order
  * (typically class scan order). For deterministic ordering, use explicit
