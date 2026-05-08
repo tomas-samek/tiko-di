@@ -876,12 +876,15 @@ The framework is suitable for early-adopter experimentation. Production use shou
 - ✅ Lifecycle events (`ApplicationStartedEvent`, `RequestStartedEvent`, etc.) — automatically published around `start()`/`shutdown()` and every `runIn*Scope`/`supplyIn*Scope` ([#4](https://github.com/tomas-samek/tiko-di/issues/4))
 - ✅ `@EventTrigger` chains — declarative event workflows with return-as-payload, guards, spread, async, and full origin tracking via `Event<?>` ([#5](https://github.com/tomas-samek/tiko-di/issues/5))
 - ✅ API/impl split example — consumer compiles against an interface-only api jar, impl loaded via runtime-scope Maven dep ([#6](https://github.com/tomas-samek/tiko-di/issues/6))
+- ✅ Handler-exception isolation + `ErrorHandler` hook — `LocalEventBus.publish()` no longer kills the dispatch loop; sealed `ErrorContext` / `EventHandlerError` route handler throws to a configurable hook (default slf4j WARN), override via `TikoOptions.errorHandler(...)` ([#44](https://github.com/tomas-samek/tiko-di/issues/44))
+- ✅ `@EventHandler(async = true)` honoured — bounded `ThreadPoolExecutor` (default sized for typical small-to-medium services) with `TikoOptions.eventExecutor(...)` override; the static `EventChainContext.ASYNC_EXECUTOR` is retired and shared between async handlers and `@EventTrigger(async)` ([#43](https://github.com/tomas-samek/tiko-di/issues/43))
 
 ### Planned Features
 
 - **Phase 2** (Current) — Configuration & distributed events
     - Kafka event bus integration
     - Configuration follow-ups: nested-record codegen ([#17](https://github.com/tomas-samek/tiko-di/issues/17)), cross-module aggregation example ([#18](https://github.com/tomas-samek/tiko-di/issues/18)), YAML `file:line:col` error anchoring ([#19](https://github.com/tomas-samek/tiko-di/issues/19))
+    - Event-system follow-ups: container shutdown idempotency + construction/destruction race ([#47](https://github.com/tomas-samek/tiko-di/issues/47)), configurable executor shutdown timeout ([#48](https://github.com/tomas-samek/tiko-di/issues/48)), multi-module `ErrorHandler`/`eventExecutor` propagation through `AggregatingContainer` ([#51](https://github.com/tomas-samek/tiko-di/issues/51)), `ErrorContext` permits for lifecycle/config/scope errors ([#52](https://github.com/tomas-samek/tiko-di/issues/52))
     - Conditional beans
     - Profile isolation: compile-time `forbidProfiles` validation + Maven source-root convention to keep test-only `@Component`s out of prod jars
 
