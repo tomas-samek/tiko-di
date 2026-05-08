@@ -174,7 +174,7 @@ public final class EventRegistryGenerator {
             if (captureResult) {
                 runBody.addStatement("$T __result = $L", TypeName.get(returnType), invocation);
                 for (EventTriggerModel trigger : handler.getEventTriggers()) {
-                    emitTriggerInto(runBody, trigger);
+                    emitTriggerInto(runBody, trigger, index);
                 }
             } else {
                 runBody.addStatement(invocation);
@@ -208,7 +208,7 @@ public final class EventRegistryGenerator {
             if (captureResult) {
                 method.addStatement("$T __result = $L", TypeName.get(returnType), invocation);
                 for (EventTriggerModel trigger : handler.getEventTriggers()) {
-                    emitTrigger(method, trigger);
+                    emitTrigger(method, trigger, index);
                 }
             } else {
                 method.addStatement(invocation);
@@ -234,8 +234,12 @@ public final class EventRegistryGenerator {
     /**
      * Emits the publish call for one {@code @EventTrigger} into a {@link MethodSpec.Builder},
      * including any guard checks and the appropriate sync/async + spread/single variant.
+     *
+     * <p>Async triggers use the 6-arg {@code publishAsync}/{@code publishSpreadAsync} form
+     * that passes the container's executor and error handler, plus the handler's
+     * {@code HANDLER_INFO_<index>} constant so any exceptional completion can be attributed.
      */
-    private void emitTrigger(MethodSpec.Builder method, EventTriggerModel trigger) {
+    private void emitTrigger(MethodSpec.Builder method, EventTriggerModel trigger, int index) {
         String publishHelper;
         if (trigger.isAsync()) {
             publishHelper = trigger.isSpread() ? "publishSpreadAsync" : "publishAsync";
@@ -243,8 +247,15 @@ public final class EventRegistryGenerator {
             publishHelper = trigger.isSpread() ? "publishSpreadWithOrigin" : "publishWithOrigin";
         }
 
+        String publishCall;
+        if (trigger.isAsync()) {
+            publishCall = "$T.$L(eventBus, __result, __wrapper, container.getEventExecutor(), container.getErrorHandler(), HANDLER_INFO_" + index + ")";
+        } else {
+            publishCall = "$T.$L(eventBus, __result, __wrapper)";
+        }
+
         if (!trigger.hasGuard()) {
-            method.addStatement("$T.$L(eventBus, __result, __wrapper)", CHAIN_CONTEXT, publishHelper);
+            method.addStatement(publishCall, CHAIN_CONTEXT, publishHelper);
             return;
         }
 
@@ -258,16 +269,20 @@ public final class EventRegistryGenerator {
         }
 
         method.beginControlFlow("if (" + condition + ")", args);
-        method.addStatement("$T.$L(eventBus, __result, __wrapper)", CHAIN_CONTEXT, publishHelper);
+        method.addStatement(publishCall, CHAIN_CONTEXT, publishHelper);
         method.endControlFlow();
     }
 
     /**
      * Emits the publish call for one {@code @EventTrigger} into a {@link CodeBlock.Builder}
      * (used inside async lambda bodies where {@link MethodSpec.Builder} is not available).
-     * Mirrors {@link #emitTrigger(MethodSpec.Builder, EventTriggerModel)} exactly.
+     * Mirrors {@link #emitTrigger(MethodSpec.Builder, EventTriggerModel, int)} exactly, but
+     * uses {@code __asyncWrapper} instead of {@code __wrapper} since the lambda captures the
+     * wrapper under that name.
+     *
+     * <p>Async triggers use the 6-arg form; sync triggers use the 3-arg form.
      */
-    private void emitTriggerInto(CodeBlock.Builder block, EventTriggerModel trigger) {
+    private void emitTriggerInto(CodeBlock.Builder block, EventTriggerModel trigger, int index) {
         String publishHelper;
         if (trigger.isAsync()) {
             publishHelper = trigger.isSpread() ? "publishSpreadAsync" : "publishAsync";
@@ -275,8 +290,15 @@ public final class EventRegistryGenerator {
             publishHelper = trigger.isSpread() ? "publishSpreadWithOrigin" : "publishWithOrigin";
         }
 
+        String publishCall;
+        if (trigger.isAsync()) {
+            publishCall = "$T.$L(eventBus, __result, __asyncWrapper, container.getEventExecutor(), container.getErrorHandler(), HANDLER_INFO_" + index + ")";
+        } else {
+            publishCall = "$T.$L(eventBus, __result, __asyncWrapper)";
+        }
+
         if (!trigger.hasGuard()) {
-            block.addStatement("$T.$L(eventBus, __result, __asyncWrapper)", CHAIN_CONTEXT, publishHelper);
+            block.addStatement(publishCall, CHAIN_CONTEXT, publishHelper);
             return;
         }
 
@@ -290,7 +312,7 @@ public final class EventRegistryGenerator {
         }
 
         block.beginControlFlow("if (" + condition + ")", args);
-        block.addStatement("$T.$L(eventBus, __result, __asyncWrapper)", CHAIN_CONTEXT, publishHelper);
+        block.addStatement(publishCall, CHAIN_CONTEXT, publishHelper);
         block.endControlFlow();
     }
 
