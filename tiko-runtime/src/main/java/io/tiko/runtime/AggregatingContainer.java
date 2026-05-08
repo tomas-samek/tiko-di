@@ -12,6 +12,7 @@ import java.lang.reflect.Constructor;
 import java.net.URL;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 /**
@@ -30,6 +31,7 @@ public final class AggregatingContainer implements Container {
     private final List<Container> moduleContainers;
     private final Map<Class<?>, Container> componentToContainerMap;
     private final Map<Class<?>, Container> configToContainer = new ConcurrentHashMap<>();
+    private final AtomicBoolean shutdownInvoked = new AtomicBoolean(false);
 
     /**
      * Creates an aggregating container by discovering all module containers on the classpath.
@@ -259,6 +261,11 @@ public final class AggregatingContainer implements Container {
 
     @Override
     public void shutdown() {
+        // Idempotency CAS (#47): per-module containers are independently idempotent now,
+        // but guarding here avoids re-walking the list on duplicate calls.
+        if (!shutdownInvoked.compareAndSet(false, true)) {
+            return;
+        }
         // Shutdown in reverse order
         for (int i = moduleContainers.size() - 1; i >= 0; i--) {
             try {
