@@ -34,6 +34,8 @@ public final class AggregatingContainer implements Container {
 
     private final EventBus sharedEventBus;
     private final ErrorHandler errorHandler;
+    private final java.util.concurrent.ExecutorService eventExecutor;
+    private final boolean ownsEventExecutor;
     private final List<Container> moduleContainers;
     private final Map<Class<?>, Container> componentToContainerMap;
     private final Map<Class<?>, Container> configToContainer = new ConcurrentHashMap<>();
@@ -65,17 +67,27 @@ public final class AggregatingContainer implements Container {
     /**
      * Creates an aggregating container with a custom error handler and event executor.
      *
+     * <p>The supplied {@code userEventExecutor} (or a framework default if {@code null})
+     * is materialised once and shared across all per-module containers (#51), so async
+     * events submitted from any module use the same pool.
+     *
      * @param eventBus         shared event bus instance passed to all module containers
      * @param errorHandler     error handler for event handler exceptions
-     * @param userEventExecutor optional user-supplied event executor; per-module containers'
-     *                         executor wiring is tracked by #51 — currently unused, kept for
-     *                         API symmetry with the single-module path
+     * @param userEventExecutor optional user-supplied event executor. When {@code null},
+     *                         the aggregator creates a default {@link DefaultEventExecutorFactory}
+     *                         instance and owns its lifecycle (shuts it down on
+     *                         {@link #shutdown()}). When non-{@code null}, the user owns
+     *                         the lifecycle — the aggregator never shuts it down.
      * @throws IllegalStateException if container discovery or initialization fails
      */
     public AggregatingContainer(EventBus eventBus, ErrorHandler errorHandler,
             java.util.concurrent.ExecutorService userEventExecutor) {
         this.sharedEventBus = eventBus;
         this.errorHandler = errorHandler;
+        this.eventExecutor = userEventExecutor != null
+            ? userEventExecutor
+            : DefaultEventExecutorFactory.create();
+        this.ownsEventExecutor = (userEventExecutor == null);
         this.moduleContainers = new ArrayList<>();
         this.componentToContainerMap = new ConcurrentHashMap<>();
 
@@ -127,15 +139,17 @@ public final class AggregatingContainer implements Container {
 
         // Load and instantiate the container with 4-arg constructor (#45):
         // (EventBus, ErrorHandler, ExecutorService, boolean publishLifecycleEvents).
-        // We pass false for publishLifecycleEvents so the per-module container does NOT
-        // publish its own ApplicationStartedEvent / ApplicationEndingEvent — the aggregator
-        // publishes once on the shared bus.
+        // - executor: the aggregator's shared executor (#51). Per-module containers see a
+        //   non-null executor so their internal `ownsEventExecutor` becomes false — only
+        //   the aggregator shuts it down.
+        // - publishLifecycleEvents=false: aggregator publishes ApplicationStartedEvent /
+        //   ApplicationEndingEvent once on the shared bus (#45).
         Class<?> containerClass = Class.forName(implClassName, true, classLoader);
         Constructor<?> constructor = containerClass.getDeclaredConstructor(
             EventBus.class, ErrorHandler.class,
             java.util.concurrent.ExecutorService.class, boolean.class);
         Container moduleContainer = (Container) constructor.newInstance(
-            sharedEventBus, errorHandler, /* executor */ null, /* publishLifecycleEvents */ false);
+            sharedEventBus, errorHandler, eventExecutor, /* publishLifecycleEvents */ false);
 
         moduleContainers.add(moduleContainer);
 
@@ -239,11 +253,8 @@ public final class AggregatingContainer implements Container {
 
     @Override
     public java.util.concurrent.ExecutorService getEventExecutor() {
-        // Delegate to first module container (all should have the same executor via TikoOptions)
-        if (moduleContainers.isEmpty()) {
-            throw new IllegalStateException("No module containers available");
-        }
-        return moduleContainers.get(0).getEventExecutor();
+        // Returns the shared executor (#51): same instance across all per-module containers.
+        return eventExecutor;
     }
 
     @Override
@@ -324,13 +335,29 @@ public final class AggregatingContainer implements Container {
             Logger.getLogger("io.tiko.events").log(Level.WARNING,
                 "ApplicationEndingEvent publish threw", t);
         }
-        // Shutdown in reverse order
+        // Shutdown in reverse order. Per-module containers no longer shut down the executor
+        // themselves (#51): they were constructed with the shared executor, so their internal
+        // ownsEventExecutor is false. The aggregator owns the lifecycle below.
         for (int i = moduleContainers.size() - 1; i >= 0; i--) {
             try {
                 moduleContainers.get(i).shutdown();
             } catch (Exception e) {
                 // Log but continue shutting down other containers
                 System.err.println("Error shutting down module container: " + e.getMessage());
+            }
+        }
+        // Shut down framework-owned event executor (#51). User-supplied executors are not
+        // touched — the user owns their lifecycle. Mirrors the per-module shutdown logic
+        // moved up to the aggregator level.
+        if (ownsEventExecutor) {
+            eventExecutor.shutdown();
+            try {
+                if (!eventExecutor.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS)) {
+                    eventExecutor.shutdownNow();
+                }
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                eventExecutor.shutdownNow();
             }
         }
     }
