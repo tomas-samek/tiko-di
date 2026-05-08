@@ -84,12 +84,18 @@ public @interface EventHandler {
     /**
      * Whether this handler should be invoked asynchronously.
      *
-     * <p>When {@code true}, the handler runs in a separate thread and does not
-     * block the event publisher. Useful for handlers with slow operations
-     * (I/O, network calls, etc.) that don't need to complete before the
-     * publisher continues.</p>
+     * <p>When {@code true}, the handler runs on the container's event executor —
+     * a bounded {@link java.util.concurrent.ThreadPoolExecutor} by default
+     * (see the framework defaults documented on
+     * {@code io.tiko.runtime.DefaultEventExecutorFactory}), or the user-supplied
+     * {@link java.util.concurrent.ExecutorService} passed via
+     * {@code TikoOptions.eventExecutor(...)}.
      *
-     * <p>Default: {@code false} (synchronous)</p>
+     * <p>The publisher does not wait for an async handler to complete. Async handler
+     * exceptions are routed to the configured {@link io.tiko.ErrorHandler}, identical
+     * to sync handler errors.
+     *
+     * <p>Default: {@code false} (synchronous).
      *
      * @return true for async execution, false for sync
      */
