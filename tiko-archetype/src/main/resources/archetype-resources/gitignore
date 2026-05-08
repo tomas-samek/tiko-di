@@ -1,0 +1,17 @@
+target/
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+.DS_Store
+*.log
+
+# Optional: ignore AI assistant local config if you don't want to commit them.
+# Uncomment the lines below to keep these out of version control.
+# By default, committing them lets the team share AI agent context.
+#
+# .ai-skills/
+# .cursor/
+# CLAUDE.md

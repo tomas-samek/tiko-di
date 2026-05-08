@@ -1,0 +1,22 @@
+# tiko-di skill
+
+This project uses **tiko-di**, a compile-time dependency injection framework for Java 17+.
+
+## Where to find framework documentation
+
+- README: https://github.com/tomas-samek/tiko-di/blob/main/README.md
+- Worked examples: https://github.com/tomas-samek/tiko-di/tree/main/tiko-examples
+- Issue tracker: https://github.com/tomas-samek/tiko-di/issues
+
+## Key things to know
+
+- Constructor injection only — no field injection, no setter injection.
+- All dependency wiring is validated and generated at compile time. Build failures point at exact problems.
+- `@Component` declares a bean. Default scope is `PROTOTYPE` — pass `Scope.SINGLETON` for stateless services.
+- Cross-scope injection (e.g. SINGLETON depending on REQUEST) requires the shorter-scoped bean to implement an interface — the framework generates a proxy.
+- Events: `@EventHandler` to receive, `container.events().publish(...)` to send. `@EventTrigger` chains handlers declaratively.
+- See README "Core Concepts" and "Usage Examples" sections for full details.
+
+## When in doubt
+
+Read the generated code under `target/generated-sources/annotations/io/tiko/generated/`. The framework's behaviour is fully visible in source — there is no runtime reflection or classpath scanning.

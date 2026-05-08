@@ -21,6 +21,7 @@
         <module>tiko-event-api</module>
         <module>tiko-event-local</module>
         <module>tiko-examples</module>
+        <module>tiko-archetype</module>
     </modules>
 
     <properties>

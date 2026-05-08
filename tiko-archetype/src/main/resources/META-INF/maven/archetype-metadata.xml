@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<archetype-descriptor xsi:schemaLocation="https://maven.apache.org/xsd/archetype-descriptor-1.1.0.xsd https://maven.apache.org/xsd/archetype-descriptor-1.1.0.xsd"
+                      name="tiko-archetype"
+                      xmlns="https://maven.apache.org/xsd/archetype-descriptor-1.1.0.xsd"
+                      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <fileSets>
+        <!-- Java sources: package directory created via packaged="true". -->
+        <fileSet filtered="true" packaged="true" encoding="UTF-8">
+            <directory>src/main/java</directory>
+            <includes>
+                <include>**/*.java</include>
+            </includes>
+        </fileSet>
+
+        <!-- AI assistant context — committed by default; users can ignore via .gitignore. -->
+        <fileSet filtered="true" encoding="UTF-8">
+            <directory>.ai-skills</directory>
+            <includes>
+                <include>**/*.md</include>
+            </includes>
+        </fileSet>
+        <fileSet filtered="true" encoding="UTF-8">
+            <directory>.cursor</directory>
+            <includes>
+                <include>**/*.md</include>
+            </includes>
+        </fileSet>
+
+        <!-- Top-level project files. `gitignore` is renamed to `.gitignore` by the
+             post-generate Groovy script (META-INF/archetype-post-generate.groovy);
+             the archetype-plugin filters dotfiles out of the bundled archetype jar
+             by default. -->
+        <fileSet filtered="true" encoding="UTF-8">
+            <directory></directory>
+            <includes>
+                <include>gitignore</include>
+                <include>CLAUDE.md</include>
+            </includes>
+        </fileSet>
+    </fileSets>
+</archetype-descriptor>
