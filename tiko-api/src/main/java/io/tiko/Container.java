@@ -143,6 +143,20 @@ public interface Container extends AutoCloseable {
     <T> T supplyInEventScope(java.util.function.Supplier<T> supplier);
 
     /**
+     * Starts the container and publishes {@link io.tiko.events.ApplicationStartedEvent}
+     * exactly once.
+     * <p>
+     * This method is invoked automatically by {@code Tiko.create(...)} after
+     * configuration injection completes; user code does not normally call it.
+     * <p>
+     * Implementations must be idempotent — calling {@code start()} more than once
+     * has no effect after the first invocation. In multi-module setups, the
+     * aggregating container publishes the event once on the shared bus; per-module
+     * containers do not publish their own.
+     */
+    void start();
+
+    /**
      * Shuts down the container gracefully.
      * <p>
      * Invokes {@code @PreDestroy} methods on all singleton beans in reverse

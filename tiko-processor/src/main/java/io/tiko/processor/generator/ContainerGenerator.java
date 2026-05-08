@@ -62,6 +62,8 @@ public final class ContainerGenerator {
         containerBuilder.addField(createStoppedField());
         containerBuilder.addField(createInFlightGetsField());
         containerBuilder.addField(createInShutdownThreadField());
+        containerBuilder.addField(createStartInvokedField());
+        containerBuilder.addField(createPublishLifecycleEventsField());
         containerBuilder.addFields(createFactoryFields());
 
         // Add constructor
@@ -275,6 +277,30 @@ public final class ContainerGenerator {
     }
 
     /**
+     * Field: AtomicBoolean startInvoked — CAS guard so start() is idempotent (#45).
+     */
+    private FieldSpec createStartInvokedField() {
+        return FieldSpec.builder(
+                ClassName.get("java.util.concurrent.atomic", "AtomicBoolean"),
+                "startInvoked",
+                Modifier.PRIVATE, Modifier.FINAL)
+            .initializer("new $T(false)", ClassName.get("java.util.concurrent.atomic", "AtomicBoolean"))
+            .build();
+    }
+
+    /**
+     * Field: boolean publishLifecycleEvents — when false, this container does NOT publish
+     * its own {@code ApplicationStartedEvent} / {@code ApplicationEndingEvent}. The
+     * {@code AggregatingContainer} sets this to {@code false} on per-module containers so
+     * the aggregator can publish exactly once on the shared bus (#45).
+     */
+    private FieldSpec createPublishLifecycleEventsField() {
+        return FieldSpec.builder(TypeName.BOOLEAN, "publishLifecycleEvents",
+                Modifier.PRIVATE, Modifier.FINAL)
+            .build();
+    }
+
+    /**
      * public void injectConfigs(Map&lt;Class&lt;?&gt;, Object&gt; configs) — populates the configSingletons map.
      */
     private MethodSpec createInjectConfigsMethod() {
@@ -324,6 +350,11 @@ public final class ContainerGenerator {
 
     /**
      * Creates the constructor that initializes factories, event bus, and error handler.
+     * <p>The {@code publishLifecycleEvents} flag (#45) controls whether this container
+     * publishes its own {@code ApplicationStartedEvent} / {@code ApplicationEndingEvent}.
+     * Single-module setups pass {@code true}; per-module containers run under an
+     * {@code AggregatingContainer} pass {@code false} so the aggregator can publish
+     * exactly once on the shared bus.
      */
     private MethodSpec createConstructor() {
         MethodSpec.Builder constructor = MethodSpec.constructorBuilder()
@@ -331,12 +362,14 @@ public final class ContainerGenerator {
                 .addParameter(EventBus.class, "eventBus")
                 .addParameter(ClassName.get("io.tiko", "ErrorHandler"), "errorHandler")
                 .addParameter(ClassName.get("java.util.concurrent", "ExecutorService"), "userEventExecutor")
+                .addParameter(TypeName.BOOLEAN, "publishLifecycleEvents")
                 .addStatement("this.eventBus = eventBus")
                 .addStatement("this.errorHandler = errorHandler")
                 .addStatement(
                     "this.eventExecutor = userEventExecutor != null ? userEventExecutor : "
                     + "io.tiko.runtime.DefaultEventExecutorFactory.create()")
-                .addStatement("this.ownsEventExecutor = (userEventExecutor == null)");
+                .addStatement("this.ownsEventExecutor = (userEventExecutor == null)")
+                .addStatement("this.publishLifecycleEvents = publishLifecycleEvents");
 
         // Initialize factory fields
         for (ComponentModel component : context.getActiveComponents()) {
@@ -704,11 +737,20 @@ public final class ContainerGenerator {
     }
 
     /**
-     * Creates start method that calls @PostConstruct on all singletons.
+     * Creates start method (#45): idempotent CAS, eagerly initialises SINGLETON
+     * components, then publishes ApplicationStartedEvent (gated on publishLifecycleEvents
+     * so per-module containers under an AggregatingContainer can stay silent — the
+     * aggregator publishes once on the shared bus).
      */
     private MethodSpec createStartMethod() {
         MethodSpec.Builder method = MethodSpec.methodBuilder("start")
-                .addModifiers(Modifier.PUBLIC);
+                .addModifiers(Modifier.PUBLIC)
+                .addAnnotation(Override.class);
+
+        method.addComment("Idempotency CAS (#45)");
+        method.beginControlFlow("if (!startInvoked.compareAndSet(false, true))");
+        method.addStatement("return");
+        method.endControlFlow();
 
         method.addComment("Initialize all SINGLETON components");
 
@@ -720,7 +762,9 @@ public final class ContainerGenerator {
         }
 
         method.addStatement("this.startedAt = $T.now()", Instant.class);
+        method.beginControlFlow("if (publishLifecycleEvents)");
         method.addStatement("eventBus.publish(new $T(this.startedAt))", APP_STARTED);
+        method.endControlFlow();
 
         return method.build();
     }
@@ -754,16 +798,19 @@ public final class ContainerGenerator {
         method.endControlFlow();
 
         method.addComment("Phase 2: publish ApplicationEndingEvent. get() still works here so handlers can read state.");
+        method.addComment("Gated on publishLifecycleEvents (#45): per-module containers under an AggregatingContainer skip this; aggregator publishes once.");
         method.addStatement("$T __endTimestamp = $T.now()", Instant.class, Instant.class);
         method.addStatement(
                 "$T __uptime = (this.startedAt != null) ? $T.between(this.startedAt, __endTimestamp) : $T.ZERO",
                 Duration.class, Duration.class, Duration.class);
+        method.beginControlFlow("if (publishLifecycleEvents)");
         method.beginControlFlow("try");
         method.addStatement("eventBus.publish(new $T(__endTimestamp, __uptime))", APP_ENDING);
         method.nextControlFlow("catch ($T __t)", Throwable.class);
         method.addComment("Bus-impl defect; @PreDestroy must still run (handler exceptions are isolated by #44)");
         method.addStatement("$T.getLogger($S).log($T.WARNING, $S, __t)",
             logger, "io.tiko.events", level, "ApplicationEndingEvent publish threw");
+        method.endControlFlow();
         method.endControlFlow();
 
         method.addComment("Phase 3: gate new get() calls and drain in-flight ones");

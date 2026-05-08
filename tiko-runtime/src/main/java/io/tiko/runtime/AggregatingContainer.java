@@ -4,16 +4,22 @@ import io.tiko.Container;
 import io.tiko.ErrorHandler;
 import io.tiko.EventBus;
 import io.tiko.Provider;
+import io.tiko.events.ApplicationEndingEvent;
+import io.tiko.events.ApplicationStartedEvent;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.reflect.Constructor;
 import java.net.URL;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Aggregating container that delegates to multiple module-specific containers.
@@ -32,6 +38,8 @@ public final class AggregatingContainer implements Container {
     private final Map<Class<?>, Container> componentToContainerMap;
     private final Map<Class<?>, Container> configToContainer = new ConcurrentHashMap<>();
     private final AtomicBoolean shutdownInvoked = new AtomicBoolean(false);
+    private final AtomicBoolean startInvoked = new AtomicBoolean(false);
+    private volatile Instant startedAt;
 
     /**
      * Creates an aggregating container by discovering all module containers on the classpath.
@@ -40,7 +48,7 @@ public final class AggregatingContainer implements Container {
      * @throws IllegalStateException if container discovery or initialization fails
      */
     public AggregatingContainer(EventBus eventBus) {
-        this(eventBus, ctx -> {});
+        this(eventBus, ctx -> {}, null);
     }
 
     /**
@@ -51,6 +59,21 @@ public final class AggregatingContainer implements Container {
      * @throws IllegalStateException if container discovery or initialization fails
      */
     public AggregatingContainer(EventBus eventBus, ErrorHandler errorHandler) {
+        this(eventBus, errorHandler, null);
+    }
+
+    /**
+     * Creates an aggregating container with a custom error handler and event executor.
+     *
+     * @param eventBus         shared event bus instance passed to all module containers
+     * @param errorHandler     error handler for event handler exceptions
+     * @param userEventExecutor optional user-supplied event executor; per-module containers'
+     *                         executor wiring is tracked by #51 — currently unused, kept for
+     *                         API symmetry with the single-module path
+     * @throws IllegalStateException if container discovery or initialization fails
+     */
+    public AggregatingContainer(EventBus eventBus, ErrorHandler errorHandler,
+            java.util.concurrent.ExecutorService userEventExecutor) {
         this.sharedEventBus = eventBus;
         this.errorHandler = errorHandler;
         this.moduleContainers = new ArrayList<>();
@@ -102,17 +125,17 @@ public final class AggregatingContainer implements Container {
                 "Missing 'impl' property in " + resourceUrl);
         }
 
-        // Load and instantiate the container — try 2-arg (EventBus, ErrorHandler) first,
-        // fall back to legacy 1-arg for backward compatibility.
+        // Load and instantiate the container with 4-arg constructor (#45):
+        // (EventBus, ErrorHandler, ExecutorService, boolean publishLifecycleEvents).
+        // We pass false for publishLifecycleEvents so the per-module container does NOT
+        // publish its own ApplicationStartedEvent / ApplicationEndingEvent — the aggregator
+        // publishes once on the shared bus.
         Class<?> containerClass = Class.forName(implClassName, true, classLoader);
-        Container moduleContainer;
-        try {
-            Constructor<?> constructor = containerClass.getDeclaredConstructor(EventBus.class, ErrorHandler.class);
-            moduleContainer = (Container) constructor.newInstance(sharedEventBus, errorHandler);
-        } catch (NoSuchMethodException nsm) {
-            Constructor<?> constructor = containerClass.getDeclaredConstructor(EventBus.class);
-            moduleContainer = (Container) constructor.newInstance(sharedEventBus);
-        }
+        Constructor<?> constructor = containerClass.getDeclaredConstructor(
+            EventBus.class, ErrorHandler.class,
+            java.util.concurrent.ExecutorService.class, boolean.class);
+        Container moduleContainer = (Container) constructor.newInstance(
+            sharedEventBus, errorHandler, /* executor */ null, /* publishLifecycleEvents */ false);
 
         moduleContainers.add(moduleContainer);
 
@@ -260,11 +283,46 @@ public final class AggregatingContainer implements Container {
     }
 
     @Override
+    public void start() {
+        // Idempotency CAS (#45): start() is also reachable from user code now that it's
+        // on the Container interface; double-call is a no-op.
+        if (!startInvoked.compareAndSet(false, true)) {
+            return;
+        }
+        // Multi-module is intentionally lazy — we do NOT call start() on per-module
+        // containers here. Singletons construct on first get(). Eager-init opt-in is
+        // tracked separately as #46.
+        this.startedAt = Instant.now();
+        try {
+            sharedEventBus.publish(new ApplicationStartedEvent(this.startedAt));
+        } catch (Throwable t) {
+            // Bus-impl defect; user-facing flow must continue. Handler exceptions are
+            // already isolated by #44, so this catch fires only for genuine bus bugs.
+            Logger.getLogger("io.tiko.events").log(Level.WARNING,
+                "ApplicationStartedEvent publish threw", t);
+        }
+    }
+
+    @Override
     public void shutdown() {
         // Idempotency CAS (#47): per-module containers are independently idempotent now,
         // but guarding here avoids re-walking the list on duplicate calls.
         if (!shutdownInvoked.compareAndSet(false, true)) {
             return;
+        }
+        // Publish ApplicationEndingEvent ONCE on the shared bus before delegating to
+        // per-module shutdowns (#45). Per-module containers were constructed with
+        // publishLifecycleEvents=false, so they will not publish their own.
+        Instant endTimestamp = Instant.now();
+        Duration uptime = (this.startedAt != null)
+            ? Duration.between(this.startedAt, endTimestamp)
+            : Duration.ZERO;
+        try {
+            sharedEventBus.publish(new ApplicationEndingEvent(endTimestamp, uptime));
+        } catch (Throwable t) {
+            // Bus-impl defect; per-module @PreDestroy must still run.
+            Logger.getLogger("io.tiko.events").log(Level.WARNING,
+                "ApplicationEndingEvent publish threw", t);
         }
         // Shutdown in reverse order
         for (int i = moduleContainers.size() - 1; i >= 0; i--) {
