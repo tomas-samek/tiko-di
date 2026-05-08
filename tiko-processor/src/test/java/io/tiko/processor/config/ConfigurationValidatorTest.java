@@ -112,7 +112,7 @@ class ConfigurationValidatorTest {
     }
 
     @Test
-    void nonRecursiveNestedRecords_failWithUnsupportedV1Codegen() {
+    void nonRecursiveNestedRecords_compileSuccessfully() {
         JavaFileObject outer = JavaFileObjects.forSourceLines(
             "io.example.Outer",
             "package io.example;",
@@ -126,12 +126,16 @@ class ConfigurationValidatorTest {
             "public record Inner(int v) {}"
         );
         Compilation c = Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(outer, inner);
-        assertThat(c).failed();
-        assertThat(c).hadErrorContaining("nested record");
+        assertThat(c).succeeded();
+        // Both the top-level binder and a NestedCoercer for Inner must be generated.
+        assertThat(c).generatedSourceFile("io.tiko.generated.config.OuterBinder");
+        boolean hasInnerCoercer = c.generatedSourceFiles().stream()
+            .anyMatch(f -> f.getName().contains("InnerNestedCoercer_"));
+        assert hasInnerCoercer : "expected InnerNestedCoercer_<hash> to be generated";
     }
 
     @Test
-    void recordInsideList_failsWithUnsupportedV1Codegen() {
+    void recordInsideList_compilesAndGeneratesNestedCoercer() {
         JavaFileObject outer = JavaFileObjects.forSourceLines(
             "io.example.Outer",
             "package io.example;",
@@ -146,7 +150,10 @@ class ConfigurationValidatorTest {
             "public record Inner(int v) {}"
         );
         Compilation c = Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(outer, inner);
-        assertThat(c).failed();
-        assertThat(c).hadErrorContaining("nested record");
+        assertThat(c).succeeded();
+        assertThat(c).generatedSourceFile("io.tiko.generated.config.OuterBinder");
+        boolean hasInnerCoercer = c.generatedSourceFiles().stream()
+            .anyMatch(f -> f.getName().contains("InnerNestedCoercer_"));
+        assert hasInnerCoercer : "expected InnerNestedCoercer_<hash> to be generated";
     }
 }

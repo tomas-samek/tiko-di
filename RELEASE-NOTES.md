@@ -6,6 +6,10 @@ All notable changes to **tiko-di** are documented in this file. Format follows [
 
 _Phase 2 work in progress — see the [Roadmap](README.md#roadmap) and [open issues](https://github.com/tomas-samek/tiko-di/issues)._
 
+### Added
+
+- **Nested records inside `@Configuration` are now supported** ([#17](https://github.com/tomas-samek/tiko-di/issues/17)). A `@Configuration` record can contain plain records as field types — directly, or inside `Optional<X>` / `List<X>` / `Map<String,X>`. The processor emits a per-nested-record coercer (`<Record>NestedCoercer_<hash>`) that composes with the existing collection coercers. Nested records are not themselves `@Configuration`-annotated; they bind by recursion under the parent's prefix.
+
 ## [0.1.0] — 2026-05-08
 
 First alpha release. Marks completion of Phase 1 work plus the basic Maven archetype for project scaffolding. Suitable for early-adopter experimentation; production use should wait for Phase 2.

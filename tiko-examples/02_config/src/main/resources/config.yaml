@@ -8,3 +8,6 @@ db:
 app:
   name: example-service
   logLevel: ${LOG_LEVEL:INFO}
+  server:
+    host: 0.0.0.0
+    # port omitted on purpose to demonstrate @Default("8080") on a nested-record field

@@ -19,6 +19,7 @@ public class DataService {
         return app.name() + " connecting to " + db.url()
             + " (max=" + db.maxConnections()
             + ", timeout=" + db.connectTimeout().orElse(java.time.Duration.ZERO)
-            + ", logLevel=" + app.logLevel() + ")";
+            + ", logLevel=" + app.logLevel()
+            + ", listening on " + app.server().host() + ":" + app.server().port() + ")";
     }
 }
