@@ -24,6 +24,28 @@ Tiko combines compile-time validation with a small surface area, and treats the 
 
 ## Quick Start
 
+### Scaffold a new project (archetype)
+
+The fastest way to start: generate a runnable single-module Tiko DI project with the bundled archetype.
+
+```bash
+mvn archetype:generate \
+    -DarchetypeGroupId=io.tiko \
+    -DarchetypeArtifactId=tiko-archetype \
+    -DarchetypeVersion=0.1.0 \
+    -DarchetypeCatalog=local \
+    -DgroupId=com.example \
+    -DartifactId=my-app \
+    -DinteractiveMode=false
+
+cd my-app
+mvn exec:java   # prints: Hello, world!
+```
+
+The scaffold ships with a minimal `Main` + one `@Component`, a `pom.xml` with `tiko-bom` imported and the annotation processor wired, plus AI-assistant context files (`CLAUDE.md`, `.ai-skills/SKILL.md`, `.cursor/rules/tiko.md`) you can extend or remove via `.gitignore`. Replace the sample classes with your own and grow from there.
+
+> The archetype currently requires `-DarchetypeCatalog=local` since Tiko is not yet on Maven Central (Phase 5 work). Build the parent project once with `mvn install` to populate your local catalog.
+
 ### Installation
 
 Add to your `pom.xml`:

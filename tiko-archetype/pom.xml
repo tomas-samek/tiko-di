@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.tiko</groupId>
+        <artifactId>tiko-parent</artifactId>
+        <version>0.1.0</version>
+    </parent>
+
+    <artifactId>tiko-archetype</artifactId>
+    <packaging>maven-archetype</packaging>
+
+    <name>Tiko DI - Archetype</name>
+    <description>Maven archetype that scaffolds a runnable single-module Tiko DI project</description>
+
+    <build>
+        <extensions>
+            <extension>
+                <groupId>org.apache.maven.archetype</groupId>
+                <artifactId>archetype-packaging</artifactId>
+                <version>3.2.1</version>
+            </extension>
+        </extensions>
+
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <artifactId>maven-archetype-plugin</artifactId>
+                    <version>3.2.1</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+        <!--
+          The maven-archetype packaging binds archetype:integration-test to the
+          integration-test phase by default. The IT regenerates the archetype against
+          src/test/resources/projects/basic/archetype.properties and runs `mvn compile`
+          (per goal.txt) on the generated project. Catches regressions on every CI run.
+
+          .gitignore: shipped in archetype-resources as `gitignore` (no leading dot)
+          and renamed by META-INF/archetype-post-generate.groovy after generation.
+          Maven archetype-plugin's default-excludes filter `**/.gitignore` out of the
+          packaged archetype jar otherwise.
+        -->
+    </build>
+</project>

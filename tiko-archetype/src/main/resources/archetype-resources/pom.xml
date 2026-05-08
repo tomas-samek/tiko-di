@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>${groupId}</groupId>
+    <artifactId>${artifactId}</artifactId>
+    <version>${version}</version>
+    <packaging>jar</packaging>
+
+    <properties>
+        <maven.compiler.release>17</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <tiko.version>0.1.0</tiko.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>io.tiko</groupId>
+                <artifactId>tiko-bom</artifactId>
+                <version>${tiko.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- Core: API + runtime container. tiko-runtime is at compile scope because the
+             annotation processor generates code that imports io.tiko.runtime classes
+             (e.g. DefaultEventExecutorFactory). -->
+        <dependency>
+            <groupId>io.tiko</groupId>
+            <artifactId>tiko-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.tiko</groupId>
+            <artifactId>tiko-runtime</artifactId>
+        </dependency>
+
+        <!-- In-memory event bus. Reflectively loaded by Tiko.create(); runtime scope
+             is sufficient. -->
+        <dependency>
+            <groupId>io.tiko</groupId>
+            <artifactId>tiko-event-local</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Uncomment to enable typed YAML configuration injection via @Configuration. -->
+        <!--
+        <dependency>
+            <groupId>io.tiko</groupId>
+            <artifactId>tiko-config</artifactId>
+        </dependency>
+        -->
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+                <configuration>
+                    <release>17</release>
+                    <!-- Required for JDK 23+: annotation processing is silently skipped without it. -->
+                    <proc>full</proc>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>io.tiko</groupId>
+                            <artifactId>tiko-processor</artifactId>
+                            <version>${tiko.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.4.1</version>
+                <configuration>
+                    <mainClass>${package}.Main</mainClass>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
