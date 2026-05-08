@@ -104,25 +104,11 @@ public final class Tiko {
 
             Container container;
             if (moduleCount > 1) {
-                // Multi-module: AggregatingContainer — try 3-arg constructor first,
-                // fall back to 2-arg, then legacy 1-arg (multi-module executor wiring is
-                // out of scope; each per-module container builds its own default executor).
+                // Multi-module: AggregatingContainer with the 3-arg constructor we ship.
                 Class<?> aggregatingClass = Class.forName("io.tiko.runtime.AggregatingContainer");
-                try {
-                    container = (Container) aggregatingClass
-                        .getDeclaredConstructor(EventBus.class, ErrorHandler.class, java.util.concurrent.ExecutorService.class)
-                        .newInstance(eventBus, errorHandler, options.eventExecutor());
-                } catch (NoSuchMethodException nsm3) {
-                    try {
-                        container = (Container) aggregatingClass
-                            .getDeclaredConstructor(EventBus.class, ErrorHandler.class)
-                            .newInstance(eventBus, errorHandler);
-                    } catch (NoSuchMethodException nsm2) {
-                        container = (Container) aggregatingClass
-                            .getDeclaredConstructor(EventBus.class)
-                            .newInstance(eventBus);
-                    }
-                }
+                container = (Container) aggregatingClass
+                    .getDeclaredConstructor(EventBus.class, ErrorHandler.class, java.util.concurrent.ExecutorService.class)
+                    .newInstance(eventBus, errorHandler, options.eventExecutor());
             } else {
                 // Single module: Direct instantiation (does NOT call start yet)
                 container = createSingleModuleContainer(eventBus, errorHandler, options.eventExecutor());
@@ -134,13 +120,11 @@ public final class Tiko {
                 container.getClass().getMethod("injectConfigs", java.util.Map.class).invoke(container, bound);
             }
 
-            // 5. Start the container (initialize all SINGLETON components)
-            if (moduleCount <= 1) {
-                container.getClass().getMethod("start").invoke(container);
-            }
-            // Multi-module: per-module containers are constructed lazily by the aggregator;
-            // their `start()` is not invoked eagerly here. Singletons initialise on first get().
-            // (This is pre-existing behaviour from the multi-module work, not introduced by config injection.)
+            // 5. Start the container — single-module's TikoContainerImpl.start() initialises
+            // all SINGLETON components and publishes ApplicationStartedEvent;
+            // multi-module's AggregatingContainer.start() publishes ApplicationStartedEvent
+            // once on the shared bus and leaves per-module singleton init lazy (#45).
+            container.start();
 
             return container;
         } catch (RuntimeException e) {
@@ -233,9 +217,12 @@ public final class Tiko {
             implClass = Class.forName("io.tiko.generated.TikoContainerImpl");
         }
 
+        // Single-module: publishLifecycleEvents=true so the per-module container publishes
+        // its own ApplicationStartedEvent / ApplicationEndingEvent (no aggregator above it).
         Container container = (Container) implClass
-            .getDeclaredConstructor(EventBus.class, ErrorHandler.class, java.util.concurrent.ExecutorService.class)
-            .newInstance(eventBus, errorHandler, userEventExecutor);
+            .getDeclaredConstructor(EventBus.class, ErrorHandler.class,
+                java.util.concurrent.ExecutorService.class, boolean.class)
+            .newInstance(eventBus, errorHandler, userEventExecutor, /* publishLifecycleEvents */ true);
 
         registerEventHandlers(eventBus, container, implClass);
 
