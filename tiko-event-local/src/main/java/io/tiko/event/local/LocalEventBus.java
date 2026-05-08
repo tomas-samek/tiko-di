@@ -3,14 +3,14 @@ package io.tiko.event.local;
 import io.tiko.EventBus;
 import io.tiko.EventCallback;
 import io.tiko.Subscription;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Simple in-memory event bus implementation.
@@ -24,11 +24,16 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * {@code ErrorHandler} with a rich {@code EventHandlerError}. Subscribers registered
  * programmatically (via {@link #subscribe(Class, EventCallback)} from user code) are
  * not associated with any compile-time identity, so the bus logs their exceptions at
- * WARN via slf4j as a defense-in-depth net.
+ * WARNING via {@link java.util.logging} as a defense-in-depth net.
  */
 public final class LocalEventBus implements EventBus {
 
-    private static final Logger LOG = LoggerFactory.getLogger(LocalEventBus.class);
+    // Lazy holder: defers java.util.logging.LogManager init until the first
+    // programmatic-callback exception fires. Most apps never hit this path during
+    // startup, so the bus's <clinit> stays free of logging-init cost.
+    private static final class LoggerHolder {
+        static final Logger LOG = Logger.getLogger(LocalEventBus.class.getName());
+    }
 
     private final Map<Class<?>, List<EventCallback<?>>> handlers = new ConcurrentHashMap<>();
 
@@ -54,11 +59,13 @@ public final class LocalEventBus implements EventBus {
                 // Defense-in-depth: the generated dispatcher already catches and reports
                 // its own throws via the ErrorHandler with a rich EventHandlerInfo. This
                 // branch fires only for programmatic EventCallback subscribers (no
-                // @EventHandler, no compile-time identity). Log at WARN — Errors (OOM,
+                // @EventHandler, no compile-time identity). Log at WARNING — Errors (OOM,
                 // StackOverflow) are deliberately not caught here; those mean the JVM
                 // is sick and surfacing them is the right move.
-                LOG.warn("Programmatic event callback threw on event {}: {}",
-                    eventType.getName(), e.toString(), e);
+                LoggerHolder.LOG.log(Level.WARNING,
+                    String.format("Programmatic event callback threw on event %s: %s",
+                        eventType.getName(), e.toString()),
+                    e);
             }
         }
     }

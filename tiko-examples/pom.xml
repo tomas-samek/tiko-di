@@ -25,20 +25,11 @@
         <module>05_multi_module</module>
     </modules>
 
-    <dependencies>
-        <!--
-          slf4j binding for the examples. Tiko's framework code (LocalEventBus,
-          Slf4jWarnErrorHandler, EventChainContext) calls slf4j; tiko-event-local
-          declares slf4j-api at provided scope so consumers bring their own
-          binding. Inheriting it here means every example module — including the
-          multi-module sub-modules — has slf4j on the runtime classpath without
-          having to repeat the dependency.
-        -->
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-simple</artifactId>
-            <scope>runtime</scope>
-        </dependency>
-    </dependencies>
+    <!--
+      No logging-binding deps inherited by examples. Tiko's framework code logs
+      via java.util.logging (see #53), so examples need no extra binding to
+      start. Users on slf4j stacks supply their own ErrorHandler via
+      TikoOptions.errorHandler(...).
+    -->
 
 </project>

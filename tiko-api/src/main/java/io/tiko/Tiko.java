@@ -84,7 +84,7 @@ public final class Tiko {
 
     private static Container createInternal(TikoOptions options) {
         try {
-            // 1. Resolve the ErrorHandler — user-supplied or the default Slf4jWarnErrorHandler.
+            // 1. Resolve the ErrorHandler — user-supplied or the JUL-backed DefaultErrorHandler.
             ErrorHandler errorHandler = options.errorHandler();
             if (errorHandler == null) {
                 errorHandler = resolveDefaultErrorHandler();
@@ -154,12 +154,12 @@ public final class Tiko {
     }
 
     /**
-     * Reflectively builds an {@code Slf4jWarnErrorHandler} from {@code tiko-event-local}.
-     * Kept reflective so {@code tiko-api} stays free of the slf4j dependency.
+     * Reflectively builds the JUL-backed {@code DefaultErrorHandler} from {@code tiko-event-local}.
+     * Kept reflective so {@code tiko-api} stays free of any concrete handler dependency.
      */
     private static ErrorHandler resolveDefaultErrorHandler() {
         try {
-            Class<?> defaultClass = Class.forName("io.tiko.event.local.Slf4jWarnErrorHandler");
+            Class<?> defaultClass = Class.forName("io.tiko.event.local.DefaultErrorHandler");
             java.lang.reflect.Constructor<?> ctor = defaultClass.getDeclaredConstructor();
             ctor.setAccessible(true);
             return (ErrorHandler) ctor.newInstance();

@@ -496,7 +496,9 @@ The same handler code is intended to work against any `EventBus` implementation 
 
 ### Error handling
 
-If an `@EventHandler` method throws, the exception is routed to the configured `ErrorHandler` (default: logs at WARN via slf4j). It does not propagate to the publisher and does not prevent other handlers from running.
+If an `@EventHandler` method throws, the exception is routed to the configured `ErrorHandler` (default: logs at `WARNING` via `java.util.logging`). It does not propagate to the publisher and does not prevent other handlers from running.
+
+The framework itself has zero logging-binding dependencies — JUL is in the JDK, so `Tiko.create()` works without adding any logging artifact to your classpath.
 
 Override the default to wire metrics, alerts, or custom logging:
 
@@ -509,6 +511,18 @@ TikoOptions opts = TikoOptions.builder()
     })
     .build();
 try (Container container = Tiko.create(opts)) { ... }
+```
+
+If your stack already uses slf4j, route the framework's error logs through it with a one-line handler:
+
+```java
+import org.slf4j.LoggerFactory;
+
+Logger slf4j = LoggerFactory.getLogger("io.tiko.events");
+TikoOptions opts = TikoOptions.builder()
+    .errorHandler(ctx -> slf4j.warn("Tiko {}: {}",
+        ctx.getClass().getSimpleName(), ctx.cause().toString(), ctx.cause()))
+    .build();
 ```
 
 The hook is for observability — exceptions are an error path, not a control-flow primitive. To branch on handler outcomes, return a typed result from your `@EventHandler` and chain the next event with `@EventTrigger` (optionally guarded by an `EventTriggerGuard`).
@@ -876,7 +890,7 @@ The framework is suitable for early-adopter experimentation. Production use shou
 - ✅ Lifecycle events (`ApplicationStartedEvent`, `RequestStartedEvent`, etc.) — automatically published around `start()`/`shutdown()` and every `runIn*Scope`/`supplyIn*Scope` ([#4](https://github.com/tomas-samek/tiko-di/issues/4))
 - ✅ `@EventTrigger` chains — declarative event workflows with return-as-payload, guards, spread, async, and full origin tracking via `Event<?>` ([#5](https://github.com/tomas-samek/tiko-di/issues/5))
 - ✅ API/impl split example — consumer compiles against an interface-only api jar, impl loaded via runtime-scope Maven dep ([#6](https://github.com/tomas-samek/tiko-di/issues/6))
-- ✅ Handler-exception isolation + `ErrorHandler` hook — `LocalEventBus.publish()` no longer kills the dispatch loop; sealed `ErrorContext` / `EventHandlerError` route handler throws to a configurable hook (default slf4j WARN), override via `TikoOptions.errorHandler(...)` ([#44](https://github.com/tomas-samek/tiko-di/issues/44))
+- ✅ Handler-exception isolation + `ErrorHandler` hook — `LocalEventBus.publish()` no longer kills the dispatch loop; sealed `ErrorContext` / `EventHandlerError` route handler throws to a configurable hook (default `java.util.logging` `WARNING`, no extra dependency required), override via `TikoOptions.errorHandler(...)` ([#44](https://github.com/tomas-samek/tiko-di/issues/44))
 - ✅ `@EventHandler(async = true)` honoured — bounded `ThreadPoolExecutor` (default sized for typical small-to-medium services) with `TikoOptions.eventExecutor(...)` override; the static `EventChainContext.ASYNC_EXECUTOR` is retired and shared between async handlers and `@EventTrigger(async)` ([#43](https://github.com/tomas-samek/tiko-di/issues/43))
 
 ### Planned Features
