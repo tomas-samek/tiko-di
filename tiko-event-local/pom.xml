@@ -29,22 +29,10 @@
             <artifactId>tiko-runtime</artifactId>
         </dependency>
 
-        <!-- Logging (provided) -->
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-            <scope>provided</scope>
-        </dependency>
-
         <!-- Testing -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-simple</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
