@@ -58,6 +58,10 @@ public final class ContainerGenerator {
         containerBuilder.addField(createOwnsEventExecutorField());
         containerBuilder.addField(createStartedAtField());
         containerBuilder.addField(createConfigSingletonsField());
+        containerBuilder.addField(createShutdownInvokedField());
+        containerBuilder.addField(createStoppedField());
+        containerBuilder.addField(createInFlightGetsField());
+        containerBuilder.addField(createInShutdownThreadField());
         containerBuilder.addFields(createFactoryFields());
 
         // Add constructor
@@ -217,6 +221,56 @@ public final class ContainerGenerator {
         );
         return FieldSpec.builder(mapType, "configSingletons", Modifier.PRIVATE, Modifier.FINAL)
             .initializer("new $T<>()", ConcurrentHashMap.class)
+            .build();
+    }
+
+    /**
+     * Field: AtomicBoolean shutdownInvoked — CAS guard so shutdown() is idempotent (#47).
+     */
+    private FieldSpec createShutdownInvokedField() {
+        return FieldSpec.builder(
+                ClassName.get("java.util.concurrent.atomic", "AtomicBoolean"),
+                "shutdownInvoked",
+                Modifier.PRIVATE, Modifier.FINAL)
+            .initializer("new $T(false)", ClassName.get("java.util.concurrent.atomic", "AtomicBoolean"))
+            .build();
+    }
+
+    /**
+     * Field: AtomicBoolean stopped — gates get() once @PreDestroy has started (#47).
+     */
+    private FieldSpec createStoppedField() {
+        return FieldSpec.builder(
+                ClassName.get("java.util.concurrent.atomic", "AtomicBoolean"),
+                "stopped",
+                Modifier.PRIVATE, Modifier.FINAL)
+            .initializer("new $T(false)", ClassName.get("java.util.concurrent.atomic", "AtomicBoolean"))
+            .build();
+    }
+
+    /**
+     * Field: AtomicInteger inFlightGets — drain barrier for shutdown to wait on (#47).
+     */
+    private FieldSpec createInFlightGetsField() {
+        return FieldSpec.builder(
+                ClassName.get("java.util.concurrent.atomic", "AtomicInteger"),
+                "inFlightGets",
+                Modifier.PRIVATE, Modifier.FINAL)
+            .initializer("new $T(0)", ClassName.get("java.util.concurrent.atomic", "AtomicInteger"))
+            .build();
+    }
+
+    /**
+     * Field: ThreadLocal&lt;Boolean&gt; inShutdownThread — bypass marker so @PreDestroy methods
+     * can call container.get(...) during shutdown without tripping the stopped gate (#47).
+     */
+    private FieldSpec createInShutdownThreadField() {
+        ParameterizedTypeName tlType = ParameterizedTypeName.get(
+            ClassName.get(ThreadLocal.class),
+            ClassName.get(Boolean.class)
+        );
+        return FieldSpec.builder(tlType, "inShutdownThread", Modifier.PRIVATE, Modifier.FINAL)
+            .initializer("$T.withInitial(() -> $T.FALSE)", ThreadLocal.class, Boolean.class)
             .build();
     }
 
@@ -672,21 +726,63 @@ public final class ContainerGenerator {
     }
 
     /**
-     * Creates shutdown method that calls @PreDestroy on all singletons.
+     * Creates shutdown method (#47): idempotent, drains in-flight get() calls, then runs
+     * @PreDestroy and shuts down the event executor.
+     *
+     * <p>Phase order:
+     * <ol>
+     *   <li>CAS shutdownInvoked false → true. If already true, return immediately.</li>
+     *   <li>Publish ApplicationEndingEvent. get() still works so handlers can read state.</li>
+     *   <li>Set stopped, drain in-flight gets (10s timeout, spin-wait).</li>
+     *   <li>Run @PreDestroy on each SINGLETON. Thread-local bypass lets PreDestroy
+     *       methods call container.get(...) without tripping the gate.</li>
+     *   <li>Shut down the framework-owned event executor (#43 logic, unchanged).</li>
+     * </ol>
      */
     private MethodSpec createShutdownMethod() {
         MethodSpec.Builder method = MethodSpec.methodBuilder("shutdown")
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class);
 
-        method.addComment("Publish ApplicationEndingEvent before tearing things down");
+        ClassName logger = ClassName.get("java.util.logging", "Logger");
+        ClassName level = ClassName.get("java.util.logging", "Level");
+        ClassName timeUnit = ClassName.get("java.util.concurrent", "TimeUnit");
+
+        method.addComment("Phase 1: idempotency CAS (#47)");
+        method.beginControlFlow("if (!shutdownInvoked.compareAndSet(false, true))");
+        method.addStatement("return");
+        method.endControlFlow();
+
+        method.addComment("Phase 2: publish ApplicationEndingEvent. get() still works here so handlers can read state.");
         method.addStatement("$T __endTimestamp = $T.now()", Instant.class, Instant.class);
         method.addStatement(
                 "$T __uptime = (this.startedAt != null) ? $T.between(this.startedAt, __endTimestamp) : $T.ZERO",
                 Duration.class, Duration.class, Duration.class);
+        method.beginControlFlow("try");
         method.addStatement("eventBus.publish(new $T(__endTimestamp, __uptime))", APP_ENDING);
+        method.nextControlFlow("catch ($T __t)", Throwable.class);
+        method.addComment("Bus-impl defect; @PreDestroy must still run (handler exceptions are isolated by #44)");
+        method.addStatement("$T.getLogger($S).log($T.WARNING, $S, __t)",
+            logger, "io.tiko.events", level, "ApplicationEndingEvent publish threw");
+        method.endControlFlow();
 
-        method.addComment("Call @PreDestroy on all SINGLETON components");
+        method.addComment("Phase 3: gate new get() calls and drain in-flight ones");
+        method.addStatement("stopped.set(true)");
+        method.addStatement("long __deadlineNanos = $T.nanoTime() + $T.SECONDS.toNanos(10)",
+            System.class, timeUnit);
+        method.beginControlFlow("while (inFlightGets.get() > 0 && $T.nanoTime() < __deadlineNanos)",
+            System.class);
+        method.addStatement("$T.onSpinWait()", Thread.class);
+        method.endControlFlow();
+        method.beginControlFlow("if (inFlightGets.get() > 0)");
+        method.addStatement("$T.getLogger($S).log($T.WARNING, $S + inFlightGets.get())",
+            logger, "io.tiko.events", level,
+            "Container shutdown drain timed out with in-flight get() calls: ");
+        method.endControlFlow();
+
+        method.addComment("Phase 4: @PreDestroy on SINGLETON components. Thread-local bypass so they can call get().");
+        method.addStatement("inShutdownThread.set($T.TRUE)", Boolean.class);
+        method.beginControlFlow("try");
 
         for (ComponentModel component : context.getActiveComponents()) {
             if (component.getScope() == Scope.SINGLETON &&
@@ -714,12 +810,15 @@ public final class ContainerGenerator {
             }
         }
 
-        method.addComment("Shut down framework-owned event executor (#43); user-supplied executors are not touched");
+        method.nextControlFlow("finally");
+        method.addStatement("inShutdownThread.remove()");
+        method.endControlFlow();
+
+        method.addComment("Phase 5: shut down framework-owned event executor (#43); user-supplied executors are not touched");
         method.beginControlFlow("if (this.ownsEventExecutor)");
         method.addStatement("this.eventExecutor.shutdown()");
         method.beginControlFlow("try");
-        method.beginControlFlow("if (!this.eventExecutor.awaitTermination(10, $T.SECONDS))",
-            ClassName.get("java.util.concurrent", "TimeUnit"));
+        method.beginControlFlow("if (!this.eventExecutor.awaitTermination(10, $T.SECONDS))", timeUnit);
         method.addStatement("this.eventExecutor.shutdownNow()");
         method.endControlFlow();
         method.nextControlFlow("catch ($T __ie)", InterruptedException.class);
@@ -750,6 +849,16 @@ public final class ContainerGenerator {
                 .addTypeVariable(typeVar)
                 .addParameter(classType, "type")
                 .returns(typeVar);
+
+        // Post-shutdown gate (#47). PreDestroy methods on the shutdown thread bypass via the thread-local.
+        method.beginControlFlow("if (stopped.get() && !inShutdownThread.get())");
+        method.addStatement("throw new $T($S)",
+            IllegalStateException.class, "Container has been shut down");
+        method.endControlFlow();
+
+        // Drain barrier (#47): mark this get() as in-flight so shutdown() can wait for it.
+        method.addStatement("inFlightGets.incrementAndGet()");
+        method.beginControlFlow("try");
 
         // Check config singletons first — config records take precedence over DI components
         method.beginControlFlow("if (configSingletons.containsKey(type))");
@@ -809,6 +918,10 @@ public final class ContainerGenerator {
             IllegalArgumentException.class,
             "No component found for type: ");
 
+        method.nextControlFlow("finally");
+        method.addStatement("inFlightGets.decrementAndGet()");
+        method.endControlFlow();
+
         return method.build();
     }
 
@@ -833,6 +946,14 @@ public final class ContainerGenerator {
                 .addParameter(classType, "type")
                 .addParameter(String.class, "name")
                 .returns(typeVar);
+
+        // Post-shutdown gate (#47).
+        method.beginControlFlow("if (stopped.get() && !inShutdownThread.get())");
+        method.addStatement("throw new $T($S)",
+            IllegalStateException.class, "Container has been shut down");
+        method.endControlFlow();
+        method.addStatement("inFlightGets.incrementAndGet()");
+        method.beginControlFlow("try");
 
         List<ComponentModel> named = context.getActiveComponents().stream()
                 .filter(c -> c.getName().isPresent())
@@ -885,6 +1006,10 @@ public final class ContainerGenerator {
                 IllegalArgumentException.class,
                 "No component found for name '",
                 "' and type: ");
+
+        method.nextControlFlow("finally");
+        method.addStatement("inFlightGets.decrementAndGet()");
+        method.endControlFlow();
 
         return method.build();
     }
