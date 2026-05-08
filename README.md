@@ -385,7 +385,22 @@ db:
   connectTimeout: PT5S
 ```
 
-> **v1 limitation:** nested records inside fields, lists, and maps are not yet supported by the generated binder. Declare nested record sections as separate `@Configuration` records with their own `prefix`, or wait for nested-record codegen support in a follow-up release.
+**Nested records.** A `@Configuration` record can contain plain records as field types — directly, or inside `Optional<X>`, `List<X>`, `Map<String,X>`. The codegen emits a per-record nested coercer and composes via the existing collection coercers. The nested record itself is *not* annotated `@Configuration`; it's bound by recursion under its parent's prefix:
+
+```java
+@Configuration(prefix = "app")
+public record AppConfig(
+    String name,
+    DbConfig db,                            // direct nested
+    List<Endpoint> endpoints,               // list of nested
+    Map<String, FeatureFlag> flags,         // map of nested
+    Optional<DbConfig> readReplica          // optional nested
+) {}
+
+public record DbConfig(String url, @Default("10") int max) {}
+public record Endpoint(String host, int port) {}
+public record FeatureFlag(boolean enabled) {}
+```
 
 YAML mismatches (missing required keys, wrong types, unknown keys) fail at container startup with a single report listing every problem — never partway through serving requests.
 
@@ -919,8 +934,8 @@ The framework is suitable for early-adopter experimentation. Production use shou
 
 - **Phase 2** (Current) — Configuration & distributed events
     - Kafka event bus integration
-    - Configuration follow-ups: nested-record codegen ([#17](https://github.com/tomas-samek/tiko-di/issues/17)), cross-module aggregation example ([#18](https://github.com/tomas-samek/tiko-di/issues/18)), YAML `file:line:col` error anchoring ([#19](https://github.com/tomas-samek/tiko-di/issues/19))
-    - Event-system follow-ups: container shutdown idempotency + construction/destruction race ([#47](https://github.com/tomas-samek/tiko-di/issues/47)), configurable executor shutdown timeout ([#48](https://github.com/tomas-samek/tiko-di/issues/48)), multi-module `ErrorHandler`/`eventExecutor` propagation through `AggregatingContainer` ([#51](https://github.com/tomas-samek/tiko-di/issues/51)), `ErrorContext` permits for lifecycle/config/scope errors ([#52](https://github.com/tomas-samek/tiko-di/issues/52))
+    - Configuration follow-ups: cross-module aggregation example ([#18](https://github.com/tomas-samek/tiko-di/issues/18)), YAML `file:line:col` error anchoring ([#19](https://github.com/tomas-samek/tiko-di/issues/19))
+    - Event-system follow-ups: configurable executor shutdown timeout ([#48](https://github.com/tomas-samek/tiko-di/issues/48)), `ErrorContext` permits for lifecycle/config/scope errors ([#52](https://github.com/tomas-samek/tiko-di/issues/52))
     - Conditional beans
     - Profile isolation: compile-time `forbidProfiles` validation + Maven source-root convention to keep test-only `@Component`s out of prod jars
 
