@@ -1,0 +1,56 @@
+package io.tiko.processor;
+
+import com.google.testing.compile.Compilation;
+import com.google.testing.compile.Compiler;
+import com.google.testing.compile.JavaFileObjects;
+import org.junit.jupiter.api.Test;
+
+import javax.tools.JavaFileObject;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+
+import static com.google.testing.compile.CompilationSubject.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
+
+class ContainerGeneratorEventExecutorTest {
+
+    @Test
+    void generated_container_has_event_executor_field_constructor_and_accessor() throws IOException {
+        JavaFileObject src = JavaFileObjects.forSourceLines(
+            "io.example.MyService",
+            "package io.example;",
+            "import io.tiko.annotations.Component;",
+            "import io.tiko.Scope;",
+            "@Component(scope = Scope.SINGLETON)",
+            "public class MyService { public MyService() {} }"
+        );
+        Compilation c = Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(src);
+        com.google.testing.compile.CompilationSubject.assertThat(c).succeeded();
+
+        JavaFileObject container = c.generatedSourceFiles().stream()
+            .filter(f -> f.getName().contains("TikoContainerImpl"))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("TikoContainerImpl not generated"));
+
+        String content = new String(container.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
+
+        // Adjust for JavaPoet's import-style output. The substantive checks:
+        assertThat(content).contains("ExecutorService eventExecutor");
+        assertThat(content).contains("boolean ownsEventExecutor");
+        assertThat(content).contains("ExecutorService getEventExecutor()");
+        // 3-arg constructor takes EventBus, ErrorHandler, ExecutorService userEventExecutor
+        assertThat(content).contains("EventBus eventBus, ErrorHandler errorHandler");
+        assertThat(content).contains("ExecutorService userEventExecutor");
+        // Default executor wired when user-supplied is null
+        assertThat(content).contains("DefaultEventExecutorFactory.create()");
+        assertThat(content).contains("userEventExecutor != null ? userEventExecutor");
+        // ownsEventExecutor flag
+        assertThat(content).contains("this.ownsEventExecutor = (userEventExecutor == null)");
+
+        // Shutdown handles the default executor
+        assertThat(content).contains("if (this.ownsEventExecutor)");
+        assertThat(content).contains("this.eventExecutor.shutdown()");
+        assertThat(content).contains("awaitTermination(10");
+        assertThat(content).contains("this.eventExecutor.shutdownNow()");
+    }
+}

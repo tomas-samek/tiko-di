@@ -37,4 +37,31 @@ class TikoOptionsTest {
         TikoOptions.Builder b = TikoOptions.builder();
         assertThatNullPointerException().isThrownBy(() -> b.configSource(null));
     }
+
+    @Test
+    void builder_round_trips_event_executor() {
+        java.util.concurrent.ExecutorService executor =
+            java.util.concurrent.Executors.newSingleThreadExecutor();
+        try {
+            TikoOptions options = TikoOptions.builder()
+                .eventExecutor(executor)
+                .build();
+
+            assertThat(options.eventExecutor()).isSameAs(executor);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void builder_rejects_null_event_executor() {
+        TikoOptions.Builder b = TikoOptions.builder();
+        assertThatNullPointerException().isThrownBy(() -> b.eventExecutor(null));
+    }
+
+    @Test
+    void builder_event_executor_default_null() {
+        TikoOptions options = TikoOptions.builder().build();
+        assertThat(options.eventExecutor()).isNull();
+    }
 }

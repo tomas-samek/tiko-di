@@ -1,34 +1,35 @@
 package io.tiko.runtime;
 
+import io.tiko.ErrorHandler;
 import io.tiko.Event;
 import io.tiko.EventBus;
+import io.tiko.EventHandlerError;
+import io.tiko.EventHandlerInfo;
+import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Array;
 import java.util.Collection;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * Tracks the currently-executing event wrapper across a thread of event delivery, so that
  * events triggered by an {@code @EventTrigger} handler can chain their origin back to the
  * event that caused the handler to fire.
  *
- * <p>Used exclusively by generated {@code EventRegistry} code; not part of the public API.
+ * <p>Used by generated {@code EventRegistry} code; not part of the public API.
+ *
+ * <p>Async helpers ({@link #publishAsync}, {@link #publishSpreadAsync}) take the
+ * container's {@link ExecutorService} and {@link ErrorHandler} as parameters — there is
+ * no longer a global static executor. Exceptional completions of submitted tasks are
+ * routed to the supplied error handler with the originating handler's
+ * {@link EventHandlerInfo}, ensuring no async failure is silently swallowed even when
+ * the returned future is discarded.
  */
 public final class EventChainContext {
 
     private static final ThreadLocal<Event<?>> CURRENT = new ThreadLocal<>();
-
-    /**
-     * Lazily-created executor for {@code @EventTrigger(async = true)} dispatch. Daemon
-     * threads so a stuck async publish never blocks JVM shutdown.
-     */
-    private static final ExecutorService ASYNC_EXECUTOR = Executors.newCachedThreadPool(r -> {
-        Thread t = new Thread(r, "tiko-event-async");
-        t.setDaemon(true);
-        return t;
-    });
 
     private EventChainContext() {}
 
@@ -41,7 +42,7 @@ public final class EventChainContext {
      * @param inner the exception thrown by the user's ErrorHandler implementation
      */
     public static void logErrorHandlerFailure(Throwable inner) {
-        org.slf4j.LoggerFactory.getLogger("io.tiko.events")
+        LoggerFactory.getLogger("io.tiko.events")
             .error("ErrorHandler.onError threw", inner);
     }
 
@@ -125,17 +126,49 @@ public final class EventChainContext {
     }
 
     /**
-     * Async trigger: schedules a sync publish on the framework's daemon executor. The origin
-     * is captured here so the dispatched task sees the same chain even though it runs on a
-     * different thread.
+     * Async trigger: schedules a sync publish on the supplied executor. The origin is captured
+     * here so the dispatched task sees the same chain even though it runs on a different thread.
+     * Exceptional completions are routed to {@code errorHandler} via
+     * {@link EventHandlerError}; if {@code errorHandler.onError} itself throws, the failure
+     * is logged via {@link #logErrorHandlerFailure(Throwable)} as a last resort.
      */
-    public static CompletableFuture<Void> publishAsync(EventBus bus, Object payload, Event<?> origin) {
+    public static CompletableFuture<Void> publishAsync(
+            EventBus bus, Object payload, Event<?> origin,
+            ExecutorService executor, ErrorHandler errorHandler, EventHandlerInfo info) {
         if (payload == null) return CompletableFuture.completedFuture(null);
-        return CompletableFuture.runAsync(() -> publishWithOrigin(bus, payload, origin), ASYNC_EXECUTOR);
+        return CompletableFuture
+            .runAsync(() -> publishWithOrigin(bus, payload, origin), executor)
+            .handle((__, throwable) -> {
+                reportIfFailed(throwable, payload, errorHandler, info);
+                return null;
+            });
     }
 
-    public static CompletableFuture<Void> publishSpreadAsync(EventBus bus, Object payload, Event<?> origin) {
+    /**
+     * Async spread trigger: like {@link #publishAsync} but each element of a
+     * Collection / array / Iterable is published separately.
+     */
+    public static CompletableFuture<Void> publishSpreadAsync(
+            EventBus bus, Object payload, Event<?> origin,
+            ExecutorService executor, ErrorHandler errorHandler, EventHandlerInfo info) {
         if (payload == null) return CompletableFuture.completedFuture(null);
-        return CompletableFuture.runAsync(() -> publishSpreadWithOrigin(bus, payload, origin), ASYNC_EXECUTOR);
+        return CompletableFuture
+            .runAsync(() -> publishSpreadWithOrigin(bus, payload, origin), executor)
+            .handle((__, throwable) -> {
+                reportIfFailed(throwable, payload, errorHandler, info);
+                return null;
+            });
+    }
+
+    private static void reportIfFailed(Throwable throwable, Object payload,
+                                        ErrorHandler errorHandler, EventHandlerInfo info) {
+        if (throwable == null) return;
+        Throwable cause = (throwable instanceof CompletionException && throwable.getCause() != null)
+            ? throwable.getCause() : throwable;
+        try {
+            errorHandler.onError(new EventHandlerError(info, payload, cause));
+        } catch (Exception inner) {
+            logErrorHandlerFailure(inner);
+        }
     }
 }

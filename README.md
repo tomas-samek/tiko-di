@@ -513,6 +513,43 @@ try (Container container = Tiko.create(opts)) { ... }
 
 The hook is for observability — exceptions are an error path, not a control-flow primitive. To branch on handler outcomes, return a typed result from your `@EventHandler` and chain the next event with `@EventTrigger` (optionally guarded by an `EventTriggerGuard`).
 
+### Async events
+
+Mark a handler `@EventHandler(async = true)` to run it off the publisher thread:
+
+```java
+@EventHandler(async = true)
+public void onSlowOperation(SlowEvent event) {
+    // ... I/O, network, batch flush ...
+}
+```
+
+The framework dispatches via a bounded `ThreadPoolExecutor` sized for typical
+small-to-medium services:
+
+| Knob              | Value                                              |
+|-------------------|----------------------------------------------------|
+| Core pool size    | `max(2, cores / 2)`                                |
+| Max pool size     | `cores * 4`                                        |
+| Keep-alive        | 60 seconds                                         |
+| Queue             | bounded `LinkedBlockingQueue` capacity 1024        |
+| Rejection policy  | `CallerRunsPolicy` — slows publisher under overload|
+| Thread name       | `tiko-event-async-{n}` (daemon)                    |
+
+Workloads with extreme throughput or latency requirements can supply their own:
+
+```java
+ExecutorService myExecutor = ...;
+TikoOptions opts = TikoOptions.builder()
+    .eventExecutor(myExecutor)
+    .build();
+try (Container container = Tiko.create(opts)) { ... }
+```
+
+When you supply your own executor, you own its lifecycle — `Container.shutdown()`
+does not stop it. Async handler exceptions still route to the configured
+`ErrorHandler` regardless of which executor is in use.
+
 ### Lifecycle Events
 
 The container automatically publishes lifecycle events that you can subscribe to for metrics, logging, tracing, and cleanup. These events allow you to keep side effects separate from your main business logic.
