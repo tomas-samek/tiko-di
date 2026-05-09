@@ -25,6 +25,7 @@ public final class FactoryMethodModel {
     private final List<String> profiles;
     private final List<DependencyModel> dependencies;
     private final boolean isStatic;
+    private final boolean autoCloseable;
 
     private FactoryMethodModel(Builder builder) {
         this.methodElement = builder.methodElement;
@@ -37,6 +38,7 @@ public final class FactoryMethodModel {
         this.profiles = List.copyOf(builder.profiles);
         this.dependencies = List.copyOf(builder.dependencies);
         this.isStatic = builder.isStatic;
+        this.autoCloseable = builder.autoCloseable;
     }
 
     public static Builder builder() {
@@ -84,6 +86,17 @@ public final class FactoryMethodModel {
     }
 
     /**
+     * True when the produced type implements {@link AutoCloseable}. The container
+     * codegen invokes {@code close()} on the produced bean at scope teardown — this
+     * lets {@code @Produces} factories return third-party closeables (data sources,
+     * HTTP clients, Kafka producers) without the user having to write a wrapper
+     * {@code @Component} just for cleanup.
+     */
+    public boolean isAutoCloseable() {
+        return autoCloseable;
+    }
+
+    /**
      * Returns the unique key for the component produced by this factory.
      * Format: returnTypeName or returnTypeName#name
      */
@@ -113,6 +126,7 @@ public final class FactoryMethodModel {
         private List<String> profiles = new ArrayList<>();
         private List<DependencyModel> dependencies = new ArrayList<>();
         private boolean isStatic = false;
+        private boolean autoCloseable = false;
 
         private Builder() {
         }
@@ -170,6 +184,11 @@ public final class FactoryMethodModel {
 
         public Builder isStatic(boolean isStatic) {
             this.isStatic = isStatic;
+            return this;
+        }
+
+        public Builder autoCloseable(boolean autoCloseable) {
+            this.autoCloseable = autoCloseable;
             return this;
         }
 

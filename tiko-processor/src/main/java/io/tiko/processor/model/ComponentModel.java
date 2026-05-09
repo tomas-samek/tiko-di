@@ -29,6 +29,7 @@ public final class ComponentModel {
     private final TypeMirror implementedInterface;  // For proxy generation (nullable)
     private final boolean requiresProxy;
     private final ExecutableElement staticFactoryMethod;  // Optional self-@Produces (nullable)
+    private final boolean autoCloseable;
 
     private ComponentModel(Builder builder) {
         this.typeElement = builder.typeElement;
@@ -45,6 +46,7 @@ public final class ComponentModel {
         this.implementedInterface = builder.implementedInterface;
         this.requiresProxy = builder.requiresProxy;
         this.staticFactoryMethod = builder.staticFactoryMethod;
+        this.autoCloseable = builder.autoCloseable;
     }
 
     public static Builder builder() {
@@ -109,6 +111,26 @@ public final class ComponentModel {
     }
 
     /**
+     * True when the component (or any supertype) implements {@link AutoCloseable} and
+     * does not declare an explicit {@code @PreDestroy}. The container codegen treats
+     * this as an implicit {@code @PreDestroy close()} hook so users get cleanup for
+     * free when their bean is naturally closeable. An explicit {@code @PreDestroy}
+     * always wins — this flag is false in that case to avoid double-cleanup.
+     */
+    public boolean isAutoCloseable() {
+        return autoCloseable;
+    }
+
+    /**
+     * True when this component has any destroy hook that should run at scope teardown —
+     * either an explicit {@code @PreDestroy} method or the implicit {@code AutoCloseable}
+     * cleanup. Used by codegen to decide whether to emit teardown loops.
+     */
+    public boolean hasDestroyHook() {
+        return !preDestroyMethods.isEmpty() || autoCloseable;
+    }
+
+    /**
      * Returns the unique key for this component (qualified name + optional name qualifier).
      */
     public String getComponentKey() {
@@ -132,6 +154,7 @@ public final class ComponentModel {
         private TypeMirror implementedInterface;
         private boolean requiresProxy = false;
         private ExecutableElement staticFactoryMethod;
+        private boolean autoCloseable = false;
 
         private Builder() {
         }
@@ -218,6 +241,11 @@ public final class ComponentModel {
 
         public Builder staticFactoryMethod(ExecutableElement staticFactoryMethod) {
             this.staticFactoryMethod = staticFactoryMethod;
+            return this;
+        }
+
+        public Builder autoCloseable(boolean autoCloseable) {
+            this.autoCloseable = autoCloseable;
             return this;
         }
 

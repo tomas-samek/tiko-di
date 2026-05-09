@@ -130,7 +130,11 @@ public final class ContainerGenerator {
     }
 
     /**
-     * Creates the REQUEST scope storage field: ThreadLocal<Map<String, Object>>
+     * Creates the REQUEST scope storage field: ThreadLocal<Map<String, Object>>.
+     * <p>Uses {@link LinkedHashMap} so scope teardown can iterate beans in
+     * insertion order (= creation order for lazy scoped beans) and invoke
+     * {@code @PreDestroy} hooks in reverse-creation (LIFO) order. Per-thread
+     * via {@link ThreadLocal}, so the non-thread-safe map is fine.
      */
     private FieldSpec createRequestScopeField() {
         ParameterizedTypeName mapType = ParameterizedTypeName.get(
@@ -145,12 +149,13 @@ public final class ContainerGenerator {
         );
 
         return FieldSpec.builder(threadLocalType, "requestScoped", Modifier.PRIVATE, Modifier.FINAL)
-                .initializer("$T.withInitial($T::new)", ThreadLocal.class, ConcurrentHashMap.class)
+                .initializer("$T.withInitial($T::new)", ThreadLocal.class, LinkedHashMap.class)
                 .build();
     }
 
     /**
-     * Creates the EVENT scope storage field: ThreadLocal<Map<String, Object>>
+     * Creates the EVENT scope storage field: ThreadLocal<Map<String, Object>>.
+     * Same rationale as the REQUEST field — {@link LinkedHashMap} for ordered teardown.
      */
     private FieldSpec createEventScopeField() {
         ParameterizedTypeName mapType = ParameterizedTypeName.get(
@@ -165,7 +170,7 @@ public final class ContainerGenerator {
         );
 
         return FieldSpec.builder(threadLocalType, "eventScoped", Modifier.PRIVATE, Modifier.FINAL)
-                .initializer("$T.withInitial($T::new)", ThreadLocal.class, ConcurrentHashMap.class)
+                .initializer("$T.withInitial($T::new)", ThreadLocal.class, LinkedHashMap.class)
                 .build();
     }
 
@@ -441,12 +446,10 @@ public final class ContainerGenerator {
             case SINGLETON -> method.addStatement(
                     "return ($T) singletons.computeIfAbsent($S, k -> $L)",
                     returnType, storageKey, callExpr);
-            case REQUEST -> method.addStatement(
-                    "return ($T) requestScoped.get().computeIfAbsent($S, k -> $L)",
-                    returnType, storageKey, callExpr);
-            case EVENT -> method.addStatement(
-                    "return ($T) eventScoped.get().computeIfAbsent($S, k -> $L)",
-                    returnType, storageKey, callExpr);
+            case REQUEST -> emitScopedGetOrCreate(method, returnType,
+                    "requestScoped.get()", storageKey, callExpr);
+            case EVENT -> emitScopedGetOrCreate(method, returnType,
+                    "eventScoped.get()", storageKey, callExpr);
             case PROTOTYPE -> method.addStatement("return $L", callExpr);
         }
 
@@ -557,12 +560,8 @@ public final class ContainerGenerator {
                     String proxyFieldName = getProxyFieldName(component.getClassName());
                     method.addStatement("return $L", proxyFieldName);
                 } else {
-                    method.addStatement(
-                            "return ($T) requestScoped.get().computeIfAbsent($S, k -> $L.create())",
-                            returnType,
-                            storageKey,
-                            factoryFieldName
-                    );
+                    emitScopedGetOrCreate(method, returnType, "requestScoped.get()",
+                            storageKey, factoryFieldName + ".create()");
                 }
             }
             case EVENT -> {
@@ -572,12 +571,8 @@ public final class ContainerGenerator {
                     String proxyFieldName = getProxyFieldName(component.getClassName());
                     method.addStatement("return $L", proxyFieldName);
                 } else {
-                    method.addStatement(
-                            "return ($T) eventScoped.get().computeIfAbsent($S, k -> $L.create())",
-                            returnType,
-                            storageKey,
-                            factoryFieldName
-                    );
+                    emitScopedGetOrCreate(method, returnType, "eventScoped.get()",
+                            storageKey, factoryFieldName + ".create()");
                 }
             }
             case PROTOTYPE -> {
@@ -603,22 +598,35 @@ public final class ContainerGenerator {
                 .returns(returnType);
 
         if (component.getScope() == Scope.REQUEST) {
-            method.addStatement(
-                    "return ($T) requestScoped.get().computeIfAbsent($S, k -> $L.create())",
-                    returnType,
-                    storageKey,
-                    factoryFieldName
-            );
+            emitScopedGetOrCreate(method, returnType, "requestScoped.get()",
+                    storageKey, factoryFieldName + ".create()");
         } else { // EVENT
-            method.addStatement(
-                    "return ($T) eventScoped.get().computeIfAbsent($S, k -> $L.create())",
-                    returnType,
-                    storageKey,
-                    factoryFieldName
-            );
+            emitScopedGetOrCreate(method, returnType, "eventScoped.get()",
+                    storageKey, factoryFieldName + ".create()");
         }
 
         return method.build();
+    }
+
+    /**
+     * Emits a reentrant-safe get-or-create for a scope map. Plain
+     * {@code computeIfAbsent} on {@link LinkedHashMap} throws
+     * {@link java.util.ConcurrentModificationException} when the create lambda
+     * recursively pulls another bean from the same map (e.g., dependency chains).
+     * The map is single-threaded (per-thread {@code ThreadLocal}) so this
+     * non-atomic get/put pair is safe — and produces the desired insertion order:
+     * dependencies are put first, dependents last, which is exactly what scope
+     * teardown's reverse iteration relies on for LIFO destruction.
+     */
+    private void emitScopedGetOrCreate(MethodSpec.Builder method, TypeName returnType,
+                                       String mapExpr, String storageKey, String createExpr) {
+        method.addStatement("$T __existing = ($T) $L.get($S)",
+                returnType, returnType, mapExpr, storageKey);
+        method.beginControlFlow("if (__existing == null)");
+        method.addStatement("__existing = $L", createExpr);
+        method.addStatement("$L.put($S, __existing)", mapExpr, storageKey);
+        method.endControlFlow();
+        method.addStatement("return __existing");
     }
 
     private static final ClassName REQUEST_STARTED = ClassName.get("io.tiko.events", "RequestStartedEvent");
@@ -632,7 +640,7 @@ public final class ContainerGenerator {
      * Creates runInRequestScope method.
      */
     private MethodSpec createRunInRequestScopeMethod() {
-        return MethodSpec.methodBuilder("runInRequestScope")
+        MethodSpec.Builder method = MethodSpec.methodBuilder("runInRequestScope")
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
                 .addParameter(Runnable.class, "task")
@@ -645,10 +653,11 @@ public final class ContainerGenerator {
                 .addStatement("$T __requestEnd = $T.now()", Instant.class, Instant.class)
                 .addStatement(
                         "eventBus.publish(new $T(__requestId, __requestEnd, $T.between(__requestStart, __requestEnd)))",
-                        REQUEST_ENDING, Duration.class)
-                .addStatement("requestScoped.get().clear()")
-                .endControlFlow()
-                .build();
+                        REQUEST_ENDING, Duration.class);
+        emitScopedTeardown(method, Scope.REQUEST, "requestScoped.get()");
+        method.addStatement("requestScoped.get().clear()")
+                .endControlFlow();
+        return method.build();
     }
 
     /**
@@ -661,7 +670,7 @@ public final class ContainerGenerator {
                 typeVar
         );
 
-        return MethodSpec.methodBuilder("supplyInRequestScope")
+        MethodSpec.Builder method = MethodSpec.methodBuilder("supplyInRequestScope")
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
                 .addTypeVariable(typeVar)
@@ -676,17 +685,18 @@ public final class ContainerGenerator {
                 .addStatement("$T __requestEnd = $T.now()", Instant.class, Instant.class)
                 .addStatement(
                         "eventBus.publish(new $T(__requestId, __requestEnd, $T.between(__requestStart, __requestEnd)))",
-                        REQUEST_ENDING, Duration.class)
-                .addStatement("requestScoped.get().clear()")
-                .endControlFlow()
-                .build();
+                        REQUEST_ENDING, Duration.class);
+        emitScopedTeardown(method, Scope.REQUEST, "requestScoped.get()");
+        method.addStatement("requestScoped.get().clear()")
+                .endControlFlow();
+        return method.build();
     }
 
     /**
      * Creates runInEventScope method.
      */
     private MethodSpec createRunInEventScopeMethod() {
-        return MethodSpec.methodBuilder("runInEventScope")
+        MethodSpec.Builder method = MethodSpec.methodBuilder("runInEventScope")
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
                 .addParameter(Runnable.class, "task")
@@ -699,10 +709,11 @@ public final class ContainerGenerator {
                 .addStatement("$T __eventEnd = $T.now()", Instant.class, Instant.class)
                 .addStatement(
                         "eventBus.publish(new $T(__eventId, __eventEnd, $T.between(__eventStart, __eventEnd)))",
-                        EVENT_ENDING, Duration.class)
-                .addStatement("eventScoped.get().clear()")
-                .endControlFlow()
-                .build();
+                        EVENT_ENDING, Duration.class);
+        emitScopedTeardown(method, Scope.EVENT, "eventScoped.get()");
+        method.addStatement("eventScoped.get().clear()")
+                .endControlFlow();
+        return method.build();
     }
 
     /**
@@ -715,7 +726,7 @@ public final class ContainerGenerator {
                 typeVar
         );
 
-        return MethodSpec.methodBuilder("supplyInEventScope")
+        MethodSpec.Builder method = MethodSpec.methodBuilder("supplyInEventScope")
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
                 .addTypeVariable(typeVar)
@@ -730,10 +741,100 @@ public final class ContainerGenerator {
                 .addStatement("$T __eventEnd = $T.now()", Instant.class, Instant.class)
                 .addStatement(
                         "eventBus.publish(new $T(__eventId, __eventEnd, $T.between(__eventStart, __eventEnd)))",
-                        EVENT_ENDING, Duration.class)
-                .addStatement("eventScoped.get().clear()")
-                .endControlFlow()
-                .build();
+                        EVENT_ENDING, Duration.class);
+        emitScopedTeardown(method, Scope.EVENT, "eventScoped.get()");
+        method.addStatement("eventScoped.get().clear()")
+                .endControlFlow();
+        return method.build();
+    }
+
+    /**
+     * Emits the destroy-hook walk for a REQUEST/EVENT scope teardown. Iterates the
+     * scope map's values in reverse insertion order (= reverse-creation, LIFO),
+     * dispatches by concrete component type, and invokes either the explicit
+     * {@code @PreDestroy} method(s) or the implicit {@code AutoCloseable.close()}.
+     * Each invocation is wrapped in a try/catch so a failing hook does not prevent
+     * the rest of the scope from being torn down.
+     *
+     * <p>Entirely no-op (zero generated code) when no component in this scope has a
+     * destroy hook — the static gate keeps the hot path free for the common case.
+     *
+     * <p>Factory-produced beans living in the same scope map are silently skipped
+     * (they don't match any instanceof case).
+     */
+    private void emitScopedTeardown(MethodSpec.Builder method, Scope scope, String scopeMapExpr) {
+        List<ComponentModel> withHooks = new ArrayList<>();
+        for (ComponentModel c : context.getActiveComponents()) {
+            if (c.getScope() == scope && c.hasDestroyHook()) {
+                withHooks.add(c);
+            }
+        }
+        boolean hasFactoryAutoCloseable = false;
+        for (FactoryMethodModel f : context.getActiveFactoryMethods()) {
+            if (f.getScope() == scope && f.isAutoCloseable()) {
+                hasFactoryAutoCloseable = true;
+                break;
+            }
+        }
+        if (withHooks.isEmpty() && !hasFactoryAutoCloseable) return;
+
+        ClassName logger = ClassName.get("java.util.logging", "Logger");
+        ClassName level = ClassName.get("java.util.logging", "Level");
+
+        method.addStatement("$T<$T> __toDestroy = new $T<>($L.values())",
+                ClassName.get(java.util.List.class),
+                ClassName.get(Object.class),
+                ClassName.get(java.util.ArrayList.class),
+                scopeMapExpr);
+        method.beginControlFlow("for (int __i = __toDestroy.size() - 1; __i >= 0; __i--)");
+        method.addStatement("$T __inst = __toDestroy.get(__i)", Object.class);
+
+        boolean first = true;
+        for (ComponentModel c : withHooks) {
+            TypeName componentType = ClassName.get(c.getTypeElement());
+            String varName = "__" + Character.toLowerCase(c.getClassName().charAt(0))
+                    + c.getClassName().substring(1);
+            if (first) {
+                method.beginControlFlow("if (__inst instanceof $T $L)", componentType, varName);
+                first = false;
+            } else {
+                method.nextControlFlow("else if (__inst instanceof $T $L)", componentType, varName);
+            }
+            method.beginControlFlow("try");
+            if (c.isAutoCloseable() && c.getPreDestroyMethods().isEmpty()) {
+                method.addStatement("$L.close()", varName);
+            } else {
+                for (var preDestroy : c.getPreDestroyMethods()) {
+                    method.addStatement("$L.$L()", varName, preDestroy.getSimpleName());
+                }
+            }
+            method.nextControlFlow("catch ($T __t)", Throwable.class);
+            method.addStatement("$T.getLogger($S).log($T.WARNING, $S, __t)",
+                    logger, "io.tiko.events", level,
+                    "@PreDestroy threw on " + c.getClassName());
+            method.endControlFlow(); // try/catch
+        }
+
+        // Catch-all for factory-produced AutoCloseable beans living in this scope. Components
+        // already handled by the cases above never reach this branch (if/else-if).
+        if (hasFactoryAutoCloseable) {
+            if (first) {
+                method.beginControlFlow("if (__inst instanceof $T __ac)", AutoCloseable.class);
+                first = false;
+            } else {
+                method.nextControlFlow("else if (__inst instanceof $T __ac)", AutoCloseable.class);
+            }
+            method.beginControlFlow("try");
+            method.addStatement("__ac.close()");
+            method.nextControlFlow("catch ($T __t)", Throwable.class);
+            method.addStatement("$T.getLogger($S).log($T.WARNING, $S, __t)",
+                    logger, "io.tiko.events", level,
+                    "AutoCloseable.close() threw on factory-produced bean");
+            method.endControlFlow(); // try/catch
+        }
+
+        method.endControlFlow(); // last if/else-if chain
+        method.endControlFlow(); // for loop
     }
 
     /**
@@ -827,34 +928,81 @@ public final class ContainerGenerator {
             "Container shutdown drain timed out with in-flight get() calls: ");
         method.endControlFlow();
 
-        method.addComment("Phase 4: @PreDestroy on SINGLETON components. Thread-local bypass so they can call get().");
+        method.addComment("Phase 4: @PreDestroy on SINGLETON components, reverse-creation (LIFO) order. "
+            + "Thread-local bypass so they can call get(). Each hook is isolated so one failure "
+            + "does not skip the rest.");
         method.addStatement("inShutdownThread.set($T.TRUE)", Boolean.class);
         method.beginControlFlow("try");
 
+        // Snapshot SINGLETON components with destroy hooks in registration order, then walk in reverse.
+        // start() initialises eagerly in registration order, so reverse iteration approximates LIFO.
+        List<ComponentModel> singletonHooks = new ArrayList<>();
         for (ComponentModel component : context.getActiveComponents()) {
             if (component.getScope() == Scope.SINGLETON &&
-                !component.getPreDestroyMethods().isEmpty() &&
+                component.hasDestroyHook() &&
                 !component.requiresProxy()) {
+                singletonHooks.add(component);
+            }
+        }
 
-                String componentKey = component.getComponentKey();
-                TypeName componentType = ClassName.get(component.getTypeElement());
-                String variableName = Character.toLowerCase(component.getClassName().charAt(0)) +
-                                     component.getClassName().substring(1);
+        for (int i = singletonHooks.size() - 1; i >= 0; i--) {
+            ComponentModel component = singletonHooks.get(i);
+            String componentKey = component.getComponentKey();
+            TypeName componentType = ClassName.get(component.getTypeElement());
+            String variableName = Character.toLowerCase(component.getClassName().charAt(0)) +
+                                 component.getClassName().substring(1);
 
-                method.addStatement(
-                        "$T $L = ($T) singletons.get($S)",
-                        componentType,
-                        variableName,
-                        componentType,
-                        componentKey
-                );
+            method.addStatement(
+                    "$T $L = ($T) singletons.get($S)",
+                    componentType,
+                    variableName,
+                    componentType,
+                    componentKey
+            );
 
-                method.beginControlFlow("if ($L != null)", variableName);
+            method.beginControlFlow("if ($L != null)", variableName);
+            method.beginControlFlow("try");
+            if (component.isAutoCloseable() && component.getPreDestroyMethods().isEmpty()) {
+                method.addStatement("$L.close()", variableName);
+            } else {
                 for (var preDestroy : component.getPreDestroyMethods()) {
                     method.addStatement("$L.$L()", variableName, preDestroy.getSimpleName());
                 }
-                method.endControlFlow();
             }
+            method.nextControlFlow("catch ($T __t)", Throwable.class);
+            method.addStatement("$T.getLogger($S).log($T.WARNING, $S, __t)",
+                logger, "io.tiko.events", level,
+                "@PreDestroy threw on " + component.getClassName());
+            method.endControlFlow(); // try/catch
+            method.endControlFlow(); // if non-null
+        }
+
+        // Factory-produced SINGLETON beans whose return type implements AutoCloseable.
+        // Covers @Produces returning third-party closeables (data sources, HTTP clients,
+        // Kafka producers) without forcing the user to write a wrapper @Component.
+        List<FactoryMethodModel> singletonFactoryHooks = new ArrayList<>();
+        for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
+            if (factory.getScope() == Scope.SINGLETON && factory.isAutoCloseable()) {
+                singletonFactoryHooks.add(factory);
+            }
+        }
+        for (int i = singletonFactoryHooks.size() - 1; i >= 0; i--) {
+            FactoryMethodModel factory = singletonFactoryHooks.get(i);
+            String factoryKey = factory.getComponentKey();
+            String variableName = "__factory_" + factory.getFactoryIdentifier();
+
+            method.addStatement("$T $L = ($T) singletons.get($S)",
+                ClassName.get(AutoCloseable.class), variableName,
+                ClassName.get(AutoCloseable.class), factoryKey);
+            method.beginControlFlow("if ($L != null)", variableName);
+            method.beginControlFlow("try");
+            method.addStatement("$L.close()", variableName);
+            method.nextControlFlow("catch ($T __t)", Throwable.class);
+            method.addStatement("$T.getLogger($S).log($T.WARNING, $S, __t)",
+                logger, "io.tiko.events", level,
+                "AutoCloseable.close() threw on " + factory.getFactoryIdentifier());
+            method.endControlFlow(); // try/catch
+            method.endControlFlow(); // if non-null
         }
 
         method.nextControlFlow("finally");

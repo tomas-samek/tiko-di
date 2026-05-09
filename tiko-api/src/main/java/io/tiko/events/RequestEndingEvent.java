@@ -7,7 +7,9 @@ import java.time.Instant;
  * Lifecycle event published when exiting a request scope.
  *
  * <p>This event is automatically published before {@code @PreDestroy} methods
- * are invoked on request-scoped beans. Useful for metrics, logging, and cleanup.</p>
+ * are invoked on request-scoped beans (or, for beans that implement
+ * {@link AutoCloseable} without an explicit {@code @PreDestroy}, before
+ * {@code close()} runs). Useful for metrics, logging, and cleanup.</p>
  *
  * <p>Example usage:</p>
  * <pre>{@code

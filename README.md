@@ -247,8 +247,33 @@ See [`tiko-examples/README.md`](./tiko-examples/README.md) for run commands.
 
 **Lifecycle:**
 
-- `@PostConstruct` - Called after dependency injection
-- `@PreDestroy` - Called before bean destruction
+- `@PostConstruct` - Called after dependency injection. *Prefer constructor injection or a `@Produces` factory method instead — with constructor injection all deps are wired by the time the constructor runs, so init logic belongs in the constructor.* `@PostConstruct` is kept for compatibility and migration ease.
+- `@PreDestroy` - Called at scope teardown (SINGLETON: at `container.shutdown()`; REQUEST/EVENT: at scope exit). Hooks fire in reverse-creation (LIFO) order, so a bean's dependencies are still available during its cleanup. The corresponding `Ending` lifecycle event is published before any `@PreDestroy` runs. *Prefer implementing `AutoCloseable` (see below) — single source of truth, no risk of multiple `@PreDestroy` methods on one class.*
+- **`AutoCloseable` convention (recommended for cleanup)** - A component (or `@Produces`-returned type) that implements `AutoCloseable` and declares no explicit `@PreDestroy` gets `close()` called automatically at scope teardown — no annotation required. Lets `@Produces` factories return third-party closeables (data sources, HTTP clients, Kafka producers) without writing a wrapper. An explicit `@PreDestroy` always wins to avoid double-cleanup.
+
+```java
+// Implicit cleanup via AutoCloseable
+@Component(scope = Scope.SINGLETON)
+public class HttpClientHolder implements AutoCloseable {
+    private final HttpClient client = HttpClient.newHttpClient();
+    public HttpClient client() { return client; }
+
+    @Override public void close() {
+        // called by the container at shutdown — no @PreDestroy needed
+    }
+}
+
+// @Produces returning a third-party closeable
+@Component
+public class DataSources {
+    @Produces(scope = Scope.SINGLETON, name = "primary")
+    public DataSource primary(ConfigProvider cfg) {
+        return new HikariDataSource(toHikari(cfg));   // close() auto-called at shutdown
+    }
+}
+```
+
+The compile-time leak check warns when a `@Component` holds an `AutoCloseable`-typed field but has neither a `@PreDestroy` nor implements `AutoCloseable` itself. Suppress with `@SuppressWarnings("resource")` on the field or class when the resource is owned elsewhere.
 
 **Factory Methods:**
 
@@ -447,8 +472,30 @@ Greeter french = container.pick(Greeter.class)
 
 ### Lifecycle Hooks
 
-```java
+Recommended pattern — initialise in the constructor, clean up via `AutoCloseable`:
 
+```java
+@Component(scope = Scope.SINGLETON)
+public class DatabaseConnection implements AutoCloseable {
+  private final Connection connection;
+
+  @Inject
+  public DatabaseConnection(ConfigProvider config) throws SQLException {
+    this.connection = DriverManager.getConnection(config.dbUrl());
+  }
+
+  public Connection get() { return connection; }
+
+  @Override
+  public void close() throws SQLException {
+    connection.close();   // called automatically at container.shutdown()
+  }
+}
+```
+
+The annotation-based form below still works (and is what most DI frameworks have used historically), but the constructor + `AutoCloseable` form keeps construction in one place and gives cleanup a single, JDK-standard method:
+
+```java
 @Component(scope = Scope.SINGLETON)
 public class DatabaseConnection {
   private Connection connection;
@@ -456,13 +503,11 @@ public class DatabaseConnection {
   @PostConstruct
   public void connect() {
     this.connection = DriverManager.getConnection("jdbc:...");
-    System.out.println("Connected to database");
   }
 
   @PreDestroy
-  public void disconnect() {
+  public void disconnect() throws SQLException {
     connection.close();
-    System.out.println("Disconnected from database");
   }
 }
 ```
@@ -917,7 +962,7 @@ The framework is suitable for early-adopter experimentation. Production use shou
 - ✅ Dependency graph validation, circular-dependency detection, scope rules
 - ✅ Compile-time ambiguity detection for unnamed providers of the same type
 - ✅ Code generation: per-component factories, `TikoContainerImpl`, cross-scope proxies, event registry
-- ✅ Runtime container: constructor injection, SINGLETON/REQUEST/EVENT/PROTOTYPE scopes, `@PostConstruct`/`@PreDestroy`, scope management (`runInRequestScope`/`runInEventScope` + `supplyIn*`)
+- ✅ Runtime container: constructor injection, SINGLETON/REQUEST/EVENT/PROTOTYPE scopes, `@PostConstruct`/`@PreDestroy` (LIFO at all scopes) plus implicit `AutoCloseable` cleanup, scope management (`runInRequestScope`/`runInEventScope` + `supplyIn*`)
 - ✅ Container lookup API: `get(Class)`, `get(Class, String)` with interface dispatch, `getProvider(...)` (lazy, scope-preserving)
 - ✅ `@Produces` factory methods: instance + static, named + unnamed, with dependency injection
 - ✅ In-memory event bus (`tiko-event-local`) with `@EventHandler` subscription

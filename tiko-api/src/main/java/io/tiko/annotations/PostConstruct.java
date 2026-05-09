@@ -15,6 +15,13 @@ import java.lang.annotation.Target;
  *   <li>Not be static</li>
  * </ul>
  *
+ * <p><strong>Note:</strong> prefer <em>constructor injection</em> or a {@code @Produces}
+ * factory method for initialization. With constructor injection, all dependencies are
+ * already wired by the time the constructor body runs, so init logic belongs in the
+ * constructor (or, for complex setup that needs validation, in a {@code @Produces}
+ * factory). {@code @PostConstruct} is retained for compatibility and migration from
+ * other frameworks; for greenfield code it is rarely the right choice.</p>
+ *
  * <p>Example:</p>
  * <pre>{@code
  * @Component

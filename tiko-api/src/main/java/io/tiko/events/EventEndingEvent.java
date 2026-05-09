@@ -7,7 +7,9 @@ import java.time.Instant;
  * Lifecycle event published when exiting an event scope.
  *
  * <p>This event is automatically published before {@code @PreDestroy} methods
- * are invoked on event-scoped beans. Ideal for distributed tracing and metrics.</p>
+ * are invoked on event-scoped beans (or, for beans that implement
+ * {@link AutoCloseable} without an explicit {@code @PreDestroy}, before
+ * {@code close()} runs). Ideal for distributed tracing and metrics.</p>
  *
  * <p>Example usage:</p>
  * <pre>{@code
