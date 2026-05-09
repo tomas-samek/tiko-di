@@ -13,10 +13,10 @@ import java.lang.annotation.Target;
 @Target(ElementType.PARAMETER)
 @Retention(RetentionPolicy.SOURCE)
 public @interface Key {
-  /**
-   * The YAML key name for this record component.
-   *
-   * @return the YAML key
-   */
-  String value();
+    /**
+     * The YAML key name for this record component.
+     *
+     * @return the YAML key
+     */
+    String value();
 }

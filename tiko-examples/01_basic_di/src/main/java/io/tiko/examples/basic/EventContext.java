@@ -6,5 +6,6 @@ package io.tiko.examples.basic;
  */
 public interface EventContext {
     String getEventId();
+
     long getTimestamp();
 }

@@ -17,10 +17,10 @@ import java.lang.annotation.Target;
 @Target(ElementType.PARAMETER)
 @Retention(RetentionPolicy.SOURCE)
 public @interface Default {
-  /**
-   * The default value as a string, parsed at compile time according to the field's type.
-   *
-   * @return the default value
-   */
-  String value();
+    /**
+     * The default value as a string, parsed at compile time according to the field's type.
+     *
+     * @return the default value
+     */
+    String value();
 }

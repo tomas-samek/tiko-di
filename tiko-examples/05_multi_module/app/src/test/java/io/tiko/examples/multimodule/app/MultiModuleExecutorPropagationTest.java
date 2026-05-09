@@ -1,15 +1,14 @@
 package io.tiko.examples.multimodule.app;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import io.tiko.Container;
 import io.tiko.runtime.Tiko;
 import io.tiko.runtime.TikoOptions;
-import org.junit.jupiter.api.Test;
-
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 /**
  * #51 verification: {@code TikoOptions.eventExecutor(...)} is honoured in multi-module
@@ -25,8 +24,8 @@ class MultiModuleExecutorPropagationTest {
             TikoOptions opts = TikoOptions.builder().eventExecutor(custom).build();
             try (Container container = Tiko.create(opts)) {
                 assertThat(container.getEventExecutor())
-                    .as("aggregator must return the user-supplied executor")
-                    .isSameAs(custom);
+                        .as("aggregator must return the user-supplied executor")
+                        .isSameAs(custom);
             }
         } finally {
             custom.shutdownNow();
@@ -43,12 +42,12 @@ class MultiModuleExecutorPropagationTest {
                 // each reports the same executor instance.
                 var perModule = perModuleContainers(aggregator);
                 assertThat(perModule)
-                    .as("multi-module setup must have at least 2 per-module containers")
-                    .hasSizeGreaterThanOrEqualTo(2);
+                        .as("multi-module setup must have at least 2 per-module containers")
+                        .hasSizeGreaterThanOrEqualTo(2);
                 for (Container module : perModule) {
                     assertThat(module.getEventExecutor())
-                        .as("per-module container's executor must be the shared aggregator executor")
-                        .isSameAs(custom);
+                            .as("per-module container's executor must be the shared aggregator executor")
+                            .isSameAs(custom);
                 }
             }
         } finally {
@@ -65,8 +64,8 @@ class MultiModuleExecutorPropagationTest {
             container.shutdown();
 
             assertThat(custom.isShutdown())
-                .as("user-supplied executor must NOT be shut down — user owns lifecycle")
-                .isFalse();
+                    .as("user-supplied executor must NOT be shut down — user owns lifecycle")
+                    .isFalse();
         } finally {
             custom.shutdownNow();
         }
@@ -83,8 +82,8 @@ class MultiModuleExecutorPropagationTest {
         // 10s drain is documented; allow generous slack
         boolean terminated = frameworkOwned.awaitTermination(11, TimeUnit.SECONDS);
         assertThat(terminated)
-            .as("framework-owned executor must be shut down (and terminated) by container.shutdown()")
-            .isTrue();
+                .as("framework-owned executor must be shut down (and terminated) by container.shutdown()")
+                .isTrue();
         assertThat(frameworkOwned.isShutdown()).isTrue();
     }
 

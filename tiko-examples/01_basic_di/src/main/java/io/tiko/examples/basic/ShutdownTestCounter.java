@@ -5,7 +5,6 @@ import io.tiko.Scope;
 import io.tiko.annotations.Component;
 import io.tiko.annotations.PostConstruct;
 import io.tiko.annotations.PreDestroy;
-
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -25,6 +24,7 @@ public class ShutdownTestCounter {
 
     /** Set by tests that want to verify get() during @PreDestroy works (bypass marker). */
     public static final AtomicReference<Container> CONTAINER_REF = new AtomicReference<>();
+
     public static final AtomicReference<Object> RETRIEVED_DURING_PREDESTROY = new AtomicReference<>();
     public static final AtomicReference<Throwable> ERROR_DURING_PREDESTROY = new AtomicReference<>();
 

@@ -1,14 +1,13 @@
 package io.tiko.runtime;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import io.tiko.ErrorHandler;
-import io.tiko.Event;
 import io.tiko.EventBus;
 import io.tiko.EventCallback;
 import io.tiko.EventHandlerError;
 import io.tiko.EventHandlerInfo;
 import io.tiko.Subscription;
-import org.junit.jupiter.api.Test;
-
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -16,8 +15,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class EventChainContextAsyncTest {
 
@@ -29,7 +27,9 @@ class EventChainContextAsyncTest {
             if (ctx instanceof EventHandlerError e) captured.set(e);
         };
         EventBus bus = new InMemoryBus();
-        bus.subscribe(String.class, e -> { throw new IllegalStateException("trigger boom"); });
+        bus.subscribe(String.class, e -> {
+            throw new IllegalStateException("trigger boom");
+        });
         EventHandlerInfo info = new EventHandlerInfo(getClass(), "test", String.class, true);
 
         EventChainContext.publishAsync(bus, "hello", null, executor, eh, info).get();
@@ -60,8 +60,13 @@ class EventChainContextAsyncTest {
         public <T> Subscription subscribe(Class<T> type, EventCallback<T> cb) {
             handlers.computeIfAbsent(type, k -> new CopyOnWriteArrayList<>()).add(cb);
             return new Subscription() {
-                @Override public void unsubscribe() {}
-                @Override public boolean isActive() { return true; }
+                @Override
+                public void unsubscribe() {}
+
+                @Override
+                public boolean isActive() {
+                    return true;
+                }
             };
         }
     }

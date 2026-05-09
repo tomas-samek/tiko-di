@@ -19,10 +19,10 @@ import java.lang.annotation.Target;
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.SOURCE)
 public @interface Configuration {
-  /**
-   * Top-level YAML key under which this record's data is read.
-   *
-   * @return the YAML prefix
-   */
-  String prefix();
+    /**
+     * Top-level YAML key under which this record's data is read.
+     *
+     * @return the YAML prefix
+     */
+    String prefix();
 }

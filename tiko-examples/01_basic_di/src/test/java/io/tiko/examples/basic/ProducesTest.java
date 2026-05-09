@@ -1,10 +1,10 @@
 package io.tiko.examples.basic;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import io.tiko.Container;
 import io.tiko.runtime.Tiko;
 import org.junit.jupiter.api.Test;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 class ProducesTest {
 

@@ -1,30 +1,36 @@
 package io.tiko.config;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import io.tiko.ConfigSource;
 import io.tiko.config.internal.Interpolator;
 import io.tiko.config.internal.coercers.Coercers;
-import org.junit.jupiter.api.Test;
-
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
 
 class HandWrittenBinderEndToEndTest {
 
     record DbConfig(String url, int maxConnections, Optional<Duration> connectTimeout) {}
 
     static class DbConfigBinder implements ConfigBinder<DbConfig> {
-        public Class<DbConfig> type() { return DbConfig.class; }
-        public String prefix() { return "db"; }
+        public Class<DbConfig> type() {
+            return DbConfig.class;
+        }
+
+        public String prefix() {
+            return "db";
+        }
+
         public DbConfig bind(Map<String, Object> root, BindContext ctx) {
             Map<String, Object> node = ctx.requireSection(root, "db");
             String url = ctx.requireScalar(node, "url", "db.url", Coercers.stringCoercer(), "");
             int max = ctx.scalarOrDefault(node, "maxConnections", "db.maxConnections", Coercers.intCoercer(), 10);
-            Optional<Duration> timeout = ctx.optionalScalar(node, "connectTimeout", "db.connectTimeout", Coercers.durationCoercer());
+            Optional<Duration> timeout =
+                    ctx.optionalScalar(node, "connectTimeout", "db.connectTimeout", Coercers.durationCoercer());
             ctx.checkUnknownKeys(node, "db", Set.of("url", "maxConnections", "connectTimeout"));
             return new DbConfig(url, max, timeout);
         }
@@ -32,8 +38,8 @@ class HandWrittenBinderEndToEndTest {
 
     @Test
     void happy_path_binds_record_from_map_source() {
-        ConfigSource src = ConfigSources.fromMap(Map.of(
-            "db", Map.of("url", "jdbc:postgres", "maxConnections", 20, "connectTimeout", "PT10S")));
+        ConfigSource src = ConfigSources.fromMap(
+                Map.of("db", Map.of("url", "jdbc:postgres", "maxConnections", 20, "connectTimeout", "PT10S")));
         BindContext ctx = new BindContext("test");
         DbConfig cfg = new DbConfigBinder().bind(src.load(), ctx);
 
@@ -67,7 +73,8 @@ class HandWrittenBinderEndToEndTest {
         ConfigSource src = ConfigSources.fromMap(Map.of("db", Map.of("url", "x", "foo", "bar")));
         BindContext ctx = new BindContext("test");
         new DbConfigBinder().bind(src.load(), ctx);
-        assertThat(ctx.errors().stream().anyMatch(e -> e.message().contains("unknown key 'db.foo'"))).isTrue();
+        assertThat(ctx.errors().stream().anyMatch(e -> e.message().contains("unknown key 'db.foo'")))
+                .isTrue();
     }
 
     @Test
@@ -86,10 +93,12 @@ class HandWrittenBinderEndToEndTest {
         ConfigSource src = ConfigSources.fromMap(Map.of("db", Map.of("maxConnections", "ten", "junk", true)));
         BindContext ctx = new BindContext("test");
         new DbConfigBinder().bind(src.load(), ctx);
-        assertThatThrownBy(() -> { throw new ConfigValidationException(ctx.source(), ctx.errors()); })
-            .isInstanceOf(ConfigValidationException.class)
-            .hasMessageContaining("db.url is required")
-            .hasMessageContaining("db.maxConnections expected integer")
-            .hasMessageContaining("unknown key 'db.junk'");
+        assertThatThrownBy(() -> {
+                    throw new ConfigValidationException(ctx.source(), ctx.errors());
+                })
+                .isInstanceOf(ConfigValidationException.class)
+                .hasMessageContaining("db.url is required")
+                .hasMessageContaining("db.maxConnections expected integer")
+                .hasMessageContaining("unknown key 'db.junk'");
     }
 }

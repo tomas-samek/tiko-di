@@ -1,8 +1,8 @@
 package io.tiko.examples.config;
 
 import io.tiko.Container;
-import io.tiko.runtime.Tiko;
 import io.tiko.config.ConfigSources;
+import io.tiko.runtime.Tiko;
 
 public class Main {
     public static void main(String[] args) {

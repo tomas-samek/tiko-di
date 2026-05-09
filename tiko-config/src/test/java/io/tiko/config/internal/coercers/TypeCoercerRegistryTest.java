@@ -1,12 +1,11 @@
 // tiko-config/src/test/java/io/tiko/config/internal/coercers/TypeCoercerRegistryTest.java
 package io.tiko.config.internal.coercers;
 
-import org.junit.jupiter.api.Test;
-
-import java.time.Duration;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.time.Duration;
+import org.junit.jupiter.api.Test;
 
 class TypeCoercerRegistryTest {
 
@@ -24,8 +23,7 @@ class TypeCoercerRegistryTest {
 
     @Test
     void unknown_type_throws_with_class_name() {
-        assertThatThrownBy(() -> TypeCoercerRegistry.get(java.io.File.class))
-            .hasMessageContaining("File");
+        assertThatThrownBy(() -> TypeCoercerRegistry.get(java.io.File.class)).hasMessageContaining("File");
     }
 
     @Test

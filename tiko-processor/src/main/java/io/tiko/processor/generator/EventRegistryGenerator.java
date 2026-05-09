@@ -6,16 +6,15 @@ import io.tiko.EventBus;
 import io.tiko.processor.model.EventHandlerModel;
 import io.tiko.processor.model.EventTriggerModel;
 import io.tiko.processor.util.ProcessorContext;
-
-import javax.lang.model.element.Modifier;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
-import javax.tools.Diagnostic;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
+import javax.lang.model.element.Modifier;
+import javax.lang.model.type.TypeKind;
+import javax.lang.model.type.TypeMirror;
+import javax.tools.Diagnostic;
 
 /**
  * Generates the EventRegistry class that registers all @EventHandler methods.
@@ -53,8 +52,7 @@ public final class EventRegistryGenerator {
             return;
         }
 
-        TypeSpec.Builder registry = TypeSpec.classBuilder(REGISTRY_CLASS)
-                .addModifiers(Modifier.PUBLIC, Modifier.FINAL);
+        TypeSpec.Builder registry = TypeSpec.classBuilder(REGISTRY_CLASS).addModifiers(Modifier.PUBLIC, Modifier.FINAL);
 
         registry.addMethod(createRegisterMethod(eventHandlers));
 
@@ -63,13 +61,19 @@ public final class EventRegistryGenerator {
         // Emit one HANDLER_INFO_<n> static constant per handler
         for (int i = 0; i < eventHandlers.size(); i++) {
             EventHandlerModel handler = eventHandlers.get(i);
-            ClassName declaring = ClassName.bestGuess(handler.getDeclaringClass().getQualifiedName().toString());
+            ClassName declaring = ClassName.bestGuess(
+                    handler.getDeclaringClass().getQualifiedName().toString());
             ClassName eventClass = ClassName.bestGuess(handler.getEventTypeName());
 
-            FieldSpec info = FieldSpec.builder(eventHandlerInfo, "HANDLER_INFO_" + i,
-                            Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
-                    .initializer("new $T($T.class, $S, $T.class, $L)", eventHandlerInfo, declaring,
-                            handler.getMethodName(), eventClass, handler.isAsync())
+            FieldSpec info = FieldSpec.builder(
+                            eventHandlerInfo, "HANDLER_INFO_" + i, Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
+                    .initializer(
+                            "new $T($T.class, $S, $T.class, $L)",
+                            eventHandlerInfo,
+                            declaring,
+                            handler.getMethodName(),
+                            eventClass,
+                            handler.isAsync())
                     .build();
             registry.addField(info);
         }
@@ -79,9 +83,7 @@ public final class EventRegistryGenerator {
             registry.addMethod(createDispatcherMethod(eventHandlers.get(i), i));
         }
 
-        JavaFile.builder(GENERATED_PACKAGE, registry.build())
-                .build()
-                .writeTo(context.getFiler());
+        JavaFile.builder(GENERATED_PACKAGE, registry.build()).build().writeTo(context.getFiler());
     }
 
     /**
@@ -121,7 +123,8 @@ public final class EventRegistryGenerator {
     private MethodSpec createDispatcherMethod(EventHandlerModel handler, int index) {
         ClassName containerClass = ClassName.get(GENERATED_PACKAGE, context.getContainerClassName());
         ClassName eventClass = ClassName.bestGuess(handler.getEventTypeName());
-        ClassName declaringClass = ClassName.bestGuess(handler.getDeclaringClass().getQualifiedName().toString());
+        ClassName declaringClass = ClassName.bestGuess(
+                handler.getDeclaringClass().getQualifiedName().toString());
         String getterName = "get" + handler.getDeclaringClass().getSimpleName().toString();
 
         ClassName errorHandler = ClassName.get("io.tiko", "ErrorHandler");
@@ -150,10 +153,11 @@ public final class EventRegistryGenerator {
         boolean captureResult = hasTriggers && returnsValue;
 
         if (hasTriggers && !returnsValue) {
-            context.getMessager().printMessage(
-                    Diagnostic.Kind.WARNING,
-                    "@EventTrigger on a void-returning @EventHandler has no payload to publish — ignored",
-                    handler.getMethodElement());
+            context.getMessager()
+                    .printMessage(
+                            Diagnostic.Kind.WARNING,
+                            "@EventTrigger on a void-returning @EventHandler has no payload to publish — ignored",
+                            handler.getMethodElement());
         }
 
         String invocation = handler.hasEventWrapper()
@@ -188,18 +192,21 @@ public final class EventRegistryGenerator {
             wcBody.beginControlFlow("if (__t != null)");
             wcBody.addStatement(
                     "$T __cause = (__t instanceof $T && __t.getCause() != null) ? __t.getCause() : __t",
-                    Throwable.class, completionExceptionClass);
+                    Throwable.class,
+                    completionExceptionClass);
             wcBody.beginControlFlow("try");
-            wcBody.addStatement("__err.onError(new $T(HANDLER_INFO_$L, event, __cause))",
-                    eventHandlerError, index);
+            wcBody.addStatement("__err.onError(new $T(HANDLER_INFO_$L, event, __cause))", eventHandlerError, index);
             wcBody.nextControlFlow("catch ($T __inner)", Exception.class);
             wcBody.addStatement("$T.logErrorHandlerFailure(__inner)", CHAIN_CONTEXT);
             wcBody.endControlFlow();
             wcBody.endControlFlow();
 
             method.addCode(CodeBlock.builder()
-                    .add("$T.runAsync(() -> {\n$L}, __exec).whenComplete((__r, __t) -> {\n$L});\n",
-                            completableFutureClass, runBody.build(), wcBody.build())
+                    .add(
+                            "$T.runAsync(() -> {\n$L}, __exec).whenComplete((__r, __t) -> {\n$L});\n",
+                            completableFutureClass,
+                            runBody.build(),
+                            wcBody.build())
                     .build());
 
         } else {
@@ -216,8 +223,7 @@ public final class EventRegistryGenerator {
             method.nextControlFlow("catch ($T __t)", Exception.class);
             method.addStatement("$T __err = container.getErrorHandler()", errorHandler);
             method.beginControlFlow("try");
-            method.addStatement("__err.onError(new $T(HANDLER_INFO_$L, event, __t))",
-                    eventHandlerError, index);
+            method.addStatement("__err.onError(new $T(HANDLER_INFO_$L, event, __t))", eventHandlerError, index);
             method.nextControlFlow("catch ($T __inner)", Exception.class);
             method.addStatement("$T.logErrorHandlerFailure(__inner)", CHAIN_CONTEXT);
             method.endControlFlow();
@@ -249,7 +255,9 @@ public final class EventRegistryGenerator {
 
         String publishCall;
         if (trigger.isAsync()) {
-            publishCall = "$T.$L(eventBus, __result, __wrapper, container.getEventExecutor(), container.getErrorHandler(), HANDLER_INFO_" + index + ")";
+            publishCall =
+                    "$T.$L(eventBus, __result, __wrapper, container.getEventExecutor(), container.getErrorHandler(), HANDLER_INFO_"
+                            + index + ")";
         } else {
             publishCall = "$T.$L(eventBus, __result, __wrapper)";
         }
@@ -292,7 +300,9 @@ public final class EventRegistryGenerator {
 
         String publishCall;
         if (trigger.isAsync()) {
-            publishCall = "$T.$L(eventBus, __result, __asyncWrapper, container.getEventExecutor(), container.getErrorHandler(), HANDLER_INFO_" + index + ")";
+            publishCall =
+                    "$T.$L(eventBus, __result, __asyncWrapper, container.getEventExecutor(), container.getErrorHandler(), HANDLER_INFO_"
+                            + index + ")";
         } else {
             publishCall = "$T.$L(eventBus, __result, __asyncWrapper)";
         }

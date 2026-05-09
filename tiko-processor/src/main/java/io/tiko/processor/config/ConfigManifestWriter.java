@@ -1,11 +1,11 @@
 package io.tiko.processor.config;
 
-import javax.annotation.processing.Filer;
-import javax.tools.FileObject;
-import javax.tools.StandardLocation;
 import java.io.IOException;
 import java.io.Writer;
 import java.util.List;
+import javax.annotation.processing.Filer;
+import javax.tools.FileObject;
+import javax.tools.StandardLocation;
 
 /**
  * Writes META-INF/tiko/configs.txt — one {@code <fqn>=<prefix>} per record,

@@ -1,14 +1,13 @@
 package io.tiko.runtime;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class DefaultEventExecutorFactoryTest {
 
@@ -25,8 +24,7 @@ class DefaultEventExecutorFactoryTest {
             assertThat(tpe.getKeepAliveTime(TimeUnit.SECONDS)).isEqualTo(60);
             assertThat(tpe.getQueue()).isInstanceOf(LinkedBlockingQueue.class);
             assertThat(tpe.getQueue().remainingCapacity()).isEqualTo(1024);
-            assertThat(tpe.getRejectedExecutionHandler())
-                .isInstanceOf(ThreadPoolExecutor.CallerRunsPolicy.class);
+            assertThat(tpe.getRejectedExecutionHandler()).isInstanceOf(ThreadPoolExecutor.CallerRunsPolicy.class);
         } finally {
             es.shutdownNow();
         }

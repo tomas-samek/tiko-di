@@ -6,5 +6,6 @@ package io.tiko.examples.basic;
  */
 public interface RequestContext {
     String getRequestId();
+
     String getUserId();
 }

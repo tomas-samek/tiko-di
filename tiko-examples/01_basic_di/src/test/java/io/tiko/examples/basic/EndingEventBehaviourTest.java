@@ -1,15 +1,14 @@
 package io.tiko.examples.basic;
 
-import io.tiko.Container;
-import io.tiko.runtime.Tiko;
-import io.tiko.events.ApplicationEndingEvent;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import io.tiko.Container;
+import io.tiko.events.ApplicationEndingEvent;
+import io.tiko.runtime.Tiko;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 class EndingEventBehaviourTest {
 
@@ -21,15 +20,16 @@ class EndingEventBehaviourTest {
     @Test
     void throwing_ending_event_handler_does_not_skip_predestroy() {
         Container container = Tiko.create();
-        container.getEventBus().subscribe(ApplicationEndingEvent.class,
-            e -> { throw new IllegalStateException("handler boom"); });
+        container.getEventBus().subscribe(ApplicationEndingEvent.class, e -> {
+            throw new IllegalStateException("handler boom");
+        });
         container.get(ShutdownTestCounter.class); // ensure it's in the singleton map
 
         container.shutdown();
 
         assertThat(ShutdownTestCounter.preDestroyCount.get())
-            .as("@PreDestroy must run even when an ApplicationEndingEvent handler throws")
-            .isEqualTo(1);
+                .as("@PreDestroy must run even when an ApplicationEndingEvent handler throws")
+                .isEqualTo(1);
     }
 
     @Test
@@ -52,8 +52,8 @@ class EndingEventBehaviourTest {
 
         assertThat(handlerRan).isTrue();
         assertThat(error.get())
-            .as("get() must succeed during ApplicationEndingEvent — stopped flag is set after publish")
-            .isNull();
+                .as("get() must succeed during ApplicationEndingEvent — stopped flag is set after publish")
+                .isNull();
         assertThat(retrieved.get()).isInstanceOf(ShutdownTestCounter.class);
     }
 }

@@ -8,8 +8,4 @@ package io.tiko;
  * @param cause   the throwable thrown by the handler ({@code CompletionException}
  *                already unwrapped to the user's original throwable)
  */
-public record EventHandlerError(
-    EventHandlerInfo handler,
-    Object event,
-    Throwable cause
-) implements ErrorContext {}
+public record EventHandlerError(EventHandlerInfo handler, Object event, Throwable cause) implements ErrorContext {}

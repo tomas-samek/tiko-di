@@ -2,7 +2,6 @@ package io.tiko.config;
 
 import io.tiko.config.internal.ConfigError;
 import io.tiko.config.internal.ErrorReporter;
-
 import java.util.List;
 
 /**

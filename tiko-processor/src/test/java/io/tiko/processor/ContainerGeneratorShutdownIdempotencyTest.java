@@ -1,16 +1,15 @@
 package io.tiko.processor;
 
+import static com.google.testing.compile.CompilationSubject.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.google.testing.compile.Compilation;
 import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
-import org.junit.jupiter.api.Test;
-
-import javax.tools.JavaFileObject;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-
-import static com.google.testing.compile.CompilationSubject.assertThat;
-import static org.assertj.core.api.Assertions.assertThat;
+import javax.tools.JavaFileObject;
+import org.junit.jupiter.api.Test;
 
 /**
  * Codegen-level coverage for #47. Verifies the generated TikoContainerImpl carries
@@ -79,24 +78,24 @@ class ContainerGeneratorShutdownIdempotencyTest {
 
     private String generateContainerSource() throws IOException {
         JavaFileObject src = JavaFileObjects.forSourceLines(
-            "io.example.MyService",
-            "package io.example;",
-            "import io.tiko.annotations.Component;",
-            "import io.tiko.annotations.PreDestroy;",
-            "import io.tiko.Scope;",
-            "@Component(scope = Scope.SINGLETON)",
-            "public class MyService {",
-            "  public MyService() {}",
-            "  @PreDestroy public void cleanup() {}",
-            "}"
-        );
-        Compilation c = Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(src);
+                "io.example.MyService",
+                "package io.example;",
+                "import io.tiko.annotations.Component;",
+                "import io.tiko.annotations.PreDestroy;",
+                "import io.tiko.Scope;",
+                "@Component(scope = Scope.SINGLETON)",
+                "public class MyService {",
+                "  public MyService() {}",
+                "  @PreDestroy public void cleanup() {}",
+                "}");
+        Compilation c =
+                Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(src);
         com.google.testing.compile.CompilationSubject.assertThat(c).succeeded();
 
         JavaFileObject container = c.generatedSourceFiles().stream()
-            .filter(f -> f.getName().contains("TikoContainerImpl"))
-            .findFirst()
-            .orElseThrow(() -> new AssertionError("TikoContainerImpl not generated"));
+                .filter(f -> f.getName().contains("TikoContainerImpl"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("TikoContainerImpl not generated"));
 
         return new String(container.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
     }

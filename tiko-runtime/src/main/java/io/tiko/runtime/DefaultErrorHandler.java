@@ -3,7 +3,6 @@ package io.tiko.runtime;
 import io.tiko.ErrorContext;
 import io.tiko.ErrorHandler;
 import io.tiko.EventHandlerError;
-
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -32,21 +31,24 @@ public final class DefaultErrorHandler implements ErrorHandler {
     @Override
     public void onError(ErrorContext context) {
         if (context instanceof EventHandlerError e) {
-            LoggerHolder.LOG.log(Level.WARNING,
-                String.format("EventHandler %s#%s on event %s threw: %s",
-                    e.handler().declaringClass().getName(),
-                    e.handler().methodName(),
-                    e.handler().eventType().getName(),
-                    e.cause().toString()),
-                e.cause());
+            LoggerHolder.LOG.log(
+                    Level.WARNING,
+                    String.format(
+                            "EventHandler %s#%s on event %s threw: %s",
+                            e.handler().declaringClass().getName(),
+                            e.handler().methodName(),
+                            e.handler().eventType().getName(),
+                            e.cause().toString()),
+                    e.cause());
         } else {
             // Forward-compatible: future ErrorContext subtypes log a generic message
             // until this default handler is updated to match the new permits.
-            LoggerHolder.LOG.log(Level.WARNING,
-                String.format("Framework error: %s: %s",
-                    context.getClass().getSimpleName(),
-                    context.cause().toString()),
-                context.cause());
+            LoggerHolder.LOG.log(
+                    Level.WARNING,
+                    String.format(
+                            "Framework error: %s: %s",
+                            context.getClass().getSimpleName(), context.cause().toString()),
+                    context.cause());
         }
     }
 }

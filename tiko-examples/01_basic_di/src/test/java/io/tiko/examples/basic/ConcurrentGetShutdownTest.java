@@ -1,13 +1,12 @@
 package io.tiko.examples.basic;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import io.tiko.Container;
 import io.tiko.runtime.Tiko;
-import org.junit.jupiter.api.RepeatedTest;
-
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.RepeatedTest;
 
 /**
  * Property test for #47: concurrent {@code get()} on thread A racing
@@ -34,27 +33,31 @@ class ConcurrentGetShutdownTest {
         AtomicBoolean getterSucceeded = new AtomicBoolean(false);
         AtomicBoolean getterRejected = new AtomicBoolean(false);
 
-        Thread getter = new Thread(() -> {
-            try {
-                start.await();
-                container.get(ShutdownTestCounter.class);
-                getterSucceeded.set(true);
-            } catch (IllegalStateException expected) {
-                // shutdown() raced ahead; this is the documented post-shutdown behaviour
-                getterRejected.set(true);
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-            }
-        }, "concurrent-getter");
+        Thread getter = new Thread(
+                () -> {
+                    try {
+                        start.await();
+                        container.get(ShutdownTestCounter.class);
+                        getterSucceeded.set(true);
+                    } catch (IllegalStateException expected) {
+                        // shutdown() raced ahead; this is the documented post-shutdown behaviour
+                        getterRejected.set(true);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                    }
+                },
+                "concurrent-getter");
 
-        Thread shutter = new Thread(() -> {
-            try {
-                start.await();
-                container.shutdown();
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-            }
-        }, "concurrent-shutter");
+        Thread shutter = new Thread(
+                () -> {
+                    try {
+                        start.await();
+                        container.shutdown();
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                    }
+                },
+                "concurrent-shutter");
 
         getter.start();
         shutter.start();
@@ -64,10 +67,10 @@ class ConcurrentGetShutdownTest {
         shutter.join(2000);
 
         assertThat(getterSucceeded.get() || getterRejected.get())
-            .as("getter must complete with either success or a clean ISE — never hang or throw something else")
-            .isTrue();
+                .as("getter must complete with either success or a clean ISE — never hang or throw something else")
+                .isTrue();
         assertThat(ShutdownTestCounter.preDestroyCount.get())
-            .as("singleton was eagerly constructed in start(); shutdown runs @PreDestroy exactly once")
-            .isEqualTo(1);
+                .as("singleton was eagerly constructed in start(); shutdown runs @PreDestroy exactly once")
+                .isEqualTo(1);
     }
 }

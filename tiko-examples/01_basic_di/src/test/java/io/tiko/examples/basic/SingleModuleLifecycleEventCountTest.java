@@ -1,14 +1,13 @@
 package io.tiko.examples.basic;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import io.tiko.Container;
-import io.tiko.runtime.Tiko;
 import io.tiko.events.ApplicationEndingEvent;
 import io.tiko.events.ApplicationStartedEvent;
-import org.junit.jupiter.api.Test;
-
+import io.tiko.runtime.Tiko;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 /**
  * #45 sanity check for single-module path: lifecycle events still fire exactly once.
@@ -35,14 +34,14 @@ class SingleModuleLifecycleEventCountTest {
         container.shutdown(); // idempotent — no second publish
 
         assertThat(ended.get())
-            .as("ApplicationEndingEvent must fire exactly once across both shutdown() calls")
-            .isEqualTo(1);
+                .as("ApplicationEndingEvent must fire exactly once across both shutdown() calls")
+                .isEqualTo(1);
         // started count is 0 here because the subscribe() happened *after* the publish
         // inside Tiko.create(). Documented behaviour — apps that need ApplicationStartedEvent
         // declare an @EventHandler on a @Component, registered before Tiko.create()
         // publishes the event.
         assertThat(started.get())
-            .as("subscribers attached after Tiko.create() miss ApplicationStartedEvent — documented")
-            .isEqualTo(0);
+                .as("subscribers attached after Tiko.create() miss ApplicationStartedEvent — documented")
+                .isEqualTo(0);
     }
 }

@@ -5,7 +5,6 @@ import io.tiko.config.BindContext;
 import io.tiko.config.ConfigBinder;
 import io.tiko.config.ConfigValidationException;
 import io.tiko.config.internal.Interpolator;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -46,12 +45,10 @@ public final class ConfigBootstrap {
         }
         for (Map.Entry<String, List<Class<?>>> e : prefixToTypes.entrySet()) {
             if (e.getValue().size() > 1) {
-                String types = e.getValue().stream()
-                    .map(Class::getName)
-                    .collect(Collectors.joining(", "));
+                String types = e.getValue().stream().map(Class::getName).collect(Collectors.joining(", "));
                 ctx.report("duplicate @Configuration prefix '" + e.getKey()
-                    + "' declared by: " + types
-                    + ". Each prefix must be unique across all modules.");
+                        + "' declared by: " + types
+                        + ". Each prefix must be unique across all modules.");
             }
         }
 
@@ -84,7 +81,10 @@ public final class ConfigBootstrap {
         int bestDist = Integer.MAX_VALUE;
         for (String c : candidates) {
             int d = levenshtein(input, c);
-            if (d < bestDist) { bestDist = d; best = c; }
+            if (d < bestDist) {
+                bestDist = d;
+                best = c;
+            }
         }
         return (bestDist <= 2) ? best : null;
     }

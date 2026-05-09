@@ -1,11 +1,11 @@
 package io.tiko.examples.basic.teardown;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import io.tiko.Container;
 import io.tiko.runtime.Tiko;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 class AutoCloseableScopedTest {
 
@@ -54,7 +54,7 @@ class AutoCloseableScopedTest {
         container.shutdown();
 
         assertThat(TeardownRecorder.order)
-            .contains("ExplicitWinsBean.preDestroy")
-            .doesNotContain("ExplicitWinsBean.close");
+                .contains("ExplicitWinsBean.preDestroy")
+                .doesNotContain("ExplicitWinsBean.close");
     }
 }

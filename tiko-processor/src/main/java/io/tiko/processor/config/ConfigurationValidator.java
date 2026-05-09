@@ -1,17 +1,16 @@
 package io.tiko.processor.config;
 
 import io.tiko.processor.util.ProcessorContext;
-
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Types;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
 
 /** All compile-time checks against the collected {@link ConfigurationModel}s. */
 public final class ConfigurationValidator {
@@ -40,11 +39,13 @@ public final class ConfigurationValidator {
         for (ConfigurationModel cfg : ctx.getConfigurations()) {
             ConfigurationModel prior = seen.put(cfg.prefix(), cfg);
             if (prior != null) {
-                ctx.getErrorReporter().error(cfg.element(),
-                    prior.simpleName() + ".java, " + cfg.simpleName()
-                        + ".java — Both records declare prefix '" + cfg.prefix() + "'."
-                        + " Each prefix must be unique.",
-                    "Rename one of the prefixes");
+                ctx.getErrorReporter()
+                        .error(
+                                cfg.element(),
+                                prior.simpleName() + ".java, " + cfg.simpleName()
+                                        + ".java — Both records declare prefix '" + cfg.prefix() + "'."
+                                        + " Each prefix must be unique.",
+                                "Rename one of the prefixes");
                 ok = false;
             }
         }
@@ -58,20 +59,24 @@ public final class ConfigurationValidator {
             TypeMirror inner = unwrapOptional(f.type());
             if (!ConfigSupportedTypes.isSupported(inner, types)) {
                 String typeName = simpleName(inner);
-                ctx.getErrorReporter().error(f.element(),
-                    "Field '" + f.fieldName() + "' uses unsupported config type '" + typeName + "'."
-                        + " See *Components → Supported types* in the spec.",
-                    "Use one of: " + String.join(", ", ConfigSupportedTypes.bundledTypeNames()),
-                    "Or declare as String and parse in your service");
+                ctx.getErrorReporter()
+                        .error(
+                                f.element(),
+                                "Field '" + f.fieldName() + "' uses unsupported config type '" + typeName + "'."
+                                        + " See *Components → Supported types* in the spec.",
+                                "Use one of: " + String.join(", ", ConfigSupportedTypes.bundledTypeNames()),
+                                "Or declare as String and parse in your service");
                 ok = false;
             }
 
             // 2. @Default + Optional<X> conflict
             if (f.cardinality() == ConfigFieldModel.Cardinality.OPTIONAL && f.defaultValue() != null) {
-                ctx.getErrorReporter().error(f.element(),
-                    "@Default cannot be combined with Optional<X> on field '" + f.fieldName() + "'."
-                        + " They mean different things.",
-                    "Drop the Optional wrapper, or remove @Default");
+                ctx.getErrorReporter()
+                        .error(
+                                f.element(),
+                                "@Default cannot be combined with Optional<X> on field '" + f.fieldName() + "'."
+                                        + " They mean different things.",
+                                "Drop the Optional wrapper, or remove @Default");
                 ok = false;
             }
 
@@ -81,10 +86,13 @@ public final class ConfigurationValidator {
                 if (effective != null) {
                     String err = ConfigSupportedTypes.validateDefault(f.defaultValue(), effective);
                     if (err != null) {
-                        ctx.getErrorReporter().error(f.element(),
-                            "@Default('" + f.defaultValue() + "') on " + simpleName(inner)
-                                + " field '" + f.fieldName() + "' is not a valid " + effective.getSimpleName() + ": " + err,
-                            "Provide a value parseable as " + effective.getSimpleName());
+                        ctx.getErrorReporter()
+                                .error(
+                                        f.element(),
+                                        "@Default('" + f.defaultValue() + "') on " + simpleName(inner) + " field '"
+                                                + f.fieldName() + "' is not a valid " + effective.getSimpleName() + ": "
+                                                + err,
+                                        "Provide a value parseable as " + effective.getSimpleName());
                         ok = false;
                     }
                 }
@@ -101,8 +109,7 @@ public final class ConfigurationValidator {
     private boolean walk(TypeElement type, Set<String> visiting, ConfigurationModel root) {
         String fqn = type.getQualifiedName().toString();
         if (!visiting.add(fqn)) {
-            ctx.getErrorReporter().error(root.element(),
-                "Recursive record reference detected at " + fqn);
+            ctx.getErrorReporter().error(root.element(), "Recursive record reference detected at " + fqn);
             return false;
         }
         for (var member : type.getEnclosedElements()) {
@@ -143,8 +150,14 @@ public final class ConfigurationValidator {
             };
         }
         if (type.getKind() == TypeKind.DECLARED) {
-            String fqn = ((TypeElement) ((DeclaredType) type).asElement()).getQualifiedName().toString();
-            try { return Class.forName(fqn); } catch (ClassNotFoundException e) { return null; }
+            String fqn = ((TypeElement) ((DeclaredType) type).asElement())
+                    .getQualifiedName()
+                    .toString();
+            try {
+                return Class.forName(fqn);
+            } catch (ClassNotFoundException e) {
+                return null;
+            }
         }
         return null;
     }
@@ -152,7 +165,9 @@ public final class ConfigurationValidator {
     private static String simpleName(TypeMirror type) {
         if (type.getKind().isPrimitive()) return type.getKind().name().toLowerCase();
         if (type.getKind() == TypeKind.DECLARED) {
-            return ((TypeElement) ((DeclaredType) type).asElement()).getSimpleName().toString();
+            return ((TypeElement) ((DeclaredType) type).asElement())
+                    .getSimpleName()
+                    .toString();
         }
         return type.toString();
     }

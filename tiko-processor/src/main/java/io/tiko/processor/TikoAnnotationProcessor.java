@@ -1,24 +1,23 @@
 package io.tiko.processor;
 
 import com.google.auto.service.AutoService;
+import io.tiko.EventTriggerGuard;
 import io.tiko.Scope;
 import io.tiko.annotations.*;
 import io.tiko.annotations.Configuration;
 import io.tiko.processor.generator.*;
 import io.tiko.processor.model.*;
+import io.tiko.processor.model.EventTriggerModel;
 import io.tiko.processor.util.ProcessorContext;
 import io.tiko.processor.util.TypeUtil;
 import io.tiko.processor.validation.*;
-
+import java.util.*;
 import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.*;
 import javax.lang.model.type.MirroredTypesException;
 import javax.lang.model.type.TypeMirror;
 import javax.tools.Diagnostic;
-import java.util.*;
-import io.tiko.EventTriggerGuard;
-import io.tiko.processor.model.EventTriggerModel;
 
 /**
  * Main annotation processor for Tiko DI.
@@ -45,10 +44,7 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         List<String> activeProfiles = parseActiveProfiles(processingEnv);
 
         this.context = new ProcessorContext(processingEnv, activeProfiles);
-        this.typeUtil = new TypeUtil(
-                processingEnv.getElementUtils(),
-                processingEnv.getTypeUtils()
-        );
+        this.typeUtil = new TypeUtil(processingEnv.getElementUtils(), processingEnv.getTypeUtils());
     }
 
     @Override
@@ -57,8 +53,7 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
                 Component.class.getCanonicalName(),
                 Produces.class.getCanonicalName(),
                 EventHandler.class.getCanonicalName(),
-                Configuration.class.getCanonicalName()
-        );
+                Configuration.class.getCanonicalName());
     }
 
     @Override
@@ -75,86 +70,82 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
 
         // Collect annotations in all rounds
         if (!roundEnv.processingOver()) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.NOTE,
-                    "Tiko DI: Processing round, collecting annotations..."
-            );
+            processingEnv
+                    .getMessager()
+                    .printMessage(Diagnostic.Kind.NOTE, "Tiko DI: Processing round, collecting annotations...");
             collectComponents(roundEnv);
             collectFactoryMethods(roundEnv);
             collectEventHandlers(roundEnv);
             collectConfigurations(roundEnv);
 
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.NOTE,
-                    "Tiko DI: Collected " + context.getComponents().size() + " components, " +
-                            context.getFactoryMethods().size() + " factories, " +
-                            context.getEventHandlers().size() + " event handlers"
-            );
+            processingEnv
+                    .getMessager()
+                    .printMessage(
+                            Diagnostic.Kind.NOTE,
+                            "Tiko DI: Collected " + context.getComponents().size() + " components, "
+                                    + context.getFactoryMethods().size()
+                                    + " factories, "
+                                    + context.getEventHandlers().size()
+                                    + " event handlers");
             return true; // Claim the annotations
         }
 
         // In final round, validate and generate code
         processed = true;
 
-        processingEnv.getMessager().printMessage(
-                Diagnostic.Kind.NOTE,
-                "Tiko DI: Final round - starting code generation..."
-        );
+        processingEnv
+                .getMessager()
+                .printMessage(Diagnostic.Kind.NOTE, "Tiko DI: Final round - starting code generation...");
 
         try {
             // Check if we have anything to process
-            if (context.getComponents().isEmpty() && context.getFactoryMethods().isEmpty()
+            if (context.getComponents().isEmpty()
+                    && context.getFactoryMethods().isEmpty()
                     && context.getConfigurations().isEmpty()) {
-                processingEnv.getMessager().printMessage(
-                        Diagnostic.Kind.WARNING,
-                        "Tiko DI: No components, factories, or configurations found to process!"
-                );
+                processingEnv
+                        .getMessager()
+                        .printMessage(
+                                Diagnostic.Kind.WARNING,
+                                "Tiko DI: No components, factories, or configurations found to process!");
                 return false;
             }
 
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.NOTE,
-                    "Tiko DI: Found " + context.getComponents().size() + " components to process"
-            );
+            processingEnv
+                    .getMessager()
+                    .printMessage(
+                            Diagnostic.Kind.NOTE,
+                            "Tiko DI: Found " + context.getComponents().size() + " components to process");
 
             // Stage 2: Validate
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.NOTE,
-                    "Tiko DI: Starting validation..."
-            );
+            processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "Tiko DI: Starting validation...");
             if (!validate()) {
-                processingEnv.getMessager().printMessage(
-                        Diagnostic.Kind.ERROR,
-                        "Tiko DI: Validation failed!"
-                );
+                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "Tiko DI: Validation failed!");
                 return false;
             }
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.NOTE,
-                    "Tiko DI: Validation passed"
-            );
+            processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "Tiko DI: Validation passed");
 
             // Stage 3: Generate code
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.NOTE,
-                    "Tiko DI: Starting code generation..."
-            );
+            processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "Tiko DI: Starting code generation...");
             generate();
 
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.NOTE,
-                    "Tiko DI: Successfully generated container with " +
-                            context.getComponents().size() + " components, " +
-                            context.getFactoryMethods().size() + " factories, " +
-                            context.getEventHandlers().size() + " event handlers"
-            );
+            processingEnv
+                    .getMessager()
+                    .printMessage(
+                            Diagnostic.Kind.NOTE,
+                            "Tiko DI: Successfully generated container with "
+                                    + context.getComponents().size()
+                                    + " components, "
+                                    + context.getFactoryMethods().size()
+                                    + " factories, "
+                                    + context.getEventHandlers().size()
+                                    + " event handlers");
 
         } catch (Exception e) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "Tiko DI processing failed: " + e.getMessage() + "\n" +
-                            Arrays.toString(e.getStackTrace())
-            );
+            processingEnv
+                    .getMessager()
+                    .printMessage(
+                            Diagnostic.Kind.ERROR,
+                            "Tiko DI processing failed: " + e.getMessage() + "\n" + Arrays.toString(e.getStackTrace()));
             e.printStackTrace();
             return false;
         }
@@ -194,19 +185,19 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         List<DependencyModel> dependencies;
         if (staticFactoryMethod != null) {
             // Static factory governs instantiation; constructor is optional.
-            constructor = findInjectConstructor(typeElement);  // may be null when private/multiple
+            constructor = findInjectConstructor(typeElement); // may be null when private/multiple
             dependencies = buildDependencies(staticFactoryMethod);
         } else {
             // Standard path: require a usable constructor.
             constructor = findInjectConstructor(typeElement);
             if (constructor == null) {
-                context.getErrorReporter().error(
-                        typeElement,
-                        "@Component must have an @Inject-annotated constructor or a single public constructor",
-                        "Add @Inject annotation to a constructor",
-                        "Ensure only one public constructor exists if not using @Inject",
-                        "If instantiation goes through a static @Produces factory, no usable constructor is required"
-                );
+                context.getErrorReporter()
+                        .error(
+                                typeElement,
+                                "@Component must have an @Inject-annotated constructor or a single public constructor",
+                                "Add @Inject annotation to a constructor",
+                                "Ensure only one public constructor exists if not using @Inject",
+                                "If instantiation goes through a static @Produces factory, no usable constructor is required");
                 return null;
             }
             dependencies = buildDependencies(constructor);
@@ -219,8 +210,8 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         // Implicit AutoCloseable cleanup: when the component implements AutoCloseable and
         // the user did not declare an explicit @PreDestroy, the container codegen calls
         // close() at scope teardown. Explicit @PreDestroy always wins to avoid double-cleanup.
-        boolean autoCloseable = preDestroyMethods.isEmpty()
-                && typeUtil.implementsInterface(typeElement, "java.lang.AutoCloseable");
+        boolean autoCloseable =
+                preDestroyMethods.isEmpty() && typeUtil.implementsInterface(typeElement, "java.lang.AutoCloseable");
 
         // Check if component implements an interface (for proxy generation)
         Optional<TypeMirror> implementedInterface = typeUtil.getFirstInterface(typeElement);
@@ -248,8 +239,8 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         implementedInterface.ifPresent(builder::implementedInterface);
 
         // Determine if proxy is needed (REQUEST/EVENT scope with interface)
-        boolean needsProxy = (annotation.scope() == Scope.REQUEST || annotation.scope() == Scope.EVENT) &&
-                             implementedInterface.isPresent();
+        boolean needsProxy = (annotation.scope() == Scope.REQUEST || annotation.scope() == Scope.EVENT)
+                && implementedInterface.isPresent();
         builder.requiresProxy(needsProxy);
 
         return builder.build();
@@ -272,10 +263,7 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
 
             if (constructor.getAnnotation(Inject.class) != null) {
                 if (injectConstructor != null) {
-                    context.getErrorReporter().error(
-                            typeElement,
-                            "Multiple constructors annotated with @Inject"
-                    );
+                    context.getErrorReporter().error(typeElement, "Multiple constructors annotated with @Inject");
                     return null;
                 }
                 injectConstructor = constructor;
@@ -410,7 +398,8 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         if (!(enclosing instanceof TypeElement declaringType)) return false;
         Component componentAnnotation = declaringType.getAnnotation(Component.class);
         if (componentAnnotation == null) return false;
-        if (!processingEnv.getTypeUtils().isSameType(methodElement.getReturnType(), declaringType.asType())) return false;
+        if (!processingEnv.getTypeUtils().isSameType(methodElement.getReturnType(), declaringType.asType()))
+            return false;
         Produces produces = methodElement.getAnnotation(Produces.class);
         return produces != null && Objects.equals(produces.name(), componentAnnotation.name());
     }
@@ -480,10 +469,8 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
 
         List<? extends VariableElement> parameters = methodElement.getParameters();
         if (parameters.isEmpty()) {
-            context.getErrorReporter().error(
-                    methodElement,
-                    "@EventHandler method must have at least one parameter (the event)"
-            );
+            context.getErrorReporter()
+                    .error(methodElement, "@EventHandler method must have at least one parameter (the event)");
             return null;
         }
 
@@ -492,8 +479,8 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         String eventTypeName = typeUtil.getQualifiedName(eventType);
 
         // Check if second parameter is Event<?> wrapper
-        boolean hasEventWrapper = parameters.size() > 1 &&
-                typeUtil.getQualifiedName(parameters.get(1).asType()).equals("io.tiko.Event");
+        boolean hasEventWrapper = parameters.size() > 1
+                && typeUtil.getQualifiedName(parameters.get(1).asType()).equals("io.tiko.Event");
 
         List<EventTriggerModel> eventTriggers = collectEventTriggers(methodElement);
 
@@ -587,7 +574,7 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
 
         // Validate @Configuration records
         io.tiko.processor.config.ConfigurationValidator configValidator =
-            new io.tiko.processor.config.ConfigurationValidator(context, processingEnv.getTypeUtils());
+                new io.tiko.processor.config.ConfigurationValidator(context, processingEnv.getTypeUtils());
         if (!configValidator.validate()) {
             valid = false;
         }
@@ -609,10 +596,9 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         // Generate factory for each component
         ComponentFactoryGenerator factoryGenerator = new ComponentFactoryGenerator(context);
         for (ComponentModel component : context.getActiveComponents()) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.NOTE,
-                    "Tiko DI: Generating factory for " + component.getClassName()
-            );
+            processingEnv
+                    .getMessager()
+                    .printMessage(Diagnostic.Kind.NOTE, "Tiko DI: Generating factory for " + component.getClassName());
             factoryGenerator.generate(component);
         }
 
@@ -620,26 +606,23 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         ProxyGenerator proxyGenerator = new ProxyGenerator(context);
         for (ComponentModel component : context.getActiveComponents()) {
             if (component.requiresProxy()) {
-                processingEnv.getMessager().printMessage(
-                        Diagnostic.Kind.NOTE,
-                        "Tiko DI: Generating proxy for " + component.getClassName()
-                );
+                processingEnv
+                        .getMessager()
+                        .printMessage(
+                                Diagnostic.Kind.NOTE, "Tiko DI: Generating proxy for " + component.getClassName());
             }
             proxyGenerator.generate(component);
         }
 
         // Generate event registry
-        processingEnv.getMessager().printMessage(
-                Diagnostic.Kind.NOTE,
-                "Tiko DI: Generating event registry..."
-        );
+        processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "Tiko DI: Generating event registry...");
         EventRegistryGenerator eventRegistryGenerator = new EventRegistryGenerator(context);
         eventRegistryGenerator.generate();
 
         // Generate per-record ConfigBinder classes
         io.tiko.processor.config.ConfigBinderGenerator configBinderGen =
-            new io.tiko.processor.config.ConfigBinderGenerator(
-                processingEnv.getFiler(), processingEnv.getMessager());
+                new io.tiko.processor.config.ConfigBinderGenerator(
+                        processingEnv.getFiler(), processingEnv.getMessager());
         for (io.tiko.processor.config.ConfigurationModel cfg : context.getConfigurations()) {
             if (configBinderGen.canGenerate(cfg)) {
                 configBinderGen.generate(cfg);
@@ -651,15 +634,13 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         // containerClassName already computed above; extract the hash suffix from it
         String hashSuffix = containerClassName.substring(containerClassName.lastIndexOf('_') + 1);
         io.tiko.processor.config.ConfigBinderRegistryGenerator regGen =
-            new io.tiko.processor.config.ConfigBinderRegistryGenerator(processingEnv.getFiler(), hashSuffix);
+                new io.tiko.processor.config.ConfigBinderRegistryGenerator(processingEnv.getFiler(), hashSuffix);
         regGen.generate(configs);
-        new io.tiko.processor.config.ConfigManifestWriter(processingEnv.getFiler(), regGen.registryClassFqn()).write(configs);
+        new io.tiko.processor.config.ConfigManifestWriter(processingEnv.getFiler(), regGen.registryClassFqn())
+                .write(configs);
 
         // Generate container (must be last)
-        processingEnv.getMessager().printMessage(
-                Diagnostic.Kind.NOTE,
-                "Tiko DI: Generating container..."
-        );
+        processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "Tiko DI: Generating container...");
         ContainerGenerator containerGenerator = new ContainerGenerator(context);
         containerGenerator.generate();
     }

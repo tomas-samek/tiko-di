@@ -28,5 +28,4 @@ import java.time.Instant;
  * @param timestamp the instant when the event scope is exiting
  * @param duration  the duration of the event processing
  */
-public record EventEndingEvent(String eventId, Instant timestamp, Duration duration) {
-}
+public record EventEndingEvent(String eventId, Instant timestamp, Duration duration) {}

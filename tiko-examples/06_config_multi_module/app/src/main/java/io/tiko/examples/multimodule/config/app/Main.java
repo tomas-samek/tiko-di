@@ -1,10 +1,10 @@
 package io.tiko.examples.multimodule.config.app;
 
 import io.tiko.Container;
-import io.tiko.runtime.Tiko;
 import io.tiko.config.ConfigSources;
 import io.tiko.examples.multimodule.config.core.CoreService;
 import io.tiko.examples.multimodule.config.notifications.NotificationsService;
+import io.tiko.runtime.Tiko;
 
 /**
  * Demonstrates layered multi-module configuration:
@@ -24,10 +24,13 @@ public class Main {
             NotificationsService notifications = container.get(NotificationsService.class);
 
             System.out.println("=== Effective configuration ===");
-            System.out.println("core.retries        = " + core.config().retries() + "  (override applied; default was 3)");
+            System.out.println(
+                    "core.retries        = " + core.config().retries() + "  (override applied; default was 3)");
             System.out.println("core.timeout        = " + core.config().timeout() + "  (default from core jar)");
-            System.out.println("notifications.channel = " + notifications.config().channel() + "  (default from notifications jar)");
-            System.out.println("notifications.enabled = " + notifications.config().enabled() + "  (default from notifications jar)");
+            System.out.println("notifications.channel = "
+                    + notifications.config().channel() + "  (default from notifications jar)");
+            System.out.println("notifications.enabled = "
+                    + notifications.config().enabled() + "  (default from notifications jar)");
         }
     }
 }

@@ -2,7 +2,6 @@ package io.tiko.examples.basic;
 
 import io.tiko.Scope;
 import io.tiko.annotations.Component;
-
 import java.util.concurrent.atomic.AtomicLong;
 
 @Component(scope = Scope.PROTOTYPE)

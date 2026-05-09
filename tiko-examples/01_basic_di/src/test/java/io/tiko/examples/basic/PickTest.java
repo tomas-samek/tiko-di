@@ -1,13 +1,13 @@
 package io.tiko.examples.basic;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import io.tiko.Container;
 import io.tiko.Pick;
 import io.tiko.Provider;
 import io.tiko.runtime.Tiko;
 import org.junit.jupiter.api.Test;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class PickTest {
 
@@ -32,7 +32,8 @@ class PickTest {
     @Test
     void asProvider_lazilyResolvesEachCall() {
         try (Container container = Tiko.create()) {
-            Provider<Greeter> provider = container.pick(Greeter.class).withName("spanish").asProvider();
+            Provider<Greeter> provider =
+                    container.pick(Greeter.class).withName("spanish").asProvider();
             Greeter first = provider.get();
             Greeter second = provider.get();
             assertThat(first).isInstanceOf(SpanishGreeter.class);
@@ -71,7 +72,8 @@ class PickTest {
     @Test
     void asProvider_unknownName_throwsOnGet() {
         try (Container container = Tiko.create()) {
-            Provider<Greeter> provider = container.pick(Greeter.class).withName("french").asProvider();
+            Provider<Greeter> provider =
+                    container.pick(Greeter.class).withName("french").asProvider();
             assertThatThrownBy(provider::get).isInstanceOf(IllegalArgumentException.class);
         }
     }

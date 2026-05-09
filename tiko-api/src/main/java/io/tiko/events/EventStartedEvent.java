@@ -23,5 +23,4 @@ import java.time.Instant;
  * @param eventId   unique identifier for this event scope
  * @param timestamp the instant when the event scope was entered
  */
-public record EventStartedEvent(String eventId, Instant timestamp) {
-}
+public record EventStartedEvent(String eventId, Instant timestamp) {}

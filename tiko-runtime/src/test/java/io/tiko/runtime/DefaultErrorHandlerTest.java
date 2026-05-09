@@ -1,13 +1,11 @@
 package io.tiko.runtime;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import io.tiko.ErrorContext;
 import io.tiko.ErrorHandler;
 import io.tiko.EventHandlerError;
 import io.tiko.EventHandlerInfo;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Handler;
@@ -15,8 +13,9 @@ import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 import java.util.logging.SimpleFormatter;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 class DefaultErrorHandlerTest {
 
@@ -34,9 +33,16 @@ class DefaultErrorHandlerTest {
         originalUseParentHandlers = logger.getUseParentHandlers();
         logger.setUseParentHandlers(false);
         sink = new Handler() {
-            @Override public void publish(LogRecord record) { captured.add(record); }
-            @Override public void flush() {}
-            @Override public void close() {}
+            @Override
+            public void publish(LogRecord record) {
+                captured.add(record);
+            }
+
+            @Override
+            public void flush() {}
+
+            @Override
+            public void close() {}
         };
         sink.setLevel(Level.ALL);
         logger.addHandler(sink);
@@ -51,8 +57,7 @@ class DefaultErrorHandlerTest {
     @Test
     void logs_warning_with_class_method_event_type_and_message() {
         ErrorHandler handler = new DefaultErrorHandler();
-        EventHandlerInfo info = new EventHandlerInfo(
-            FakeService.class, "onSomething", FakeEvent.class, false);
+        EventHandlerInfo info = new EventHandlerInfo(FakeService.class, "onSomething", FakeEvent.class, false);
         IllegalStateException cause = new IllegalStateException("boom");
         ErrorContext ctx = new EventHandlerError(info, new FakeEvent(), cause);
 
@@ -71,5 +76,6 @@ class DefaultErrorHandlerTest {
     }
 
     static class FakeService {}
+
     record FakeEvent() {}
 }

@@ -1,9 +1,9 @@
 package io.tiko.examples.apiimpl.app;
 
 import io.tiko.Container;
-import io.tiko.runtime.Tiko;
 import io.tiko.examples.apiimpl.api.User;
 import io.tiko.examples.apiimpl.api.UserService;
+import io.tiko.runtime.Tiko;
 
 /**
  * The app sees only the api jar at compile time — note that the imports cover only

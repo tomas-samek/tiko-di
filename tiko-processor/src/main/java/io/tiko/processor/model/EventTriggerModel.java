@@ -1,8 +1,8 @@
 package io.tiko.processor.model;
 
-import javax.lang.model.type.TypeMirror;
 import java.util.ArrayList;
 import java.util.List;
+import javax.lang.model.type.TypeMirror;
 
 /**
  * Represents an @EventTrigger annotation on an event handler.
@@ -57,8 +57,7 @@ public final class EventTriggerModel {
         private boolean spread = false;
         private List<TypeMirror> guardClasses = new ArrayList<>();
 
-        private Builder() {
-        }
+        private Builder() {}
 
         public Builder eventName(String eventName) {
             this.eventName = eventName;

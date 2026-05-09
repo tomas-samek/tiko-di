@@ -1,11 +1,11 @@
 package io.tiko.examples.basic;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import io.tiko.Container;
 import io.tiko.runtime.Tiko;
 import org.junit.jupiter.api.Test;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class CoreDiIntegrationTest {
 
@@ -30,8 +30,7 @@ class CoreDiIntegrationTest {
     @Test
     void get_unknownType_throws() {
         try (Container container = Tiko.create()) {
-            assertThatThrownBy(() -> container.get(String.class))
-                .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> container.get(String.class)).isInstanceOf(IllegalArgumentException.class);
         }
     }
 
@@ -74,12 +73,8 @@ class CoreDiIntegrationTest {
             AuditService audit = container.get(AuditService.class);
             int before = audit.getAuditCount();
 
-            container.runInRequestScope(() ->
-                container.runInEventScope(() ->
-                    container.getEventBus().publish(
-                        new MessageCreatedEvent(99L, "content", "tester"))
-                )
-            );
+            container.runInRequestScope(() -> container.runInEventScope(
+                    () -> container.getEventBus().publish(new MessageCreatedEvent(99L, "content", "tester"))));
 
             assertThat(audit.getAuditCount()).isEqualTo(before + 1);
         }
@@ -103,12 +98,10 @@ class CoreDiIntegrationTest {
 
     private static String captureLastAuditEntry(
             Container container, AuditService audit, long msgId, String content, String user) {
-        return container.supplyInRequestScope(() ->
-            container.supplyInEventScope(() -> {
-                container.getEventBus().publish(new MessageCreatedEvent(msgId, content, user));
-                return audit.getAuditLog().get(audit.getAuditLog().size() - 1);
-            })
-        );
+        return container.supplyInRequestScope(() -> container.supplyInEventScope(() -> {
+            container.getEventBus().publish(new MessageCreatedEvent(msgId, content, user));
+            return audit.getAuditLog().get(audit.getAuditLog().size() - 1);
+        }));
     }
 
     private static String requestIdOf(String auditEntry) {

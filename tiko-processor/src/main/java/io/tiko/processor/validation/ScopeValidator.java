@@ -5,10 +5,8 @@ import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
 import io.tiko.processor.util.ProcessorContext;
-
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.TypeMirror;
 import java.util.Optional;
+import javax.lang.model.element.TypeElement;
 
 /**
  * Validates scope hierarchy rules and cross-scope injection requirements.
@@ -83,12 +81,11 @@ public final class ScopeValidator {
         }
 
         return validateScopeHierarchy(
-            consumer.getTypeElement(),
-            consumer.getScope(),
-            providerScope,
-            dependency.getTypeName(),
-            provider.get()
-        );
+                consumer.getTypeElement(),
+                consumer.getScope(),
+                providerScope,
+                dependency.getTypeName(),
+                provider.get());
     }
 
     /**
@@ -115,12 +112,11 @@ public final class ScopeValidator {
         }
 
         return validateScopeHierarchy(
-            factory.getMethodElement(),
-            factory.getScope(),
-            providerScope,
-            dependency.getTypeName(),
-            provider.get()
-        );
+                factory.getMethodElement(),
+                factory.getScope(),
+                providerScope,
+                dependency.getTypeName(),
+                provider.get());
     }
 
     /**
@@ -138,8 +134,7 @@ public final class ScopeValidator {
             Scope consumerScope,
             Scope providerScope,
             String providerTypeName,
-            Object providerObj
-    ) {
+            Object providerObj) {
         int consumerLevel = getScopeLevel(consumerScope);
         int providerLevel = getScopeLevel(providerScope);
 
@@ -152,26 +147,25 @@ public final class ScopeValidator {
         // Check if provider implements an interface for proxy generation
         if (providerObj instanceof ComponentModel component) {
             if (component.getImplementedInterface().isEmpty()) {
-                context.getErrorReporter().missingInterface(
-                    consumerElement,
-                    providerTypeName,
-                    "Required for proxy generation when injecting " + providerScope +
-                    "-scoped bean into " + consumerScope + "-scoped consumer"
-                );
+                context.getErrorReporter()
+                        .missingInterface(
+                                consumerElement,
+                                providerTypeName,
+                                "Required for proxy generation when injecting " + providerScope + "-scoped bean into "
+                                        + consumerScope + "-scoped consumer");
                 return false;
             }
         } else if (providerObj instanceof FactoryMethodModel factory) {
             // For factory methods, check if return type implements an interface
-            TypeElement returnTypeElement = context.getElementUtils()
-                .getTypeElement(factory.getReturnTypeName());
+            TypeElement returnTypeElement = context.getElementUtils().getTypeElement(factory.getReturnTypeName());
 
             if (returnTypeElement != null && returnTypeElement.getInterfaces().isEmpty()) {
-                context.getErrorReporter().missingInterface(
-                    consumerElement,
-                    factory.getReturnTypeName(),
-                    "Required for proxy generation when injecting " + providerScope +
-                    "-scoped bean into " + consumerScope + "-scoped consumer"
-                );
+                context.getErrorReporter()
+                        .missingInterface(
+                                consumerElement,
+                                factory.getReturnTypeName(),
+                                "Required for proxy generation when injecting " + providerScope + "-scoped bean into "
+                                        + consumerScope + "-scoped consumer");
                 return false;
             }
         }

@@ -1,20 +1,20 @@
 package io.tiko.config.internal;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
 
 class YamlLoaderTest {
 
     @Test
     void parses_simple_mapping_to_nested_maps() {
-        String yaml = """
+        String yaml =
+                """
                 db:
                   url: jdbc:postgres
                   maxConnections: 10
@@ -26,7 +26,8 @@ class YamlLoaderTest {
 
     @Test
     void parses_lists_and_nested_mappings() {
-        String yaml = """
+        String yaml =
+                """
                 servers:
                   - host: a
                     port: 1
@@ -51,7 +52,7 @@ class YamlLoaderTest {
     void malformed_yaml_throws_runtime_exception_with_message() {
         String yaml = "db:\n  url: [unclosed\n";
         assertThatThrownBy(() -> YamlLoader.load(new ByteArrayInputStream(yaml.getBytes(StandardCharsets.UTF_8))))
-            .isInstanceOf(RuntimeException.class);
+                .isInstanceOf(RuntimeException.class);
     }
 
     @Test
@@ -59,7 +60,8 @@ class YamlLoaderTest {
         // YAML allows non-string keys in mappings; SnakeYAML faithfully produces them
         // (e.g. integer keys). After load(), every map — even ones nested inside lists —
         // must use String keys so downstream BindContext.requireSection cast is safe.
-        String yaml = """
+        String yaml =
+                """
                 servers:
                   - 1: alpha
                     2: beta

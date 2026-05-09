@@ -14,7 +14,12 @@ public final class ErrorReporter {
         for (ConfigError e : errors) {
             sb.append("\n  ").append(idx++).append(". ");
             if (e.line() > 0) {
-                sb.append(e.source()).append(":").append(e.line()).append(":").append(e.column()).append("  ");
+                sb.append(e.source())
+                        .append(":")
+                        .append(e.line())
+                        .append(":")
+                        .append(e.column())
+                        .append("  ");
             }
             sb.append(e.message()).append("\n");
         }

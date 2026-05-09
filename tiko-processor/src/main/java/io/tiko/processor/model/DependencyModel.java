@@ -1,10 +1,8 @@
 package io.tiko.processor.model;
 
-import io.tiko.Scope;
-
+import java.util.Optional;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.TypeMirror;
-import java.util.Optional;
 
 /**
  * Represents a dependency to be injected.
@@ -15,9 +13,9 @@ public final class DependencyModel {
     private final VariableElement parameter;
     private final TypeMirror type;
     private final String typeName;
-    private final String qualifier;  // From @Named annotation
-    private final boolean isProvider;  // Provider<T> wrapper
-    private final TypeMirror unwrappedType;  // T in Provider<T>
+    private final String qualifier; // From @Named annotation
+    private final boolean isProvider; // Provider<T> wrapper
+    private final TypeMirror unwrappedType; // T in Provider<T>
 
     private DependencyModel(Builder builder) {
         this.parameter = builder.parameter;
@@ -62,9 +60,7 @@ public final class DependencyModel {
      */
     public String getDependencyKey() {
         String baseType = isProvider ? unwrappedType.toString() : typeName;
-        return getQualifier()
-                .map(q -> baseType + "#" + q)
-                .orElse(baseType);
+        return getQualifier().map(q -> baseType + "#" + q).orElse(baseType);
     }
 
     /**
@@ -82,8 +78,7 @@ public final class DependencyModel {
         private boolean isProvider = false;
         private TypeMirror unwrappedType;
 
-        private Builder() {
-        }
+        private Builder() {}
 
         public Builder parameter(VariableElement parameter) {
             this.parameter = parameter;

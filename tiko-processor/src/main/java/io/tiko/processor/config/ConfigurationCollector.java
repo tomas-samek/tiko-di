@@ -4,7 +4,10 @@ import io.tiko.annotations.Configuration;
 import io.tiko.annotations.Default;
 import io.tiko.annotations.Key;
 import io.tiko.processor.util.ProcessorContext;
-
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import javax.annotation.processing.RoundEnvironment;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
@@ -16,10 +19,6 @@ import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Types;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 /**
  * Walks {@code @Configuration}-annotated elements and builds {@link ConfigurationModel}s.
@@ -41,15 +40,16 @@ public final class ConfigurationCollector {
                 continue;
             }
             if (type.getKind() != ElementKind.RECORD) {
-                ctx.getErrorReporter().error(type,
-                    "@Configuration must be applied to a record",
-                    "Change `class` to `record`");
+                ctx.getErrorReporter()
+                        .error(type, "@Configuration must be applied to a record", "Change `class` to `record`");
                 continue;
             }
 
             Configuration ann = type.getAnnotation(Configuration.class);
             String prefix = ann.prefix();
-            String pkg = ((PackageElement) type.getEnclosingElement()).getQualifiedName().toString();
+            String pkg = ((PackageElement) type.getEnclosingElement())
+                    .getQualifiedName()
+                    .toString();
             String simple = type.getSimpleName().toString();
             String qualified = type.getQualifiedName().toString();
 
@@ -81,9 +81,9 @@ public final class ConfigurationCollector {
         Types types = ctx.getTypeUtils();
 
         List<VariableElement> components = type.getEnclosedElements().stream()
-            .filter(e -> e.getKind() == ElementKind.RECORD_COMPONENT)
-            .map(e -> (VariableElement) e)
-            .toList();
+                .filter(e -> e.getKind() == ElementKind.RECORD_COMPONENT)
+                .map(e -> (VariableElement) e)
+                .toList();
 
         for (Element member : type.getEnclosedElements()) {
             if (member.getKind() != ElementKind.CONSTRUCTOR) continue;

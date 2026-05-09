@@ -1,16 +1,15 @@
 package io.tiko.examples.multimodule.app;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import io.tiko.Container;
 import io.tiko.EventBus;
 import io.tiko.events.ApplicationEndingEvent;
 import io.tiko.events.ApplicationStartedEvent;
 import io.tiko.runtime.AggregatingContainer;
 import io.tiko.runtime.LocalEventBus;
-import org.junit.jupiter.api.Test;
-
 import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 /**
  * #45 verification for multi-module: {@code ApplicationStartedEvent} fires exactly
@@ -41,8 +40,8 @@ class MultiModuleLifecycleEventsTest {
         }
 
         assertThat(startedCount.get())
-            .as("ApplicationStartedEvent must fire exactly once across two start() calls")
-            .isEqualTo(1);
+                .as("ApplicationStartedEvent must fire exactly once across two start() calls")
+                .isEqualTo(1);
     }
 
     @Test
@@ -57,9 +56,9 @@ class MultiModuleLifecycleEventsTest {
         container.shutdown(); // idempotent
 
         assertThat(endingCount.get())
-            .as("ApplicationEndingEvent must fire exactly once across module-a and module-b "
-                + "(N=2 modules) and across two shutdown() calls")
-            .isEqualTo(1);
+                .as("ApplicationEndingEvent must fire exactly once across module-a and module-b "
+                        + "(N=2 modules) and across two shutdown() calls")
+                .isEqualTo(1);
     }
 
     private EventBus newLocalEventBus() {

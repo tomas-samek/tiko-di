@@ -1,19 +1,18 @@
 package io.tiko.examples.basic;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import io.tiko.Container;
-import io.tiko.runtime.Tiko;
 import io.tiko.events.ApplicationEndingEvent;
 import io.tiko.events.ApplicationStartedEvent;
 import io.tiko.events.EventEndingEvent;
 import io.tiko.events.EventStartedEvent;
 import io.tiko.events.RequestEndingEvent;
 import io.tiko.events.RequestStartedEvent;
-import org.junit.jupiter.api.Test;
-
+import io.tiko.runtime.Tiko;
 import java.time.Duration;
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class LifecycleEventsTest {
 
@@ -22,12 +21,11 @@ class LifecycleEventsTest {
         LifecycleRecorder recorder;
         try (Container container = Tiko.create()) {
             recorder = container.get(LifecycleRecorder.class);
-            assertThat(recorder.getEvents())
-                .hasAtLeastOneElementOfType(ApplicationStartedEvent.class);
+            assertThat(recorder.getEvents()).hasAtLeastOneElementOfType(ApplicationStartedEvent.class);
             assertThat(recorder.getEvents().stream()
-                    .filter(ApplicationStartedEvent.class::isInstance)
-                    .count())
-                .isEqualTo(1);
+                            .filter(ApplicationStartedEvent.class::isInstance)
+                            .count())
+                    .isEqualTo(1);
         }
     }
 
@@ -37,13 +35,16 @@ class LifecycleEventsTest {
         try (Container container = Tiko.create()) {
             recorder = container.get(LifecycleRecorder.class);
             // Sleep briefly so uptime is measurable
-            try { Thread.sleep(5); } catch (InterruptedException ignored) {}
+            try {
+                Thread.sleep(5);
+            } catch (InterruptedException ignored) {
+            }
         }
         ApplicationEndingEvent ending = recorder.getEvents().stream()
-            .filter(ApplicationEndingEvent.class::isInstance)
-            .map(ApplicationEndingEvent.class::cast)
-            .findFirst()
-            .orElseThrow();
+                .filter(ApplicationEndingEvent.class::isInstance)
+                .map(ApplicationEndingEvent.class::cast)
+                .findFirst()
+                .orElseThrow();
         assertThat(ending.timestamp()).isNotNull();
         assertThat(ending.uptime()).isGreaterThanOrEqualTo(Duration.ZERO);
     }
@@ -55,18 +56,24 @@ class LifecycleEventsTest {
             int before = recorder.getEvents().size();
 
             container.runInRequestScope(() -> {
-                try { Thread.sleep(2); } catch (InterruptedException ignored) {}
+                try {
+                    Thread.sleep(2);
+                } catch (InterruptedException ignored) {
+                }
             });
 
-            List<Object> after = recorder.getEvents().subList(before, recorder.getEvents().size());
+            List<Object> after =
+                    recorder.getEvents().subList(before, recorder.getEvents().size());
             RequestStartedEvent started = after.stream()
-                .filter(RequestStartedEvent.class::isInstance)
-                .map(RequestStartedEvent.class::cast)
-                .findFirst().orElseThrow();
+                    .filter(RequestStartedEvent.class::isInstance)
+                    .map(RequestStartedEvent.class::cast)
+                    .findFirst()
+                    .orElseThrow();
             RequestEndingEvent ending = after.stream()
-                .filter(RequestEndingEvent.class::isInstance)
-                .map(RequestEndingEvent.class::cast)
-                .findFirst().orElseThrow();
+                    .filter(RequestEndingEvent.class::isInstance)
+                    .map(RequestEndingEvent.class::cast)
+                    .findFirst()
+                    .orElseThrow();
 
             assertThat(started.requestId()).isNotBlank();
             assertThat(ending.requestId()).isEqualTo(started.requestId());
@@ -84,7 +91,8 @@ class LifecycleEventsTest {
             String result = container.supplyInRequestScope(() -> "ok");
             assertThat(result).isEqualTo("ok");
 
-            List<Object> after = recorder.getEvents().subList(before, recorder.getEvents().size());
+            List<Object> after =
+                    recorder.getEvents().subList(before, recorder.getEvents().size());
             assertThat(after).hasAtLeastOneElementOfType(RequestStartedEvent.class);
             assertThat(after).hasAtLeastOneElementOfType(RequestEndingEvent.class);
         }
@@ -97,18 +105,24 @@ class LifecycleEventsTest {
             int before = recorder.getEvents().size();
 
             container.runInEventScope(() -> {
-                try { Thread.sleep(2); } catch (InterruptedException ignored) {}
+                try {
+                    Thread.sleep(2);
+                } catch (InterruptedException ignored) {
+                }
             });
 
-            List<Object> after = recorder.getEvents().subList(before, recorder.getEvents().size());
+            List<Object> after =
+                    recorder.getEvents().subList(before, recorder.getEvents().size());
             EventStartedEvent started = after.stream()
-                .filter(EventStartedEvent.class::isInstance)
-                .map(EventStartedEvent.class::cast)
-                .findFirst().orElseThrow();
+                    .filter(EventStartedEvent.class::isInstance)
+                    .map(EventStartedEvent.class::cast)
+                    .findFirst()
+                    .orElseThrow();
             EventEndingEvent ending = after.stream()
-                .filter(EventEndingEvent.class::isInstance)
-                .map(EventEndingEvent.class::cast)
-                .findFirst().orElseThrow();
+                    .filter(EventEndingEvent.class::isInstance)
+                    .map(EventEndingEvent.class::cast)
+                    .findFirst()
+                    .orElseThrow();
 
             assertThat(started.eventId()).isNotBlank();
             assertThat(ending.eventId()).isEqualTo(started.eventId());
@@ -126,7 +140,8 @@ class LifecycleEventsTest {
             Integer result = container.supplyInEventScope(() -> 42);
             assertThat(result).isEqualTo(42);
 
-            List<Object> after = recorder.getEvents().subList(before, recorder.getEvents().size());
+            List<Object> after =
+                    recorder.getEvents().subList(before, recorder.getEvents().size());
             assertThat(after).hasAtLeastOneElementOfType(EventStartedEvent.class);
             assertThat(after).hasAtLeastOneElementOfType(EventEndingEvent.class);
         }
@@ -138,11 +153,10 @@ class LifecycleEventsTest {
             LifecycleRecorder recorder = container.get(LifecycleRecorder.class);
             int before = recorder.getEvents().size();
 
-            container.runInRequestScope(() ->
-                container.runInEventScope(() -> {})
-            );
+            container.runInRequestScope(() -> container.runInEventScope(() -> {}));
 
-            List<Object> after = recorder.getEvents().subList(before, recorder.getEvents().size());
+            List<Object> after =
+                    recorder.getEvents().subList(before, recorder.getEvents().size());
             // Expected order: RequestStarted, EventStarted, EventEnding, RequestEnding
             assertThat(after).hasSize(4);
             assertThat(after.get(0)).isInstanceOf(RequestStartedEvent.class);

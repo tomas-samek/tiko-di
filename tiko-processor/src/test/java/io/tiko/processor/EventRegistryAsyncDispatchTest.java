@@ -1,46 +1,42 @@
 package io.tiko.processor;
 
+import static com.google.testing.compile.CompilationSubject.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.google.testing.compile.Compilation;
 import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
-import org.junit.jupiter.api.Test;
-
-import javax.tools.JavaFileObject;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-
-import static com.google.testing.compile.CompilationSubject.assertThat;
-import static org.assertj.core.api.Assertions.assertThat;
+import javax.tools.JavaFileObject;
+import org.junit.jupiter.api.Test;
 
 class EventRegistryAsyncDispatchTest {
 
     @Test
     void async_handler_generates_completable_future_dispatch_with_when_complete() throws IOException {
         JavaFileObject component = JavaFileObjects.forSourceLines(
-            "io.example.AsyncHandler",
-            "package io.example;",
-            "import io.tiko.annotations.Component;",
-            "import io.tiko.annotations.EventHandler;",
-            "import io.tiko.Scope;",
-            "@Component(scope = Scope.SINGLETON)",
-            "public class AsyncHandler {",
-            "    @EventHandler(async = true)",
-            "    public void onPing(Ping event) {}",
-            "}"
-        );
-        JavaFileObject event = JavaFileObjects.forSourceLines(
-            "io.example.Ping",
-            "package io.example;",
-            "public record Ping() {}"
-        );
+                "io.example.AsyncHandler",
+                "package io.example;",
+                "import io.tiko.annotations.Component;",
+                "import io.tiko.annotations.EventHandler;",
+                "import io.tiko.Scope;",
+                "@Component(scope = Scope.SINGLETON)",
+                "public class AsyncHandler {",
+                "    @EventHandler(async = true)",
+                "    public void onPing(Ping event) {}",
+                "}");
+        JavaFileObject event =
+                JavaFileObjects.forSourceLines("io.example.Ping", "package io.example;", "public record Ping() {}");
 
-        Compilation c = Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(component, event);
+        Compilation c =
+                Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(component, event);
         com.google.testing.compile.CompilationSubject.assertThat(c).succeeded();
 
         JavaFileObject registry = c.generatedSourceFiles().stream()
-            .filter(f -> f.getName().contains("EventRegistry"))
-            .findFirst()
-            .orElseThrow(() -> new AssertionError("EventRegistry not generated"));
+                .filter(f -> f.getName().contains("EventRegistry"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("EventRegistry not generated"));
 
         String content = new String(registry.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
 
@@ -48,7 +44,7 @@ class EventRegistryAsyncDispatchTest {
         assertThat(content).contains("AsyncHandler.class");
         assertThat(content).contains("\"onPing\"");
         assertThat(content).contains("Ping.class");
-        assertThat(content).contains("true)");  // The async boolean — last arg of EventHandlerInfo
+        assertThat(content).contains("true)"); // The async boolean — last arg of EventHandlerInfo
 
         // Async path uses CompletableFuture.runAsync
         assertThat(content).contains("CompletableFuture");
@@ -70,30 +66,27 @@ class EventRegistryAsyncDispatchTest {
     @Test
     void sync_handler_generates_unchanged_inline_dispatch() throws IOException {
         JavaFileObject component = JavaFileObjects.forSourceLines(
-            "io.example.SyncHandler",
-            "package io.example;",
-            "import io.tiko.annotations.Component;",
-            "import io.tiko.annotations.EventHandler;",
-            "import io.tiko.Scope;",
-            "@Component(scope = Scope.SINGLETON)",
-            "public class SyncHandler {",
-            "    @EventHandler",
-            "    public void onPing(Ping event) {}",
-            "}"
-        );
-        JavaFileObject event = JavaFileObjects.forSourceLines(
-            "io.example.Ping",
-            "package io.example;",
-            "public record Ping() {}"
-        );
+                "io.example.SyncHandler",
+                "package io.example;",
+                "import io.tiko.annotations.Component;",
+                "import io.tiko.annotations.EventHandler;",
+                "import io.tiko.Scope;",
+                "@Component(scope = Scope.SINGLETON)",
+                "public class SyncHandler {",
+                "    @EventHandler",
+                "    public void onPing(Ping event) {}",
+                "}");
+        JavaFileObject event =
+                JavaFileObjects.forSourceLines("io.example.Ping", "package io.example;", "public record Ping() {}");
 
-        Compilation c = Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(component, event);
+        Compilation c =
+                Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(component, event);
         com.google.testing.compile.CompilationSubject.assertThat(c).succeeded();
 
         JavaFileObject registry = c.generatedSourceFiles().stream()
-            .filter(f -> f.getName().contains("EventRegistry"))
-            .findFirst()
-            .orElseThrow(() -> new AssertionError("EventRegistry not generated"));
+                .filter(f -> f.getName().contains("EventRegistry"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("EventRegistry not generated"));
 
         String content = new String(registry.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
 

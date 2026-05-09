@@ -4,13 +4,12 @@ import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.FactoryMethodModel;
 import io.tiko.processor.util.ErrorReporter;
 import io.tiko.processor.util.ProcessorContext;
-
-import javax.lang.model.element.Element;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import javax.lang.model.element.Element;
 
 /**
  * Detects two or more unnamed providers (components or factory methods) that
@@ -34,27 +33,18 @@ public final class AmbiguityValidator {
         for (ComponentModel component : context.getActiveComponents()) {
             if (component.getName().isPresent()) continue;
 
-            ProviderInfo info = new ProviderInfo(
-                    component.getTypeElement(),
-                    component.getClassName(),
-                    "@Component"
-            );
+            ProviderInfo info = new ProviderInfo(component.getTypeElement(), component.getClassName(), "@Component");
 
             register(providersByType, component.getQualifiedName(), info);
-            component.getImplementedInterface().ifPresent(iface ->
-                    register(providersByType, iface.toString(), info)
-            );
+            component.getImplementedInterface().ifPresent(iface -> register(providersByType, iface.toString(), info));
         }
 
         for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
             String name = factory.getName();
             if (name != null && !name.isEmpty()) continue;
 
-            ProviderInfo info = new ProviderInfo(
-                    factory.getMethodElement(),
-                    factory.getFactoryIdentifier(),
-                    "@Produces"
-            );
+            ProviderInfo info =
+                    new ProviderInfo(factory.getMethodElement(), factory.getFactoryIdentifier(), "@Produces");
             register(providersByType, factory.getReturnTypeName(), info);
         }
 
@@ -74,9 +64,8 @@ public final class AmbiguityValidator {
     }
 
     private void reportAmbiguity(String typeKey, List<ProviderInfo> providers) {
-        String providerList = providers.stream()
-                .map(p -> p.label + " (" + p.kind + ")")
-                .collect(Collectors.joining(", "));
+        String providerList =
+                providers.stream().map(p -> p.label + " (" + p.kind + ")").collect(Collectors.joining(", "));
         String simpleName = simpleName(typeKey);
         ErrorReporter errorReporter = context.getErrorReporter();
 

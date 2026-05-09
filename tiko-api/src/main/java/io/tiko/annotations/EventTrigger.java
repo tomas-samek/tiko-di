@@ -1,7 +1,6 @@
 package io.tiko.annotations;
 
 import io.tiko.EventTriggerGuard;
-
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Repeatable;

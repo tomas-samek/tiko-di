@@ -1,16 +1,15 @@
 package io.tiko.runtime;
 
-import io.tiko.EventBus;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
+import io.tiko.EventBus;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 class LocalEventBusErrorIsolationTest {
 
@@ -33,7 +32,9 @@ class LocalEventBusErrorIsolationTest {
         EventBus bus = new LocalEventBus();
         AtomicInteger secondHandlerInvocations = new AtomicInteger();
 
-        bus.subscribe(String.class, e -> { throw new IllegalStateException("first"); });
+        bus.subscribe(String.class, e -> {
+            throw new IllegalStateException("first");
+        });
         bus.subscribe(String.class, e -> secondHandlerInvocations.incrementAndGet());
 
         bus.publish("hello");
@@ -44,7 +45,9 @@ class LocalEventBusErrorIsolationTest {
     @Test
     void throwing_handler_does_not_propagate_to_publisher() {
         EventBus bus = new LocalEventBus();
-        bus.subscribe(String.class, e -> { throw new IllegalStateException("kaboom"); });
+        bus.subscribe(String.class, e -> {
+            throw new IllegalStateException("kaboom");
+        });
 
         assertThatCode(() -> bus.publish("hello")).doesNotThrowAnyException();
     }
@@ -52,7 +55,9 @@ class LocalEventBusErrorIsolationTest {
     @Test
     void throwing_programmatic_subscriber_logs_warn_with_event_type() {
         EventBus bus = new LocalEventBus();
-        bus.subscribe(String.class, e -> { throw new IllegalStateException("logged"); });
+        bus.subscribe(String.class, e -> {
+            throw new IllegalStateException("logged");
+        });
 
         bus.publish("hello");
 

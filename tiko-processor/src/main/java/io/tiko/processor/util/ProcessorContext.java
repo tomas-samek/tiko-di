@@ -1,20 +1,19 @@
 package io.tiko.processor.util;
 
-import io.tiko.processor.model.ComponentModel;
-import io.tiko.processor.model.FactoryMethodModel;
-import io.tiko.processor.model.EventHandlerModel;
 import io.tiko.processor.config.ConfigurationModel;
-
-import javax.annotation.processing.Filer;
-import javax.annotation.processing.Messager;
-import javax.annotation.processing.ProcessingEnvironment;
-import javax.lang.model.util.Elements;
-import javax.lang.model.util.Types;
+import io.tiko.processor.model.ComponentModel;
+import io.tiko.processor.model.EventHandlerModel;
+import io.tiko.processor.model.FactoryMethodModel;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import javax.annotation.processing.Filer;
+import javax.annotation.processing.Messager;
+import javax.annotation.processing.ProcessingEnvironment;
+import javax.lang.model.util.Elements;
+import javax.lang.model.util.Types;
 
 /**
  * Shared context for annotation processing.
@@ -84,10 +83,7 @@ public final class ProcessorContext {
     public void registerComponent(ComponentModel component) {
         String key = component.getComponentKey();
         if (components.containsKey(key)) {
-            errorReporter.error(
-                component.getTypeElement(),
-                "Duplicate component: " + key + " is already registered"
-            );
+            errorReporter.error(component.getTypeElement(), "Duplicate component: " + key + " is already registered");
         }
         components.put(key, component);
     }
@@ -96,15 +92,12 @@ public final class ProcessorContext {
         String key = factory.getComponentKey();
         if (factoryMethods.containsKey(key)) {
             errorReporter.error(
-                factory.getMethodElement(),
-                "Duplicate factory method: " + key + " is already registered"
-            );
+                    factory.getMethodElement(), "Duplicate factory method: " + key + " is already registered");
         }
         if (components.containsKey(key)) {
             errorReporter.error(
-                factory.getMethodElement(),
-                "Factory method produces type " + key + " which is already provided by a @Component"
-            );
+                    factory.getMethodElement(),
+                    "Factory method produces type " + key + " which is already provided by a @Component");
         }
         factoryMethods.put(key, factory);
     }
@@ -167,7 +160,8 @@ public final class ProcessorContext {
                 String interfaceName = component.getImplementedInterface().get().toString();
                 if (interfaceName.equals(typeName)) {
                     // Check qualifier matches if present
-                    if (qualifier.isEmpty() || qualifier.equals(component.getName().orElse(""))) {
+                    if (qualifier.isEmpty()
+                            || qualifier.equals(component.getName().orElse(""))) {
                         return Optional.of(component);
                     }
                 }

@@ -3,7 +3,6 @@ package io.tiko.config;
 import io.tiko.ConfigSource;
 import io.tiko.config.internal.DeepMerge;
 import io.tiko.config.internal.YamlLoader;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;

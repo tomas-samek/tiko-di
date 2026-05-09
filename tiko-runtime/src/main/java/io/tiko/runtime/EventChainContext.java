@@ -5,7 +5,6 @@ import io.tiko.Event;
 import io.tiko.EventBus;
 import io.tiko.EventHandlerError;
 import io.tiko.EventHandlerInfo;
-
 import java.lang.reflect.Array;
 import java.util.Collection;
 import java.util.concurrent.CompletableFuture;
@@ -43,8 +42,7 @@ public final class EventChainContext {
      * @param inner the exception thrown by the user's ErrorHandler implementation
      */
     public static void logErrorHandlerFailure(Throwable inner) {
-        Logger.getLogger("io.tiko.events")
-            .log(Level.SEVERE, "ErrorHandler.onError threw", inner);
+        Logger.getLogger("io.tiko.events").log(Level.SEVERE, "ErrorHandler.onError threw", inner);
     }
 
     /**
@@ -134,15 +132,18 @@ public final class EventChainContext {
      * is logged via {@link #logErrorHandlerFailure(Throwable)} as a last resort.
      */
     public static CompletableFuture<Void> publishAsync(
-            EventBus bus, Object payload, Event<?> origin,
-            ExecutorService executor, ErrorHandler errorHandler, EventHandlerInfo info) {
+            EventBus bus,
+            Object payload,
+            Event<?> origin,
+            ExecutorService executor,
+            ErrorHandler errorHandler,
+            EventHandlerInfo info) {
         if (payload == null) return CompletableFuture.completedFuture(null);
-        return CompletableFuture
-            .runAsync(() -> publishWithOrigin(bus, payload, origin), executor)
-            .handle((__, throwable) -> {
-                reportIfFailed(throwable, payload, errorHandler, info);
-                return null;
-            });
+        return CompletableFuture.runAsync(() -> publishWithOrigin(bus, payload, origin), executor)
+                .handle((__, throwable) -> {
+                    reportIfFailed(throwable, payload, errorHandler, info);
+                    return null;
+                });
     }
 
     /**
@@ -150,22 +151,26 @@ public final class EventChainContext {
      * Collection / array / Iterable is published separately.
      */
     public static CompletableFuture<Void> publishSpreadAsync(
-            EventBus bus, Object payload, Event<?> origin,
-            ExecutorService executor, ErrorHandler errorHandler, EventHandlerInfo info) {
+            EventBus bus,
+            Object payload,
+            Event<?> origin,
+            ExecutorService executor,
+            ErrorHandler errorHandler,
+            EventHandlerInfo info) {
         if (payload == null) return CompletableFuture.completedFuture(null);
-        return CompletableFuture
-            .runAsync(() -> publishSpreadWithOrigin(bus, payload, origin), executor)
-            .handle((__, throwable) -> {
-                reportIfFailed(throwable, payload, errorHandler, info);
-                return null;
-            });
+        return CompletableFuture.runAsync(() -> publishSpreadWithOrigin(bus, payload, origin), executor)
+                .handle((__, throwable) -> {
+                    reportIfFailed(throwable, payload, errorHandler, info);
+                    return null;
+                });
     }
 
-    private static void reportIfFailed(Throwable throwable, Object payload,
-                                        ErrorHandler errorHandler, EventHandlerInfo info) {
+    private static void reportIfFailed(
+            Throwable throwable, Object payload, ErrorHandler errorHandler, EventHandlerInfo info) {
         if (throwable == null) return;
         Throwable cause = (throwable instanceof CompletionException && throwable.getCause() != null)
-            ? throwable.getCause() : throwable;
+                ? throwable.getCause()
+                : throwable;
         try {
             errorHandler.onError(new EventHandlerError(info, payload, cause));
         } catch (Exception inner) {

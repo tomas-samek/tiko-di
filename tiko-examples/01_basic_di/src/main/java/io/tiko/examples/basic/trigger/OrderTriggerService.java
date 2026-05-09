@@ -5,7 +5,6 @@ import io.tiko.Scope;
 import io.tiko.annotations.Component;
 import io.tiko.annotations.EventHandler;
 import io.tiko.annotations.EventTrigger;
-
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;

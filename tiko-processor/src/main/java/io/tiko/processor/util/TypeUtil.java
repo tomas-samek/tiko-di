@@ -1,5 +1,7 @@
 package io.tiko.processor.util;
 
+import java.util.List;
+import java.util.Optional;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.DeclaredType;
@@ -7,8 +9,6 @@ import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
-import java.util.List;
-import java.util.Optional;
 
 /**
  * Utility methods for working with types during annotation processing.
@@ -41,18 +41,14 @@ public final class TypeUtil {
      * Returns the qualified name of the given type.
      */
     public String getQualifiedName(TypeMirror type) {
-        return asTypeElement(type)
-                .map(te -> te.getQualifiedName().toString())
-                .orElse(type.toString());
+        return asTypeElement(type).map(te -> te.getQualifiedName().toString()).orElse(type.toString());
     }
 
     /**
      * Returns the simple name of the given type.
      */
     public String getSimpleName(TypeMirror type) {
-        return asTypeElement(type)
-                .map(te -> te.getSimpleName().toString())
-                .orElse(type.toString());
+        return asTypeElement(type).map(te -> te.getSimpleName().toString()).orElse(type.toString());
     }
 
     /**
@@ -119,8 +115,7 @@ public final class TypeUtil {
     }
 
     private static boolean isLifecycleInterface(String qualifiedName) {
-        return "java.lang.AutoCloseable".equals(qualifiedName)
-            || "java.io.Closeable".equals(qualifiedName);
+        return "java.lang.AutoCloseable".equals(qualifiedName) || "java.io.Closeable".equals(qualifiedName);
     }
 
     /**
@@ -180,8 +175,8 @@ public final class TypeUtil {
      * Checks if the given type is a concrete class (not abstract, not interface).
      */
     public boolean isConcreteClass(TypeElement typeElement) {
-        return typeElement.getKind().isClass() &&
-               !typeElement.getModifiers().contains(javax.lang.model.element.Modifier.ABSTRACT);
+        return typeElement.getKind().isClass()
+                && !typeElement.getModifiers().contains(javax.lang.model.element.Modifier.ABSTRACT);
     }
 
     /**

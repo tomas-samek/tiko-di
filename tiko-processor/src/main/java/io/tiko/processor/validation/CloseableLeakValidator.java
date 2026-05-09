@@ -3,7 +3,8 @@ package io.tiko.processor.validation;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.util.ProcessorContext;
-
+import java.util.HashSet;
+import java.util.Set;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.Modifier;
@@ -11,8 +12,6 @@ import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.TypeMirror;
 import javax.tools.Diagnostic;
-import java.util.HashSet;
-import java.util.Set;
 
 /**
  * Compile-time leak check: warns when a {@code @Component} holds an instance field
@@ -70,16 +69,14 @@ public final class CloseableLeakValidator {
             if (!implementsAutoCloseable(fieldType)) continue;
 
             // Probably injected, not owned: skip.
-            String fieldTypeName = context.getElementUtils()
-                    .getTypeElement(erasureName(fieldType)) != null
-                ? erasureName(fieldType) : fieldType.toString();
+            String fieldTypeName = context.getElementUtils().getTypeElement(erasureName(fieldType)) != null
+                    ? erasureName(fieldType)
+                    : fieldType.toString();
             if (dependencyTypeNames.contains(fieldTypeName)) continue;
 
-            context.getProcessingEnv().getMessager().printMessage(
-                Diagnostic.Kind.WARNING,
-                buildMessage(component, field),
-                field
-            );
+            context.getProcessingEnv()
+                    .getMessager()
+                    .printMessage(Diagnostic.Kind.WARNING, buildMessage(component, field), field);
         }
     }
 
@@ -118,15 +115,15 @@ public final class CloseableLeakValidator {
 
     private String buildMessage(ComponentModel component, VariableElement field) {
         return "Tiko DI: @Component '" + component.getClassName()
-            + "' holds AutoCloseable field '" + field.getSimpleName()
-            + "' (type: " + field.asType()
-            + ") but declares no @PreDestroy and does not implement AutoCloseable. "
-            + "The held resource will leak when the bean is destroyed.\n\n"
-            + "Suggested fixes:\n"
-            + "1. Add a @PreDestroy method on " + component.getClassName()
-            + " that closes " + field.getSimpleName()
-            + "\n2. Make " + component.getClassName()
-            + " implement AutoCloseable (the container will call close() automatically)"
-            + "\n3. Suppress with @SuppressWarnings(\"resource\") if the resource is owned elsewhere";
+                + "' holds AutoCloseable field '" + field.getSimpleName()
+                + "' (type: " + field.asType()
+                + ") but declares no @PreDestroy and does not implement AutoCloseable. "
+                + "The held resource will leak when the bean is destroyed.\n\n"
+                + "Suggested fixes:\n"
+                + "1. Add a @PreDestroy method on " + component.getClassName()
+                + " that closes " + field.getSimpleName()
+                + "\n2. Make " + component.getClassName()
+                + " implement AutoCloseable (the container will call close() automatically)"
+                + "\n3. Suppress with @SuppressWarnings(\"resource\") if the resource is owned elsewhere";
     }
 }

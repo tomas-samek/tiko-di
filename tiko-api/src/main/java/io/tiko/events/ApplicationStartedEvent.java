@@ -21,5 +21,4 @@ import java.time.Instant;
  *
  * @param timestamp the instant when the application started
  */
-public record ApplicationStartedEvent(Instant timestamp) {
-}
+public record ApplicationStartedEvent(Instant timestamp) {}

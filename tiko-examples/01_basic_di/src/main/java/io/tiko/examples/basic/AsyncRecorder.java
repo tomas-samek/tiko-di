@@ -3,7 +3,6 @@ package io.tiko.examples.basic;
 import io.tiko.Scope;
 import io.tiko.annotations.Component;
 import io.tiko.annotations.EventHandler;
-
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 

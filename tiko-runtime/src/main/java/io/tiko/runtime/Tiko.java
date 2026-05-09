@@ -4,7 +4,6 @@ import io.tiko.ConfigSource;
 import io.tiko.Container;
 import io.tiko.ErrorHandler;
 import io.tiko.EventBus;
-
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -49,8 +48,8 @@ public final class Tiko {
      */
     public static Container create(ConfigSource source) {
         return create(TikoOptions.builder()
-            .configSource(Objects.requireNonNull(source, "source"))
-            .build());
+                .configSource(Objects.requireNonNull(source, "source"))
+                .build());
     }
 
     /**
@@ -84,7 +83,10 @@ public final class Tiko {
 
             var resources = classLoader.getResources("META-INF/tiko/container.properties");
             int moduleCount = 0;
-            while (resources.hasMoreElements()) { resources.nextElement(); moduleCount++; }
+            while (resources.hasMoreElements()) {
+                resources.nextElement();
+                moduleCount++;
+            }
 
             Container container;
             if (moduleCount > 1) {
@@ -114,7 +116,8 @@ public final class Tiko {
             throw e;
         } catch (ClassNotFoundException e) {
             throw new IllegalStateException(
-                "Tiko container implementation not found. Did you include tiko-processor in your annotation processor path?", e);
+                    "Tiko container implementation not found. Did you include tiko-processor in your annotation processor path?",
+                    e);
         } catch (Exception e) {
             throw new IllegalStateException("Failed to create container instance", e);
         }
@@ -136,17 +139,18 @@ public final class Tiko {
         var resources = cl.getResources("META-INF/tiko/configs.txt");
         while (resources.hasMoreElements()) {
             var url = resources.nextElement();
-            try (BufferedReader br = new BufferedReader(new InputStreamReader(
-                    url.openStream(), StandardCharsets.UTF_8))) {
+            try (BufferedReader br =
+                    new BufferedReader(new InputStreamReader(url.openStream(), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = br.readLine()) != null) {
                     line = line.trim();
                     if (line.startsWith("# registry=")) {
-                        String registryFqn = line.substring("# registry=".length()).trim();
+                        String registryFqn =
+                                line.substring("# registry=".length()).trim();
                         Class<?> registryClass = Class.forName(registryFqn, true, cl);
                         @SuppressWarnings("unchecked")
                         List<Object> moduleBinders =
-                            (List<Object>) registryClass.getMethod("all").invoke(null);
+                                (List<Object>) registryClass.getMethod("all").invoke(null);
                         binders.addAll(moduleBinders);
                         break;
                     }
@@ -159,23 +163,22 @@ public final class Tiko {
 
         // Build the effective ConfigSource: defaults first, user override on top.
         Class<?> sourcesClass = Class.forName("io.tiko.config.ConfigSources", true, cl);
-        ConfigSource defaults = (ConfigSource) sourcesClass
-            .getMethod("classpathAll", String.class)
-            .invoke(null, "META-INF/tiko/defaults.yaml");
+        ConfigSource defaults = (ConfigSource)
+                sourcesClass.getMethod("classpathAll", String.class).invoke(null, "META-INF/tiko/defaults.yaml");
         ConfigSource effective;
         if (userSource == null) {
             effective = defaults;
         } else {
-            effective = (ConfigSource) sourcesClass
-                .getMethod("layered", ConfigSource[].class)
-                .invoke(null, (Object) new ConfigSource[]{ defaults, userSource });
+            effective = (ConfigSource)
+                    sourcesClass.getMethod("layered", ConfigSource[].class).invoke(null, (Object)
+                            new ConfigSource[] {defaults, userSource});
         }
 
         // Delegate to ConfigBootstrap via reflection (avoids circular compile dep).
         Class<?> bootstrapClass = Class.forName("io.tiko.config.runtime.ConfigBootstrap", true, cl);
         @SuppressWarnings("unchecked")
-        Map<Class<?>, Object> result = (Map<Class<?>, Object>)
-            bootstrapClass.getMethod("bind", String.class, ConfigSource.class, List.class)
+        Map<Class<?>, Object> result = (Map<Class<?>, Object>) bootstrapClass
+                .getMethod("bind", String.class, ConfigSource.class, List.class)
                 .invoke(null, "config", effective, binders);
         return result;
     }
@@ -185,8 +188,7 @@ public final class Tiko {
      * after injectConfigs() runs.
      */
     private static Container createSingleModuleContainer(
-            EventBus eventBus, ErrorHandler errorHandler,
-            ExecutorService userEventExecutor) throws Exception {
+            EventBus eventBus, ErrorHandler errorHandler, ExecutorService userEventExecutor) throws Exception {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
         if (classLoader == null) classLoader = Tiko.class.getClassLoader();
 
@@ -206,9 +208,8 @@ public final class Tiko {
         // Single-module: publishLifecycleEvents=true so the per-module container publishes
         // its own ApplicationStartedEvent / ApplicationEndingEvent (no aggregator above it).
         Container container = (Container) implClass
-            .getDeclaredConstructor(EventBus.class, ErrorHandler.class,
-                ExecutorService.class, boolean.class)
-            .newInstance(eventBus, errorHandler, userEventExecutor, /* publishLifecycleEvents */ true);
+                .getDeclaredConstructor(EventBus.class, ErrorHandler.class, ExecutorService.class, boolean.class)
+                .newInstance(eventBus, errorHandler, userEventExecutor, /* publishLifecycleEvents */ true);
 
         registerEventHandlers(eventBus, container, implClass);
 

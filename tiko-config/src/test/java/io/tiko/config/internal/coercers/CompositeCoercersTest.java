@@ -1,14 +1,13 @@
 // tiko-config/src/test/java/io/tiko/config/internal/coercers/CompositeCoercersTest.java
 package io.tiko.config.internal.coercers;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
 
 class CompositeCoercersTest {
 

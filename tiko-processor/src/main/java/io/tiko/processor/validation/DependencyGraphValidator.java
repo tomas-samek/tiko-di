@@ -57,11 +57,8 @@ public final class DependencyGraphValidator {
 
             // Check if dependency exists
             if (!context.findComponentOrFactory(depKey).isPresent()) {
-                context.getErrorReporter().missingDependency(
-                    component.getTypeElement(),
-                    depKey,
-                    component.getClassName()
-                );
+                context.getErrorReporter()
+                        .missingDependency(component.getTypeElement(), depKey, component.getClassName());
                 valid = false;
             }
         }
@@ -77,17 +74,20 @@ public final class DependencyGraphValidator {
 
         // For instance methods, validate that the declaring class is available as a component
         if (!factory.isStatic()) {
-            String declaringClassKey = factory.getDeclaringClass().getQualifiedName().toString();
+            String declaringClassKey =
+                    factory.getDeclaringClass().getQualifiedName().toString();
 
             if (!context.getComponents().containsKey(declaringClassKey)) {
-                context.getErrorReporter().error(
-                    factory.getMethodElement(),
-                    "Factory method " + factory.getMethodName() + " is an instance method, " +
-                    "but declaring class " + factory.getDeclaringClass().getSimpleName() +
-                    " is not registered as a @Component",
-                    "Add @Component annotation to " + factory.getDeclaringClass().getSimpleName(),
-                    "Make the factory method static if it doesn't need component dependencies"
-                );
+                context.getErrorReporter()
+                        .error(
+                                factory.getMethodElement(),
+                                "Factory method " + factory.getMethodName() + " is an instance method, "
+                                        + "but declaring class "
+                                        + factory.getDeclaringClass().getSimpleName()
+                                        + " is not registered as a @Component",
+                                "Add @Component annotation to "
+                                        + factory.getDeclaringClass().getSimpleName(),
+                                "Make the factory method static if it doesn't need component dependencies");
                 valid = false;
             }
         }
@@ -97,11 +97,8 @@ public final class DependencyGraphValidator {
             String depKey = dependency.getDependencyKey();
 
             if (!context.findComponentOrFactory(depKey).isPresent()) {
-                context.getErrorReporter().missingDependency(
-                    factory.getMethodElement(),
-                    depKey,
-                    factory.getFactoryIdentifier()
-                );
+                context.getErrorReporter()
+                        .missingDependency(factory.getMethodElement(), depKey, factory.getFactoryIdentifier());
                 valid = false;
             }
         }

@@ -15,7 +15,8 @@ public final class CompositeCoercers {
     public static <X> TypeCoercer<List<X>> list(TypeCoercer<X> elementCoercer) {
         return v -> {
             if (!(v instanceof List<?> raw)) {
-                throw new CoercionException("expected list, got " + (v == null ? "null" : v.getClass().getSimpleName()));
+                throw new CoercionException("expected list, got "
+                        + (v == null ? "null" : v.getClass().getSimpleName()));
             }
             List<X> out = new ArrayList<>(raw.size());
             for (Object e : raw) out.add(elementCoercer.coerce(e));
@@ -26,7 +27,8 @@ public final class CompositeCoercers {
     public static <X> TypeCoercer<Map<String, X>> map(TypeCoercer<X> valueCoercer) {
         return v -> {
             if (!(v instanceof Map<?, ?> raw)) {
-                throw new CoercionException("expected map, got " + (v == null ? "null" : v.getClass().getSimpleName()));
+                throw new CoercionException("expected map, got "
+                        + (v == null ? "null" : v.getClass().getSimpleName()));
             }
             Map<String, X> out = new LinkedHashMap<>(raw.size());
             for (Map.Entry<?, ?> entry : raw.entrySet()) {

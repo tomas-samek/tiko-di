@@ -1,17 +1,16 @@
 // tiko-config/src/test/java/io/tiko/config/BindContextTest.java
 package io.tiko.config;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import io.tiko.config.internal.ConfigError;
 import io.tiko.config.internal.coercers.Coercers;
 import io.tiko.config.internal.coercers.TypeCoercer;
-import org.junit.jupiter.api.Test;
-
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class BindContextTest {
 
@@ -50,9 +49,12 @@ class BindContextTest {
         Map<String, Object> node = new LinkedHashMap<>(Map.of("port", "ten"));
         int v = ctx.requireScalar(node, "port", "db.port", Coercers.intCoercer(), 0);
         assertThat(v).isZero();
-        assertThat(ctx.errors()).singleElement()
-            .extracting(ConfigError::message)
-            .asString().startsWith("db.port ").contains("expected integer");
+        assertThat(ctx.errors())
+                .singleElement()
+                .extracting(ConfigError::message)
+                .asString()
+                .startsWith("db.port ")
+                .contains("expected integer");
     }
 
     @Test

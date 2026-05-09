@@ -1,14 +1,13 @@
 package io.tiko.examples.basic.teardown;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import io.tiko.Container;
-import io.tiko.runtime.Tiko;
 import io.tiko.events.RequestEndingEvent;
+import io.tiko.runtime.Tiko;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 class RequestScopePreDestroyTest {
 
@@ -29,8 +28,8 @@ class RequestScopePreDestroyTest {
         }
 
         assertThat(TeardownRecorder.order)
-            .as("REQUEST-scoped beans must run their @PreDestroy at scope exit")
-            .contains("RequestA", "RequestB", "RequestC");
+                .as("REQUEST-scoped beans must run their @PreDestroy at scope exit")
+                .contains("RequestA", "RequestB", "RequestC");
     }
 
     @Test
@@ -47,8 +46,8 @@ class RequestScopePreDestroyTest {
 
         // LIFO: last-created destroyed first. A → B → C.
         java.util.List<String> requestEntries = TeardownRecorder.order.stream()
-            .filter(s -> s.startsWith("Request"))
-            .toList();
+                .filter(s -> s.startsWith("Request"))
+                .toList();
         assertThat(requestEntries).containsExactly("RequestA", "RequestB", "RequestC");
     }
 
@@ -56,9 +55,9 @@ class RequestScopePreDestroyTest {
     void ending_event_published_before_predestroy() {
         Container container = Tiko.create();
         AtomicInteger endingEventIndex = new AtomicInteger(-1);
-        container.getEventBus().subscribe(RequestEndingEvent.class, e ->
-            endingEventIndex.set(TeardownRecorder.order.size())
-        );
+        container
+                .getEventBus()
+                .subscribe(RequestEndingEvent.class, e -> endingEventIndex.set(TeardownRecorder.order.size()));
 
         try {
             container.runInRequestScope(() -> {
@@ -86,8 +85,8 @@ class RequestScopePreDestroyTest {
         }
 
         assertThat(TeardownRecorder.order)
-            .as("Throwing @PreDestroy must not skip the other beans")
-            .contains("RequestA", "RequestB", "RequestC", "Throwing.boom");
+                .as("Throwing @PreDestroy must not skip the other beans")
+                .contains("RequestA", "RequestB", "RequestC", "Throwing.boom");
     }
 
     @Test

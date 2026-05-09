@@ -8,14 +8,13 @@ import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
 import io.tiko.processor.util.ProcessorContext;
-
-import javax.lang.model.element.Modifier;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import javax.lang.model.element.Modifier;
 
 /**
  * Generates the TikoContainerImpl class - the main DI container implementation.
@@ -104,8 +103,7 @@ public final class ContainerGenerator {
 
         TypeSpec containerClass = containerBuilder.build();
 
-        JavaFile javaFile = JavaFile.builder(GENERATED_PACKAGE, containerClass)
-                .build();
+        JavaFile javaFile = JavaFile.builder(GENERATED_PACKAGE, containerClass).build();
 
         javaFile.writeTo(context.getFiler());
 
@@ -119,10 +117,7 @@ public final class ContainerGenerator {
      */
     private FieldSpec createSingletonStorageField() {
         ParameterizedTypeName mapType = ParameterizedTypeName.get(
-                ClassName.get(Map.class),
-                ClassName.get(String.class),
-                ClassName.get(Object.class)
-        );
+                ClassName.get(Map.class), ClassName.get(String.class), ClassName.get(Object.class));
 
         return FieldSpec.builder(mapType, "singletons", Modifier.PRIVATE, Modifier.FINAL)
                 .initializer("new $T<>()", ConcurrentHashMap.class)
@@ -138,15 +133,9 @@ public final class ContainerGenerator {
      */
     private FieldSpec createRequestScopeField() {
         ParameterizedTypeName mapType = ParameterizedTypeName.get(
-                ClassName.get(Map.class),
-                ClassName.get(String.class),
-                ClassName.get(Object.class)
-        );
+                ClassName.get(Map.class), ClassName.get(String.class), ClassName.get(Object.class));
 
-        ParameterizedTypeName threadLocalType = ParameterizedTypeName.get(
-                ClassName.get(ThreadLocal.class),
-                mapType
-        );
+        ParameterizedTypeName threadLocalType = ParameterizedTypeName.get(ClassName.get(ThreadLocal.class), mapType);
 
         return FieldSpec.builder(threadLocalType, "requestScoped", Modifier.PRIVATE, Modifier.FINAL)
                 .initializer("$T.withInitial($T::new)", ThreadLocal.class, LinkedHashMap.class)
@@ -159,15 +148,9 @@ public final class ContainerGenerator {
      */
     private FieldSpec createEventScopeField() {
         ParameterizedTypeName mapType = ParameterizedTypeName.get(
-                ClassName.get(Map.class),
-                ClassName.get(String.class),
-                ClassName.get(Object.class)
-        );
+                ClassName.get(Map.class), ClassName.get(String.class), ClassName.get(Object.class));
 
-        ParameterizedTypeName threadLocalType = ParameterizedTypeName.get(
-                ClassName.get(ThreadLocal.class),
-                mapType
-        );
+        ParameterizedTypeName threadLocalType = ParameterizedTypeName.get(ClassName.get(ThreadLocal.class), mapType);
 
         return FieldSpec.builder(threadLocalType, "eventScoped", Modifier.PRIVATE, Modifier.FINAL)
                 .initializer("$T.withInitial($T::new)", ThreadLocal.class, LinkedHashMap.class)
@@ -186,7 +169,8 @@ public final class ContainerGenerator {
      * Creates the ErrorHandler field.
      */
     private FieldSpec createErrorHandlerField() {
-        return FieldSpec.builder(ClassName.get("io.tiko", "ErrorHandler"), "errorHandler", Modifier.PRIVATE, Modifier.FINAL)
+        return FieldSpec.builder(
+                        ClassName.get("io.tiko", "ErrorHandler"), "errorHandler", Modifier.PRIVATE, Modifier.FINAL)
                 .build();
     }
 
@@ -195,10 +179,11 @@ public final class ContainerGenerator {
      */
     private FieldSpec createEventExecutorField() {
         return FieldSpec.builder(
-                ClassName.get("java.util.concurrent", "ExecutorService"),
-                "eventExecutor",
-                Modifier.PRIVATE, Modifier.FINAL)
-            .build();
+                        ClassName.get("java.util.concurrent", "ExecutorService"),
+                        "eventExecutor",
+                        Modifier.PRIVATE,
+                        Modifier.FINAL)
+                .build();
     }
 
     /**
@@ -206,7 +191,7 @@ public final class ContainerGenerator {
      */
     private FieldSpec createOwnsEventExecutorField() {
         return FieldSpec.builder(TypeName.BOOLEAN, "ownsEventExecutor", Modifier.PRIVATE, Modifier.FINAL)
-            .build();
+                .build();
     }
 
     /**
@@ -222,13 +207,12 @@ public final class ContainerGenerator {
      */
     private FieldSpec createConfigSingletonsField() {
         ParameterizedTypeName mapType = ParameterizedTypeName.get(
-            ClassName.get(Map.class),
-            ParameterizedTypeName.get(ClassName.get(Class.class), WildcardTypeName.subtypeOf(Object.class)),
-            ClassName.get(Object.class)
-        );
+                ClassName.get(Map.class),
+                ParameterizedTypeName.get(ClassName.get(Class.class), WildcardTypeName.subtypeOf(Object.class)),
+                ClassName.get(Object.class));
         return FieldSpec.builder(mapType, "configSingletons", Modifier.PRIVATE, Modifier.FINAL)
-            .initializer("new $T<>()", ConcurrentHashMap.class)
-            .build();
+                .initializer("new $T<>()", ConcurrentHashMap.class)
+                .build();
     }
 
     /**
@@ -236,11 +220,12 @@ public final class ContainerGenerator {
      */
     private FieldSpec createShutdownInvokedField() {
         return FieldSpec.builder(
-                ClassName.get("java.util.concurrent.atomic", "AtomicBoolean"),
-                "shutdownInvoked",
-                Modifier.PRIVATE, Modifier.FINAL)
-            .initializer("new $T(false)", ClassName.get("java.util.concurrent.atomic", "AtomicBoolean"))
-            .build();
+                        ClassName.get("java.util.concurrent.atomic", "AtomicBoolean"),
+                        "shutdownInvoked",
+                        Modifier.PRIVATE,
+                        Modifier.FINAL)
+                .initializer("new $T(false)", ClassName.get("java.util.concurrent.atomic", "AtomicBoolean"))
+                .build();
     }
 
     /**
@@ -248,11 +233,12 @@ public final class ContainerGenerator {
      */
     private FieldSpec createStoppedField() {
         return FieldSpec.builder(
-                ClassName.get("java.util.concurrent.atomic", "AtomicBoolean"),
-                "stopped",
-                Modifier.PRIVATE, Modifier.FINAL)
-            .initializer("new $T(false)", ClassName.get("java.util.concurrent.atomic", "AtomicBoolean"))
-            .build();
+                        ClassName.get("java.util.concurrent.atomic", "AtomicBoolean"),
+                        "stopped",
+                        Modifier.PRIVATE,
+                        Modifier.FINAL)
+                .initializer("new $T(false)", ClassName.get("java.util.concurrent.atomic", "AtomicBoolean"))
+                .build();
     }
 
     /**
@@ -260,11 +246,12 @@ public final class ContainerGenerator {
      */
     private FieldSpec createInFlightGetsField() {
         return FieldSpec.builder(
-                ClassName.get("java.util.concurrent.atomic", "AtomicInteger"),
-                "inFlightGets",
-                Modifier.PRIVATE, Modifier.FINAL)
-            .initializer("new $T(0)", ClassName.get("java.util.concurrent.atomic", "AtomicInteger"))
-            .build();
+                        ClassName.get("java.util.concurrent.atomic", "AtomicInteger"),
+                        "inFlightGets",
+                        Modifier.PRIVATE,
+                        Modifier.FINAL)
+                .initializer("new $T(0)", ClassName.get("java.util.concurrent.atomic", "AtomicInteger"))
+                .build();
     }
 
     /**
@@ -272,13 +259,11 @@ public final class ContainerGenerator {
      * can call container.get(...) during shutdown without tripping the stopped gate (#47).
      */
     private FieldSpec createInShutdownThreadField() {
-        ParameterizedTypeName tlType = ParameterizedTypeName.get(
-            ClassName.get(ThreadLocal.class),
-            ClassName.get(Boolean.class)
-        );
+        ParameterizedTypeName tlType =
+                ParameterizedTypeName.get(ClassName.get(ThreadLocal.class), ClassName.get(Boolean.class));
         return FieldSpec.builder(tlType, "inShutdownThread", Modifier.PRIVATE, Modifier.FINAL)
-            .initializer("$T.withInitial(() -> $T.FALSE)", ThreadLocal.class, Boolean.class)
-            .build();
+                .initializer("$T.withInitial(() -> $T.FALSE)", ThreadLocal.class, Boolean.class)
+                .build();
     }
 
     /**
@@ -286,11 +271,12 @@ public final class ContainerGenerator {
      */
     private FieldSpec createStartInvokedField() {
         return FieldSpec.builder(
-                ClassName.get("java.util.concurrent.atomic", "AtomicBoolean"),
-                "startInvoked",
-                Modifier.PRIVATE, Modifier.FINAL)
-            .initializer("new $T(false)", ClassName.get("java.util.concurrent.atomic", "AtomicBoolean"))
-            .build();
+                        ClassName.get("java.util.concurrent.atomic", "AtomicBoolean"),
+                        "startInvoked",
+                        Modifier.PRIVATE,
+                        Modifier.FINAL)
+                .initializer("new $T(false)", ClassName.get("java.util.concurrent.atomic", "AtomicBoolean"))
+                .build();
     }
 
     /**
@@ -300,9 +286,8 @@ public final class ContainerGenerator {
      * the aggregator can publish exactly once on the shared bus (#45).
      */
     private FieldSpec createPublishLifecycleEventsField() {
-        return FieldSpec.builder(TypeName.BOOLEAN, "publishLifecycleEvents",
-                Modifier.PRIVATE, Modifier.FINAL)
-            .build();
+        return FieldSpec.builder(TypeName.BOOLEAN, "publishLifecycleEvents", Modifier.PRIVATE, Modifier.FINAL)
+                .build();
     }
 
     /**
@@ -310,15 +295,14 @@ public final class ContainerGenerator {
      */
     private MethodSpec createInjectConfigsMethod() {
         ParameterizedTypeName mapType = ParameterizedTypeName.get(
-            ClassName.get(Map.class),
-            ParameterizedTypeName.get(ClassName.get(Class.class), WildcardTypeName.subtypeOf(Object.class)),
-            ClassName.get(Object.class)
-        );
+                ClassName.get(Map.class),
+                ParameterizedTypeName.get(ClassName.get(Class.class), WildcardTypeName.subtypeOf(Object.class)),
+                ClassName.get(Object.class));
         return MethodSpec.methodBuilder("injectConfigs")
-            .addModifiers(Modifier.PUBLIC)
-            .addParameter(mapType, "configs")
-            .addStatement("this.configSingletons.putAll(configs)")
-            .build();
+                .addModifiers(Modifier.PUBLIC)
+                .addParameter(mapType, "configs")
+                .addStatement("this.configSingletons.putAll(configs)")
+                .build();
     }
 
     /**
@@ -332,10 +316,11 @@ public final class ContainerGenerator {
             String fieldName = getFactoryFieldName(component.getClassName());
 
             fields.add(FieldSpec.builder(
-                    ClassName.get(GENERATED_PACKAGE, factoryClassName),
-                    fieldName,
-                    Modifier.PRIVATE, Modifier.FINAL
-            ).build());
+                            ClassName.get(GENERATED_PACKAGE, factoryClassName),
+                            fieldName,
+                            Modifier.PRIVATE,
+                            Modifier.FINAL)
+                    .build());
 
             // Add proxy field for components that need proxies
             if (component.requiresProxy()) {
@@ -343,10 +328,11 @@ public final class ContainerGenerator {
                 String proxyClassName = component.getClassName() + "Proxy";
 
                 fields.add(FieldSpec.builder(
-                        ClassName.get(GENERATED_PACKAGE, proxyClassName),
-                        proxyFieldName,
-                        Modifier.PRIVATE, Modifier.FINAL
-                ).build());
+                                ClassName.get(GENERATED_PACKAGE, proxyClassName),
+                                proxyFieldName,
+                                Modifier.PRIVATE,
+                                Modifier.FINAL)
+                        .build());
             }
         }
 
@@ -370,9 +356,8 @@ public final class ContainerGenerator {
                 .addParameter(TypeName.BOOLEAN, "publishLifecycleEvents")
                 .addStatement("this.eventBus = eventBus")
                 .addStatement("this.errorHandler = errorHandler")
-                .addStatement(
-                    "this.eventExecutor = userEventExecutor != null ? userEventExecutor : "
-                    + "io.tiko.runtime.DefaultEventExecutorFactory.create()")
+                .addStatement("this.eventExecutor = userEventExecutor != null ? userEventExecutor : "
+                        + "io.tiko.runtime.DefaultEventExecutorFactory.create()")
                 .addStatement("this.ownsEventExecutor = (userEventExecutor == null)")
                 .addStatement("this.publishLifecycleEvents = publishLifecycleEvents");
 
@@ -381,11 +366,7 @@ public final class ContainerGenerator {
             String factoryClassName = component.getClassName() + "Factory";
             String fieldName = getFactoryFieldName(component.getClassName());
 
-            constructor.addStatement(
-                    "this.$L = new $L(this)",
-                    fieldName,
-                    factoryClassName
-            );
+            constructor.addStatement("this.$L = new $L(this)", fieldName, factoryClassName);
         }
 
         // Initialize proxy fields
@@ -394,11 +375,7 @@ public final class ContainerGenerator {
                 String proxyFieldName = getProxyFieldName(component.getClassName());
                 String proxyClassName = component.getClassName() + "Proxy";
 
-                constructor.addStatement(
-                        "this.$L = new $L(this)",
-                        proxyFieldName,
-                        proxyClassName
-                );
+                constructor.addStatement("this.$L = new $L(this)", proxyFieldName, proxyClassName);
             }
         }
 
@@ -444,12 +421,9 @@ public final class ContainerGenerator {
 
         switch (factory.getScope()) {
             case SINGLETON -> method.addStatement(
-                    "return ($T) singletons.computeIfAbsent($S, k -> $L)",
-                    returnType, storageKey, callExpr);
-            case REQUEST -> emitScopedGetOrCreate(method, returnType,
-                    "requestScoped.get()", storageKey, callExpr);
-            case EVENT -> emitScopedGetOrCreate(method, returnType,
-                    "eventScoped.get()", storageKey, callExpr);
+                    "return ($T) singletons.computeIfAbsent($S, k -> $L)", returnType, storageKey, callExpr);
+            case REQUEST -> emitScopedGetOrCreate(method, returnType, "requestScoped.get()", storageKey, callExpr);
+            case EVENT -> emitScopedGetOrCreate(method, returnType, "eventScoped.get()", storageKey, callExpr);
             case PROTOTYPE -> method.addStatement("return $L", callExpr);
         }
 
@@ -481,18 +455,19 @@ public final class ContainerGenerator {
      * calls (no "container." prefix) since we are inside the container itself.
      */
     private String generateContainerGetCall(DependencyModel dependency) {
-        String typeName = dependency.isProvider()
-                ? dependency.getUnwrappedType().get().toString()
-                : dependency.getTypeName();
+        String typeName =
+                dependency.isProvider() ? dependency.getUnwrappedType().get().toString() : dependency.getTypeName();
 
-        Object provider = context.findComponentOrFactory(dependency.getDependencyKey()).orElse(null);
+        Object provider =
+                context.findComponentOrFactory(dependency.getDependencyKey()).orElse(null);
 
         String call;
         if (provider instanceof FactoryMethodModel factoryDep) {
             call = factoryGetterName(factoryDep) + "()";
         } else if (provider instanceof ComponentModel component) {
             String methodName = "get" + component.getClassName();
-            call = dependency.getQualifier()
+            call = dependency
+                    .getQualifier()
                     .map(q -> methodName + "(\"" + q + "\")")
                     .orElse(methodName + "()");
         } else if (provider instanceof io.tiko.processor.config.ConfigurationModel) {
@@ -500,7 +475,8 @@ public final class ContainerGenerator {
             call = "get(" + typeName + ".class)";
         } else {
             String methodName = "get" + simpleClassName(typeName);
-            call = dependency.getQualifier()
+            call = dependency
+                    .getQualifier()
                     .map(q -> methodName + "(\"" + q + "\")")
                     .orElse(methodName + "()");
         }
@@ -549,8 +525,7 @@ public final class ContainerGenerator {
                             "return ($T) singletons.computeIfAbsent($S, k -> $L.create())",
                             returnType,
                             storageKey,
-                            factoryFieldName
-                    );
+                            factoryFieldName);
                 }
             }
             case REQUEST -> {
@@ -560,8 +535,8 @@ public final class ContainerGenerator {
                     String proxyFieldName = getProxyFieldName(component.getClassName());
                     method.addStatement("return $L", proxyFieldName);
                 } else {
-                    emitScopedGetOrCreate(method, returnType, "requestScoped.get()",
-                            storageKey, factoryFieldName + ".create()");
+                    emitScopedGetOrCreate(
+                            method, returnType, "requestScoped.get()", storageKey, factoryFieldName + ".create()");
                 }
             }
             case EVENT -> {
@@ -571,8 +546,8 @@ public final class ContainerGenerator {
                     String proxyFieldName = getProxyFieldName(component.getClassName());
                     method.addStatement("return $L", proxyFieldName);
                 } else {
-                    emitScopedGetOrCreate(method, returnType, "eventScoped.get()",
-                            storageKey, factoryFieldName + ".create()");
+                    emitScopedGetOrCreate(
+                            method, returnType, "eventScoped.get()", storageKey, factoryFieldName + ".create()");
                 }
             }
             case PROTOTYPE -> {
@@ -598,11 +573,10 @@ public final class ContainerGenerator {
                 .returns(returnType);
 
         if (component.getScope() == Scope.REQUEST) {
-            emitScopedGetOrCreate(method, returnType, "requestScoped.get()",
-                    storageKey, factoryFieldName + ".create()");
+            emitScopedGetOrCreate(
+                    method, returnType, "requestScoped.get()", storageKey, factoryFieldName + ".create()");
         } else { // EVENT
-            emitScopedGetOrCreate(method, returnType, "eventScoped.get()",
-                    storageKey, factoryFieldName + ".create()");
+            emitScopedGetOrCreate(method, returnType, "eventScoped.get()", storageKey, factoryFieldName + ".create()");
         }
 
         return method.build();
@@ -618,10 +592,9 @@ public final class ContainerGenerator {
      * dependencies are put first, dependents last, which is exactly what scope
      * teardown's reverse iteration relies on for LIFO destruction.
      */
-    private void emitScopedGetOrCreate(MethodSpec.Builder method, TypeName returnType,
-                                       String mapExpr, String storageKey, String createExpr) {
-        method.addStatement("$T __existing = ($T) $L.get($S)",
-                returnType, returnType, mapExpr, storageKey);
+    private void emitScopedGetOrCreate(
+            MethodSpec.Builder method, TypeName returnType, String mapExpr, String storageKey, String createExpr) {
+        method.addStatement("$T __existing = ($T) $L.get($S)", returnType, returnType, mapExpr, storageKey);
         method.beginControlFlow("if (__existing == null)");
         method.addStatement("__existing = $L", createExpr);
         method.addStatement("$L.put($S, __existing)", mapExpr, storageKey);
@@ -630,11 +603,11 @@ public final class ContainerGenerator {
     }
 
     private static final ClassName REQUEST_STARTED = ClassName.get("io.tiko.events", "RequestStartedEvent");
-    private static final ClassName REQUEST_ENDING  = ClassName.get("io.tiko.events", "RequestEndingEvent");
-    private static final ClassName EVENT_STARTED   = ClassName.get("io.tiko.events", "EventStartedEvent");
-    private static final ClassName EVENT_ENDING    = ClassName.get("io.tiko.events", "EventEndingEvent");
-    private static final ClassName APP_STARTED     = ClassName.get("io.tiko.events", "ApplicationStartedEvent");
-    private static final ClassName APP_ENDING      = ClassName.get("io.tiko.events", "ApplicationEndingEvent");
+    private static final ClassName REQUEST_ENDING = ClassName.get("io.tiko.events", "RequestEndingEvent");
+    private static final ClassName EVENT_STARTED = ClassName.get("io.tiko.events", "EventStartedEvent");
+    private static final ClassName EVENT_ENDING = ClassName.get("io.tiko.events", "EventEndingEvent");
+    private static final ClassName APP_STARTED = ClassName.get("io.tiko.events", "ApplicationStartedEvent");
+    private static final ClassName APP_ENDING = ClassName.get("io.tiko.events", "ApplicationEndingEvent");
 
     /**
      * Creates runInRequestScope method.
@@ -653,10 +626,10 @@ public final class ContainerGenerator {
                 .addStatement("$T __requestEnd = $T.now()", Instant.class, Instant.class)
                 .addStatement(
                         "eventBus.publish(new $T(__requestId, __requestEnd, $T.between(__requestStart, __requestEnd)))",
-                        REQUEST_ENDING, Duration.class);
+                        REQUEST_ENDING,
+                        Duration.class);
         emitScopedTeardown(method, Scope.REQUEST, "requestScoped.get()");
-        method.addStatement("requestScoped.get().clear()")
-                .endControlFlow();
+        method.addStatement("requestScoped.get().clear()").endControlFlow();
         return method.build();
     }
 
@@ -665,10 +638,8 @@ public final class ContainerGenerator {
      */
     private MethodSpec createSupplyInRequestScopeMethod() {
         TypeVariableName typeVar = TypeVariableName.get("T");
-        ParameterizedTypeName supplierType = ParameterizedTypeName.get(
-                ClassName.get(java.util.function.Supplier.class),
-                typeVar
-        );
+        ParameterizedTypeName supplierType =
+                ParameterizedTypeName.get(ClassName.get(java.util.function.Supplier.class), typeVar);
 
         MethodSpec.Builder method = MethodSpec.methodBuilder("supplyInRequestScope")
                 .addModifiers(Modifier.PUBLIC)
@@ -685,10 +656,10 @@ public final class ContainerGenerator {
                 .addStatement("$T __requestEnd = $T.now()", Instant.class, Instant.class)
                 .addStatement(
                         "eventBus.publish(new $T(__requestId, __requestEnd, $T.between(__requestStart, __requestEnd)))",
-                        REQUEST_ENDING, Duration.class);
+                        REQUEST_ENDING,
+                        Duration.class);
         emitScopedTeardown(method, Scope.REQUEST, "requestScoped.get()");
-        method.addStatement("requestScoped.get().clear()")
-                .endControlFlow();
+        method.addStatement("requestScoped.get().clear()").endControlFlow();
         return method.build();
     }
 
@@ -709,10 +680,10 @@ public final class ContainerGenerator {
                 .addStatement("$T __eventEnd = $T.now()", Instant.class, Instant.class)
                 .addStatement(
                         "eventBus.publish(new $T(__eventId, __eventEnd, $T.between(__eventStart, __eventEnd)))",
-                        EVENT_ENDING, Duration.class);
+                        EVENT_ENDING,
+                        Duration.class);
         emitScopedTeardown(method, Scope.EVENT, "eventScoped.get()");
-        method.addStatement("eventScoped.get().clear()")
-                .endControlFlow();
+        method.addStatement("eventScoped.get().clear()").endControlFlow();
         return method.build();
     }
 
@@ -721,10 +692,8 @@ public final class ContainerGenerator {
      */
     private MethodSpec createSupplyInEventScopeMethod() {
         TypeVariableName typeVar = TypeVariableName.get("T");
-        ParameterizedTypeName supplierType = ParameterizedTypeName.get(
-                ClassName.get(java.util.function.Supplier.class),
-                typeVar
-        );
+        ParameterizedTypeName supplierType =
+                ParameterizedTypeName.get(ClassName.get(java.util.function.Supplier.class), typeVar);
 
         MethodSpec.Builder method = MethodSpec.methodBuilder("supplyInEventScope")
                 .addModifiers(Modifier.PUBLIC)
@@ -741,10 +710,10 @@ public final class ContainerGenerator {
                 .addStatement("$T __eventEnd = $T.now()", Instant.class, Instant.class)
                 .addStatement(
                         "eventBus.publish(new $T(__eventId, __eventEnd, $T.between(__eventStart, __eventEnd)))",
-                        EVENT_ENDING, Duration.class);
+                        EVENT_ENDING,
+                        Duration.class);
         emitScopedTeardown(method, Scope.EVENT, "eventScoped.get()");
-        method.addStatement("eventScoped.get().clear()")
-                .endControlFlow();
+        method.addStatement("eventScoped.get().clear()").endControlFlow();
         return method.build();
     }
 
@@ -781,7 +750,8 @@ public final class ContainerGenerator {
         ClassName logger = ClassName.get("java.util.logging", "Logger");
         ClassName level = ClassName.get("java.util.logging", "Level");
 
-        method.addStatement("$T<$T> __toDestroy = new $T<>($L.values())",
+        method.addStatement(
+                "$T<$T> __toDestroy = new $T<>($L.values())",
                 ClassName.get(java.util.List.class),
                 ClassName.get(Object.class),
                 ClassName.get(java.util.ArrayList.class),
@@ -809,8 +779,11 @@ public final class ContainerGenerator {
                 }
             }
             method.nextControlFlow("catch ($T __t)", Throwable.class);
-            method.addStatement("$T.getLogger($S).log($T.WARNING, $S, __t)",
-                    logger, "io.tiko.events", level,
+            method.addStatement(
+                    "$T.getLogger($S).log($T.WARNING, $S, __t)",
+                    logger,
+                    "io.tiko.events",
+                    level,
                     "@PreDestroy threw on " + c.getClassName());
             method.endControlFlow(); // try/catch
         }
@@ -827,8 +800,11 @@ public final class ContainerGenerator {
             method.beginControlFlow("try");
             method.addStatement("__ac.close()");
             method.nextControlFlow("catch ($T __t)", Throwable.class);
-            method.addStatement("$T.getLogger($S).log($T.WARNING, $S, __t)",
-                    logger, "io.tiko.events", level,
+            method.addStatement(
+                    "$T.getLogger($S).log($T.WARNING, $S, __t)",
+                    logger,
+                    "io.tiko.events",
+                    level,
                     "AutoCloseable.close() threw on factory-produced bean");
             method.endControlFlow(); // try/catch
         }
@@ -844,9 +820,8 @@ public final class ContainerGenerator {
      * aggregator publishes once on the shared bus).
      */
     private MethodSpec createStartMethod() {
-        MethodSpec.Builder method = MethodSpec.methodBuilder("start")
-                .addModifiers(Modifier.PUBLIC)
-                .addAnnotation(Override.class);
+        MethodSpec.Builder method =
+                MethodSpec.methodBuilder("start").addModifiers(Modifier.PUBLIC).addAnnotation(Override.class);
 
         method.addComment("Idempotency CAS (#45)");
         method.beginControlFlow("if (!startInvoked.compareAndSet(false, true))");
@@ -898,39 +873,48 @@ public final class ContainerGenerator {
         method.addStatement("return");
         method.endControlFlow();
 
-        method.addComment("Phase 2: publish ApplicationEndingEvent. get() still works here so handlers can read state.");
-        method.addComment("Gated on publishLifecycleEvents (#45): per-module containers under an AggregatingContainer skip this; aggregator publishes once.");
+        method.addComment(
+                "Phase 2: publish ApplicationEndingEvent. get() still works here so handlers can read state.");
+        method.addComment(
+                "Gated on publishLifecycleEvents (#45): per-module containers under an AggregatingContainer skip this; aggregator publishes once.");
         method.addStatement("$T __endTimestamp = $T.now()", Instant.class, Instant.class);
         method.addStatement(
                 "$T __uptime = (this.startedAt != null) ? $T.between(this.startedAt, __endTimestamp) : $T.ZERO",
-                Duration.class, Duration.class, Duration.class);
+                Duration.class,
+                Duration.class,
+                Duration.class);
         method.beginControlFlow("if (publishLifecycleEvents)");
         method.beginControlFlow("try");
         method.addStatement("eventBus.publish(new $T(__endTimestamp, __uptime))", APP_ENDING);
         method.nextControlFlow("catch ($T __t)", Throwable.class);
         method.addComment("Bus-impl defect; @PreDestroy must still run (handler exceptions are isolated by #44)");
-        method.addStatement("$T.getLogger($S).log($T.WARNING, $S, __t)",
-            logger, "io.tiko.events", level, "ApplicationEndingEvent publish threw");
+        method.addStatement(
+                "$T.getLogger($S).log($T.WARNING, $S, __t)",
+                logger,
+                "io.tiko.events",
+                level,
+                "ApplicationEndingEvent publish threw");
         method.endControlFlow();
         method.endControlFlow();
 
         method.addComment("Phase 3: gate new get() calls and drain in-flight ones");
         method.addStatement("stopped.set(true)");
-        method.addStatement("long __deadlineNanos = $T.nanoTime() + $T.SECONDS.toNanos(10)",
-            System.class, timeUnit);
-        method.beginControlFlow("while (inFlightGets.get() > 0 && $T.nanoTime() < __deadlineNanos)",
-            System.class);
+        method.addStatement("long __deadlineNanos = $T.nanoTime() + $T.SECONDS.toNanos(10)", System.class, timeUnit);
+        method.beginControlFlow("while (inFlightGets.get() > 0 && $T.nanoTime() < __deadlineNanos)", System.class);
         method.addStatement("$T.onSpinWait()", Thread.class);
         method.endControlFlow();
         method.beginControlFlow("if (inFlightGets.get() > 0)");
-        method.addStatement("$T.getLogger($S).log($T.WARNING, $S + inFlightGets.get())",
-            logger, "io.tiko.events", level,
-            "Container shutdown drain timed out with in-flight get() calls: ");
+        method.addStatement(
+                "$T.getLogger($S).log($T.WARNING, $S + inFlightGets.get())",
+                logger,
+                "io.tiko.events",
+                level,
+                "Container shutdown drain timed out with in-flight get() calls: ");
         method.endControlFlow();
 
         method.addComment("Phase 4: @PreDestroy on SINGLETON components, reverse-creation (LIFO) order. "
-            + "Thread-local bypass so they can call get(). Each hook is isolated so one failure "
-            + "does not skip the rest.");
+                + "Thread-local bypass so they can call get(). Each hook is isolated so one failure "
+                + "does not skip the rest.");
         method.addStatement("inShutdownThread.set($T.TRUE)", Boolean.class);
         method.beginControlFlow("try");
 
@@ -938,9 +922,7 @@ public final class ContainerGenerator {
         // start() initialises eagerly in registration order, so reverse iteration approximates LIFO.
         List<ComponentModel> singletonHooks = new ArrayList<>();
         for (ComponentModel component : context.getActiveComponents()) {
-            if (component.getScope() == Scope.SINGLETON &&
-                component.hasDestroyHook() &&
-                !component.requiresProxy()) {
+            if (component.getScope() == Scope.SINGLETON && component.hasDestroyHook() && !component.requiresProxy()) {
                 singletonHooks.add(component);
             }
         }
@@ -949,16 +931,11 @@ public final class ContainerGenerator {
             ComponentModel component = singletonHooks.get(i);
             String componentKey = component.getComponentKey();
             TypeName componentType = ClassName.get(component.getTypeElement());
-            String variableName = Character.toLowerCase(component.getClassName().charAt(0)) +
-                                 component.getClassName().substring(1);
+            String variableName = Character.toLowerCase(component.getClassName().charAt(0))
+                    + component.getClassName().substring(1);
 
             method.addStatement(
-                    "$T $L = ($T) singletons.get($S)",
-                    componentType,
-                    variableName,
-                    componentType,
-                    componentKey
-            );
+                    "$T $L = ($T) singletons.get($S)", componentType, variableName, componentType, componentKey);
 
             method.beginControlFlow("if ($L != null)", variableName);
             method.beginControlFlow("try");
@@ -970,9 +947,12 @@ public final class ContainerGenerator {
                 }
             }
             method.nextControlFlow("catch ($T __t)", Throwable.class);
-            method.addStatement("$T.getLogger($S).log($T.WARNING, $S, __t)",
-                logger, "io.tiko.events", level,
-                "@PreDestroy threw on " + component.getClassName());
+            method.addStatement(
+                    "$T.getLogger($S).log($T.WARNING, $S, __t)",
+                    logger,
+                    "io.tiko.events",
+                    level,
+                    "@PreDestroy threw on " + component.getClassName());
             method.endControlFlow(); // try/catch
             method.endControlFlow(); // if non-null
         }
@@ -991,16 +971,22 @@ public final class ContainerGenerator {
             String factoryKey = factory.getComponentKey();
             String variableName = "__factory_" + factory.getFactoryIdentifier();
 
-            method.addStatement("$T $L = ($T) singletons.get($S)",
-                ClassName.get(AutoCloseable.class), variableName,
-                ClassName.get(AutoCloseable.class), factoryKey);
+            method.addStatement(
+                    "$T $L = ($T) singletons.get($S)",
+                    ClassName.get(AutoCloseable.class),
+                    variableName,
+                    ClassName.get(AutoCloseable.class),
+                    factoryKey);
             method.beginControlFlow("if ($L != null)", variableName);
             method.beginControlFlow("try");
             method.addStatement("$L.close()", variableName);
             method.nextControlFlow("catch ($T __t)", Throwable.class);
-            method.addStatement("$T.getLogger($S).log($T.WARNING, $S, __t)",
-                logger, "io.tiko.events", level,
-                "AutoCloseable.close() threw on " + factory.getFactoryIdentifier());
+            method.addStatement(
+                    "$T.getLogger($S).log($T.WARNING, $S, __t)",
+                    logger,
+                    "io.tiko.events",
+                    level,
+                    "AutoCloseable.close() threw on " + factory.getFactoryIdentifier());
             method.endControlFlow(); // try/catch
             method.endControlFlow(); // if non-null
         }
@@ -1009,7 +995,8 @@ public final class ContainerGenerator {
         method.addStatement("inShutdownThread.remove()");
         method.endControlFlow();
 
-        method.addComment("Phase 5: shut down framework-owned event executor (#43); user-supplied executors are not touched");
+        method.addComment(
+                "Phase 5: shut down framework-owned event executor (#43); user-supplied executors are not touched");
         method.beginControlFlow("if (this.ownsEventExecutor)");
         method.addStatement("this.eventExecutor.shutdown()");
         method.beginControlFlow("try");
@@ -1030,10 +1017,7 @@ public final class ContainerGenerator {
      */
     private MethodSpec createGetMethod() {
         TypeVariableName typeVar = TypeVariableName.get("T");
-        ParameterizedTypeName classType = ParameterizedTypeName.get(
-                ClassName.get(Class.class),
-                typeVar
-        );
+        ParameterizedTypeName classType = ParameterizedTypeName.get(ClassName.get(Class.class), typeVar);
 
         MethodSpec.Builder method = MethodSpec.methodBuilder("get")
                 .addModifiers(Modifier.PUBLIC)
@@ -1047,8 +1031,7 @@ public final class ContainerGenerator {
 
         // Post-shutdown gate (#47). PreDestroy methods on the shutdown thread bypass via the thread-local.
         method.beginControlFlow("if (stopped.get() && !inShutdownThread.get())");
-        method.addStatement("throw new $T($S)",
-            IllegalStateException.class, "Container has been shut down");
+        method.addStatement("throw new $T($S)", IllegalStateException.class, "Container has been shut down");
         method.endControlFlow();
 
         // Drain barrier (#47): mark this get() as in-flight so shutdown() can wait for it.
@@ -1071,13 +1054,12 @@ public final class ContainerGenerator {
                     && component.getImplementedInterface().isPresent();
 
             if (includeInterface) {
-                TypeName ifaceType = TypeName.get(component.getImplementedInterface().get());
+                TypeName ifaceType =
+                        TypeName.get(component.getImplementedInterface().get());
                 if (first) {
-                    method.beginControlFlow(
-                            "if (type == $T.class || type == $T.class)", componentType, ifaceType);
+                    method.beginControlFlow("if (type == $T.class || type == $T.class)", componentType, ifaceType);
                 } else {
-                    method.nextControlFlow(
-                            "else if (type == $T.class || type == $T.class)", componentType, ifaceType);
+                    method.nextControlFlow("else if (type == $T.class || type == $T.class)", componentType, ifaceType);
                 }
             } else {
                 if (first) {
@@ -1109,9 +1091,8 @@ public final class ContainerGenerator {
         }
 
         // If no match found, throw exception
-        method.addStatement("throw new $T($S + type.getName())",
-            IllegalArgumentException.class,
-            "No component found for type: ");
+        method.addStatement(
+                "throw new $T($S + type.getName())", IllegalArgumentException.class, "No component found for type: ");
 
         method.nextControlFlow("finally");
         method.addStatement("inFlightGets.decrementAndGet()");
@@ -1126,10 +1107,7 @@ public final class ContainerGenerator {
      */
     private MethodSpec createGetWithNameMethod() {
         TypeVariableName typeVar = TypeVariableName.get("T");
-        ParameterizedTypeName classType = ParameterizedTypeName.get(
-                ClassName.get(Class.class),
-                typeVar
-        );
+        ParameterizedTypeName classType = ParameterizedTypeName.get(ClassName.get(Class.class), typeVar);
 
         MethodSpec.Builder method = MethodSpec.methodBuilder("get")
                 .addModifiers(Modifier.PUBLIC)
@@ -1144,8 +1122,7 @@ public final class ContainerGenerator {
 
         // Post-shutdown gate (#47).
         method.beginControlFlow("if (stopped.get() && !inShutdownThread.get())");
-        method.addStatement("throw new $T($S)",
-            IllegalStateException.class, "Container has been shut down");
+        method.addStatement("throw new $T($S)", IllegalStateException.class, "Container has been shut down");
         method.endControlFlow();
         method.addStatement("inFlightGets.incrementAndGet()");
         method.beginControlFlow("try");
@@ -1162,13 +1139,11 @@ public final class ContainerGenerator {
 
             if (first) {
                 method.beginControlFlow(
-                        "if ($S.equals(name) && type.isAssignableFrom($T.class))",
-                        componentName, componentType);
+                        "if ($S.equals(name) && type.isAssignableFrom($T.class))", componentName, componentType);
                 first = false;
             } else {
                 method.nextControlFlow(
-                        "else if ($S.equals(name) && type.isAssignableFrom($T.class))",
-                        componentName, componentType);
+                        "else if ($S.equals(name) && type.isAssignableFrom($T.class))", componentName, componentType);
             }
             method.addStatement("return (T) $L()", getterName);
         }
@@ -1181,13 +1156,11 @@ public final class ContainerGenerator {
 
             if (first) {
                 method.beginControlFlow(
-                        "if ($S.equals(name) && type.isAssignableFrom($T.class))",
-                        factoryName, producedType);
+                        "if ($S.equals(name) && type.isAssignableFrom($T.class))", factoryName, producedType);
                 first = false;
             } else {
                 method.nextControlFlow(
-                        "else if ($S.equals(name) && type.isAssignableFrom($T.class))",
-                        factoryName, producedType);
+                        "else if ($S.equals(name) && type.isAssignableFrom($T.class))", factoryName, producedType);
             }
             method.addStatement("return (T) $L()", factoryGetterName(factory));
         }
@@ -1216,14 +1189,8 @@ public final class ContainerGenerator {
      */
     private MethodSpec createGetProviderMethod() {
         TypeVariableName typeVar = TypeVariableName.get("T");
-        ParameterizedTypeName classType = ParameterizedTypeName.get(
-                ClassName.get(Class.class),
-                typeVar
-        );
-        ParameterizedTypeName providerType = ParameterizedTypeName.get(
-                ClassName.get("io.tiko", "Provider"),
-                typeVar
-        );
+        ParameterizedTypeName classType = ParameterizedTypeName.get(ClassName.get(Class.class), typeVar);
+        ParameterizedTypeName providerType = ParameterizedTypeName.get(ClassName.get("io.tiko", "Provider"), typeVar);
 
         return MethodSpec.methodBuilder("getProvider")
                 .addModifiers(Modifier.PUBLIC)
@@ -1240,14 +1207,8 @@ public final class ContainerGenerator {
      */
     private MethodSpec createGetProviderWithNameMethod() {
         TypeVariableName typeVar = TypeVariableName.get("T");
-        ParameterizedTypeName classType = ParameterizedTypeName.get(
-                ClassName.get(Class.class),
-                typeVar
-        );
-        ParameterizedTypeName providerType = ParameterizedTypeName.get(
-                ClassName.get("io.tiko", "Provider"),
-                typeVar
-        );
+        ParameterizedTypeName classType = ParameterizedTypeName.get(ClassName.get(Class.class), typeVar);
+        ParameterizedTypeName providerType = ParameterizedTypeName.get(ClassName.get("io.tiko", "Provider"), typeVar);
 
         return MethodSpec.methodBuilder("getProvider")
                 .addModifiers(Modifier.PUBLIC)
@@ -1321,11 +1282,7 @@ public final class ContainerGenerator {
         String fullClassName = GENERATED_PACKAGE + "." + context.getContainerClassName();
 
         try (var writer = context.getFiler()
-                .createResource(
-                        javax.tools.StandardLocation.CLASS_OUTPUT,
-                        "",
-                        "META-INF/tiko/container.properties"
-                )
+                .createResource(javax.tools.StandardLocation.CLASS_OUTPUT, "", "META-INF/tiko/container.properties")
                 .openWriter()) {
 
             writer.write("# Tiko DI Container Metadata\n");
@@ -1339,16 +1296,14 @@ public final class ContainerGenerator {
      */
     private void generateComponentsListFile() throws IOException {
         try (var writer = context.getFiler()
-                .createResource(
-                        javax.tools.StandardLocation.CLASS_OUTPUT,
-                        "",
-                        "META-INF/tiko/components.txt"
-                )
+                .createResource(javax.tools.StandardLocation.CLASS_OUTPUT, "", "META-INF/tiko/components.txt")
                 .openWriter()) {
 
             for (ComponentModel component : context.getActiveComponents()) {
                 // Use binary name (with '$' for nested classes) so Class.forName() works at runtime
-                writer.write(context.getElementUtils().getBinaryName(component.getTypeElement()).toString());
+                writer.write(context.getElementUtils()
+                        .getBinaryName(component.getTypeElement())
+                        .toString());
                 writer.write("\n");
             }
         }

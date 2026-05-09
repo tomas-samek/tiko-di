@@ -11,5 +11,7 @@ package io.tiko.config.internal.coercers;
  * a later release.</p>
  */
 public final class CoercionException extends RuntimeException {
-    public CoercionException(String message) { super(message); }
+    public CoercionException(String message) {
+        super(message);
+    }
 }

@@ -1,17 +1,16 @@
 package io.tiko.examples.basic;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+
 import io.tiko.Container;
 import io.tiko.ErrorContext;
 import io.tiko.ErrorHandler;
 import io.tiko.EventHandlerError;
 import io.tiko.runtime.Tiko;
 import io.tiko.runtime.TikoOptions;
-import org.junit.jupiter.api.Test;
-
 import java.util.concurrent.atomic.AtomicReference;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
+import org.junit.jupiter.api.Test;
 
 class EventErrorIsolationIntegrationTest {
 
@@ -22,8 +21,7 @@ class EventErrorIsolationIntegrationTest {
 
         TikoOptions opts = TikoOptions.builder().errorHandler(recording).build();
         try (Container container = Tiko.create(opts)) {
-            assertThatCode(() -> container.getEventBus().publish(new Ping()))
-                .doesNotThrowAnyException();
+            assertThatCode(() -> container.getEventBus().publish(new Ping())).doesNotThrowAnyException();
         }
 
         assertThat(captured.get()).isInstanceOf(EventHandlerError.class);

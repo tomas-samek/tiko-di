@@ -1,10 +1,10 @@
 package io.tiko.processor.model;
 
+import java.util.ArrayList;
+import java.util.List;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.TypeMirror;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Represents an @EventHandler method.
@@ -17,7 +17,7 @@ public final class EventHandlerModel {
     private final TypeMirror eventType;
     private final String eventTypeName;
     private final boolean async;
-    private final boolean hasEventWrapper;  // Second parameter is Event<?> wrapper
+    private final boolean hasEventWrapper; // Second parameter is Event<?> wrapper
     private final List<EventTriggerModel> eventTriggers;
 
     private EventHandlerModel(Builder builder) {
@@ -84,8 +84,7 @@ public final class EventHandlerModel {
         private boolean hasEventWrapper = false;
         private List<EventTriggerModel> eventTriggers = new ArrayList<>();
 
-        private Builder() {
-        }
+        private Builder() {}
 
         public Builder methodElement(ExecutableElement methodElement) {
             this.methodElement = methodElement;

@@ -8,7 +8,12 @@ import io.tiko.config.internal.coercers.Coercers;
 import io.tiko.config.internal.coercers.CompositeCoercers;
 import io.tiko.config.internal.coercers.NestedRecordSupport;
 import io.tiko.config.internal.coercers.TypeCoercer;
-
+import java.io.IOException;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.Messager;
 import javax.lang.model.element.ElementKind;
@@ -17,12 +22,6 @@ import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeMirror;
-import java.io.IOException;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
 
 /**
  * Generates {@code <Record>ConfigBinder.java} for each {@code @Configuration} record and
@@ -83,17 +82,17 @@ public final class ConfigBinderGenerator {
         ClassName recordType = ClassName.get(cfg.packageName(), cfg.simpleName());
 
         MethodSpec.Builder bind = MethodSpec.methodBuilder("bind")
-            .addAnnotation(Override.class)
-            .addModifiers(Modifier.PUBLIC)
-            .returns(recordType)
-            .addParameter(ParameterizedTypeName.get(
-                ClassName.get(Map.class),
-                ClassName.get(String.class),
-                ClassName.get(Object.class)), "root")
-            .addParameter(ClassName.get(BindContext.class), "ctx");
+                .addAnnotation(Override.class)
+                .addModifiers(Modifier.PUBLIC)
+                .returns(recordType)
+                .addParameter(
+                        ParameterizedTypeName.get(
+                                ClassName.get(Map.class), ClassName.get(String.class), ClassName.get(Object.class)),
+                        "root")
+                .addParameter(ClassName.get(BindContext.class), "ctx");
 
-        bind.addStatement("$T<$T, $T> node = ctx.requireSection(root, $S)",
-            Map.class, String.class, Object.class, cfg.prefix());
+        bind.addStatement(
+                "$T<$T, $T> node = ctx.requireSection(root, $S)", Map.class, String.class, Object.class, cfg.prefix());
 
         Set<String> consumedKeys = new LinkedHashSet<>();
         StringBuilder ctorArgs = new StringBuilder();
@@ -110,45 +109,61 @@ public final class ConfigBinderGenerator {
             TypeName javaType = TypeName.get(f.type());
 
             switch (f.cardinality()) {
-                case OPTIONAL -> bind.addStatement("$T $L = ctx.optionalScalar(node, $S, $S, $L)",
-                    javaType, varName, f.yamlKey(), fullPath, coercer);
+                case OPTIONAL -> bind.addStatement(
+                        "$T $L = ctx.optionalScalar(node, $S, $S, $L)",
+                        javaType,
+                        varName,
+                        f.yamlKey(),
+                        fullPath,
+                        coercer);
                 case DEFAULTED -> bind.addStatement(
-                    "$T $L = ctx.scalarOrDefault(node, $S, $S, $L, $L.coerce($S))",
-                    javaType, varName, f.yamlKey(), fullPath, coercer, coercer, f.defaultValue());
+                        "$T $L = ctx.scalarOrDefault(node, $S, $S, $L, $L.coerce($S))",
+                        javaType,
+                        varName,
+                        f.yamlKey(),
+                        fullPath,
+                        coercer,
+                        coercer,
+                        f.defaultValue());
                 case REQUIRED -> bind.addStatement(
-                    "$T $L = ctx.requireScalar(node, $S, $S, $L, $L)",
-                    javaType, varName, f.yamlKey(), fullPath, coercer, fallbackExpr(inner));
+                        "$T $L = ctx.requireScalar(node, $S, $S, $L, $L)",
+                        javaType,
+                        varName,
+                        f.yamlKey(),
+                        fullPath,
+                        coercer,
+                        fallbackExpr(inner));
             }
 
             if (i > 0) ctorArgs.append(", ");
             ctorArgs.append(varName);
         }
 
-        bind.addStatement("ctx.checkUnknownKeys(node, $S, $T.of($L))",
-            cfg.prefix(), Set.class, quotedJoin(consumedKeys));
+        bind.addStatement(
+                "ctx.checkUnknownKeys(node, $S, $T.of($L))", cfg.prefix(), Set.class, quotedJoin(consumedKeys));
         bind.addStatement("return new $T($L)", recordType, ctorArgs.toString());
 
         MethodSpec typeM = MethodSpec.methodBuilder("type")
-            .addAnnotation(Override.class)
-            .addModifiers(Modifier.PUBLIC)
-            .returns(ParameterizedTypeName.get(ClassName.get(Class.class), recordType))
-            .addStatement("return $T.class", recordType)
-            .build();
+                .addAnnotation(Override.class)
+                .addModifiers(Modifier.PUBLIC)
+                .returns(ParameterizedTypeName.get(ClassName.get(Class.class), recordType))
+                .addStatement("return $T.class", recordType)
+                .build();
 
         MethodSpec prefixM = MethodSpec.methodBuilder("prefix")
-            .addAnnotation(Override.class)
-            .addModifiers(Modifier.PUBLIC)
-            .returns(ClassName.get(String.class))
-            .addStatement("return $S", cfg.prefix())
-            .build();
+                .addAnnotation(Override.class)
+                .addModifiers(Modifier.PUBLIC)
+                .returns(ClassName.get(String.class))
+                .addStatement("return $S", cfg.prefix())
+                .build();
 
         TypeSpec binderClass = TypeSpec.classBuilder(cfg.binderSimpleName())
-            .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-            .addSuperinterface(ParameterizedTypeName.get(ClassName.get(ConfigBinder.class), recordType))
-            .addMethod(typeM)
-            .addMethod(prefixM)
-            .addMethod(bind.build())
-            .build();
+                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                .addSuperinterface(ParameterizedTypeName.get(ClassName.get(ConfigBinder.class), recordType))
+                .addMethod(typeM)
+                .addMethod(prefixM)
+                .addMethod(bind.build())
+                .build();
 
         JavaFile.builder(GENERATED_PACKAGE, binderClass).build().writeTo(filer);
     }
@@ -204,19 +219,23 @@ public final class ConfigBinderGenerator {
         String recordSimpleName = record.getSimpleName().toString();
         ClassName coercerType = ClassName.get(GENERATED_PACKAGE, coercerName);
 
-        TypeName coercerOfRecord = ParameterizedTypeName.get(
-            ClassName.get(TypeCoercer.class), recordType);
+        TypeName coercerOfRecord = ParameterizedTypeName.get(ClassName.get(TypeCoercer.class), recordType);
 
         // doCoerce(Object raw) → Record builds the record imperatively so each line is a
         // top-level JavaPoet statement (avoids "$[ followed by $[" issues caused by
         // embedding a multi-statement body inside `addStatement`).
         MethodSpec.Builder doCoerce = MethodSpec.methodBuilder("doCoerce")
-            .addModifiers(Modifier.PRIVATE, Modifier.STATIC)
-            .returns(recordType)
-            .addParameter(Object.class, "raw");
+                .addModifiers(Modifier.PRIVATE, Modifier.STATIC)
+                .returns(recordType)
+                .addParameter(Object.class, "raw");
 
-        doCoerce.addStatement("$T<$T, $T> node = $T.requireMap(raw, $S)",
-            Map.class, String.class, Object.class, NestedRecordSupport.class, recordSimpleName);
+        doCoerce.addStatement(
+                "$T<$T, $T> node = $T.requireMap(raw, $S)",
+                Map.class,
+                String.class,
+                Object.class,
+                NestedRecordSupport.class,
+                recordSimpleName);
 
         StringBuilder ctorArgs = new StringBuilder();
 
@@ -236,15 +255,34 @@ public final class ConfigBinderGenerator {
             String varName = "f_" + i;
 
             if (isOptional) {
-                doCoerce.addStatement("$T $L = $T.optionalField(node, $S, $S, $L)",
-                    javaType, varName, NestedRecordSupport.class, yamlKey, recordSimpleName, coercer);
+                doCoerce.addStatement(
+                        "$T $L = $T.optionalField(node, $S, $S, $L)",
+                        javaType,
+                        varName,
+                        NestedRecordSupport.class,
+                        yamlKey,
+                        recordSimpleName,
+                        coercer);
             } else if (defaultValue != null) {
                 doCoerce.addStatement(
-                    "$T $L = $T.fieldOrDefault(node, $S, $S, $L, $L.coerce($S))",
-                    javaType, varName, NestedRecordSupport.class, yamlKey, recordSimpleName, coercer, coercer, defaultValue);
+                        "$T $L = $T.fieldOrDefault(node, $S, $S, $L, $L.coerce($S))",
+                        javaType,
+                        varName,
+                        NestedRecordSupport.class,
+                        yamlKey,
+                        recordSimpleName,
+                        coercer,
+                        coercer,
+                        defaultValue);
             } else {
-                doCoerce.addStatement("$T $L = $T.requireField(node, $S, $S, $L)",
-                    javaType, varName, NestedRecordSupport.class, yamlKey, recordSimpleName, coercer);
+                doCoerce.addStatement(
+                        "$T $L = $T.requireField(node, $S, $S, $L)",
+                        javaType,
+                        varName,
+                        NestedRecordSupport.class,
+                        yamlKey,
+                        recordSimpleName,
+                        coercer);
             }
 
             if (i > 0) ctorArgs.append(", ");
@@ -257,17 +295,17 @@ public final class ConfigBinderGenerator {
         // coercer() returns a method reference to doCoerce — a single statement that
         // JavaPoet handles trivially.
         MethodSpec coercerM = MethodSpec.methodBuilder("coercer")
-            .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
-            .returns(coercerOfRecord)
-            .addStatement("return $T::doCoerce", coercerType)
-            .build();
+                .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
+                .returns(coercerOfRecord)
+                .addStatement("return $T::doCoerce", coercerType)
+                .build();
 
         TypeSpec coercerClass = TypeSpec.classBuilder(coercerName)
-            .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-            .addJavadoc("Generated nested-record coercer for $T (#17).\n", recordType)
-            .addMethod(coercerM)
-            .addMethod(doCoerce.build())
-            .build();
+                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                .addJavadoc("Generated nested-record coercer for $T (#17).\n", recordType)
+                .addMethod(coercerM)
+                .addMethod(doCoerce.build())
+                .build();
 
         JavaFile.builder(GENERATED_PACKAGE, coercerClass).build().writeTo(filer);
     }
@@ -289,9 +327,9 @@ public final class ConfigBinderGenerator {
 
     private static java.util.List<VariableElement> enclosedRecordComponents(TypeElement record) {
         return record.getEnclosedElements().stream()
-            .filter(e -> e.getKind() == ElementKind.RECORD_COMPONENT)
-            .map(e -> (VariableElement) e)
-            .toList();
+                .filter(e -> e.getKind() == ElementKind.RECORD_COMPONENT)
+                .map(e -> (VariableElement) e)
+                .toList();
     }
 
     /**
@@ -341,8 +379,8 @@ public final class ConfigBinderGenerator {
                 CodeBlock elemCoercer = coercerExpr(dt.getTypeArguments().get(valueArgIdx));
                 ClassName helper = ClassName.get(CompositeCoercers.class);
                 return fqn.equals("java.util.List")
-                    ? CodeBlock.of("$T.list($L)", helper, elemCoercer)
-                    : CodeBlock.of("$T.map($L)", helper, elemCoercer);
+                        ? CodeBlock.of("$T.list($L)", helper, elemCoercer)
+                        : CodeBlock.of("$T.map($L)", helper, elemCoercer);
             }
             if (el.getKind() == ElementKind.ENUM) {
                 ClassName enumType = ClassName.get(el);
@@ -360,39 +398,39 @@ public final class ConfigBinderGenerator {
 
     private CodeBlock primitiveCoercer(String kind) {
         return switch (kind) {
-            case "INT"     -> CodeBlock.of("$T.intCoercer()", Coercers.class);
-            case "LONG"    -> CodeBlock.of("$T.longCoercer()", Coercers.class);
+            case "INT" -> CodeBlock.of("$T.intCoercer()", Coercers.class);
+            case "LONG" -> CodeBlock.of("$T.longCoercer()", Coercers.class);
             case "BOOLEAN" -> CodeBlock.of("$T.booleanCoercer()", Coercers.class);
-            case "DOUBLE"  -> CodeBlock.of("$T.doubleCoercer()", Coercers.class);
-            case "FLOAT"   -> CodeBlock.of("$T.floatCoercer()", Coercers.class);
-            case "SHORT"   -> CodeBlock.of("$T.shortCoercer()", Coercers.class);
-            case "BYTE"    -> CodeBlock.of("$T.byteCoercer()", Coercers.class);
-            case "CHAR"    -> CodeBlock.of("$T.charCoercer()", Coercers.class);
+            case "DOUBLE" -> CodeBlock.of("$T.doubleCoercer()", Coercers.class);
+            case "FLOAT" -> CodeBlock.of("$T.floatCoercer()", Coercers.class);
+            case "SHORT" -> CodeBlock.of("$T.shortCoercer()", Coercers.class);
+            case "BYTE" -> CodeBlock.of("$T.byteCoercer()", Coercers.class);
+            case "CHAR" -> CodeBlock.of("$T.charCoercer()", Coercers.class);
             default -> throw new IllegalArgumentException("Unsupported primitive: " + kind);
         };
     }
 
     private CodeBlock scalarCoercer(String fqn) {
         return switch (fqn) {
-            case "java.lang.Integer"       -> CodeBlock.of("$T.intCoercer()", Coercers.class);
-            case "java.lang.Long"          -> CodeBlock.of("$T.longCoercer()", Coercers.class);
-            case "java.lang.Boolean"       -> CodeBlock.of("$T.booleanCoercer()", Coercers.class);
-            case "java.lang.Double"        -> CodeBlock.of("$T.doubleCoercer()", Coercers.class);
-            case "java.lang.Float"         -> CodeBlock.of("$T.floatCoercer()", Coercers.class);
-            case "java.lang.Short"         -> CodeBlock.of("$T.shortCoercer()", Coercers.class);
-            case "java.lang.Byte"          -> CodeBlock.of("$T.byteCoercer()", Coercers.class);
-            case "java.lang.Character"     -> CodeBlock.of("$T.charCoercer()", Coercers.class);
-            case "java.lang.String"        -> CodeBlock.of("$T.stringCoercer()", Coercers.class);
-            case "java.time.Duration"      -> CodeBlock.of("$T.durationCoercer()", Coercers.class);
-            case "java.time.Instant"       -> CodeBlock.of("$T.instantCoercer()", Coercers.class);
-            case "java.time.LocalDate"     -> CodeBlock.of("$T.localDateCoercer()", Coercers.class);
+            case "java.lang.Integer" -> CodeBlock.of("$T.intCoercer()", Coercers.class);
+            case "java.lang.Long" -> CodeBlock.of("$T.longCoercer()", Coercers.class);
+            case "java.lang.Boolean" -> CodeBlock.of("$T.booleanCoercer()", Coercers.class);
+            case "java.lang.Double" -> CodeBlock.of("$T.doubleCoercer()", Coercers.class);
+            case "java.lang.Float" -> CodeBlock.of("$T.floatCoercer()", Coercers.class);
+            case "java.lang.Short" -> CodeBlock.of("$T.shortCoercer()", Coercers.class);
+            case "java.lang.Byte" -> CodeBlock.of("$T.byteCoercer()", Coercers.class);
+            case "java.lang.Character" -> CodeBlock.of("$T.charCoercer()", Coercers.class);
+            case "java.lang.String" -> CodeBlock.of("$T.stringCoercer()", Coercers.class);
+            case "java.time.Duration" -> CodeBlock.of("$T.durationCoercer()", Coercers.class);
+            case "java.time.Instant" -> CodeBlock.of("$T.instantCoercer()", Coercers.class);
+            case "java.time.LocalDate" -> CodeBlock.of("$T.localDateCoercer()", Coercers.class);
             case "java.time.LocalDateTime" -> CodeBlock.of("$T.localDateTimeCoercer()", Coercers.class);
-            case "java.time.ZoneId"        -> CodeBlock.of("$T.zoneIdCoercer()", Coercers.class);
-            case "java.util.UUID"          -> CodeBlock.of("$T.uuidCoercer()", Coercers.class);
-            case "java.net.URI"            -> CodeBlock.of("$T.uriCoercer()", Coercers.class);
-            case "java.nio.file.Path"      -> CodeBlock.of("$T.pathCoercer()", Coercers.class);
-            case "java.nio.charset.Charset"-> CodeBlock.of("$T.charsetCoercer()", Coercers.class);
-            case "java.math.BigDecimal"    -> CodeBlock.of("$T.bigDecimalCoercer()", Coercers.class);
+            case "java.time.ZoneId" -> CodeBlock.of("$T.zoneIdCoercer()", Coercers.class);
+            case "java.util.UUID" -> CodeBlock.of("$T.uuidCoercer()", Coercers.class);
+            case "java.net.URI" -> CodeBlock.of("$T.uriCoercer()", Coercers.class);
+            case "java.nio.file.Path" -> CodeBlock.of("$T.pathCoercer()", Coercers.class);
+            case "java.nio.charset.Charset" -> CodeBlock.of("$T.charsetCoercer()", Coercers.class);
+            case "java.math.BigDecimal" -> CodeBlock.of("$T.bigDecimalCoercer()", Coercers.class);
             case "java.util.regex.Pattern" -> CodeBlock.of("$T.patternCoercer()", Coercers.class);
             default -> throw new IllegalArgumentException("Unsupported scalar type: " + fqn);
         };

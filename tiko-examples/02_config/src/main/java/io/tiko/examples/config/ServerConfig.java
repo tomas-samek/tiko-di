@@ -7,7 +7,4 @@ import io.tiko.annotations.Default;
  * nested-record support (#17). Note this is NOT itself annotated {@code @Configuration} —
  * it's bound by recursion through the parent's generated nested coercer.
  */
-public record ServerConfig(
-    String host,
-    @Default("8080") int port
-) {}
+public record ServerConfig(String host, @Default("8080") int port) {}

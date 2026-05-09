@@ -1,13 +1,12 @@
 package io.tiko.processor.model;
 
 import io.tiko.Scope;
-
+import java.util.ArrayList;
+import java.util.List;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.TypeMirror;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Represents a @Produces factory method.
@@ -21,7 +20,7 @@ public final class FactoryMethodModel {
     private final TypeMirror returnType;
     private final String returnTypeName;
     private final Scope scope;
-    private final String name;  // Optional qualifier
+    private final String name; // Optional qualifier
     private final List<String> profiles;
     private final List<DependencyModel> dependencies;
     private final boolean isStatic;
@@ -128,8 +127,7 @@ public final class FactoryMethodModel {
         private boolean isStatic = false;
         private boolean autoCloseable = false;
 
-        private Builder() {
-        }
+        private Builder() {}
 
         public Builder methodElement(ExecutableElement methodElement) {
             this.methodElement = methodElement;

@@ -4,7 +4,6 @@ package io.tiko.config;
 import io.tiko.config.internal.ConfigError;
 import io.tiko.config.internal.coercers.CoercionException;
 import io.tiko.config.internal.coercers.TypeCoercer;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -39,9 +38,17 @@ public final class BindContext {
         errors.add(ConfigError.unanchored(message));
     }
 
-    public boolean hasErrors() { return !errors.isEmpty(); }
-    public List<ConfigError> errors() { return List.copyOf(errors); }
-    public String source() { return source; }
+    public boolean hasErrors() {
+        return !errors.isEmpty();
+    }
+
+    public List<ConfigError> errors() {
+        return List.copyOf(errors);
+    }
+
+    public String source() {
+        return source;
+    }
 
     // -- Section navigation ------------------------------------------------
 
@@ -58,7 +65,8 @@ public final class BindContext {
             return new LinkedHashMap<>();
         }
         if (!(v instanceof Map<?, ?>)) {
-            report("expected section '" + key + "' to be a mapping, got " + v.getClass().getSimpleName());
+            report("expected section '" + key + "' to be a mapping, got "
+                    + v.getClass().getSimpleName());
             return new LinkedHashMap<>();
         }
         return new LinkedHashMap<>((Map<String, Object>) v);
@@ -73,7 +81,8 @@ public final class BindContext {
      * The key is removed from {@code node} on success so {@link #checkUnknownKeys}
      * can detect leftovers.
      */
-    public <T> T requireScalar(Map<String, Object> node, String key, String fullPath, TypeCoercer<T> coercer, T fallback) {
+    public <T> T requireScalar(
+            Map<String, Object> node, String key, String fullPath, TypeCoercer<T> coercer, T fallback) {
         if (!node.containsKey(key)) {
             report(fullPath + " is required but missing");
             return fallback;
@@ -92,7 +101,8 @@ public final class BindContext {
      * otherwise returns {@code defaultValue}. Coercion failure produces an error
      * and the default is returned.
      */
-    public <T> T scalarOrDefault(Map<String, Object> node, String key, String fullPath, TypeCoercer<T> coercer, T defaultValue) {
+    public <T> T scalarOrDefault(
+            Map<String, Object> node, String key, String fullPath, TypeCoercer<T> coercer, T defaultValue) {
         if (!node.containsKey(key)) return defaultValue;
         Object raw = node.remove(key);
         try {
@@ -107,7 +117,8 @@ public final class BindContext {
      * Reads {@code key} as {@code Optional<T>} — present-and-coerced if the key exists,
      * empty if absent.
      */
-    public <T> Optional<T> optionalScalar(Map<String, Object> node, String key, String fullPath, TypeCoercer<T> coercer) {
+    public <T> Optional<T> optionalScalar(
+            Map<String, Object> node, String key, String fullPath, TypeCoercer<T> coercer) {
         if (!node.containsKey(key)) return Optional.empty();
         Object raw = node.remove(key);
         try {

@@ -1,8 +1,7 @@
 package io.tiko.examples.basic;
 
-import io.tiko.annotations.Component;
 import io.tiko.Scope;
-
+import io.tiko.annotations.Component;
 import io.tiko.annotations.PostConstruct;
 import io.tiko.annotations.PreDestroy;
 import java.util.Map;

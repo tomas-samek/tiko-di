@@ -1,11 +1,11 @@
 package io.tiko.examples.basic;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import io.tiko.Container;
 import io.tiko.runtime.Tiko;
 import org.junit.jupiter.api.Test;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class NamedLookupTest {
 
@@ -43,7 +43,7 @@ class NamedLookupTest {
     void get_unknownName_throws() {
         try (Container container = Tiko.create()) {
             assertThatThrownBy(() -> container.get(Greeter.class, "french"))
-                .isInstanceOf(IllegalArgumentException.class);
+                    .isInstanceOf(IllegalArgumentException.class);
         }
     }
 
@@ -52,7 +52,7 @@ class NamedLookupTest {
         try (Container container = Tiko.create()) {
             // "english" exists but as EnglishGreeter, not MessageService
             assertThatThrownBy(() -> container.get(MessageService.class, "english"))
-                .isInstanceOf(IllegalArgumentException.class);
+                    .isInstanceOf(IllegalArgumentException.class);
         }
     }
 }

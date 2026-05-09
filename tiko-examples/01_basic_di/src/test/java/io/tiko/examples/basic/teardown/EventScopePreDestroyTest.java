@@ -1,14 +1,13 @@
 package io.tiko.examples.basic.teardown;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import io.tiko.Container;
-import io.tiko.runtime.Tiko;
 import io.tiko.events.EventEndingEvent;
+import io.tiko.runtime.Tiko;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 class EventScopePreDestroyTest {
 
@@ -29,8 +28,8 @@ class EventScopePreDestroyTest {
         }
 
         java.util.List<String> eventEntries = TeardownRecorder.order.stream()
-            .filter(s -> s.startsWith("Event"))
-            .toList();
+                .filter(s -> s.startsWith("Event"))
+                .toList();
         assertThat(eventEntries).containsExactly("EventA", "EventB", "EventC");
     }
 
@@ -38,9 +37,9 @@ class EventScopePreDestroyTest {
     void ending_event_published_before_predestroy() {
         Container container = Tiko.create();
         AtomicInteger endingEventIndex = new AtomicInteger(-1);
-        container.getEventBus().subscribe(EventEndingEvent.class, e ->
-            endingEventIndex.set(TeardownRecorder.order.size())
-        );
+        container
+                .getEventBus()
+                .subscribe(EventEndingEvent.class, e -> endingEventIndex.set(TeardownRecorder.order.size()));
 
         try {
             container.runInEventScope(() -> {
@@ -66,9 +65,8 @@ class EventScopePreDestroyTest {
             container.shutdown();
         }
 
-        long eventCDestroys = TeardownRecorder.order.stream()
-            .filter(s -> s.equals("EventC"))
-            .count();
+        long eventCDestroys =
+                TeardownRecorder.order.stream().filter(s -> s.equals("EventC")).count();
         assertThat(eventCDestroys).isEqualTo(3);
     }
 }

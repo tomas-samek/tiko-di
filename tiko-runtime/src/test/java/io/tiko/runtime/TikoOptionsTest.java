@@ -1,10 +1,10 @@
 package io.tiko.runtime;
 
-import io.tiko.ErrorHandler;
-import org.junit.jupiter.api.Test;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
+
+import io.tiko.ErrorHandler;
+import org.junit.jupiter.api.Test;
 
 class TikoOptionsTest {
 
@@ -20,9 +20,7 @@ class TikoOptionsTest {
     void builder_round_trips_error_handler() {
         ErrorHandler handler = ctx -> {};
 
-        TikoOptions options = TikoOptions.builder()
-            .errorHandler(handler)
-            .build();
+        TikoOptions options = TikoOptions.builder().errorHandler(handler).build();
 
         assertThat(options.errorHandler()).isSameAs(handler);
     }
@@ -41,12 +39,9 @@ class TikoOptionsTest {
 
     @Test
     void builder_round_trips_event_executor() {
-        java.util.concurrent.ExecutorService executor =
-            java.util.concurrent.Executors.newSingleThreadExecutor();
+        java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newSingleThreadExecutor();
         try {
-            TikoOptions options = TikoOptions.builder()
-                .eventExecutor(executor)
-                .build();
+            TikoOptions options = TikoOptions.builder().eventExecutor(executor).build();
 
             assertThat(options.eventExecutor()).isSameAs(executor);
         } finally {

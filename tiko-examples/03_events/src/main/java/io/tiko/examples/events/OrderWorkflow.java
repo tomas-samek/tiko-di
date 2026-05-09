@@ -5,7 +5,6 @@ import io.tiko.Scope;
 import io.tiko.annotations.Component;
 import io.tiko.annotations.EventHandler;
 import io.tiko.annotations.EventTrigger;
-
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -36,8 +35,12 @@ public class OrderWorkflow {
     @EventTrigger(eventName = "OrderValidated")
     public OrderValidated onPlaced(OrderPlaced event) {
         boolean valid = event.total() > 0;
-        System.out.printf(java.util.Locale.ROOT, "  validate %s: total=%.2f -> %s%n",
-            event.orderId(), event.total(), valid ? "VALID" : "INVALID");
+        System.out.printf(
+                java.util.Locale.ROOT,
+                "  validate %s: total=%.2f -> %s%n",
+                event.orderId(),
+                event.total(),
+                valid ? "VALID" : "INVALID");
         return new OrderValidated(event.orderId(), event.customer(), event.total(), valid);
     }
 
@@ -55,10 +58,10 @@ public class OrderWorkflow {
     @EventHandler
     public void onShipped(OrderShipped event, Event<?> wrapper) {
         String chain = wrapper.getOriginChain().stream()
-            .map(o -> o.getClass().getSimpleName())
-            .collect(Collectors.joining(" -> "));
-        System.out.printf(java.util.Locale.ROOT, "  ship %s for %s ($%.2f)%n",
-            event.orderId(), event.customer(), event.total());
+                .map(o -> o.getClass().getSimpleName())
+                .collect(Collectors.joining(" -> "));
+        System.out.printf(
+                java.util.Locale.ROOT, "  ship %s for %s ($%.2f)%n", event.orderId(), event.customer(), event.total());
         System.out.println("    chain: " + chain);
     }
 

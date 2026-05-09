@@ -29,5 +29,4 @@ import java.time.Instant;
  * @param timestamp the instant when the request scope is exiting
  * @param duration  the duration of the request processing
  */
-public record RequestEndingEvent(String requestId, Instant timestamp, Duration duration) {
-}
+public record RequestEndingEvent(String requestId, Instant timestamp, Duration duration) {}

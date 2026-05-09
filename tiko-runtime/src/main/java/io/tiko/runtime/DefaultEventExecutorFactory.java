@@ -47,12 +47,12 @@ public final class DefaultEventExecutorFactory {
         };
 
         return new ThreadPoolExecutor(
-            corePoolSize,
-            maxPoolSize,
-            60L, TimeUnit.SECONDS,
-            new LinkedBlockingQueue<>(1024),
-            threadFactory,
-            new ThreadPoolExecutor.CallerRunsPolicy()
-        );
+                corePoolSize,
+                maxPoolSize,
+                60L,
+                TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(1024),
+                threadFactory,
+                new ThreadPoolExecutor.CallerRunsPolicy());
     }
 }

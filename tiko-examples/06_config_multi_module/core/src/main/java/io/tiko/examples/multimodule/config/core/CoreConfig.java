@@ -1,7 +1,6 @@
 package io.tiko.examples.multimodule.config.core;
 
 import io.tiko.annotations.Configuration;
-
 import java.time.Duration;
 
 /**

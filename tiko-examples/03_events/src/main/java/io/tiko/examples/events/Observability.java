@@ -9,7 +9,6 @@ import io.tiko.events.EventEndingEvent;
 import io.tiko.events.EventStartedEvent;
 import io.tiko.events.RequestEndingEvent;
 import io.tiko.events.RequestStartedEvent;
-
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -58,9 +57,9 @@ public class Observability {
         System.out.println();
         System.out.println("[obs] -- shutdown report --");
         System.out.println("[obs] uptime         : " + event.uptime());
-        System.out.println("[obs] requests       : " + requestCount.get()
-            + " (total " + Duration.ofNanos(totalRequestNanos.get()) + ")");
-        System.out.println("[obs] events         : " + eventCount.get()
-            + " (total " + Duration.ofNanos(totalEventNanos.get()) + ")");
+        System.out.println("[obs] requests       : " + requestCount.get() + " (total "
+                + Duration.ofNanos(totalRequestNanos.get()) + ")");
+        System.out.println("[obs] events         : " + eventCount.get() + " (total "
+                + Duration.ofNanos(totalEventNanos.get()) + ")");
     }
 }

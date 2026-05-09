@@ -1,12 +1,12 @@
 package io.tiko.examples.basic;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import io.tiko.Container;
 import io.tiko.runtime.Tiko;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class PostShutdownGetTest {
 
@@ -21,8 +21,8 @@ class PostShutdownGetTest {
         container.shutdown();
 
         assertThatThrownBy(() -> container.get(ShutdownTestCounter.class))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessage("Container has been shut down");
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Container has been shut down");
     }
 
     @Test
@@ -31,8 +31,8 @@ class PostShutdownGetTest {
         container.shutdown();
 
         assertThatThrownBy(() -> container.get(MessageRepository.class, "any"))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessage("Container has been shut down");
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Container has been shut down");
     }
 
     @Test
@@ -48,8 +48,8 @@ class PostShutdownGetTest {
 
         // Second call should be ~free (just CAS read). Allow generous slack: 1 ms.
         assertThat(secondCall)
-            .as("second shutdown() returns via idempotency CAS, not full sequence")
-            .isLessThan(1_000_000L);
+                .as("second shutdown() returns via idempotency CAS, not full sequence")
+                .isLessThan(1_000_000L);
         assertThat(secondCall).isLessThan(firstCall);
     }
 }

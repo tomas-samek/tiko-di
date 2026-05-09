@@ -3,7 +3,6 @@ package io.tiko.runtime;
 import io.tiko.EventBus;
 import io.tiko.EventCallback;
 import io.tiko.Subscription;
-
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -62,20 +61,18 @@ public final class LocalEventBus implements EventBus {
                 // @EventHandler, no compile-time identity). Log at WARNING — Errors (OOM,
                 // StackOverflow) are deliberately not caught here; those mean the JVM
                 // is sick and surfacing them is the right move.
-                LoggerHolder.LOG.log(Level.WARNING,
-                    String.format("Programmatic event callback threw on event %s: %s",
-                        eventType.getName(), e.toString()),
-                    e);
+                LoggerHolder.LOG.log(
+                        Level.WARNING,
+                        String.format(
+                                "Programmatic event callback threw on event %s: %s", eventType.getName(), e.toString()),
+                        e);
             }
         }
     }
 
     @Override
     public <T> Subscription subscribe(Class<T> eventType, EventCallback<T> callback) {
-        List<EventCallback<?>> callbacks = handlers.computeIfAbsent(
-            eventType,
-            k -> new CopyOnWriteArrayList<>()
-        );
+        List<EventCallback<?>> callbacks = handlers.computeIfAbsent(eventType, k -> new CopyOnWriteArrayList<>());
         callbacks.add(callback);
 
         return new LocalSubscription<>(callbacks, callback);

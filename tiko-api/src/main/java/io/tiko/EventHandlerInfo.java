@@ -13,9 +13,4 @@ package io.tiko;
  * @param eventType      class of the event the handler subscribes to
  * @param async          whether the handler was declared {@code @EventHandler(async = true)}
  */
-public record EventHandlerInfo(
-    Class<?> declaringClass,
-    String methodName,
-    Class<?> eventType,
-    boolean async
-) {}
+public record EventHandlerInfo(Class<?> declaringClass, String methodName, Class<?> eventType, boolean async) {}

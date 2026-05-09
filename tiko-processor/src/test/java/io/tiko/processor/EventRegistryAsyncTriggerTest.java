@@ -1,53 +1,46 @@
 package io.tiko.processor;
 
+import static com.google.testing.compile.CompilationSubject.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.google.testing.compile.Compilation;
 import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
-import org.junit.jupiter.api.Test;
-
-import javax.tools.JavaFileObject;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-
-import static com.google.testing.compile.CompilationSubject.assertThat;
-import static org.assertj.core.api.Assertions.assertThat;
+import javax.tools.JavaFileObject;
+import org.junit.jupiter.api.Test;
 
 class EventRegistryAsyncTriggerTest {
 
     @Test
     void async_event_trigger_passes_executor_and_error_handler() throws IOException {
         JavaFileObject component = JavaFileObjects.forSourceLines(
-            "io.example.Triggering",
-            "package io.example;",
-            "import io.tiko.annotations.Component;",
-            "import io.tiko.annotations.EventHandler;",
-            "import io.tiko.annotations.EventTrigger;",
-            "import io.tiko.Scope;",
-            "@Component(scope = Scope.SINGLETON)",
-            "public class Triggering {",
-            "    @EventHandler",
-            "    @EventTrigger(eventName = \"io.example.Pong\", async = true)",
-            "    public Pong onPing(Ping event) { return new Pong(); }",
-            "}"
-        );
-        JavaFileObject ping = JavaFileObjects.forSourceLines(
-            "io.example.Ping",
-            "package io.example;",
-            "public record Ping() {}"
-        );
-        JavaFileObject pong = JavaFileObjects.forSourceLines(
-            "io.example.Pong",
-            "package io.example;",
-            "public record Pong() {}"
-        );
+                "io.example.Triggering",
+                "package io.example;",
+                "import io.tiko.annotations.Component;",
+                "import io.tiko.annotations.EventHandler;",
+                "import io.tiko.annotations.EventTrigger;",
+                "import io.tiko.Scope;",
+                "@Component(scope = Scope.SINGLETON)",
+                "public class Triggering {",
+                "    @EventHandler",
+                "    @EventTrigger(eventName = \"io.example.Pong\", async = true)",
+                "    public Pong onPing(Ping event) { return new Pong(); }",
+                "}");
+        JavaFileObject ping =
+                JavaFileObjects.forSourceLines("io.example.Ping", "package io.example;", "public record Ping() {}");
+        JavaFileObject pong =
+                JavaFileObjects.forSourceLines("io.example.Pong", "package io.example;", "public record Pong() {}");
 
-        Compilation c = Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(component, ping, pong);
+        Compilation c =
+                Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(component, ping, pong);
         com.google.testing.compile.CompilationSubject.assertThat(c).succeeded();
 
         JavaFileObject registry = c.generatedSourceFiles().stream()
-            .filter(f -> f.getName().contains("EventRegistry"))
-            .findFirst()
-            .orElseThrow(() -> new AssertionError("EventRegistry not generated"));
+                .filter(f -> f.getName().contains("EventRegistry"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("EventRegistry not generated"));
 
         String content = new String(registry.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
 
@@ -61,33 +54,31 @@ class EventRegistryAsyncTriggerTest {
     @Test
     void sync_event_trigger_keeps_3_arg_signature() throws IOException {
         JavaFileObject component = JavaFileObjects.forSourceLines(
-            "io.example.SyncTrig",
-            "package io.example;",
-            "import io.tiko.annotations.Component;",
-            "import io.tiko.annotations.EventHandler;",
-            "import io.tiko.annotations.EventTrigger;",
-            "import io.tiko.Scope;",
-            "@Component(scope = Scope.SINGLETON)",
-            "public class SyncTrig {",
-            "    @EventHandler",
-            "    @EventTrigger(eventName = \"io.example.Pong2\")",
-            "    public Pong2 onPing(Ping2 event) { return new Pong2(); }",
-            "}"
-        );
-        JavaFileObject ping = JavaFileObjects.forSourceLines("io.example.Ping2",
-            "package io.example;",
-            "public record Ping2() {}");
-        JavaFileObject pong = JavaFileObjects.forSourceLines("io.example.Pong2",
-            "package io.example;",
-            "public record Pong2() {}");
+                "io.example.SyncTrig",
+                "package io.example;",
+                "import io.tiko.annotations.Component;",
+                "import io.tiko.annotations.EventHandler;",
+                "import io.tiko.annotations.EventTrigger;",
+                "import io.tiko.Scope;",
+                "@Component(scope = Scope.SINGLETON)",
+                "public class SyncTrig {",
+                "    @EventHandler",
+                "    @EventTrigger(eventName = \"io.example.Pong2\")",
+                "    public Pong2 onPing(Ping2 event) { return new Pong2(); }",
+                "}");
+        JavaFileObject ping =
+                JavaFileObjects.forSourceLines("io.example.Ping2", "package io.example;", "public record Ping2() {}");
+        JavaFileObject pong =
+                JavaFileObjects.forSourceLines("io.example.Pong2", "package io.example;", "public record Pong2() {}");
 
-        Compilation c = Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(component, ping, pong);
+        Compilation c =
+                Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(component, ping, pong);
         com.google.testing.compile.CompilationSubject.assertThat(c).succeeded();
 
         JavaFileObject registry = c.generatedSourceFiles().stream()
-            .filter(f -> f.getName().contains("EventRegistry"))
-            .findFirst()
-            .orElseThrow(() -> new AssertionError("EventRegistry not generated"));
+                .filter(f -> f.getName().contains("EventRegistry"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("EventRegistry not generated"));
 
         String content = new String(registry.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
 

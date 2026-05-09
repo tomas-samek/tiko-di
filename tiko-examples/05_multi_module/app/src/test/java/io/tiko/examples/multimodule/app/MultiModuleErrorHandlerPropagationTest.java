@@ -1,14 +1,13 @@
 package io.tiko.examples.multimodule.app;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import io.tiko.Container;
 import io.tiko.ErrorHandler;
 import io.tiko.runtime.Tiko;
 import io.tiko.runtime.TikoOptions;
-import org.junit.jupiter.api.Test;
-
 import java.util.concurrent.atomic.AtomicReference;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 /**
  * #51 regression pin: {@code TikoOptions.errorHandler(...)} is propagated through the
@@ -38,8 +37,8 @@ class MultiModuleErrorHandlerPropagationTest {
             for (Container module : perModule) {
                 ErrorHandler installed = readErrorHandler(module);
                 assertThat(installed)
-                    .as("per-module container's errorHandler must be the user-supplied instance")
-                    .isSameAs(custom);
+                        .as("per-module container's errorHandler must be the user-supplied instance")
+                        .isSameAs(custom);
             }
         }
     }

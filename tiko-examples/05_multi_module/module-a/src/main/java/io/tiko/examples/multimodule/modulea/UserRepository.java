@@ -3,7 +3,6 @@ package io.tiko.examples.multimodule.modulea;
 import io.tiko.Scope;
 import io.tiko.annotations.Component;
 import io.tiko.annotations.PostConstruct;
-
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 

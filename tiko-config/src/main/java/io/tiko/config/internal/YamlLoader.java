@@ -1,13 +1,12 @@
 package io.tiko.config.internal;
 
-import org.yaml.snakeyaml.LoaderOptions;
-import org.yaml.snakeyaml.Yaml;
-
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.Yaml;
 
 /** SnakeYAML-backed loader that produces a {@code Map<String, Object>} tree. */
 public final class YamlLoader {
@@ -25,7 +24,8 @@ public final class YamlLoader {
             Map<String, Object> stringKeyed = stringKeyed((Map<Object, Object>) m);
             return stringKeyed;
         }
-        throw new IllegalArgumentException("YAML root must be a mapping; got " + loaded.getClass().getSimpleName());
+        throw new IllegalArgumentException(
+                "YAML root must be a mapping; got " + loaded.getClass().getSimpleName());
     }
 
     @SuppressWarnings("unchecked")

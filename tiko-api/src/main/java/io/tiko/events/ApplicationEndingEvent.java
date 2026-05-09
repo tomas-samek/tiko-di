@@ -24,5 +24,4 @@ import java.time.Instant;
  * @param timestamp the instant when shutdown was initiated
  * @param uptime    the duration the application was running
  */
-public record ApplicationEndingEvent(Instant timestamp, Duration uptime) {
-}
+public record ApplicationEndingEvent(Instant timestamp, Duration uptime) {}

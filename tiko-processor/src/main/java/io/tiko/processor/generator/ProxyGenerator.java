@@ -1,18 +1,16 @@
 package io.tiko.processor.generator;
 
 import com.palantir.javapoet.*;
-import io.tiko.Scope;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.util.ProcessorContext;
-
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.TypeMirror;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Generates proxy classes for cross-scope injection.
@@ -60,7 +58,8 @@ public final class ProxyGenerator {
             return false;
         }
 
-        TypeMirror interfaceType = component.getImplementedInterface()
+        TypeMirror interfaceType = component
+                .getImplementedInterface()
                 .orElseThrow(() -> new IllegalStateException("Proxy required but no interface found"));
 
         TypeElement interfaceElement = context.getElementUtils().getTypeElement(interfaceType.toString());
@@ -78,8 +77,7 @@ public final class ProxyGenerator {
                 .addMethods(createDelegatingMethods(component, interfaceElement))
                 .build();
 
-        JavaFile javaFile = JavaFile.builder(GENERATED_PACKAGE, proxyClass)
-                .build();
+        JavaFile javaFile = JavaFile.builder(GENERATED_PACKAGE, proxyClass).build();
 
         javaFile.writeTo(context.getFiler());
         return true;
@@ -90,10 +88,11 @@ public final class ProxyGenerator {
      */
     private FieldSpec createContainerField() {
         return FieldSpec.builder(
-                ClassName.get(GENERATED_PACKAGE, context.getContainerClassName()),
-                "container",
-                Modifier.PRIVATE, Modifier.FINAL
-        ).build();
+                        ClassName.get(GENERATED_PACKAGE, context.getContainerClassName()),
+                        "container",
+                        Modifier.PRIVATE,
+                        Modifier.FINAL)
+                .build();
     }
 
     /**
@@ -116,8 +115,8 @@ public final class ProxyGenerator {
         for (Element enclosedElement : interfaceElement.getEnclosedElements()) {
             if (enclosedElement instanceof ExecutableElement method) {
                 // Skip static and default methods
-                if (method.getModifiers().contains(Modifier.STATIC) ||
-                    method.getModifiers().contains(Modifier.DEFAULT)) {
+                if (method.getModifiers().contains(Modifier.STATIC)
+                        || method.getModifiers().contains(Modifier.DEFAULT)) {
                     continue;
                 }
 
@@ -132,7 +131,8 @@ public final class ProxyGenerator {
      * Creates a single delegating method that forwards to the actual instance.
      */
     private MethodSpec createDelegatingMethod(ComponentModel component, ExecutableElement method) {
-        MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder(method.getSimpleName().toString())
+        MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder(
+                        method.getSimpleName().toString())
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
                 .returns(TypeName.get(method.getReturnType()));
@@ -163,11 +163,13 @@ public final class ProxyGenerator {
      * e.g., "container.getCurrentRequestContext()"
      */
     private String generateGetActualInstanceCall(ComponentModel component) {
-        String methodName = switch (component.getScope()) {
-            case REQUEST -> "getCurrent" + component.getClassName();
-            case EVENT -> "getCurrent" + component.getClassName();
-            default -> throw new IllegalStateException("Proxy only for REQUEST/EVENT scope, got: " + component.getScope());
-        };
+        String methodName =
+                switch (component.getScope()) {
+                    case REQUEST -> "getCurrent" + component.getClassName();
+                    case EVENT -> "getCurrent" + component.getClassName();
+                    default -> throw new IllegalStateException(
+                            "Proxy only for REQUEST/EVENT scope, got: " + component.getScope());
+                };
 
         return "container." + methodName + "()";
     }

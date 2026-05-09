@@ -1,13 +1,12 @@
 package io.tiko.processor.model;
 
 import io.tiko.Scope;
-
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.type.TypeMirror;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.TypeMirror;
 
 /**
  * Internal model representing a @Component annotated class.
@@ -20,15 +19,15 @@ public final class ComponentModel {
     private final String className;
     private final String qualifiedName;
     private final Scope scope;
-    private final String name;  // Optional qualifier
+    private final String name; // Optional qualifier
     private final List<String> profiles;
     private final List<DependencyModel> dependencies;
     private final ExecutableElement constructor;
     private final List<ExecutableElement> postConstructMethods;
     private final List<ExecutableElement> preDestroyMethods;
-    private final TypeMirror implementedInterface;  // For proxy generation (nullable)
+    private final TypeMirror implementedInterface; // For proxy generation (nullable)
     private final boolean requiresProxy;
-    private final ExecutableElement staticFactoryMethod;  // Optional self-@Produces (nullable)
+    private final ExecutableElement staticFactoryMethod; // Optional self-@Produces (nullable)
     private final boolean autoCloseable;
 
     private ComponentModel(Builder builder) {
@@ -134,9 +133,7 @@ public final class ComponentModel {
      * Returns the unique key for this component (qualified name + optional name qualifier).
      */
     public String getComponentKey() {
-        return getName()
-                .map(n -> qualifiedName + "#" + n)
-                .orElse(qualifiedName);
+        return getName().map(n -> qualifiedName + "#" + n).orElse(qualifiedName);
     }
 
     public static final class Builder {
@@ -156,8 +153,7 @@ public final class ComponentModel {
         private ExecutableElement staticFactoryMethod;
         private boolean autoCloseable = false;
 
-        private Builder() {
-        }
+        private Builder() {}
 
         public Builder typeElement(TypeElement typeElement) {
             this.typeElement = typeElement;

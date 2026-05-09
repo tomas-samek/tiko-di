@@ -3,7 +3,6 @@ package io.tiko.examples.apiimpl.impl;
 import io.tiko.Scope;
 import io.tiko.annotations.Component;
 import io.tiko.examples.apiimpl.api.User;
-
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;

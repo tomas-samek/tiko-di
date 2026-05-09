@@ -28,7 +28,7 @@ public final class NestedRecordSupport {
     public static Map<String, Object> requireMap(Object raw, String recordName) {
         if (!(raw instanceof Map<?, ?> m)) {
             throw new CoercionException(
-                "expected mapping for nested record '" + recordName + "', got " + describe(raw));
+                    "expected mapping for nested record '" + recordName + "', got " + describe(raw));
         }
         return new LinkedHashMap<>((Map<String, Object>) m);
     }
@@ -37,11 +37,10 @@ public final class NestedRecordSupport {
      * Reads a required field from a nested record's node. Throws {@link CoercionException}
      * with the record + field path prepended on missing key or coercion failure.
      */
-    public static <T> T requireField(Map<String, Object> node, String fieldName,
-            String recordName, TypeCoercer<T> coercer) {
+    public static <T> T requireField(
+            Map<String, Object> node, String fieldName, String recordName, TypeCoercer<T> coercer) {
         if (!node.containsKey(fieldName)) {
-            throw new CoercionException(
-                recordName + " missing required field '" + fieldName + "'");
+            throw new CoercionException(recordName + " missing required field '" + fieldName + "'");
         }
         Object raw = node.remove(fieldName);
         try {
@@ -55,8 +54,8 @@ public final class NestedRecordSupport {
      * Reads a defaulted field from a nested record's node. Returns {@code defaultValue}
      * if the key is absent.
      */
-    public static <T> T fieldOrDefault(Map<String, Object> node, String fieldName,
-            String recordName, TypeCoercer<T> coercer, T defaultValue) {
+    public static <T> T fieldOrDefault(
+            Map<String, Object> node, String fieldName, String recordName, TypeCoercer<T> coercer, T defaultValue) {
         if (!node.containsKey(fieldName)) {
             return defaultValue;
         }
@@ -72,8 +71,8 @@ public final class NestedRecordSupport {
      * Reads an Optional field from a nested record's node. Returns {@link Optional#empty()}
      * if the key is absent.
      */
-    public static <T> Optional<T> optionalField(Map<String, Object> node, String fieldName,
-            String recordName, TypeCoercer<T> coercer) {
+    public static <T> Optional<T> optionalField(
+            Map<String, Object> node, String fieldName, String recordName, TypeCoercer<T> coercer) {
         if (!node.containsKey(fieldName)) {
             return Optional.empty();
         }
@@ -96,7 +95,7 @@ public final class NestedRecordSupport {
     public static void checkUnknownKeys(Map<String, Object> node, String recordName) {
         if (!node.isEmpty()) {
             throw new CoercionException(
-                recordName + " unknown key '" + node.keySet().iterator().next() + "'");
+                    recordName + " unknown key '" + node.keySet().iterator().next() + "'");
         }
     }
 

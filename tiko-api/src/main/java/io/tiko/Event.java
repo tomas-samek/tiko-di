@@ -168,12 +168,11 @@ public final class Event<T> {
 
     @Override
     public String toString() {
-        return "Event{" +
-                "payload=" + payload.getClass().getSimpleName() +
-                ", depth=" + getChainDepth() +
-                ", eventId='" + eventId + '\'' +
-                ", timestamp=" + timestamp +
-                '}';
+        return "Event{" + "payload="
+                + payload.getClass().getSimpleName() + ", depth="
+                + getChainDepth() + ", eventId='"
+                + eventId + '\'' + ", timestamp="
+                + timestamp + '}';
     }
 
     @Override

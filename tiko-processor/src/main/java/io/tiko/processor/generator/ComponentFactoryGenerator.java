@@ -4,14 +4,13 @@ import com.palantir.javapoet.*;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.util.ProcessorContext;
-
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.TypeElement;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.Modifier;
+import javax.lang.model.element.TypeElement;
 
 /**
  * Generates factory classes for @Component annotated classes.
@@ -57,8 +56,7 @@ public final class ComponentFactoryGenerator {
                 .addMethod(createFactoryMethod(component))
                 .build();
 
-        JavaFile javaFile = JavaFile.builder(GENERATED_PACKAGE, factoryClass)
-                .build();
+        JavaFile javaFile = JavaFile.builder(GENERATED_PACKAGE, factoryClass).build();
 
         javaFile.writeTo(context.getFiler());
     }
@@ -68,10 +66,11 @@ public final class ComponentFactoryGenerator {
      */
     private FieldSpec createContainerField() {
         return FieldSpec.builder(
-                ClassName.get(GENERATED_PACKAGE, context.getContainerClassName()),
-                "container",
-                Modifier.PRIVATE, Modifier.FINAL
-        ).build();
+                        ClassName.get(GENERATED_PACKAGE, context.getContainerClassName()),
+                        "container",
+                        Modifier.PRIVATE,
+                        Modifier.FINAL)
+                .build();
     }
 
     /**
@@ -92,9 +91,8 @@ public final class ComponentFactoryGenerator {
         TypeElement typeElement = component.getTypeElement();
         ClassName componentClass = ClassName.get(typeElement);
 
-        MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("create")
-                .addModifiers(Modifier.PUBLIC)
-                .returns(componentClass);
+        MethodSpec.Builder methodBuilder =
+                MethodSpec.methodBuilder("create").addModifiers(Modifier.PUBLIC).returns(componentClass);
 
         // Resolve dependencies
         List<String> parameterNames = new ArrayList<>();
@@ -108,16 +106,14 @@ public final class ComponentFactoryGenerator {
                         "$T $L = () -> $L",
                         TypeName.get(dependency.getType()),
                         paramName,
-                        generateContainerGetCall(dependency)
-                );
+                        generateContainerGetCall(dependency));
             } else {
                 // Direct dependency resolution
                 methodBuilder.addStatement(
                         "$T $L = $L",
                         TypeName.get(dependency.getType()),
                         paramName,
-                        generateContainerGetCall(dependency)
-                );
+                        generateContainerGetCall(dependency));
             }
         }
 
@@ -148,9 +144,8 @@ public final class ComponentFactoryGenerator {
      * Generates a call to container.getXxx() for the given dependency.
      */
     private String generateContainerGetCall(DependencyModel dependency) {
-        String typeName = dependency.isProvider()
-                ? dependency.getUnwrappedType().get().toString()
-                : dependency.getTypeName();
+        String typeName =
+                dependency.isProvider() ? dependency.getUnwrappedType().get().toString() : dependency.getTypeName();
 
         // Find the actual component or factory that provides this dependency
         String dependencyKey = dependency.getDependencyKey();

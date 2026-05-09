@@ -30,10 +30,10 @@ import java.lang.annotation.Target;
 @Target({ElementType.PARAMETER})
 @Retention(RetentionPolicy.RUNTIME)
 public @interface Named {
-  /**
-   * The name used to distinguish this component from others of the same type.
-   *
-   * @return the qualifier name
-   */
-  String value();
+    /**
+     * The name used to distinguish this component from others of the same type.
+     *
+     * @return the qualifier name
+     */
+    String value();
 }

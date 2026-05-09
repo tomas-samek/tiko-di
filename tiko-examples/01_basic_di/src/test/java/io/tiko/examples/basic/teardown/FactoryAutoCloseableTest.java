@@ -1,11 +1,11 @@
 package io.tiko.examples.basic.teardown;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import io.tiko.Container;
 import io.tiko.runtime.Tiko;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 class FactoryAutoCloseableTest {
 
@@ -24,8 +24,8 @@ class FactoryAutoCloseableTest {
         container.shutdown();
 
         assertThat(TeardownRecorder.order)
-            .as("@Produces returning AutoCloseable must auto-close at shutdown")
-            .contains("FakePool.primary");
+                .as("@Produces returning AutoCloseable must auto-close at shutdown")
+                .contains("FakePool.primary");
     }
 
     @Test
@@ -41,8 +41,8 @@ class FactoryAutoCloseableTest {
         }
 
         assertThat(TeardownRecorder.order)
-            .as("@Produces returning AutoCloseable in REQUEST scope must auto-close at scope exit")
-            .contains("FakePool.request");
+                .as("@Produces returning AutoCloseable in REQUEST scope must auto-close at scope exit")
+                .contains("FakePool.request");
     }
 
     @Test
@@ -57,7 +57,7 @@ class FactoryAutoCloseableTest {
         }
 
         assertThat(TeardownRecorder.order)
-            .as("Lazy factory beans never created in a scope must not appear in teardown")
-            .doesNotContain("FakePool.request");
+                .as("Lazy factory beans never created in a scope must not appear in teardown")
+                .doesNotContain("FakePool.request");
     }
 }

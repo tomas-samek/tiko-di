@@ -74,67 +74,58 @@ public final class ErrorReporter {
 
     public void missingDependency(Element element, String dependencyKey, String injectingClass) {
         error(
-            element,
-            "Cannot resolve dependency: " + dependencyKey,
-            "Add a @Component class of type " + dependencyKey,
-            "Create a @Produces factory method that returns " + dependencyKey,
-            "Check if the dependency has the correct qualifier (@Named)"
-        );
+                element,
+                "Cannot resolve dependency: " + dependencyKey,
+                "Add a @Component class of type " + dependencyKey,
+                "Create a @Produces factory method that returns " + dependencyKey,
+                "Check if the dependency has the correct qualifier (@Named)");
     }
 
     public void circularDependency(Element element, String cycle) {
         error(
-            element,
-            "Circular dependency detected: " + cycle,
-            "Break the cycle by using Provider<T> for one of the dependencies",
-            "Refactor to remove the circular dependency",
-            "Consider using event-based communication instead of direct dependencies"
-        );
+                element,
+                "Circular dependency detected: " + cycle,
+                "Break the cycle by using Provider<T> for one of the dependencies",
+                "Refactor to remove the circular dependency",
+                "Consider using event-based communication instead of direct dependencies");
     }
 
     public void scopeViolation(Element element, String consumerScope, String dependencyScope, String dependencyType) {
         error(
-            element,
-            "Scope violation: " + consumerScope + "-scoped bean cannot inject " +
-                dependencyScope + "-scoped bean '" + dependencyType + "'",
-            "Make " + dependencyType + " implement an interface for proxy generation",
-            "Change the scope of " + dependencyType + " to " + consumerScope + " or longer",
-            "Use Provider<" + dependencyType + "> for lazy resolution"
-        );
+                element,
+                "Scope violation: " + consumerScope + "-scoped bean cannot inject " + dependencyScope + "-scoped bean '"
+                        + dependencyType + "'",
+                "Make " + dependencyType + " implement an interface for proxy generation",
+                "Change the scope of " + dependencyType + " to " + consumerScope + " or longer",
+                "Use Provider<" + dependencyType + "> for lazy resolution");
     }
 
     public void missingInterface(Element element, String className, String reason) {
         error(
-            element,
-            className + " must implement an interface. " + reason,
-            "Extract an interface from " + className,
-            "Make " + className + " implement an existing interface"
-        );
+                element,
+                className + " must implement an interface. " + reason,
+                "Extract an interface from " + className,
+                "Make " + className + " implement an existing interface");
     }
 
     public void invalidAnnotationUsage(Element element, String annotationName, String reason) {
-        error(
-            element,
-            "Invalid use of " + annotationName + ": " + reason
-        );
+        error(element, "Invalid use of " + annotationName + ": " + reason);
     }
 
     public void duplicateQualifier(Element element, String qualifier, String existingComponent) {
         error(
-            element,
-            "Duplicate qualifier '" + qualifier + "' - already used by " + existingComponent,
-            "Use a different qualifier name",
-            "Remove the qualifier if not needed",
-            "Ensure each qualifier is unique within a type"
-        );
+                element,
+                "Duplicate qualifier '" + qualifier + "' - already used by " + existingComponent,
+                "Use a different qualifier name",
+                "Remove the qualifier if not needed",
+                "Ensure each qualifier is unique within a type");
     }
 
     public void ambiguousProviders(Element element, String type, String providers, String simpleTypeName) {
         error(
-            element,
-            "Multiple unnamed providers for type " + type + ": " + providers,
-            "Add @Named(\"...\") to each and use container.get(" + simpleTypeName + ".class, \"name\")",
-            "Keep one provider unnamed as the default and give the others @Component(name = \"...\") or @Produces(name = \"...\")"
-        );
+                element,
+                "Multiple unnamed providers for type " + type + ": " + providers,
+                "Add @Named(\"...\") to each and use container.get(" + simpleTypeName + ".class, \"name\")",
+                "Keep one provider unnamed as the default and give the others @Component(name = \"...\") or @Produces(name = \"...\")");
     }
 }

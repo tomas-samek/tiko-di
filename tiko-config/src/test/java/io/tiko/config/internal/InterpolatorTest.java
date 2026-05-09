@@ -1,15 +1,14 @@
 // tiko-config/src/test/java/io/tiko/config/internal/InterpolatorTest.java
 package io.tiko.config.internal;
 
-import io.tiko.config.BindContext;
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import io.tiko.config.BindContext;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class InterpolatorTest {
 
@@ -21,8 +20,8 @@ class InterpolatorTest {
     void substitutes_present_variable() {
         Map<String, Object> tree = Map.of("url", "${DB_URL}");
         BindContext ctx = new BindContext("c.yaml");
-        Map<String, Object> result = (Map<String, Object>) Interpolator.interpolate(
-            tree, env(Map.of("DB_URL", "jdbc:postgres://x")), ctx);
+        Map<String, Object> result =
+                (Map<String, Object>) Interpolator.interpolate(tree, env(Map.of("DB_URL", "jdbc:postgres://x")), ctx);
         assertThat(result).containsEntry("url", "jdbc:postgres://x");
         assertThat(ctx.hasErrors()).isFalse();
     }
@@ -49,8 +48,8 @@ class InterpolatorTest {
     void multiple_substitutions_per_scalar() {
         Map<String, Object> tree = Map.of("conn", "${HOST}:${PORT}");
         BindContext ctx = new BindContext("c.yaml");
-        Map<String, Object> result = (Map<String, Object>) Interpolator.interpolate(
-            tree, env(Map.of("HOST", "h", "PORT", "9090")), ctx);
+        Map<String, Object> result =
+                (Map<String, Object>) Interpolator.interpolate(tree, env(Map.of("HOST", "h", "PORT", "9090")), ctx);
         assertThat(result).containsEntry("conn", "h:9090");
     }
 
@@ -62,8 +61,8 @@ class InterpolatorTest {
         Map<String, Object> tree = Map.of("inner", inner);
 
         BindContext ctx = new BindContext("c.yaml");
-        Map<String, Object> result = (Map<String, Object>) Interpolator.interpolate(
-            tree, env(Map.of("A", "alpha", "B", "beta")), ctx);
+        Map<String, Object> result =
+                (Map<String, Object>) Interpolator.interpolate(tree, env(Map.of("A", "alpha", "B", "beta")), ctx);
 
         Map<String, Object> r = (Map<String, Object>) result.get("inner");
         assertThat(r).containsEntry("a", "alpha");
@@ -76,8 +75,8 @@ class InterpolatorTest {
     void leaves_keys_untouched() {
         Map<String, Object> tree = Map.of("${LITERAL_KEY}", "value");
         BindContext ctx = new BindContext("c.yaml");
-        Map<String, Object> result = (Map<String, Object>) Interpolator.interpolate(
-            tree, env(Map.of("LITERAL_KEY", "ignored")), ctx);
+        Map<String, Object> result =
+                (Map<String, Object>) Interpolator.interpolate(tree, env(Map.of("LITERAL_KEY", "ignored")), ctx);
         assertThat(result).containsKey("${LITERAL_KEY}");
     }
 }

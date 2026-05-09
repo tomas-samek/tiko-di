@@ -1,8 +1,11 @@
 // tiko-config/src/test/java/io/tiko/config/internal/coercers/CoercersTest.java
 package io.tiko.config.internal.coercers;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.math.BigDecimal;
+import java.net.URI;
 import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -10,13 +13,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.math.BigDecimal;
-import java.net.URI;
 import java.util.UUID;
 import java.util.regex.Pattern;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
 
 class CoercersTest {
 
@@ -29,8 +28,8 @@ class CoercersTest {
     @Test
     void int_coercer_rejects_non_integer_string() {
         assertThatThrownBy(() -> Coercers.intCoercer().coerce("ten"))
-            .isInstanceOf(CoercionException.class)
-            .hasMessageContaining("expected integer");
+                .isInstanceOf(CoercionException.class)
+                .hasMessageContaining("expected integer");
     }
 
     @Test
@@ -60,7 +59,7 @@ class CoercersTest {
     @Test
     void instant_coercer_parses_iso8601() {
         assertThat(Coercers.instantCoercer().coerce("2026-05-04T12:00:00Z"))
-            .isEqualTo(Instant.parse("2026-05-04T12:00:00Z"));
+                .isEqualTo(Instant.parse("2026-05-04T12:00:00Z"));
     }
 
     @Test
@@ -79,11 +78,12 @@ class CoercersTest {
         assertThat(Coercers.uriCoercer().coerce("https://example.com")).isEqualTo(URI.create("https://example.com"));
         assertThat(Coercers.pathCoercer().coerce("/tmp/foo")).isEqualTo(Path.of("/tmp/foo"));
         assertThat(Coercers.charsetCoercer().coerce("UTF-8")).isEqualTo(Charset.forName("UTF-8"));
-        assertThat(Coercers.patternCoercer().coerce("[a-z]+").pattern()).isEqualTo(Pattern.compile("[a-z]+").pattern());
+        assertThat(Coercers.patternCoercer().coerce("[a-z]+").pattern())
+                .isEqualTo(Pattern.compile("[a-z]+").pattern());
         assertThat(Coercers.bigDecimalCoercer().coerce("3.14")).isEqualTo(new BigDecimal("3.14"));
         assertThat(Coercers.zoneIdCoercer().coerce("Europe/Prague")).isEqualTo(ZoneId.of("Europe/Prague"));
         assertThat(Coercers.localDateTimeCoercer().coerce("2026-05-04T12:00:00"))
-            .isEqualTo(LocalDateTime.parse("2026-05-04T12:00:00"));
+                .isEqualTo(LocalDateTime.parse("2026-05-04T12:00:00"));
     }
 
     @Test
@@ -91,30 +91,33 @@ class CoercersTest {
         TypeCoercer<TestKind> c = Coercers.enumCoercer(TestKind.class);
         assertThat(c.coerce("RED")).isEqualTo(TestKind.RED);
         assertThatThrownBy(() -> c.coerce("red"))
-            .isInstanceOf(CoercionException.class)
-            .hasMessageContaining("expected one of [RED, BLUE]");
+                .isInstanceOf(CoercionException.class)
+                .hasMessageContaining("expected one of [RED, BLUE]");
     }
 
     @Test
     void int_coercer_rejects_long_overflow() {
         assertThatThrownBy(() -> Coercers.intCoercer().coerce(((long) Integer.MAX_VALUE) + 1L))
-            .isInstanceOf(CoercionException.class)
-            .hasMessageContaining("out of int range");
+                .isInstanceOf(CoercionException.class)
+                .hasMessageContaining("out of int range");
     }
 
     @Test
     void enum_coercer_rejects_null_input() {
         assertThatThrownBy(() -> Coercers.enumCoercer(TestKind.class).coerce(null))
-            .isInstanceOf(CoercionException.class)
-            .hasMessageContaining("got null");
+                .isInstanceOf(CoercionException.class)
+                .hasMessageContaining("got null");
     }
 
     @Test
     void byte_coercer_rejects_out_of_range() {
         assertThatThrownBy(() -> Coercers.byteCoercer().coerce(200))
-            .isInstanceOf(CoercionException.class)
-            .hasMessageContaining("out of byte range");
+                .isInstanceOf(CoercionException.class)
+                .hasMessageContaining("out of byte range");
     }
 
-    enum TestKind { RED, BLUE }
+    enum TestKind {
+        RED,
+        BLUE
+    }
 }

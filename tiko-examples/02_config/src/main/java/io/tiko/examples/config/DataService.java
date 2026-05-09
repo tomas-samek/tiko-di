@@ -17,9 +17,9 @@ public class DataService {
 
     public String describe() {
         return app.name() + " connecting to " + db.url()
-            + " (max=" + db.maxConnections()
-            + ", timeout=" + db.connectTimeout().orElse(java.time.Duration.ZERO)
-            + ", logLevel=" + app.logLevel()
-            + ", listening on " + app.server().host() + ":" + app.server().port() + ")";
+                + " (max=" + db.maxConnections()
+                + ", timeout=" + db.connectTimeout().orElse(java.time.Duration.ZERO)
+                + ", logLevel=" + app.logLevel()
+                + ", listening on " + app.server().host() + ":" + app.server().port() + ")";
     }
 }

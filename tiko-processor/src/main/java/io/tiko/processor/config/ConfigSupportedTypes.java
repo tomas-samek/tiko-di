@@ -4,12 +4,11 @@ package io.tiko.processor.config;
 import io.tiko.config.internal.coercers.CoercionException;
 import io.tiko.config.internal.coercers.TypeCoercer;
 import io.tiko.config.internal.coercers.TypeCoercerRegistry;
-
+import java.util.List;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Types;
-import java.util.List;
 
 /**
  * Bridge between processor element types and the runtime coercer set.
@@ -75,9 +74,23 @@ public final class ConfigSupportedTypes {
 
     public static List<String> bundledTypeNames() {
         return List.of(
-            "primitives + boxed", "String", "Duration", "Instant", "LocalDate", "LocalDateTime",
-            "ZoneId", "UUID", "URI", "Path", "BigDecimal", "Pattern", "Charset",
-            "enums", "List<X>", "Map<String,X>", "nested records", "Optional<X>"
-        );
+                "primitives + boxed",
+                "String",
+                "Duration",
+                "Instant",
+                "LocalDate",
+                "LocalDateTime",
+                "ZoneId",
+                "UUID",
+                "URI",
+                "Path",
+                "BigDecimal",
+                "Pattern",
+                "Charset",
+                "enums",
+                "List<X>",
+                "Map<String,X>",
+                "nested records",
+                "Optional<X>");
     }
 }

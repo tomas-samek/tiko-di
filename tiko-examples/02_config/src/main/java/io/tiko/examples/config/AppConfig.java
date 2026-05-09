@@ -10,8 +10,4 @@ import io.tiko.annotations.Default;
  * the {@code app} prefix.
  */
 @Configuration(prefix = "app")
-public record AppConfig(
-    String name,
-    @Default("INFO") String logLevel,
-    ServerConfig server
-) {}
+public record AppConfig(String name, @Default("INFO") String logLevel, ServerConfig server) {}

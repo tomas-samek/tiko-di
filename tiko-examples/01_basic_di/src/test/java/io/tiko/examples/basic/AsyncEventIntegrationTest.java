@@ -1,22 +1,21 @@
 package io.tiko.examples.basic;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import io.tiko.Container;
 import io.tiko.ErrorContext;
 import io.tiko.ErrorHandler;
 import io.tiko.EventHandlerError;
 import io.tiko.runtime.Tiko;
 import io.tiko.runtime.TikoOptions;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 class AsyncEventIntegrationTest {
 
@@ -34,8 +33,8 @@ class AsyncEventIntegrationTest {
 
             assertThat(AsyncRecorder.latch.await(5, TimeUnit.SECONDS)).isTrue();
             assertThat(AsyncRecorder.threadName.get())
-                .isNotEqualTo(publisherThread)
-                .startsWith("tiko-event-async-");
+                    .isNotEqualTo(publisherThread)
+                    .startsWith("tiko-event-async-");
         }
     }
 
@@ -70,14 +69,33 @@ class AsyncEventIntegrationTest {
             return t;
         });
         ExecutorService recording = new java.util.concurrent.AbstractExecutorService() {
-            @Override public void shutdown() { delegate.shutdown(); }
-            @Override public java.util.List<Runnable> shutdownNow() { return delegate.shutdownNow(); }
-            @Override public boolean isShutdown() { return delegate.isShutdown(); }
-            @Override public boolean isTerminated() { return delegate.isTerminated(); }
-            @Override public boolean awaitTermination(long t, TimeUnit u) throws InterruptedException {
+            @Override
+            public void shutdown() {
+                delegate.shutdown();
+            }
+
+            @Override
+            public java.util.List<Runnable> shutdownNow() {
+                return delegate.shutdownNow();
+            }
+
+            @Override
+            public boolean isShutdown() {
+                return delegate.isShutdown();
+            }
+
+            @Override
+            public boolean isTerminated() {
+                return delegate.isTerminated();
+            }
+
+            @Override
+            public boolean awaitTermination(long t, TimeUnit u) throws InterruptedException {
                 return delegate.awaitTermination(t, u);
             }
-            @Override public void execute(Runnable command) {
+
+            @Override
+            public void execute(Runnable command) {
                 submissions.incrementAndGet();
                 delegate.execute(command);
             }
@@ -85,7 +103,10 @@ class AsyncEventIntegrationTest {
 
         // Suppress the AsyncThrower from polluting stderr with stack traces — using a no-op handler.
         ErrorHandler silent = ctx -> {};
-        TikoOptions opts = TikoOptions.builder().eventExecutor(recording).errorHandler(silent).build();
+        TikoOptions opts = TikoOptions.builder()
+                .eventExecutor(recording)
+                .errorHandler(silent)
+                .build();
         try (Container container = Tiko.create(opts)) {
             assertThat(container.getEventExecutor()).isSameAs(recording);
             container.getEventBus().publish(new AsyncPing());
@@ -102,7 +123,8 @@ class AsyncEventIntegrationTest {
         ExecutorService user = Executors.newSingleThreadExecutor();
         // Silent error handler so the AsyncThrower's exception doesn't pollute test output.
         ErrorHandler silent = ctx -> {};
-        TikoOptions opts = TikoOptions.builder().eventExecutor(user).errorHandler(silent).build();
+        TikoOptions opts =
+                TikoOptions.builder().eventExecutor(user).errorHandler(silent).build();
         try (Container container = Tiko.create(opts)) {
             // empty body — close at end
         }

@@ -1,16 +1,15 @@
 package io.tiko.examples.multimodule.config.app;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import io.tiko.Container;
-import io.tiko.runtime.Tiko;
 import io.tiko.config.ConfigSources;
 import io.tiko.examples.multimodule.config.core.CoreService;
 import io.tiko.examples.multimodule.config.notifications.NotificationsService;
-import org.junit.jupiter.api.Test;
-
+import io.tiko.runtime.Tiko;
 import java.time.Duration;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 /**
  * End-to-end coverage for #18: cross-module configuration aggregation with
@@ -50,8 +49,8 @@ class MultiModuleConfigIntegrationTest {
 
     @Test
     void in_memory_override_works_the_same_as_a_file_override() {
-        try (Container container = Tiko.create(ConfigSources.fromMap(Map.of(
-                "notifications", Map.of("channel", "sms"))))) {
+        try (Container container =
+                Tiko.create(ConfigSources.fromMap(Map.of("notifications", Map.of("channel", "sms"))))) {
             NotificationsService notifications = container.get(NotificationsService.class);
             CoreService core = container.get(CoreService.class);
 

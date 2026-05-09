@@ -6,9 +6,7 @@ import io.tiko.EventBus;
 import io.tiko.Provider;
 import io.tiko.events.ApplicationEndingEvent;
 import io.tiko.events.ApplicationStartedEvent;
-
 import java.io.BufferedReader;
-import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.reflect.Constructor;
 import java.net.URL;
@@ -80,13 +78,11 @@ public final class AggregatingContainer implements Container {
      *                         the lifecycle — the aggregator never shuts it down.
      * @throws IllegalStateException if container discovery or initialization fails
      */
-    public AggregatingContainer(EventBus eventBus, ErrorHandler errorHandler,
-            java.util.concurrent.ExecutorService userEventExecutor) {
+    public AggregatingContainer(
+            EventBus eventBus, ErrorHandler errorHandler, java.util.concurrent.ExecutorService userEventExecutor) {
         this.sharedEventBus = eventBus;
         this.errorHandler = errorHandler;
-        this.eventExecutor = userEventExecutor != null
-            ? userEventExecutor
-            : DefaultEventExecutorFactory.create();
+        this.eventExecutor = userEventExecutor != null ? userEventExecutor : DefaultEventExecutorFactory.create();
         this.ownsEventExecutor = (userEventExecutor == null);
         this.moduleContainers = new ArrayList<>();
         this.componentToContainerMap = new ConcurrentHashMap<>();
@@ -117,7 +113,7 @@ public final class AggregatingContainer implements Container {
 
         if (moduleContainers.isEmpty()) {
             throw new IllegalStateException(
-                "No Tiko containers found on classpath. Expected at least one META-INF/tiko/container.properties file.");
+                    "No Tiko containers found on classpath. Expected at least one META-INF/tiko/container.properties file.");
         }
     }
 
@@ -133,8 +129,7 @@ public final class AggregatingContainer implements Container {
 
         String implClassName = props.getProperty("impl");
         if (implClassName == null || implClassName.trim().isEmpty()) {
-            throw new IllegalStateException(
-                "Missing 'impl' property in " + resourceUrl);
+            throw new IllegalStateException("Missing 'impl' property in " + resourceUrl);
         }
 
         // Load and instantiate the container with 4-arg constructor (#45):
@@ -146,18 +141,18 @@ public final class AggregatingContainer implements Container {
         //   ApplicationEndingEvent once on the shared bus (#45).
         Class<?> containerClass = Class.forName(implClassName, true, classLoader);
         Constructor<?> constructor = containerClass.getDeclaredConstructor(
-            EventBus.class, ErrorHandler.class,
-            java.util.concurrent.ExecutorService.class, boolean.class);
+                EventBus.class, ErrorHandler.class,
+                java.util.concurrent.ExecutorService.class, boolean.class);
         Container moduleContainer = (Container) constructor.newInstance(
-            sharedEventBus, errorHandler, eventExecutor, /* publishLifecycleEvents */ false);
+                sharedEventBus, errorHandler, eventExecutor, /* publishLifecycleEvents */ false);
 
         moduleContainers.add(moduleContainer);
 
         // Load components mapping
         String resourcePath = resourceUrl.getPath();
         String componentsPath = resourcePath.replace("container.properties", "components.txt");
-        URL componentsUrl = new URL(resourceUrl.getProtocol(), resourceUrl.getHost(),
-            resourceUrl.getPort(), componentsPath);
+        URL componentsUrl =
+                new URL(resourceUrl.getProtocol(), resourceUrl.getHost(), resourceUrl.getPort(), componentsPath);
 
         try (var reader = new BufferedReader(new InputStreamReader(componentsUrl.openStream()))) {
             String line;
@@ -172,8 +167,7 @@ public final class AggregatingContainer implements Container {
 
         // Load configs.txt mappings (one entry per @Configuration record)
         String configsPath = resourcePath.replace("container.properties", "configs.txt");
-        URL configsUrl = new URL(resourceUrl.getProtocol(), resourceUrl.getHost(),
-            resourceUrl.getPort(), configsPath);
+        URL configsUrl = new URL(resourceUrl.getProtocol(), resourceUrl.getHost(), resourceUrl.getPort(), configsPath);
         try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(configsUrl.openStream()))) {
             String line;
             while ((line = reader.readLine()) != null) {
@@ -187,7 +181,9 @@ public final class AggregatingContainer implements Container {
                         configToContainer.put(typeClass, moduleContainer);
                     } catch (ClassNotFoundException e) {
                         // Module declared a config record class that's not on the classpath — surface a clear failure.
-                        throw new IllegalStateException("Configuration record " + fqn + " referenced in configs.txt is not on the classpath", e);
+                        throw new IllegalStateException(
+                                "Configuration record " + fqn + " referenced in configs.txt is not on the classpath",
+                                e);
                     }
                 }
             }
@@ -202,9 +198,8 @@ public final class AggregatingContainer implements Container {
         if (ccfg != null) return ccfg.get(type);
         Container container = componentToContainerMap.get(type);
         if (container == null) {
-            throw new IllegalArgumentException(
-                "No component found for type: " + type.getName() +
-                ". Available components: " + componentToContainerMap.keySet());
+            throw new IllegalArgumentException("No component found for type: " + type.getName()
+                    + ". Available components: " + componentToContainerMap.keySet());
         }
         return container.get(type);
     }
@@ -219,8 +214,7 @@ public final class AggregatingContainer implements Container {
                 // Try next container
             }
         }
-        throw new IllegalArgumentException(
-            "No component found for type: " + type.getName() + " with name: " + name);
+        throw new IllegalArgumentException("No component found for type: " + type.getName() + " with name: " + name);
     }
 
     @Override
@@ -242,8 +236,7 @@ public final class AggregatingContainer implements Container {
                 // Try next container
             }
         }
-        throw new IllegalArgumentException(
-            "No component found for type: " + type.getName() + " with name: " + name);
+        throw new IllegalArgumentException("No component found for type: " + type.getName() + " with name: " + name);
     }
 
     @Override
@@ -309,8 +302,7 @@ public final class AggregatingContainer implements Container {
         } catch (Throwable t) {
             // Bus-impl defect; user-facing flow must continue. Handler exceptions are
             // already isolated by #44, so this catch fires only for genuine bus bugs.
-            Logger.getLogger("io.tiko.events").log(Level.WARNING,
-                "ApplicationStartedEvent publish threw", t);
+            Logger.getLogger("io.tiko.events").log(Level.WARNING, "ApplicationStartedEvent publish threw", t);
         }
     }
 
@@ -325,15 +317,12 @@ public final class AggregatingContainer implements Container {
         // per-module shutdowns (#45). Per-module containers were constructed with
         // publishLifecycleEvents=false, so they will not publish their own.
         Instant endTimestamp = Instant.now();
-        Duration uptime = (this.startedAt != null)
-            ? Duration.between(this.startedAt, endTimestamp)
-            : Duration.ZERO;
+        Duration uptime = (this.startedAt != null) ? Duration.between(this.startedAt, endTimestamp) : Duration.ZERO;
         try {
             sharedEventBus.publish(new ApplicationEndingEvent(endTimestamp, uptime));
         } catch (Throwable t) {
             // Bus-impl defect; per-module @PreDestroy must still run.
-            Logger.getLogger("io.tiko.events").log(Level.WARNING,
-                "ApplicationEndingEvent publish threw", t);
+            Logger.getLogger("io.tiko.events").log(Level.WARNING, "ApplicationEndingEvent publish threw", t);
         }
         // Shutdown in reverse order. Per-module containers no longer shut down the executor
         // themselves (#51): they were constructed with the shared executor, so their internal
@@ -372,14 +361,16 @@ public final class AggregatingContainer implements Container {
         for (java.util.Map.Entry<Class<?>, Object> e : configs.entrySet()) {
             Container target = configToContainer.get(e.getKey());
             if (target == null) {
-                throw new IllegalStateException("No module owns config type " + e.getKey().getName()
-                    + ". Discovered config types: " + configToContainer.keySet());
+                throw new IllegalStateException("No module owns config type "
+                        + e.getKey().getName() + ". Discovered config types: " + configToContainer.keySet());
             }
             try {
-                target.getClass().getMethod("injectConfigs", java.util.Map.class)
-                    .invoke(target, java.util.Map.of(e.getKey(), e.getValue()));
+                target.getClass()
+                        .getMethod("injectConfigs", java.util.Map.class)
+                        .invoke(target, java.util.Map.of(e.getKey(), e.getValue()));
             } catch (Exception ex) {
-                throw new IllegalStateException("Failed to inject config " + e.getKey().getName(), ex);
+                throw new IllegalStateException(
+                        "Failed to inject config " + e.getKey().getName(), ex);
             }
         }
     }

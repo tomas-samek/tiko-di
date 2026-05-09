@@ -79,8 +79,8 @@ public class Main {
                     eventBus.publish(new MessageCreatedEvent(msgId2, "Second message", "user-123"));
                 });
 
-                System.out.println("Request 1 complete - processed " +
-                    messageService.getProcessedCount() + " messages");
+                System.out.println(
+                        "Request 1 complete - processed " + messageService.getProcessedCount() + " messages");
             });
 
             // Request 2: Different request context
@@ -92,8 +92,7 @@ public class Main {
                     eventBus.publish(new MessageCreatedEvent(msgId3, "Third message", "user-456"));
                 });
 
-                System.out.println("Request 2 complete - total messages: " +
-                    messageService.getProcessedCount());
+                System.out.println("Request 2 complete - total messages: " + messageService.getProcessedCount());
             });
 
             System.out.println("\n4. DEMONSTRATING LIFECYCLE EVENTS");
@@ -128,7 +127,8 @@ public class Main {
                     System.out.println("    2. Handler validates -> returns ValidationResult");
                     System.out.println("    3. ValidationResult triggers next handler");
                     System.out.println("    4. Handler processes payment -> returns PaymentProcessedEvent");
-                    System.out.println("    5. Origin chain: [OrderCreatedEvent, ValidationResult, PaymentProcessedEvent]");
+                    System.out.println(
+                            "    5. Origin chain: [OrderCreatedEvent, ValidationResult, PaymentProcessedEvent]");
                 });
             });
 

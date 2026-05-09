@@ -2,7 +2,6 @@ package io.tiko.runtime;
 
 import io.tiko.ConfigSource;
 import io.tiko.ErrorHandler;
-
 import java.util.Objects;
 
 /**
