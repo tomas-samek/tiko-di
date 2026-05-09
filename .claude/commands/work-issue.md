@@ -7,10 +7,15 @@ Implement GitHub issue #$ARGUMENTS in this repo. Run the loop below end-to-end w
 
 The deliverable is a **green PR** ready for human review — branch pushed, PR opened, CI green. Merging and closing the issue are the repo owner's call: never merge the PR yourself, and never close the issue by hand (the `Closes #` line in the PR body does that on merge).
 
-## Tooling locations (Windows, not on PATH in spawned shells)
+## Tooling locations
 
-- **GitHub CLI:** `C:\Program Files\GitHub CLI\gh.exe` — invoke as `"/c/Program Files/GitHub CLI/gh.exe"` from bash.
-- **Maven:** `W:\tools\apache-maven\bin\mvn` — invoke as `"/w/tools/apache-maven/bin/mvn"` from bash.
+This workflow needs the GitHub CLI (`gh`) and Maven (`mvn`). Resolve each one before the loop starts:
+
+1. **Try PATH first** — run `gh --version` and `mvn -v`. If they succeed, use the bare commands.
+2. **Otherwise check memory** — skim `MEMORY.md` for `reference` entries pointing at the executables (e.g. `env_gh_cli_path.md`, `env_maven_path.md`) and verify the path still exists.
+3. **Otherwise ask the user** — call `AskUserQuestion` for the exact path. Save it as a new `reference` memory (one file per tool, like `env_<tool>_path.md`) so future runs don't re-prompt.
+
+When invoking from bash, quote paths with spaces (e.g. `"/c/Program Files/GitHub CLI/gh.exe"`).
 
 ## 1. Read the issue and the relevant memory
 
