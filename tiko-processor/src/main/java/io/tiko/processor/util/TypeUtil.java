@@ -102,13 +102,25 @@ public final class TypeUtil {
 
     /**
      * Returns the first interface implemented by the given type, if any.
+     *
+     * <p>Lifecycle marker interfaces ({@link AutoCloseable}, {@link java.io.Closeable})
+     * are skipped: they are JDK conventions for cleanup, not service contracts a
+     * caller would dispatch against. This avoids treating two unrelated beans that
+     * both implement {@code AutoCloseable} as ambiguous providers for the same type.</p>
      */
     public Optional<TypeMirror> getFirstInterface(TypeElement typeElement) {
         List<? extends TypeMirror> interfaces = typeElement.getInterfaces();
-        if (interfaces.isEmpty()) {
-            return Optional.empty();
+        for (TypeMirror iface : interfaces) {
+            String name = getQualifiedName(iface);
+            if (isLifecycleInterface(name)) continue;
+            return Optional.of(iface);
         }
-        return Optional.of(interfaces.get(0));
+        return Optional.empty();
+    }
+
+    private static boolean isLifecycleInterface(String qualifiedName) {
+        return "java.lang.AutoCloseable".equals(qualifiedName)
+            || "java.io.Closeable".equals(qualifiedName);
     }
 
     /**
@@ -149,6 +161,19 @@ public final class TypeUtil {
             return false;
         }
         return typeUtils.isAssignable(typeElement.asType(), interfaceElement.asType());
+    }
+
+    /**
+     * Checks if a {@link TypeMirror} is assignable to a specific interface (by qualified
+     * name). Useful for {@code @Produces} return types where the produced object's
+     * declaring element may be a third-party type (data sources, HTTP clients).
+     */
+    public boolean isAssignableTo(TypeMirror type, String interfaceQualifiedName) {
+        TypeElement interfaceElement = elementUtils.getTypeElement(interfaceQualifiedName);
+        if (interfaceElement == null) {
+            return false;
+        }
+        return typeUtils.isAssignable(type, interfaceElement.asType());
     }
 
     /**

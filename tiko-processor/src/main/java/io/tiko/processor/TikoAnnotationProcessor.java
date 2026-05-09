@@ -216,6 +216,12 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         List<ExecutableElement> postConstructMethods = findAnnotatedMethods(typeElement, PostConstruct.class);
         List<ExecutableElement> preDestroyMethods = findAnnotatedMethods(typeElement, PreDestroy.class);
 
+        // Implicit AutoCloseable cleanup: when the component implements AutoCloseable and
+        // the user did not declare an explicit @PreDestroy, the container codegen calls
+        // close() at scope teardown. Explicit @PreDestroy always wins to avoid double-cleanup.
+        boolean autoCloseable = preDestroyMethods.isEmpty()
+                && typeUtil.implementsInterface(typeElement, "java.lang.AutoCloseable");
+
         // Check if component implements an interface (for proxy generation)
         Optional<TypeMirror> implementedInterface = typeUtil.getFirstInterface(typeElement);
 
@@ -229,7 +235,8 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
                 .profiles(Arrays.asList(annotation.profiles()))
                 .dependencies(dependencies)
                 .postConstructMethods(postConstructMethods)
-                .preDestroyMethods(preDestroyMethods);
+                .preDestroyMethods(preDestroyMethods)
+                .autoCloseable(autoCloseable);
 
         if (constructor != null) {
             builder.constructor(constructor);
@@ -421,6 +428,11 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         // Build dependencies from method parameters
         List<DependencyModel> dependencies = buildDependencies(methodElement);
 
+        // Factory-produced beans implementing AutoCloseable get implicit close() at teardown,
+        // covering the common case of @Produces returning third-party types (HikariDataSource,
+        // HttpClient, KafkaProducer, etc.).
+        boolean factoryAutoCloseable = typeUtil.isAssignableTo(returnType, "java.lang.AutoCloseable");
+
         return FactoryMethodModel.builder()
                 .methodElement(methodElement)
                 .declaringClass(declaringClass)
@@ -431,6 +443,7 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
                 .name(annotation.name())
                 .profiles(Arrays.asList(annotation.profiles()))
                 .dependencies(dependencies)
+                .autoCloseable(factoryAutoCloseable)
                 .build();
     }
 
@@ -578,6 +591,9 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         if (!configValidator.validate()) {
             valid = false;
         }
+
+        // Closeable-field leak warning (warning only, never fails the build)
+        new CloseableLeakValidator(context).validate();
 
         return valid;
     }
