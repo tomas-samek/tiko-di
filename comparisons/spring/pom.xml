@@ -19,7 +19,7 @@
     <properties>
         <maven.compiler.release>17</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <spring.version>6.1.14</spring.version>
+        <spring.version>6.1.20</spring.version>
         <jakarta.annotation.version>2.1.1</jakarta.annotation.version>
     </properties>
 
