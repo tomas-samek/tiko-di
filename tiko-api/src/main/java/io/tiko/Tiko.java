@@ -1,15 +1,10 @@
 package io.tiko;
 
 import java.io.BufferedReader;
-import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -83,7 +78,7 @@ public final class Tiko {
             ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
             if (classLoader == null) classLoader = Tiko.class.getClassLoader();
 
-            Enumeration<URL> resources = classLoader.getResources("META-INF/tiko/container.properties");
+            var resources = classLoader.getResources("META-INF/tiko/container.properties");
             int moduleCount = 0;
             while (resources.hasMoreElements()) { resources.nextElement(); moduleCount++; }
 
@@ -132,7 +127,7 @@ public final class Tiko {
     private static ErrorHandler resolveDefaultErrorHandler() {
         try {
             Class<?> defaultClass = Class.forName("io.tiko.event.local.DefaultErrorHandler");
-            Constructor<?> ctor = defaultClass.getDeclaredConstructor();
+            var ctor = defaultClass.getDeclaredConstructor();
             ctor.setAccessible(true);
             return (ErrorHandler) ctor.newInstance();
         } catch (ClassNotFoundException e) {
@@ -158,9 +153,9 @@ public final class Tiko {
      */
     private static Map<Class<?>, Object> bindConfigs(ConfigSource userSource, ClassLoader cl) throws Exception {
         List<Object> binders = new ArrayList<>();
-        Enumeration<URL> resources = cl.getResources("META-INF/tiko/configs.txt");
+        var resources = cl.getResources("META-INF/tiko/configs.txt");
         while (resources.hasMoreElements()) {
-            URL url = resources.nextElement();
+            var url = resources.nextElement();
             try (BufferedReader br = new BufferedReader(new InputStreamReader(
                     url.openStream(), StandardCharsets.UTF_8))) {
                 String line;
@@ -215,11 +210,11 @@ public final class Tiko {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
         if (classLoader == null) classLoader = Tiko.class.getClassLoader();
 
-        Enumeration<URL> resources = classLoader.getResources("META-INF/tiko/container.properties");
+        var resources = classLoader.getResources("META-INF/tiko/container.properties");
         Class<?> implClass;
         if (resources.hasMoreElements()) {
             Properties props = new Properties();
-            try (InputStream input = resources.nextElement().openStream()) {
+            try (var input = resources.nextElement().openStream()) {
                 props.load(input);
             }
             String implClassName = props.getProperty("impl");
@@ -247,7 +242,7 @@ public final class Tiko {
     private static void registerEventHandlers(EventBus eventBus, Container container, Class<?> containerClass) {
         try {
             Class<?> registryClass = Class.forName("io.tiko.generated.EventRegistry");
-            Method registerMethod = registryClass.getMethod("registerHandlers", EventBus.class, containerClass);
+            var registerMethod = registryClass.getMethod("registerHandlers", EventBus.class, containerClass);
             registerMethod.invoke(null, eventBus, container);
         } catch (ClassNotFoundException e) {
             // No event handlers registered - this is OK
