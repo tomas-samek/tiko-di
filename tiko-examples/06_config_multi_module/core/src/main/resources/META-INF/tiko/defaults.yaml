@@ -1,0 +1,6 @@
+# Default values for the core module. Shipped inside the jar at
+# META-INF/tiko/defaults.yaml — discovered automatically by Tiko at runtime
+# and layered under the user-provided ConfigSource.
+core:
+  retries: 3
+  timeout: PT5S

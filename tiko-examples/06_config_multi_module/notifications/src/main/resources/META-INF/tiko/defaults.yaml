@@ -1,0 +1,4 @@
+# Default values for the notifications module.
+notifications:
+  channel: email
+  enabled: true

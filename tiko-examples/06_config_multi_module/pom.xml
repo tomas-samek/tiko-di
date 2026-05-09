@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.tiko.examples</groupId>
+        <artifactId>tiko-examples</artifactId>
+        <version>0.1.0</version>
+    </parent>
+
+    <artifactId>06_config_multi_module</artifactId>
+    <packaging>pom</packaging>
+    <name>06 - Multi-Module Configuration Example</name>
+    <description>
+        Each module ships its own META-INF/tiko/defaults.yaml inside its jar; a single
+        external override file overrides individual values per key. Demonstrates the
+        layered config model (#18).
+    </description>
+
+    <modules>
+        <module>core</module>
+        <module>notifications</module>
+        <module>app</module>
+    </modules>
+</project>
