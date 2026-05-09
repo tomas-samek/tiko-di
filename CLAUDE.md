@@ -300,6 +300,26 @@ public class HighValueGuard implements EventTriggerGuard {
 
 ## Development Guidelines
 
+### Coding Style
+
+The project uses **Spotless + Palantir Java Format** (configured in the root `pom.xml`).
+The `spotless:check` goal is bound to the **validate** phase, so any Maven invocation —
+including `mvn compile`, `mvn test`, `mvn package` (the CI command), and `mvn install` —
+fails fast on style violations.
+
+- **Format before committing:** `mvn spotless:apply` (excludes `tiko-bom` because it
+  intentionally has no parent: `mvn -pl '!tiko-bom' spotless:apply` from the root).
+- **Style facts** (handled automatically by the formatter — don't fight them by hand):
+  4-space indent, K&R braces, deterministic import ordering, no unused imports, no
+  trailing whitespace, files end with a newline.
+- **IDE integration:** the [Palantir Java Format](https://github.com/palantir/palantir-java-format)
+  IntelliJ plugin formats on save with the same rules; with that installed, the gate
+  should never fire on local commits.
+- **Don't bypass the gate.** If the formatter rewrites something in a way that hurts
+  readability, fix it via small structural changes (extract a variable, split an
+  expression) rather than disabling Spotless. The whole point is a single mechanical
+  source of truth — local exceptions defeat that.
+
 ### Code Generation Strategy
 
 All code is generated in the `io.tiko.generated` package:
