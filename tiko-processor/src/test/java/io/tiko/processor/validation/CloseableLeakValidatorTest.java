@@ -24,7 +24,7 @@ class CloseableLeakValidatorTest {
 
         assertThat(compilation).succeeded();
         assertThat(compilation)
-            .hadWarningContaining("holds AutoCloseable field 'executor'");
+            .hadWarningContaining("holds AutoCloseable field 'stream'");
     }
 
     @Test
@@ -80,19 +80,22 @@ class CloseableLeakValidatorTest {
         }
     }
 
+    // Note: tests use java.io.InputStream (Closeable since JDK 1.5) rather than
+    // ExecutorService — the latter only became AutoCloseable in JDK 19, which would
+    // make these tests pass on JDK 19+ but fail on the JDK 17 baseline.
+
     private static final JavaFileObject LEAKY_COMPONENT =
         JavaFileObjects.forSourceLines(
             "io.tiko.processor.fixtures.leaky.LeakyService",
             "package io.tiko.processor.fixtures.leaky;",
             "",
-            "import java.util.concurrent.ExecutorService;",
-            "import java.util.concurrent.Executors;",
+            "import java.io.InputStream;",
             "import io.tiko.Scope;",
             "import io.tiko.annotations.Component;",
             "",
             "@Component(scope = Scope.SINGLETON)",
             "public class LeakyService {",
-            "    private final ExecutorService executor = Executors.newSingleThreadExecutor();",
+            "    private InputStream stream;",
             "    public LeakyService() {}",
             "}"
         );
@@ -102,16 +105,15 @@ class CloseableLeakValidatorTest {
             "io.tiko.processor.fixtures.leaky.SelfClosing",
             "package io.tiko.processor.fixtures.leaky;",
             "",
-            "import java.util.concurrent.ExecutorService;",
-            "import java.util.concurrent.Executors;",
+            "import java.io.InputStream;",
             "import io.tiko.Scope;",
             "import io.tiko.annotations.Component;",
             "",
             "@Component(scope = Scope.SINGLETON)",
             "public class SelfClosing implements AutoCloseable {",
-            "    private final ExecutorService executor = Executors.newSingleThreadExecutor();",
+            "    private InputStream stream;",
             "    public SelfClosing() {}",
-            "    @Override public void close() { executor.shutdown(); }",
+            "    @Override public void close() throws Exception { if (stream != null) stream.close(); }",
             "}"
         );
 
@@ -120,17 +122,17 @@ class CloseableLeakValidatorTest {
             "io.tiko.processor.fixtures.leaky.WithPreDestroy",
             "package io.tiko.processor.fixtures.leaky;",
             "",
-            "import java.util.concurrent.ExecutorService;",
-            "import java.util.concurrent.Executors;",
+            "import java.io.IOException;",
+            "import java.io.InputStream;",
             "import io.tiko.Scope;",
             "import io.tiko.annotations.Component;",
             "import io.tiko.annotations.PreDestroy;",
             "",
             "@Component(scope = Scope.SINGLETON)",
             "public class WithPreDestroy {",
-            "    private final ExecutorService executor = Executors.newSingleThreadExecutor();",
+            "    private InputStream stream;",
             "    public WithPreDestroy() {}",
-            "    @PreDestroy public void shutdownExecutor() { executor.shutdown(); }",
+            "    @PreDestroy public void closeStream() throws IOException { if (stream != null) stream.close(); }",
             "}"
         );
 
@@ -139,15 +141,14 @@ class CloseableLeakValidatorTest {
             "io.tiko.processor.fixtures.leaky.Suppressed",
             "package io.tiko.processor.fixtures.leaky;",
             "",
-            "import java.util.concurrent.ExecutorService;",
-            "import java.util.concurrent.Executors;",
+            "import java.io.InputStream;",
             "import io.tiko.Scope;",
             "import io.tiko.annotations.Component;",
             "",
             "@Component(scope = Scope.SINGLETON)",
             "public class Suppressed {",
             "    @SuppressWarnings(\"resource\")",
-            "    private final ExecutorService executor = Executors.newSingleThreadExecutor();",
+            "    private InputStream stream;",
             "    public Suppressed() {}",
             "}"
         );
