@@ -1,5 +1,21 @@
 package io.tiko;
 
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Properties;
+import java.util.concurrent.ExecutorService;
+
 /**
  * Main entry point for creating Tiko containers.
  *
@@ -33,7 +49,7 @@ public final class Tiko {
      */
     public static Container create(ConfigSource source) {
         return create(TikoOptions.builder()
-            .configSource(java.util.Objects.requireNonNull(source, "source"))
+            .configSource(Objects.requireNonNull(source, "source"))
             .build());
     }
 
@@ -43,7 +59,7 @@ public final class Tiko {
      * @param options framework knobs (config source, error handler, ...). Never {@code null}.
      */
     public static Container create(TikoOptions options) {
-        java.util.Objects.requireNonNull(options, "options");
+        Objects.requireNonNull(options, "options");
         // No upfront fail for missing ConfigSource — module-baked
         // META-INF/tiko/defaults.yaml + @Default annotations may cover everything.
         // bindConfigs always discovers defaults first; per-field errors during binding
@@ -67,7 +83,7 @@ public final class Tiko {
             ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
             if (classLoader == null) classLoader = Tiko.class.getClassLoader();
 
-            var resources = classLoader.getResources("META-INF/tiko/container.properties");
+            Enumeration<URL> resources = classLoader.getResources("META-INF/tiko/container.properties");
             int moduleCount = 0;
             while (resources.hasMoreElements()) { resources.nextElement(); moduleCount++; }
 
@@ -76,7 +92,7 @@ public final class Tiko {
                 // Multi-module: AggregatingContainer with the 3-arg constructor we ship.
                 Class<?> aggregatingClass = Class.forName("io.tiko.runtime.AggregatingContainer");
                 container = (Container) aggregatingClass
-                    .getDeclaredConstructor(EventBus.class, ErrorHandler.class, java.util.concurrent.ExecutorService.class)
+                    .getDeclaredConstructor(EventBus.class, ErrorHandler.class, ExecutorService.class)
                     .newInstance(eventBus, errorHandler, options.eventExecutor());
             } else {
                 // Single module: Direct instantiation (does NOT call start yet)
@@ -87,9 +103,9 @@ public final class Tiko {
             // Defaults from META-INF/tiko/defaults.yaml are always layered under the user
             // source — modules can ship a self-sufficient bean even when the user provides
             // no ConfigSource. bindConfigs is a no-op when no @Configuration records exist.
-            java.util.Map<Class<?>, Object> bound = bindConfigs(options.configSource(), classLoader);
+            Map<Class<?>, Object> bound = bindConfigs(options.configSource(), classLoader);
             if (!bound.isEmpty()) {
-                container.getClass().getMethod("injectConfigs", java.util.Map.class).invoke(container, bound);
+                container.getClass().getMethod("injectConfigs", Map.class).invoke(container, bound);
             }
 
             // 5. Start the container — single-module's TikoContainerImpl.start() initialises
@@ -116,7 +132,7 @@ public final class Tiko {
     private static ErrorHandler resolveDefaultErrorHandler() {
         try {
             Class<?> defaultClass = Class.forName("io.tiko.event.local.DefaultErrorHandler");
-            java.lang.reflect.Constructor<?> ctor = defaultClass.getDeclaredConstructor();
+            Constructor<?> ctor = defaultClass.getDeclaredConstructor();
             ctor.setAccessible(true);
             return (ErrorHandler) ctor.newInstance();
         } catch (ClassNotFoundException e) {
@@ -140,13 +156,13 @@ public final class Tiko {
      * the classpath. Uses reflection to avoid a circular compile dependency on
      * tiko-config.</p>
      */
-    private static java.util.Map<Class<?>, Object> bindConfigs(ConfigSource userSource, ClassLoader cl) throws Exception {
-        java.util.List<Object> binders = new java.util.ArrayList<>();
-        var resources = cl.getResources("META-INF/tiko/configs.txt");
+    private static Map<Class<?>, Object> bindConfigs(ConfigSource userSource, ClassLoader cl) throws Exception {
+        List<Object> binders = new ArrayList<>();
+        Enumeration<URL> resources = cl.getResources("META-INF/tiko/configs.txt");
         while (resources.hasMoreElements()) {
-            java.net.URL url = resources.nextElement();
-            try (var br = new java.io.BufferedReader(new java.io.InputStreamReader(
-                    url.openStream(), java.nio.charset.StandardCharsets.UTF_8))) {
+            URL url = resources.nextElement();
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(
+                    url.openStream(), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = br.readLine()) != null) {
                     line = line.trim();
@@ -154,8 +170,8 @@ public final class Tiko {
                         String registryFqn = line.substring("# registry=".length()).trim();
                         Class<?> registryClass = Class.forName(registryFqn, true, cl);
                         @SuppressWarnings("unchecked")
-                        java.util.List<Object> moduleBinders =
-                            (java.util.List<Object>) registryClass.getMethod("all").invoke(null);
+                        List<Object> moduleBinders =
+                            (List<Object>) registryClass.getMethod("all").invoke(null);
                         binders.addAll(moduleBinders);
                         break;
                     }
@@ -163,9 +179,8 @@ public final class Tiko {
             }
         }
 
-        // Nothing declared — skip ConfigBootstrap entirely so apps with no @Configuration
-        // records do not pay for classpath enumeration of defaults.yaml.
-        if (binders.isEmpty()) return java.util.Collections.emptyMap();
+        // Nothing declared — skip the reflective ConfigBootstrap call entirely.
+        if (binders.isEmpty()) return Collections.emptyMap();
 
         // Build the effective ConfigSource: defaults first, user override on top.
         Class<?> sourcesClass = Class.forName("io.tiko.config.ConfigSources", true, cl);
@@ -184,8 +199,8 @@ public final class Tiko {
         // Delegate to ConfigBootstrap via reflection (avoids circular compile dep).
         Class<?> bootstrapClass = Class.forName("io.tiko.config.runtime.ConfigBootstrap", true, cl);
         @SuppressWarnings("unchecked")
-        java.util.Map<Class<?>, Object> result = (java.util.Map<Class<?>, Object>)
-            bootstrapClass.getMethod("bind", String.class, ConfigSource.class, java.util.List.class)
+        Map<Class<?>, Object> result = (Map<Class<?>, Object>)
+            bootstrapClass.getMethod("bind", String.class, ConfigSource.class, List.class)
                 .invoke(null, "config", effective, binders);
         return result;
     }
@@ -196,15 +211,15 @@ public final class Tiko {
      */
     private static Container createSingleModuleContainer(
             EventBus eventBus, ErrorHandler errorHandler,
-            java.util.concurrent.ExecutorService userEventExecutor) throws Exception {
+            ExecutorService userEventExecutor) throws Exception {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
         if (classLoader == null) classLoader = Tiko.class.getClassLoader();
 
-        var resources = classLoader.getResources("META-INF/tiko/container.properties");
+        Enumeration<URL> resources = classLoader.getResources("META-INF/tiko/container.properties");
         Class<?> implClass;
         if (resources.hasMoreElements()) {
-            var props = new java.util.Properties();
-            try (var input = resources.nextElement().openStream()) {
+            Properties props = new Properties();
+            try (InputStream input = resources.nextElement().openStream()) {
                 props.load(input);
             }
             String implClassName = props.getProperty("impl");
@@ -217,7 +232,7 @@ public final class Tiko {
         // its own ApplicationStartedEvent / ApplicationEndingEvent (no aggregator above it).
         Container container = (Container) implClass
             .getDeclaredConstructor(EventBus.class, ErrorHandler.class,
-                java.util.concurrent.ExecutorService.class, boolean.class)
+                ExecutorService.class, boolean.class)
             .newInstance(eventBus, errorHandler, userEventExecutor, /* publishLifecycleEvents */ true);
 
         registerEventHandlers(eventBus, container, implClass);
@@ -232,7 +247,7 @@ public final class Tiko {
     private static void registerEventHandlers(EventBus eventBus, Container container, Class<?> containerClass) {
         try {
             Class<?> registryClass = Class.forName("io.tiko.generated.EventRegistry");
-            var registerMethod = registryClass.getMethod("registerHandlers", EventBus.class, containerClass);
+            Method registerMethod = registryClass.getMethod("registerHandlers", EventBus.class, containerClass);
             registerMethod.invoke(null, eventBus, container);
         } catch (ClassNotFoundException e) {
             // No event handlers registered - this is OK
