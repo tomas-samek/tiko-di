@@ -2,7 +2,7 @@ package io.tiko.examples.basic;
 
 import io.tiko.Container;
 import io.tiko.Event;
-import io.tiko.Tiko;
+import io.tiko.runtime.Tiko;
 import io.tiko.examples.basic.trigger.AuditedEvent;
 import io.tiko.examples.basic.trigger.BatchItemEvent;
 import io.tiko.examples.basic.trigger.BatchReceivedEvent;

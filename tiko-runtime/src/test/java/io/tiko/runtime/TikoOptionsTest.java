@@ -1,5 +1,6 @@
-package io.tiko;
+package io.tiko.runtime;
 
+import io.tiko.ErrorHandler;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;

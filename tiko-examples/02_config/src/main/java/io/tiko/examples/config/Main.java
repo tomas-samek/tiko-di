@@ -1,7 +1,7 @@
 package io.tiko.examples.config;
 
 import io.tiko.Container;
-import io.tiko.Tiko;
+import io.tiko.runtime.Tiko;
 import io.tiko.config.ConfigSources;
 
 public class Main {

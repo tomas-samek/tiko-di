@@ -1,7 +1,7 @@
 package io.tiko.examples.basic;
 
 import io.tiko.Container;
-import io.tiko.Tiko;
+import io.tiko.runtime.Tiko;
 import org.junit.jupiter.api.RepeatedTest;
 
 import java.util.concurrent.CountDownLatch;

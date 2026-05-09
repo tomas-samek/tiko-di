@@ -58,18 +58,6 @@ Then add dependencies without specifying versions:
         <!-- Version managed by BOM -->
     </dependency>
 
-    <!-- Event Support -->
-    <dependency>
-        <groupId>io.tiko</groupId>
-        <artifactId>tiko-event-api</artifactId>
-        <!-- Version managed by BOM -->
-    </dependency>
-
-    <dependency>
-        <groupId>io.tiko</groupId>
-        <artifactId>tiko-event-local</artifactId>
-        <!-- Version managed by BOM -->
-    </dependency>
 </dependencies>
 ```
 
@@ -87,9 +75,8 @@ The BOM manages versions for:
 ### Tiko DI Modules
 - `tiko-api` - Core annotations and interfaces
 - `tiko-processor` - Annotation processor
-- `tiko-runtime` - Runtime container
-- `tiko-event-api` - Event system API
-- `tiko-event-local` - In-memory event bus
+- `tiko-runtime` - Runtime container (includes the in-memory `LocalEventBus`)
+- `tiko-config` - YAML-backed configuration injection
 
 ### Third-party Dependencies
 - Google Auto Service - Annotation processor registration
@@ -145,10 +132,6 @@ The BOM manages versions for:
         <dependency>
             <groupId>io.tiko</groupId>
             <artifactId>tiko-runtime</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.tiko</groupId>
-            <artifactId>tiko-event-local</artifactId>
         </dependency>
     </dependencies>
 </project>

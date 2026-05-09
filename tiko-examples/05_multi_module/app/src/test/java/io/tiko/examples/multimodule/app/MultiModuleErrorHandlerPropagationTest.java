@@ -2,8 +2,8 @@ package io.tiko.examples.multimodule.app;
 
 import io.tiko.Container;
 import io.tiko.ErrorHandler;
-import io.tiko.Tiko;
-import io.tiko.TikoOptions;
+import io.tiko.runtime.Tiko;
+import io.tiko.runtime.TikoOptions;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.atomic.AtomicReference;

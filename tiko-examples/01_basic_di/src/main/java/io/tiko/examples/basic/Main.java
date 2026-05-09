@@ -2,7 +2,7 @@ package io.tiko.examples.basic;
 
 import io.tiko.Container;
 import io.tiko.EventBus;
-import io.tiko.Tiko;
+import io.tiko.runtime.Tiko;
 
 /**
  * Main application demonstrating Tiko DI features:

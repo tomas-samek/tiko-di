@@ -4,8 +4,8 @@ import io.tiko.Container;
 import io.tiko.ErrorContext;
 import io.tiko.ErrorHandler;
 import io.tiko.EventHandlerError;
-import io.tiko.Tiko;
-import io.tiko.TikoOptions;
+import io.tiko.runtime.Tiko;
+import io.tiko.runtime.TikoOptions;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.atomic.AtomicReference;

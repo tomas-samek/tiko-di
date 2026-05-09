@@ -18,8 +18,6 @@
         <module>tiko-processor</module>
         <module>tiko-runtime</module>
         <module>tiko-config</module>
-        <module>tiko-event-api</module>
-        <module>tiko-event-local</module>
         <module>tiko-examples</module>
         <module>tiko-archetype</module>
     </modules>
@@ -50,16 +48,6 @@
             <dependency>
                 <groupId>io.tiko</groupId>
                 <artifactId>tiko-runtime</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>io.tiko</groupId>
-                <artifactId>tiko-event-api</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>io.tiko</groupId>
-                <artifactId>tiko-event-local</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

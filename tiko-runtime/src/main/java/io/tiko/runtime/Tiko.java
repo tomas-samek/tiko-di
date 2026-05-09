@@ -1,4 +1,9 @@
-package io.tiko;
+package io.tiko.runtime;
+
+import io.tiko.ConfigSource;
+import io.tiko.Container;
+import io.tiko.ErrorHandler;
+import io.tiko.EventBus;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -67,12 +72,11 @@ public final class Tiko {
             // 1. Resolve the ErrorHandler — user-supplied or the JUL-backed DefaultErrorHandler.
             ErrorHandler errorHandler = options.errorHandler();
             if (errorHandler == null) {
-                errorHandler = resolveDefaultErrorHandler();
+                errorHandler = new DefaultErrorHandler();
             }
 
             // 2. Create EventBus instance (still no-arg; the bus does not take ErrorHandler).
-            Class<?> eventBusClass = Class.forName("io.tiko.event.local.LocalEventBus");
-            EventBus eventBus = (EventBus) eventBusClass.getDeclaredConstructor().newInstance();
+            EventBus eventBus = new LocalEventBus();
 
             // 3. Detect single vs multi-module scenario
             ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
@@ -84,11 +88,7 @@ public final class Tiko {
 
             Container container;
             if (moduleCount > 1) {
-                // Multi-module: AggregatingContainer with the 3-arg constructor we ship.
-                Class<?> aggregatingClass = Class.forName("io.tiko.runtime.AggregatingContainer");
-                container = (Container) aggregatingClass
-                    .getDeclaredConstructor(EventBus.class, ErrorHandler.class, ExecutorService.class)
-                    .newInstance(eventBus, errorHandler, options.eventExecutor());
+                container = new AggregatingContainer(eventBus, errorHandler, options.eventExecutor());
             } else {
                 // Single module: Direct instantiation (does NOT call start yet)
                 container = createSingleModuleContainer(eventBus, errorHandler, options.eventExecutor());
@@ -117,26 +117,6 @@ public final class Tiko {
                 "Tiko container implementation not found. Did you include tiko-processor in your annotation processor path?", e);
         } catch (Exception e) {
             throw new IllegalStateException("Failed to create container instance", e);
-        }
-    }
-
-    /**
-     * Reflectively builds the JUL-backed {@code DefaultErrorHandler} from {@code tiko-event-local}.
-     * Kept reflective so {@code tiko-api} stays free of any concrete handler dependency.
-     */
-    private static ErrorHandler resolveDefaultErrorHandler() {
-        try {
-            Class<?> defaultClass = Class.forName("io.tiko.event.local.DefaultErrorHandler");
-            var ctor = defaultClass.getDeclaredConstructor();
-            ctor.setAccessible(true);
-            return (ErrorHandler) ctor.newInstance();
-        } catch (ClassNotFoundException e) {
-            // Bus implementation not on the classpath — return a minimal no-op so we do not
-            // crash users who have somehow excluded tiko-event-local. This will also be
-            // surfaced when EventBus construction fails downstream.
-            return ctx -> {};
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed to construct default ErrorHandler", e);
         }
     }
 

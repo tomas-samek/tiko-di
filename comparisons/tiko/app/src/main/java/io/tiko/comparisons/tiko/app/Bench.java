@@ -1,7 +1,7 @@
 package io.tiko.comparisons.tiko.app;
 
 import io.tiko.Container;
-import io.tiko.Tiko;
+import io.tiko.runtime.Tiko;
 import io.tiko.comparisons.tiko.modulea.UserService;
 import io.tiko.comparisons.tiko.moduleb.NotificationService;
 

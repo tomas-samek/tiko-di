@@ -62,17 +62,10 @@ Add to your `pom.xml`:
         <version>0.1.0</version>
     </dependency>
 
-    <!-- Runtime container -->
+    <!-- Runtime container (includes the in-memory LocalEventBus) -->
     <dependency>
         <groupId>io.tiko</groupId>
         <artifactId>tiko-runtime</artifactId>
-        <version>0.1.0</version>
-    </dependency>
-
-    <!-- In-memory event bus (optional) -->
-    <dependency>
-        <groupId>io.tiko</groupId>
-        <artifactId>tiko-event-local</artifactId>
         <version>0.1.0</version>
     </dependency>
 
@@ -919,17 +912,9 @@ Minimal runtime container implementation. Zero dependencies beyond tiko-api.
 
 YAML-backed configuration injection — `@Configuration` records, generated per-record binders, runtime helpers. The only module that depends on SnakeYAML. Required when your project uses `@Configuration`; not pulled otherwise.
 
-### tiko-event-api
+### Event bus
 
-Event system abstractions (EventBus, EventHandler, Subscription).
-
-### tiko-event-local
-
-In-memory event bus implementation for single-instance deployments.
-
-### tiko-event-kafka (Planned)
-
-Kafka-backed event bus for distributed systems.
+Event abstractions (`EventBus`, `EventCallback`, `Subscription`, `@EventHandler`, `@EventTrigger`, `Event<T>`) live in **tiko-api**. The in-memory implementation (`LocalEventBus`) ships in **tiko-runtime** — there is no separate event-system module. A planned Kafka-backed bus would arrive as its own module that bridges to the local bus for in-process propagation.
 
 ## Building from Source
 
@@ -975,7 +960,7 @@ The framework is suitable for early-adopter experimentation. Production use shou
 - ✅ Runtime container: constructor injection, SINGLETON/REQUEST/EVENT/PROTOTYPE scopes, `@PostConstruct`/`@PreDestroy` (LIFO at all scopes) plus implicit `AutoCloseable` cleanup, scope management (`runInRequestScope`/`runInEventScope` + `supplyIn*`)
 - ✅ Container lookup API: `get(Class)`, `get(Class, String)` with interface dispatch, `getProvider(...)` (lazy, scope-preserving)
 - ✅ `@Produces` factory methods: instance + static, named + unnamed, with dependency injection
-- ✅ In-memory event bus (`tiko-event-local`) with `@EventHandler` subscription
+- ✅ In-memory event bus (`LocalEventBus` in `tiko-runtime`) with `@EventHandler` subscription
 - ✅ Multi-module aggregation via `AggregatingContainer` + `META-INF/tiko/` metadata
 - ✅ `container.pick(Class)` fluent API for multi-axis lookup (`withName`, `resolve`, `asProvider`, `orDefault`)
 - ✅ Configuration injection v1: `@Configuration` records with typed YAML binding, generated per-record binders, `${VAR}` interpolation, layered `ConfigSources`, strict-mode validation — see [#15](https://github.com/tomas-samek/tiko-di/issues/15)

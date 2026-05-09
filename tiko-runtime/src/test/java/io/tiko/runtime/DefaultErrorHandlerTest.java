@@ -1,4 +1,4 @@
-package io.tiko.event.local;
+package io.tiko.runtime;
 
 import io.tiko.ErrorContext;
 import io.tiko.ErrorHandler;

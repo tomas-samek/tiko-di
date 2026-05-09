@@ -1,7 +1,7 @@
 package ${package};
 
 import io.tiko.Container;
-import io.tiko.Tiko;
+import io.tiko.runtime.Tiko;
 
 /**
  * Tiny entry point produced by the tiko-archetype scaffold. Replace with your own.

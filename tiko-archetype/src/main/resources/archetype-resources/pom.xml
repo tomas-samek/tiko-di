@@ -42,11 +42,6 @@
 
         <!-- In-memory event bus. Reflectively loaded by Tiko.create(); runtime scope
              is sufficient. -->
-        <dependency>
-            <groupId>io.tiko</groupId>
-            <artifactId>tiko-event-local</artifactId>
-            <scope>runtime</scope>
-        </dependency>
 
         <!-- Uncomment to enable typed YAML configuration injection via @Configuration. -->
         <!--
