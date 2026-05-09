@@ -410,6 +410,16 @@ db:
   connectTimeout: PT5S
 ```
 
+**Module-baked defaults + a single external override.** Each module can ship its own `META-INF/tiko/defaults.yaml` inside its jar. At startup, Tiko discovers every such file on the classpath, deep-merges them, and layers the user-supplied `ConfigSource` on top. Any single value in any module's defaults is overrideable per key — and the user file is *optional* when defaults cover everything.
+
+```
+core/src/main/resources/META-INF/tiko/defaults.yaml          # baked into core.jar
+notifications/src/main/resources/META-INF/tiko/defaults.yaml # baked into notifications.jar
+app/src/main/resources/application.yaml                       # user override (optional)
+```
+
+Resolution order, per field: **user override → any module's `defaults.yaml` → `@Default(value=...)` annotation → bind error**. Two modules cannot independently claim the same `@Configuration(prefix="...")` — the runtime fails fast with a clear collision error. See `tiko-examples/06_config_multi_module/` for an end-to-end sample.
+
 **Nested records.** A `@Configuration` record can contain plain records as field types — directly, or inside `Optional<X>`, `List<X>`, `Map<String,X>`. The codegen emits a per-record nested coercer and composes via the existing collection coercers. The nested record itself is *not* annotated `@Configuration`; it's bound by recursion under its parent's prefix:
 
 ```java

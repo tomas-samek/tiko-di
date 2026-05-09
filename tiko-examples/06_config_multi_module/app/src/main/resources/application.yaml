@@ -1,0 +1,5 @@
+# User-supplied override file. Only touches one key — every unset value
+# comes from the per-module defaults shipped inside the core/ and
+# notifications/ jars at META-INF/tiko/defaults.yaml.
+core:
+  retries: 10

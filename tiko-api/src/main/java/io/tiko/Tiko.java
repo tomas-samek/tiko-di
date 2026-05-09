@@ -44,42 +44,11 @@ public final class Tiko {
      */
     public static Container create(TikoOptions options) {
         java.util.Objects.requireNonNull(options, "options");
-        if (options.configSource() == null) {
-            failIfConfigsMissingSource();
-        }
+        // No upfront fail for missing ConfigSource — module-baked
+        // META-INF/tiko/defaults.yaml + @Default annotations may cover everything.
+        // bindConfigs always discovers defaults first; per-field errors during binding
+        // surface specifically what is missing.
         return createInternal(options);
-    }
-
-    /**
-     * Checks the classpath for META-INF/tiko/configs.txt. If any config records are declared
-     * there, throws IllegalStateException telling the user to use Tiko.create(ConfigSource).
-     */
-    private static void failIfConfigsMissingSource() {
-        try {
-            ClassLoader cl = Thread.currentThread().getContextClassLoader();
-            if (cl == null) cl = Tiko.class.getClassLoader();
-            var resources = cl.getResources("META-INF/tiko/configs.txt");
-            java.util.List<String> declared = new java.util.ArrayList<>();
-            while (resources.hasMoreElements()) {
-                java.net.URL url = resources.nextElement();
-                try (var br = new java.io.BufferedReader(new java.io.InputStreamReader(
-                        url.openStream(), java.nio.charset.StandardCharsets.UTF_8))) {
-                    String line;
-                    while ((line = br.readLine()) != null) {
-                        line = line.trim();
-                        if (line.isEmpty() || line.startsWith("#")) continue;
-                        int eq = line.indexOf('=');
-                        if (eq > 0) declared.add(line.substring(0, eq));
-                    }
-                }
-            }
-            if (!declared.isEmpty()) {
-                throw new IllegalStateException(
-                    "You declared @Configuration records (" + String.join(", ", declared)
-                        + ") but called Tiko.create() without a ConfigSource. "
-                        + "Use Tiko.create(ConfigSources.classpath(\"config.yaml\")) or similar.");
-            }
-        } catch (java.io.IOException ignored) { /* no manifest — no configs declared */ }
     }
 
     private static Container createInternal(TikoOptions options) {
@@ -114,9 +83,12 @@ public final class Tiko {
                 container = createSingleModuleContainer(eventBus, errorHandler, options.eventExecutor());
             }
 
-            // 4. Inject config singletons before start(), so @PostConstruct can use them
-            if (options.configSource() != null) {
-                java.util.Map<Class<?>, Object> bound = bindConfigs(options.configSource(), classLoader);
+            // 4. Inject config singletons before start(), so @PostConstruct can use them.
+            // Defaults from META-INF/tiko/defaults.yaml are always layered under the user
+            // source — modules can ship a self-sufficient bean even when the user provides
+            // no ConfigSource. bindConfigs is a no-op when no @Configuration records exist.
+            java.util.Map<Class<?>, Object> bound = bindConfigs(options.configSource(), classLoader);
+            if (!bound.isEmpty()) {
                 container.getClass().getMethod("injectConfigs", java.util.Map.class).invoke(container, bound);
             }
 
@@ -159,9 +131,16 @@ public final class Tiko {
 
     /**
      * Loads and binds all declared @Configuration records from configs.txt manifests.
-     * Uses full reflection to avoid a circular compile dependency on tiko-config.
+     *
+     * <p>Layers module-baked {@code META-INF/tiko/defaults.yaml} under the (optional)
+     * user source so each module can ship its own private slice of defaults inside
+     * its jar — overrideable per-key by the user file (#18).</p>
+     *
+     * <p>Returns an empty map if no {@code @Configuration} records are declared on
+     * the classpath. Uses reflection to avoid a circular compile dependency on
+     * tiko-config.</p>
      */
-    private static java.util.Map<Class<?>, Object> bindConfigs(ConfigSource source, ClassLoader cl) throws Exception {
+    private static java.util.Map<Class<?>, Object> bindConfigs(ConfigSource userSource, ClassLoader cl) throws Exception {
         java.util.List<Object> binders = new java.util.ArrayList<>();
         var resources = cl.getResources("META-INF/tiko/configs.txt");
         while (resources.hasMoreElements()) {
@@ -183,14 +162,31 @@ public final class Tiko {
                 }
             }
         }
-        // Delegate to ConfigBootstrap via reflection to avoid circular dependency
+
+        // Nothing declared — skip ConfigBootstrap entirely so apps with no @Configuration
+        // records do not pay for classpath enumeration of defaults.yaml.
+        if (binders.isEmpty()) return java.util.Collections.emptyMap();
+
+        // Build the effective ConfigSource: defaults first, user override on top.
+        Class<?> sourcesClass = Class.forName("io.tiko.config.ConfigSources", true, cl);
+        ConfigSource defaults = (ConfigSource) sourcesClass
+            .getMethod("classpathAll", String.class)
+            .invoke(null, "META-INF/tiko/defaults.yaml");
+        ConfigSource effective;
+        if (userSource == null) {
+            effective = defaults;
+        } else {
+            effective = (ConfigSource) sourcesClass
+                .getMethod("layered", ConfigSource[].class)
+                .invoke(null, (Object) new ConfigSource[]{ defaults, userSource });
+        }
+
+        // Delegate to ConfigBootstrap via reflection (avoids circular compile dep).
         Class<?> bootstrapClass = Class.forName("io.tiko.config.runtime.ConfigBootstrap", true, cl);
-        // ConfigBootstrap.bind(String, ConfigSource, List<ConfigBinder<?>>)
-        // We use the raw List type reflectively
         @SuppressWarnings("unchecked")
         java.util.Map<Class<?>, Object> result = (java.util.Map<Class<?>, Object>)
             bootstrapClass.getMethod("bind", String.class, ConfigSource.class, java.util.List.class)
-                .invoke(null, "config", source, binders);
+                .invoke(null, "config", effective, binders);
         return result;
     }
 
