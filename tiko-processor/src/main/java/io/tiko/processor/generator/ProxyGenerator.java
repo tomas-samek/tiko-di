@@ -167,8 +167,9 @@ public final class ProxyGenerator {
                 switch (component.getScope()) {
                     case REQUEST -> "getCurrent" + component.getClassName();
                     case EVENT -> "getCurrent" + component.getClassName();
-                    default -> throw new IllegalStateException(
-                            "Proxy only for REQUEST/EVENT scope, got: " + component.getScope());
+                    default ->
+                        throw new IllegalStateException(
+                                "Proxy only for REQUEST/EVENT scope, got: " + component.getScope());
                 };
 
         return "container." + methodName + "()";

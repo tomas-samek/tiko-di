@@ -13,8 +13,7 @@ class YamlLoaderTest {
 
     @Test
     void parses_simple_mapping_to_nested_maps() {
-        String yaml =
-                """
+        String yaml = """
                 db:
                   url: jdbc:postgres
                   maxConnections: 10
@@ -26,8 +25,7 @@ class YamlLoaderTest {
 
     @Test
     void parses_lists_and_nested_mappings() {
-        String yaml =
-                """
+        String yaml = """
                 servers:
                   - host: a
                     port: 1
@@ -60,8 +58,7 @@ class YamlLoaderTest {
         // YAML allows non-string keys in mappings; SnakeYAML faithfully produces them
         // (e.g. integer keys). After load(), every map — even ones nested inside lists —
         // must use String keys so downstream BindContext.requireSection cast is safe.
-        String yaml =
-                """
+        String yaml = """
                 servers:
                   - 1: alpha
                     2: beta

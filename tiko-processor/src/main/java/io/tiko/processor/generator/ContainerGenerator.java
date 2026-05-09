@@ -420,8 +420,9 @@ public final class ContainerGenerator {
                 .returns(returnType);
 
         switch (factory.getScope()) {
-            case SINGLETON -> method.addStatement(
-                    "return ($T) singletons.computeIfAbsent($S, k -> $L)", returnType, storageKey, callExpr);
+            case SINGLETON ->
+                method.addStatement(
+                        "return ($T) singletons.computeIfAbsent($S, k -> $L)", returnType, storageKey, callExpr);
             case REQUEST -> emitScopedGetOrCreate(method, returnType, "requestScoped.get()", storageKey, callExpr);
             case EVENT -> emitScopedGetOrCreate(method, returnType, "eventScoped.get()", storageKey, callExpr);
             case PROTOTYPE -> method.addStatement("return $L", callExpr);

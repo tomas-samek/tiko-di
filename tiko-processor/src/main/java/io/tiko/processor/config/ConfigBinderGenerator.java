@@ -109,30 +109,33 @@ public final class ConfigBinderGenerator {
             TypeName javaType = TypeName.get(f.type());
 
             switch (f.cardinality()) {
-                case OPTIONAL -> bind.addStatement(
-                        "$T $L = ctx.optionalScalar(node, $S, $S, $L)",
-                        javaType,
-                        varName,
-                        f.yamlKey(),
-                        fullPath,
-                        coercer);
-                case DEFAULTED -> bind.addStatement(
-                        "$T $L = ctx.scalarOrDefault(node, $S, $S, $L, $L.coerce($S))",
-                        javaType,
-                        varName,
-                        f.yamlKey(),
-                        fullPath,
-                        coercer,
-                        coercer,
-                        f.defaultValue());
-                case REQUIRED -> bind.addStatement(
-                        "$T $L = ctx.requireScalar(node, $S, $S, $L, $L)",
-                        javaType,
-                        varName,
-                        f.yamlKey(),
-                        fullPath,
-                        coercer,
-                        fallbackExpr(inner));
+                case OPTIONAL ->
+                    bind.addStatement(
+                            "$T $L = ctx.optionalScalar(node, $S, $S, $L)",
+                            javaType,
+                            varName,
+                            f.yamlKey(),
+                            fullPath,
+                            coercer);
+                case DEFAULTED ->
+                    bind.addStatement(
+                            "$T $L = ctx.scalarOrDefault(node, $S, $S, $L, $L.coerce($S))",
+                            javaType,
+                            varName,
+                            f.yamlKey(),
+                            fullPath,
+                            coercer,
+                            coercer,
+                            f.defaultValue());
+                case REQUIRED ->
+                    bind.addStatement(
+                            "$T $L = ctx.requireScalar(node, $S, $S, $L, $L)",
+                            javaType,
+                            varName,
+                            f.yamlKey(),
+                            fullPath,
+                            coercer,
+                            fallbackExpr(inner));
             }
 
             if (i > 0) ctorArgs.append(", ");
