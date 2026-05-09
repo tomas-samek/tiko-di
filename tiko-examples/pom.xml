@@ -24,6 +24,7 @@
         <module>04_api_impl</module>
         <module>05_multi_module</module>
         <module>06_config_multi_module</module>
+        <module>07_async_start</module>
     </modules>
 
     <!--
