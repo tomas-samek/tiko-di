@@ -13,6 +13,8 @@ _Phase 2 work in progress — see the [Roadmap](README.md#roadmap) and [open iss
 - **`AutoCloseable` cleanup convention** ([#57](https://github.com/tomas-samek/tiko-di/issues/57)). A `@Component` (or a type returned by a `@Produces` method) that implements `AutoCloseable` and declares no explicit `@PreDestroy` gets `close()` called automatically at scope teardown — no annotation required. Lets `@Produces` factories return third-party closeables (`HikariDataSource`, `HttpClient`, `KafkaProducer`, …) without a wrapper `@Component`. Explicit `@PreDestroy` always wins to avoid double-cleanup.
 - **Compile-time leak warning** ([#57](https://github.com/tomas-samek/tiko-di/issues/57)). The processor warns when a `@Component` holds a field of an `AutoCloseable` type but the bean has neither a `@PreDestroy` nor implements `AutoCloseable` itself. Suppressible with `@SuppressWarnings("resource")` on the field or class.
 
+  Thanks to [@SentryMan](https://github.com/SentryMan) for the discussion in [#57](https://github.com/tomas-samek/tiko-di/issues/57) and the [avaje-inject prior-art pointer](https://github.com/avaje/avaje-inject/pull/968) — useful framing while picking the position.
+
 ## [0.1.0] — 2026-05-08
 
 First alpha release. Marks completion of Phase 1 work plus the basic Maven archetype for project scaffolding. Suitable for early-adopter experimentation; production use should wait for Phase 2.
