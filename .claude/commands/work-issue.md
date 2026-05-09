@@ -38,7 +38,7 @@ If a memo is older than a couple of days, verify its claims against current code
 
 - Write the failing test **first**. Run it and confirm it fails for the targeted reason. If extra failures show up (e.g. the fixture trips a different bug), isolate the fixture so the signal is clean — one bug per test.
 - Then write the minimum production code to turn it green.
-- Run the full reactor build (`mvn clean install` via `W:\tools\apache-maven\bin\mvn`) to confirm no regressions before committing.
+- Run the full reactor build (`mvn clean install`, using the `mvn` resolved in **Tooling locations**) to confirm no regressions before committing.
 
 ## 4. Commit (conventional, summary-only)
 
