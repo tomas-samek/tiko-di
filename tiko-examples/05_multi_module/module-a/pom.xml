@@ -31,10 +31,5 @@
             <artifactId>tiko-runtime</artifactId>
             <version>${project.version}</version>
         </dependency>
-        <dependency>
-            <groupId>io.tiko</groupId>
-            <artifactId>tiko-event-local</artifactId>
-            <version>${project.version}</version>
-        </dependency>
     </dependencies>
 </project>

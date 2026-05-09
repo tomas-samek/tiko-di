@@ -50,16 +50,6 @@
                 <artifactId>tiko-config</artifactId>
                 <version>${tiko.version}</version>
             </dependency>
-            <dependency>
-                <groupId>io.tiko</groupId>
-                <artifactId>tiko-event-api</artifactId>
-                <version>${tiko.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>io.tiko</groupId>
-                <artifactId>tiko-event-local</artifactId>
-                <version>${tiko.version}</version>
-            </dependency>
 
             <!-- Annotation Processing -->
             <dependency>

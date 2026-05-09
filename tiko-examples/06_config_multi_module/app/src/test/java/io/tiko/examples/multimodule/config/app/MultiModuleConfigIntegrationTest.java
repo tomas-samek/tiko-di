@@ -1,7 +1,7 @@
 package io.tiko.examples.multimodule.config.app;
 
 import io.tiko.Container;
-import io.tiko.Tiko;
+import io.tiko.runtime.Tiko;
 import io.tiko.config.ConfigSources;
 import io.tiko.examples.multimodule.config.core.CoreService;
 import io.tiko.examples.multimodule.config.notifications.NotificationsService;

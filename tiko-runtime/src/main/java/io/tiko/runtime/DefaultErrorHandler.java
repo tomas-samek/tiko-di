@@ -1,4 +1,4 @@
-package io.tiko.event.local;
+package io.tiko.runtime;
 
 import io.tiko.ErrorContext;
 import io.tiko.ErrorHandler;
@@ -21,7 +21,7 @@ import java.util.logging.Logger;
  *     .build());
  * }</pre>
  */
-final class DefaultErrorHandler implements ErrorHandler {
+public final class DefaultErrorHandler implements ErrorHandler {
 
     // Lazy holder: defers java.util.logging.LogManager init until the first error fires.
     // Most apps never touch this path on startup, so Tiko.create() pays no logging cost.

@@ -42,7 +42,7 @@ First alpha release. Marks completion of Phase 1 work plus the basic Maven arche
 
 **Events:**
 - `@EventHandler` for receiving events
-- In-memory event bus (`tiko-event-local`) for single-instance deployments
+- In-memory event bus (`LocalEventBus` in `tiko-runtime`) for single-instance deployments
 - Lifecycle events (`ApplicationStartedEvent`, `RequestStartedEvent`, etc.) automatically published around scope boundaries — exactly once across single- and multi-module setups ([#45](https://github.com/tomas-samek/tiko-di/issues/45))
 - `@EventTrigger` chains for declarative event workflows, with guards, spread, and async support
 - Full origin tracking via `Event<?>`

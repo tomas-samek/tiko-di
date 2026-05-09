@@ -30,11 +30,6 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>io.tiko</groupId>
-            <artifactId>tiko-event-local</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>

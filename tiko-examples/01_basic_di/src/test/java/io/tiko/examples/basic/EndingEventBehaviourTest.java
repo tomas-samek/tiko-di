@@ -1,7 +1,7 @@
 package io.tiko.examples.basic;
 
 import io.tiko.Container;
-import io.tiko.Tiko;
+import io.tiko.runtime.Tiko;
 import io.tiko.events.ApplicationEndingEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

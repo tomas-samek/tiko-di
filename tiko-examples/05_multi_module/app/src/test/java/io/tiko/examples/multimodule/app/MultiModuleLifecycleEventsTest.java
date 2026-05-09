@@ -5,6 +5,7 @@ import io.tiko.EventBus;
 import io.tiko.events.ApplicationEndingEvent;
 import io.tiko.events.ApplicationStartedEvent;
 import io.tiko.runtime.AggregatingContainer;
+import io.tiko.runtime.LocalEventBus;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.atomic.AtomicInteger;
@@ -61,8 +62,7 @@ class MultiModuleLifecycleEventsTest {
             .isEqualTo(1);
     }
 
-    private EventBus newLocalEventBus() throws Exception {
-        return (EventBus) Class.forName("io.tiko.event.local.LocalEventBus")
-            .getDeclaredConstructor().newInstance();
+    private EventBus newLocalEventBus() {
+        return new LocalEventBus();
     }
 }

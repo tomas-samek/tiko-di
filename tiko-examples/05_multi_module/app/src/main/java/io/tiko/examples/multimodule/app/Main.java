@@ -1,7 +1,7 @@
 package io.tiko.examples.multimodule.app;
 
 import io.tiko.Container;
-import io.tiko.Tiko;
+import io.tiko.runtime.Tiko;
 import io.tiko.examples.multimodule.modulea.User;
 import io.tiko.examples.multimodule.modulea.UserService;
 import io.tiko.examples.multimodule.moduleb.NotificationService;

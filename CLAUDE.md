@@ -59,10 +59,14 @@ mvn compile -pl tiko-api
 tiko/
 ├── tiko-api/              # Core annotations & interfaces (~30KB target)
 ├── tiko-processor/        # Compile-time annotation processor
-├── tiko-runtime/          # Minimal runtime container (~100KB target)
-├── tiko-event-api/        # Event system abstractions
-└── tiko-event-local/      # In-memory event bus implementation
+├── tiko-runtime/          # Runtime container — `Tiko` bootstrap, `TikoContainerImpl`,
+│                          # `AggregatingContainer`, `LocalEventBus`, `DefaultErrorHandler`
+└── tiko-config/           # YAML-backed @Configuration injection (optional)
 ```
+
+Event abstractions (`EventBus`, `@EventHandler`, `@EventTrigger`, `Event<T>`, etc.) live
+in **tiko-api**; the in-memory implementation is in `tiko-runtime`. There is no separate
+`tiko-event-api` / `tiko-event-local` split.
 
 ### Module Dependencies
 
@@ -73,9 +77,7 @@ tiko-processor (depends on tiko-api, javapoet, auto-service)
   ↑ (annotation processor path)
 tiko-runtime (depends on tiko-api)
   ↑
-tiko-event-api (depends on tiko-api)
-  ↑
-tiko-event-local (depends on tiko-event-api, tiko-runtime)
+tiko-config (depends on tiko-api, snakeyaml)
 ```
 
 ## Core Architecture
