@@ -127,6 +127,48 @@ public final class ProcessorContext {
     }
 
     /**
+     * Finds a single provider whose implementation class (for {@link ComponentModel})
+     * or return type (for {@link FactoryMethodModel}) equals the given fully qualified
+     * name. This is the {@code @Pick(X.class)} lookup: identity is the impl class
+     * itself, ignoring any {@code @Component(name = ...)} or {@code @Produces(name = ...)}
+     * qualifier — those are name-keyed, this is class-keyed.
+     */
+    public Optional<Object> findByImplClass(String implFqn) {
+        for (ComponentModel c : components.values()) {
+            if (c.getQualifiedName().equals(implFqn)) {
+                return Optional.of(c);
+            }
+        }
+        for (FactoryMethodModel f : factoryMethods.values()) {
+            if (f.getReturnTypeName().equals(implFqn)) {
+                return Optional.of(f);
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Returns every provider (component or factory) matching the given impl class FQN.
+     * Used by the {@code @Pick} validator to detect ambiguous {@code @Produces} targets:
+     * if two factory methods return the same type, {@code @Pick(That.class)} cannot
+     * disambiguate them and the user must use {@code @Named} instead.
+     */
+    public List<Object> findAllByImplClass(String implFqn) {
+        List<Object> matches = new ArrayList<>();
+        for (ComponentModel c : components.values()) {
+            if (c.getQualifiedName().equals(implFqn)) {
+                matches.add(c);
+            }
+        }
+        for (FactoryMethodModel f : factoryMethods.values()) {
+            if (f.getReturnTypeName().equals(implFqn)) {
+                matches.add(f);
+            }
+        }
+        return matches;
+    }
+
+    /**
      * Looks up a component or factory by its key (typeName or typeName#qualifier).
      * Also matches {@code @Configuration} records, which are injected as SINGLETON beans
      * by the runtime after config binding.

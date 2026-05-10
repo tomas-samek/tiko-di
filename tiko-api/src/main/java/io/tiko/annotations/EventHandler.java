@@ -77,7 +77,7 @@ import java.lang.annotation.Target;
  * event chains with {@link EventTrigger}.</p>
  */
 @Target(ElementType.METHOD)
-@Retention(RetentionPolicy.RUNTIME)
+@Retention(RetentionPolicy.SOURCE)
 @Documented
 public @interface EventHandler {
 

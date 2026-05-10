@@ -16,6 +16,8 @@ public final class DependencyModel {
     private final String qualifier; // From @Named annotation
     private final boolean isProvider; // Provider<T> wrapper
     private final TypeMirror unwrappedType; // T in Provider<T>
+    private final TypeMirror pickedType; // From @Pick annotation (nullable)
+    private final String pickedTypeName; // Qualified name of @Pick value (nullable)
 
     private DependencyModel(Builder builder) {
         this.parameter = builder.parameter;
@@ -24,6 +26,8 @@ public final class DependencyModel {
         this.qualifier = builder.qualifier;
         this.isProvider = builder.isProvider;
         this.unwrappedType = builder.unwrappedType;
+        this.pickedType = builder.pickedType;
+        this.pickedTypeName = builder.pickedTypeName;
     }
 
     public static Builder builder() {
@@ -54,11 +58,33 @@ public final class DependencyModel {
         return Optional.ofNullable(unwrappedType);
     }
 
+    public Optional<TypeMirror> getPickedType() {
+        return Optional.ofNullable(pickedType);
+    }
+
+    public Optional<String> getPickedTypeName() {
+        return Optional.ofNullable(pickedTypeName);
+    }
+
+    public boolean isPicked() {
+        return pickedTypeName != null;
+    }
+
     /**
      * Returns the key to look up this dependency in the container.
-     * Format: typeName or typeName#qualifier
+     *
+     * <p>Format:
+     * <ul>
+     *   <li>{@code @Pick(X.class)} → {@code X.qualifiedName} (class identity wins;
+     *       {@code @Named} is forbidden alongside {@code @Pick} so there is never a
+     *       qualifier suffix to consider).</li>
+     *   <li>otherwise → {@code typeName} or {@code typeName#qualifier}.</li>
+     * </ul>
      */
     public String getDependencyKey() {
+        if (pickedTypeName != null) {
+            return pickedTypeName;
+        }
         String baseType = isProvider ? unwrappedType.toString() : typeName;
         return getQualifier().map(q -> baseType + "#" + q).orElse(baseType);
     }
@@ -77,6 +103,8 @@ public final class DependencyModel {
         private String qualifier = "";
         private boolean isProvider = false;
         private TypeMirror unwrappedType;
+        private TypeMirror pickedType;
+        private String pickedTypeName;
 
         private Builder() {}
 
@@ -107,6 +135,16 @@ public final class DependencyModel {
 
         public Builder unwrappedType(TypeMirror unwrappedType) {
             this.unwrappedType = unwrappedType;
+            return this;
+        }
+
+        public Builder pickedType(TypeMirror pickedType) {
+            this.pickedType = pickedType;
+            return this;
+        }
+
+        public Builder pickedTypeName(String pickedTypeName) {
+            this.pickedTypeName = pickedTypeName;
             return this;
         }
 

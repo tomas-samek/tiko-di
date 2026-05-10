@@ -28,7 +28,7 @@ import java.lang.annotation.Target;
  * }</pre>
  */
 @Target({ElementType.PARAMETER})
-@Retention(RetentionPolicy.RUNTIME)
+@Retention(RetentionPolicy.SOURCE)
 public @interface Named {
     /**
      * The name used to distinguish this component from others of the same type.
