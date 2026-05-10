@@ -107,6 +107,16 @@ public final class ComponentFactoryGenerator {
                         TypeName.get(dependency.getType()),
                         paramName,
                         generateContainerGetCall(dependency));
+            } else if (dependency.isPicker()) {
+                // Picker<T> is constructed inline via the generic ContainerPicker<T> impl —
+                // one runtime class services every Picker injection point regardless of T.
+                TypeName baseType = TypeName.get(dependency.getUnwrappedType().orElseThrow());
+                methodBuilder.addStatement(
+                        "$T $L = new $T<>(container, $T.class)",
+                        TypeName.get(dependency.getType()),
+                        paramName,
+                        ClassName.get("io.tiko.runtime", "ContainerPicker"),
+                        baseType);
             } else {
                 // Direct dependency resolution
                 methodBuilder.addStatement(

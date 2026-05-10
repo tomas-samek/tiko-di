@@ -88,6 +88,7 @@ public final class ContainerGenerator {
         // Add get methods
         containerBuilder.addMethod(createGetMethod());
         containerBuilder.addMethod(createGetWithNameMethod());
+        containerBuilder.addMethod(createGetAllMethod());
 
         // Add config injection method
         containerBuilder.addMethod(createInjectConfigsMethod());
@@ -456,6 +457,13 @@ public final class ContainerGenerator {
      * calls (no "container." prefix) since we are inside the container itself.
      */
     private String generateContainerGetCall(DependencyModel dependency) {
+        // Picker<T> is constructed inline via the generic ContainerPicker — no provider
+        // lookup. Inside the container we pass `this` (we ARE the container).
+        if (dependency.isPicker()) {
+            String baseType = dependency.getUnwrappedType().get().toString();
+            return "new io.tiko.runtime.ContainerPicker<>(this, " + baseType + ".class)";
+        }
+
         String typeName =
                 dependency.isProvider() ? dependency.getUnwrappedType().get().toString() : dependency.getTypeName();
 
@@ -1175,6 +1183,63 @@ public final class ContainerGenerator {
                 IllegalArgumentException.class,
                 "No component found for name '",
                 "' and type: ");
+
+        method.nextControlFlow("finally");
+        method.addStatement("inFlightGets.decrementAndGet()");
+        method.endControlFlow();
+
+        return method.build();
+    }
+
+    /**
+     * Creates {@code getAll(Class<T>)} — returns every registered impl assignable to
+     * {@code type}, including both named and unnamed components and {@code @Produces}
+     * outputs. Backbone of {@code Picker.list()}.
+     *
+     * <p>Scope semantics are preserved by delegating to each component's existing
+     * getter — singletons return the cached instance, prototypes get freshly created
+     * each time, scoped beans resolve in the current scope.
+     */
+    private MethodSpec createGetAllMethod() {
+        TypeVariableName typeVar = TypeVariableName.get("T");
+        ParameterizedTypeName classType = ParameterizedTypeName.get(ClassName.get(Class.class), typeVar);
+        ParameterizedTypeName listType = ParameterizedTypeName.get(ClassName.get(List.class), typeVar);
+
+        MethodSpec.Builder method = MethodSpec.methodBuilder("getAll")
+                .addModifiers(Modifier.PUBLIC)
+                .addAnnotation(Override.class)
+                .addTypeVariable(typeVar)
+                .addParameter(classType, "type")
+                .returns(listType);
+
+        // Post-shutdown gate, mirrors get(Class).
+        method.beginControlFlow("if (stopped.get() && !inShutdownThread.get())");
+        method.addStatement("throw new $T($S)", IllegalStateException.class, "Container has been shut down");
+        method.endControlFlow();
+
+        method.addStatement("inFlightGets.incrementAndGet()");
+        method.beginControlFlow("try");
+        method.addStatement("$T<T> __result = new $T<>()", List.class, ArrayList.class);
+
+        // One assignability check per component. type.isAssignableFrom(ComponentClass.class)
+        // catches both interface-typed and concrete-typed picker base types.
+        for (ComponentModel component : context.getActiveComponents()) {
+            TypeName componentType = ClassName.get(component.getTypeElement());
+            String getterName = "get" + component.getClassName();
+            method.beginControlFlow("if (type.isAssignableFrom($T.class))", componentType);
+            method.addStatement("__result.add(type.cast($L()))", getterName);
+            method.endControlFlow();
+        }
+
+        // Same for factory-produced beans — both named and unnamed are visible to getAll.
+        for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
+            TypeName producedType = TypeName.get(factory.getReturnType());
+            method.beginControlFlow("if (type.isAssignableFrom($T.class))", producedType);
+            method.addStatement("__result.add(type.cast($L()))", factoryGetterName(factory));
+            method.endControlFlow();
+        }
+
+        method.addStatement("return $T.unmodifiableList(__result)", java.util.Collections.class);
 
         method.nextControlFlow("finally");
         method.addStatement("inFlightGets.decrementAndGet()");

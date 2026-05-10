@@ -62,6 +62,23 @@ public interface Container extends AutoCloseable {
     <T> T get(Class<T> type, String name);
 
     /**
+     * Returns every registered bean assignable to the given type, in declaration order.
+     *
+     * <p>Backbone of {@link Picker#list()}. Includes both {@code @Component} instances
+     * and {@code @Produces} factory outputs whose return type is assignable to
+     * {@code type}; both named and unnamed beans are included. Returns an empty list
+     * when no impls match — never {@code null}.
+     *
+     * <p>In multi-module setups the aggregator concatenates results across all
+     * sub-containers so {@code Picker<T>.list()} sees every available impl.
+     *
+     * @param type the base type (interface or class) to match
+     * @param <T>  the bean type
+     * @return all registered impls assignable to {@code type}
+     */
+    <T> java.util.List<T> getAll(Class<T> type);
+
+    /**
      * Retrieves a Provider for the specified type, allowing lazy resolution.
      *
      * @param type the class of the component

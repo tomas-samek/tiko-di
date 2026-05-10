@@ -62,14 +62,7 @@ public final class TypeUtil {
      * Checks if the given type is Provider<T>.
      */
     public boolean isProvider(TypeMirror type) {
-        if (type.getKind() != TypeKind.DECLARED) {
-            return false;
-        }
-        TypeElement typeElement = asTypeElement(type).orElse(null);
-        if (typeElement == null) {
-            return false;
-        }
-        return typeElement.getQualifiedName().toString().equals("io.tiko.Provider");
+        return isParameterized(type, "io.tiko.Provider");
     }
 
     /**
@@ -80,6 +73,39 @@ public final class TypeUtil {
         if (!isProvider(type)) {
             return Optional.empty();
         }
+        return firstTypeArgument(type);
+    }
+
+    /**
+     * Checks if the given type is Picker<T>.
+     */
+    public boolean isPicker(TypeMirror type) {
+        return isParameterized(type, "io.tiko.Picker");
+    }
+
+    /**
+     * Extracts the type argument from Picker<T>.
+     * Returns empty if not a Picker or no type argument.
+     */
+    public Optional<TypeMirror> unwrapPicker(TypeMirror type) {
+        if (!isPicker(type)) {
+            return Optional.empty();
+        }
+        return firstTypeArgument(type);
+    }
+
+    private boolean isParameterized(TypeMirror type, String qualifiedName) {
+        if (type.getKind() != TypeKind.DECLARED) {
+            return false;
+        }
+        TypeElement typeElement = asTypeElement(type).orElse(null);
+        if (typeElement == null) {
+            return false;
+        }
+        return typeElement.getQualifiedName().toString().equals(qualifiedName);
+    }
+
+    private Optional<TypeMirror> firstTypeArgument(TypeMirror type) {
         if (type instanceof DeclaredType declaredType) {
             List<? extends TypeMirror> typeArguments = declaredType.getTypeArguments();
             if (!typeArguments.isEmpty()) {
