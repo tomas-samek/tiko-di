@@ -52,11 +52,11 @@ public final class DependencyGraphValidator {
         boolean valid = true;
 
         for (DependencyModel dependency : component.getDependencies()) {
-            // Get the actual type to resolve (unwrap Provider<T>)
             String depKey = dependency.getDependencyKey();
-
-            // Check if dependency exists
-            if (!context.findComponentOrFactory(depKey).isPresent()) {
+            boolean resolved = dependency.isPicked()
+                    ? context.findByImplClass(depKey).isPresent()
+                    : context.findComponentOrFactory(depKey).isPresent();
+            if (!resolved) {
                 context.getErrorReporter()
                         .missingDependency(component.getTypeElement(), depKey, component.getClassName());
                 valid = false;
@@ -95,8 +95,10 @@ public final class DependencyGraphValidator {
         // Validate factory method's own dependencies
         for (DependencyModel dependency : factory.getDependencies()) {
             String depKey = dependency.getDependencyKey();
-
-            if (!context.findComponentOrFactory(depKey).isPresent()) {
+            boolean resolved = dependency.isPicked()
+                    ? context.findByImplClass(depKey).isPresent()
+                    : context.findComponentOrFactory(depKey).isPresent();
+            if (!resolved) {
                 context.getErrorReporter()
                         .missingDependency(factory.getMethodElement(), depKey, factory.getFactoryIdentifier());
                 valid = false;

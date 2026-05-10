@@ -1,6 +1,7 @@
 package io.tiko.processor.validation;
 
 import io.tiko.processor.model.ComponentModel;
+import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
 import io.tiko.processor.util.ErrorReporter;
 import io.tiko.processor.util.ProcessorContext;
@@ -51,12 +52,48 @@ public final class AmbiguityValidator {
         boolean valid = true;
         for (Map.Entry<String, List<ProviderInfo>> entry : providersByType.entrySet()) {
             List<ProviderInfo> providers = entry.getValue();
-            if (providers.size() > 1) {
+            if (providers.size() > 1 && hasUnqualifiedConsumer(entry.getKey())) {
                 reportAmbiguity(entry.getKey(), providers);
                 valid = false;
             }
         }
         return valid;
+    }
+
+    /**
+     * True when at least one consumer injects the given type without disambiguating
+     * via {@code @Pick} or {@code @Named}. When every consumer qualifies its lookup,
+     * the multiple unnamed providers are not actually ambiguous at any call site —
+     * silent first-match-wins dispatch can never happen — and the validator should
+     * not fire.
+     */
+    private boolean hasUnqualifiedConsumer(String typeKey) {
+        for (ComponentModel component : context.getActiveComponents()) {
+            for (DependencyModel dep : component.getDependencies()) {
+                if (matchesType(dep, typeKey) && isUnqualified(dep)) {
+                    return true;
+                }
+            }
+        }
+        for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
+            for (DependencyModel dep : factory.getDependencies()) {
+                if (matchesType(dep, typeKey) && isUnqualified(dep)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean matchesType(DependencyModel dep, String typeKey) {
+        // Compare against the parameter type (or unwrapped Provider<T>), not the picked
+        // class — we are asking "is this dependency for the ambiguous type?".
+        String depType = dep.getUnwrappedType().map(Object::toString).orElse(dep.getTypeName());
+        return depType.equals(typeKey);
+    }
+
+    private boolean isUnqualified(DependencyModel dep) {
+        return !dep.isPicked() && dep.getQualifier().isEmpty();
     }
 
     private void register(Map<String, List<ProviderInfo>> map, String key, ProviderInfo provider) {

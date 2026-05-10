@@ -15,6 +15,7 @@ import java.util.*;
 import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.*;
+import javax.lang.model.type.MirroredTypeException;
 import javax.lang.model.type.MirroredTypesException;
 import javax.lang.model.type.TypeMirror;
 import javax.tools.Diagnostic;
@@ -313,6 +314,23 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
                 qualifier = namedAnnotation.value();
             }
 
+            // Check for @Pick class-literal qualifier. Reading the Class value goes
+            // through MirroredTypeException because the picked class is a TypeMirror
+            // at processor time, not yet a loadable Class.
+            TypeMirror pickedType = null;
+            String pickedTypeName = null;
+            Pick pickAnnotation = parameter.getAnnotation(Pick.class);
+            if (pickAnnotation != null) {
+                try {
+                    pickAnnotation.value();
+                } catch (MirroredTypeException e) {
+                    pickedType = e.getTypeMirror();
+                }
+                if (pickedType != null) {
+                    pickedTypeName = typeUtil.getQualifiedName(pickedType);
+                }
+            }
+
             DependencyModel dependency = DependencyModel.builder()
                     .parameter(parameter)
                     .type(paramType)
@@ -320,6 +338,8 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
                     .qualifier(qualifier)
                     .isProvider(isProvider)
                     .unwrappedType(unwrappedType)
+                    .pickedType(pickedType)
+                    .pickedTypeName(pickedTypeName)
                     .build();
 
             dependencies.add(dependency);
@@ -569,6 +589,12 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         // Detect ambiguous unnamed providers (two+ @Components/@Produces for same type)
         AmbiguityValidator ambiguityValidator = new AmbiguityValidator(context);
         if (!ambiguityValidator.validate()) {
+            valid = false;
+        }
+
+        // Validate @Pick usage on injection-point parameters
+        PickValidator pickValidator = new PickValidator(context);
+        if (!pickValidator.validate()) {
             valid = false;
         }
 
