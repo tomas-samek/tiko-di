@@ -157,6 +157,21 @@ public final class ComponentFactoryGenerator {
         String typeName =
                 dependency.isProvider() ? dependency.getUnwrappedType().get().toString() : dependency.getTypeName();
 
+        // @Pick: identity is the picked impl class, ignoring any @Component/@Produces name
+        // qualifier on the provider. PickValidator guarantees there is exactly one match
+        // and that no @Named coexists, so the lookup and call are unqualified.
+        if (dependency.isPicked()) {
+            String pickedFqn = dependency.getPickedTypeName().get();
+            Object pickedProvider = context.findByImplClass(pickedFqn).orElse(null);
+            String methodName = "get" + getSimpleClassName(pickedFqn);
+            if (pickedProvider instanceof ComponentModel pickedComponent) {
+                methodName = "get" + pickedComponent.getClassName();
+            } else if (pickedProvider instanceof io.tiko.processor.model.FactoryMethodModel pickedFactory) {
+                methodName = "get" + getSimpleClassName(pickedFactory.getReturnTypeName());
+            }
+            return String.format("container.%s()", methodName);
+        }
+
         // Find the actual component or factory that provides this dependency
         String dependencyKey = dependency.getDependencyKey();
         Object provider = context.findComponentOrFactory(dependencyKey).orElse(null);

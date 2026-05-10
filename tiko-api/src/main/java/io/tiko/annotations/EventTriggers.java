@@ -26,7 +26,7 @@ import java.lang.annotation.Target;
  * }</pre>
  */
 @Target(ElementType.METHOD)
-@Retention(RetentionPolicy.RUNTIME)
+@Retention(RetentionPolicy.SOURCE)
 @Documented
 public @interface EventTriggers {
 

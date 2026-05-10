@@ -17,6 +17,8 @@ public final class DependencyModel {
     private final boolean isProvider; // Provider<T> wrapper
     private final boolean isPicker; // Picker<T> wrapper
     private final TypeMirror unwrappedType; // T in Provider<T> or Picker<T>
+    private final TypeMirror pickedType; // From @Pick annotation (nullable)
+    private final String pickedTypeName; // Qualified name of @Pick value (nullable)
 
     private DependencyModel(Builder builder) {
         this.parameter = builder.parameter;
@@ -26,6 +28,8 @@ public final class DependencyModel {
         this.isProvider = builder.isProvider;
         this.isPicker = builder.isPicker;
         this.unwrappedType = builder.unwrappedType;
+        this.pickedType = builder.pickedType;
+        this.pickedTypeName = builder.pickedTypeName;
     }
 
     public static Builder builder() {
@@ -60,18 +64,36 @@ public final class DependencyModel {
         return Optional.ofNullable(unwrappedType);
     }
 
+    public Optional<TypeMirror> getPickedType() {
+        return Optional.ofNullable(pickedType);
+    }
+
+    public Optional<String> getPickedTypeName() {
+        return Optional.ofNullable(pickedTypeName);
+    }
+
+    public boolean isPicked() {
+        return pickedTypeName != null;
+    }
+
     /**
      * Returns the key to look up this dependency in the container.
      *
      * <p>Format:
      * <ul>
-     *   <li>Provider/regular dep → {@code typeName} or {@code typeName#qualifier}.</li>
+     *   <li>{@code @Pick(X.class)} → {@code X.qualifiedName} (class identity wins;
+     *       {@code @Named} is forbidden alongside {@code @Pick} so there is never a
+     *       qualifier suffix to consider).</li>
      *   <li>Picker dep → {@code typeName} (the picker base type T). Pickers are
      *       constructed inline by codegen, not looked up by provider key — this is
      *       only used for diagnostic messages and the "≥1 impl exists" check.</li>
+     *   <li>otherwise → {@code typeName} or {@code typeName#qualifier}.</li>
      * </ul>
      */
     public String getDependencyKey() {
+        if (pickedTypeName != null) {
+            return pickedTypeName;
+        }
         if (isPicker) {
             return unwrappedType.toString();
         }
@@ -94,6 +116,8 @@ public final class DependencyModel {
         private boolean isProvider = false;
         private boolean isPicker = false;
         private TypeMirror unwrappedType;
+        private TypeMirror pickedType;
+        private String pickedTypeName;
 
         private Builder() {}
 
@@ -129,6 +153,16 @@ public final class DependencyModel {
 
         public Builder unwrappedType(TypeMirror unwrappedType) {
             this.unwrappedType = unwrappedType;
+            return this;
+        }
+
+        public Builder pickedType(TypeMirror pickedType) {
+            this.pickedType = pickedType;
+            return this;
+        }
+
+        public Builder pickedTypeName(String pickedTypeName) {
+            this.pickedTypeName = pickedTypeName;
             return this;
         }
 

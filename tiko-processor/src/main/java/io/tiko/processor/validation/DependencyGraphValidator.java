@@ -58,7 +58,10 @@ public final class DependencyGraphValidator {
                 continue;
             }
             String depKey = dependency.getDependencyKey();
-            if (!context.findComponentOrFactory(depKey).isPresent()) {
+            boolean resolved = dependency.isPicked()
+                    ? context.findByImplClass(depKey).isPresent()
+                    : context.findComponentOrFactory(depKey).isPresent();
+            if (!resolved) {
                 context.getErrorReporter()
                         .missingDependency(component.getTypeElement(), depKey, component.getClassName());
                 valid = false;
@@ -100,7 +103,10 @@ public final class DependencyGraphValidator {
                 continue;
             }
             String depKey = dependency.getDependencyKey();
-            if (!context.findComponentOrFactory(depKey).isPresent()) {
+            boolean resolved = dependency.isPicked()
+                    ? context.findByImplClass(depKey).isPresent()
+                    : context.findComponentOrFactory(depKey).isPresent();
+            if (!resolved) {
                 context.getErrorReporter()
                         .missingDependency(factory.getMethodElement(), depKey, factory.getFactoryIdentifier());
                 valid = false;

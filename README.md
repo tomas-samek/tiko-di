@@ -208,7 +208,7 @@ Five worked examples ship under [`tiko-examples/`](./tiko-examples/README.md), e
 
 | # | Module | Demonstrates |
 |---|--------|--------------|
-| 01 | [`01_basic_di`](./tiko-examples/01_basic_di) | `@Component`, scopes, cross-scope proxies, `@Produces`, `@Named`, `Provider<T>`, `Picker<T>`, `pick()` |
+| 01 | [`01_basic_di`](./tiko-examples/01_basic_di) | `@Component`, scopes, cross-scope proxies, `@Produces`, `@Named`, `@Pick`, `Provider<T>`, `Picker<T>`, `pick()` |
 | 02 | [`02_config`](./tiko-examples/02_config) | `@Configuration` records, layered `ConfigSources`, `${VAR}` interpolation |
 | 03 | [`03_events`](./tiko-examples/03_events) | Lifecycle events, `@EventTrigger` chains with guards/spread/async, `Event<?>` origin tracking |
 | 04 | [`04_api_impl`](./tiko-examples/04_api_impl) | API/impl split — app compiles against an interface jar, impl supplied at runtime |
@@ -230,6 +230,7 @@ See [`tiko-examples/README.md`](./tiko-examples/README.md) for run commands.
     - `profiles` - Optional active profiles
 - `@Inject` - Marks constructors for dependency injection (constructor-only, no field injection)
 - `@Named("name")` - Qualifies injection by string name (typically used to disambiguate `@Produces` factory methods returning the same type)
+- `@Pick(Class)` - Qualifies injection by class literal — the compile-time, refactor-safe alternative to `@Named` when disambiguating between multiple `@Component` impls of the same interface
 - `Picker<T>` - Typed runtime lookup primitive for polymorphic queries — see [Picker&lt;T&gt;](#picker-runtime-polymorphic-queries) below
 
 **Scopes (via @Component parameter - from longest to shortest lifetime):**
@@ -453,6 +454,31 @@ public class DataService {
   }
 }
 ```
+
+### Class-Literal Qualifier with `@Pick`
+
+When the disambiguator is a *class* — not a string name — `@Pick(SomeImpl.class)` is the compile-time, refactor-safe alternative to `@Named("...")`. Typos become compile errors, IDE rename refactors update every usage, and the choice of implementation is visible in the constructor signature.
+
+```java
+@Component class MySqlDatabase    implements Database { ... }
+@Component class PostgresDatabase implements Database { ... }
+
+@Component(scope = Scope.SINGLETON)
+public class DataService {
+  @Inject
+  public DataService(
+      @Pick(MySqlDatabase.class)    Database primary,
+      @Pick(PostgresDatabase.class) Database analytics) {
+    // ...
+  }
+}
+```
+
+**When to use which:**
+- **`@Pick(Class)`** — disambiguating between multiple `@Component` impls of the same interface. Always prefer when there's a distinct class to point at.
+- **`@Named("...")`** — disambiguating between multiple `@Produces` factory methods returning the same type (no class to pick), or when the bean name is genuinely string-keyed metadata.
+
+The two cannot be combined on the same parameter — they're alternative qualifier mechanisms. Compile-time errors enforce: the picked class must be assignable to the parameter type, must not be the parameter type itself, and (for `@Produces` targets) must be uniquely produced. See `tiko-examples/01_basic_di/Polyglot.java` for a runnable demo.
 
 ### Fluent Lookup with `pick()`
 

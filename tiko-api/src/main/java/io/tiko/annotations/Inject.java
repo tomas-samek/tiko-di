@@ -76,5 +76,5 @@ import java.lang.annotation.Target;
  * @since 1.0
  */
 @Target({ElementType.CONSTRUCTOR, ElementType.PARAMETER})
-@Retention(RetentionPolicy.RUNTIME)
+@Retention(RetentionPolicy.SOURCE)
 public @interface Inject {}

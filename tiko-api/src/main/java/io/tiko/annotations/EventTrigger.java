@@ -88,7 +88,7 @@ import java.lang.annotation.Target;
  * successfully. If an exception is thrown, no events are triggered.</p>
  */
 @Target(ElementType.METHOD)
-@Retention(RetentionPolicy.RUNTIME)
+@Retention(RetentionPolicy.SOURCE)
 @Repeatable(EventTriggers.class)
 @Documented
 public @interface EventTrigger {
