@@ -296,12 +296,20 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
             TypeMirror paramType = parameter.asType();
             String typeName = typeUtil.getQualifiedName(paramType);
 
-            // Check if it's Provider<T>
+            // Provider<T> and Picker<T> are wrappers around a base type T. They are
+            // mutually exclusive (a parameter can't be both), so detect each and unwrap
+            // to the inner T for downstream lookup / codegen.
             boolean isProvider = typeUtil.isProvider(paramType);
+            boolean isPicker = !isProvider && typeUtil.isPicker(paramType);
             TypeMirror unwrappedType = null;
 
             if (isProvider) {
                 unwrappedType = typeUtil.unwrapProvider(paramType).orElse(null);
+                if (unwrappedType != null) {
+                    typeName = typeUtil.getQualifiedName(unwrappedType);
+                }
+            } else if (isPicker) {
+                unwrappedType = typeUtil.unwrapPicker(paramType).orElse(null);
                 if (unwrappedType != null) {
                     typeName = typeUtil.getQualifiedName(unwrappedType);
                 }
@@ -337,6 +345,7 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
                     .typeName(typeName)
                     .qualifier(qualifier)
                     .isProvider(isProvider)
+                    .isPicker(isPicker)
                     .unwrappedType(unwrappedType)
                     .pickedType(pickedType)
                     .pickedTypeName(pickedTypeName)
@@ -589,6 +598,12 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         // Detect ambiguous unnamed providers (two+ @Components/@Produces for same type)
         AmbiguityValidator ambiguityValidator = new AmbiguityValidator(context);
         if (!ambiguityValidator.validate()) {
+            valid = false;
+        }
+
+        // Validate Picker<T> injection points (warn if no local impls)
+        PickerValidator pickerValidator = new PickerValidator(context);
+        if (!pickerValidator.validate()) {
             valid = false;
         }
 

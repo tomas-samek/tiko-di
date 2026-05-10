@@ -208,7 +208,7 @@ Five worked examples ship under [`tiko-examples/`](./tiko-examples/README.md), e
 
 | # | Module | Demonstrates |
 |---|--------|--------------|
-| 01 | [`01_basic_di`](./tiko-examples/01_basic_di) | `@Component`, scopes, cross-scope proxies, `@Produces`, `@Named`, `@Pick`, `Provider<T>`, `pick()` |
+| 01 | [`01_basic_di`](./tiko-examples/01_basic_di) | `@Component`, scopes, cross-scope proxies, `@Produces`, `@Named`, `@Pick`, `Provider<T>`, `Picker<T>`, `pick()` |
 | 02 | [`02_config`](./tiko-examples/02_config) | `@Configuration` records, layered `ConfigSources`, `${VAR}` interpolation |
 | 03 | [`03_events`](./tiko-examples/03_events) | Lifecycle events, `@EventTrigger` chains with guards/spread/async, `Event<?>` origin tracking |
 | 04 | [`04_api_impl`](./tiko-examples/04_api_impl) | API/impl split — app compiles against an interface jar, impl supplied at runtime |
@@ -231,6 +231,7 @@ See [`tiko-examples/README.md`](./tiko-examples/README.md) for run commands.
 - `@Inject` - Marks constructors for dependency injection (constructor-only, no field injection)
 - `@Named("name")` - Qualifies injection by string name (typically used to disambiguate `@Produces` factory methods returning the same type)
 - `@Pick(Class)` - Qualifies injection by class literal — the compile-time, refactor-safe alternative to `@Named` when disambiguating between multiple `@Component` impls of the same interface
+- `Picker<T>` - Typed runtime lookup primitive for polymorphic queries — see [Picker&lt;T&gt;](#picker-runtime-polymorphic-queries) below
 
 **Scopes (via @Component parameter - from longest to shortest lifetime):**
 
@@ -498,6 +499,42 @@ Greeter french = container.pick(Greeter.class)
     .withName("french")
     .orDefault(new NoopGreeter());
 ```
+
+### `Picker<T>` — runtime polymorphic queries
+
+When the choice of impl is not known at compile time — driven by configuration, runtime data, or "I want to iterate them all" — inject a `Picker<T>` and query at runtime. It's typed at the boundary (`Picker<DataSource>` only returns `DataSource` subtypes) and one runtime impl handles every injection point:
+
+```java
+@Component
+public class StrategyService {
+    private final Strategy strategy;
+
+    @Inject
+    public StrategyService(Picker<Strategy> strategies, StrategyConfig config) {
+        // config.implName() comes from YAML — only known at runtime
+        this.strategy = strategies.byName(config.implName())
+                .orElseThrow(() -> new IllegalStateException(
+                        "no Strategy named '" + config.implName() + "'"));
+    }
+}
+```
+
+API surface (three methods, all return-by-value):
+
+```java
+public interface Picker<T> {
+    List<T> list();                                                // every registered impl of T
+    Optional<T> byName(String name);                               // @Component(name=...) lookup
+    <S extends T> Optional<S> byImplClass(Class<S> implClass);     // class-keyed lookup
+}
+```
+
+**When to use what:**
+- **`@Pick(SomeImpl.class) T`** — compile-time-known, class-based qualifier. Declarative; the choice is visible in the constructor signature.
+- **`@Named("name") T`** — compile-time-known, string-based qualifier. Used to disambiguate multiple `@Produces` factory methods returning the same type.
+- **`Picker<T>`** — runtime queries: the impl class or name is computed at runtime, you need to iterate all impls, or you want a single primitive that handles cross-module lookup transparently.
+
+Cross-module pickers work for free — the underlying `Container.get(Class)` / `getAll(Class)` route through the aggregator when multiple modules are linked, so `Picker<T>.list()` returns the union of impls from every module on the classpath. See `tiko-examples/01_basic_di/PickerConsumer.java` for a runnable demo.
 
 ### Lifecycle Hooks
 

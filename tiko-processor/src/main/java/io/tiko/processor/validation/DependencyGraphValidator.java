@@ -52,6 +52,11 @@ public final class DependencyGraphValidator {
         boolean valid = true;
 
         for (DependencyModel dependency : component.getDependencies()) {
+            // Picker<T> doesn't resolve to a single provider — its existence check
+            // ("at least one impl of T") lives in PickerValidator.
+            if (dependency.isPicker()) {
+                continue;
+            }
             String depKey = dependency.getDependencyKey();
             boolean resolved = dependency.isPicked()
                     ? context.findByImplClass(depKey).isPresent()
@@ -94,6 +99,9 @@ public final class DependencyGraphValidator {
 
         // Validate factory method's own dependencies
         for (DependencyModel dependency : factory.getDependencies()) {
+            if (dependency.isPicker()) {
+                continue;
+            }
             String depKey = dependency.getDependencyKey();
             boolean resolved = dependency.isPicked()
                     ? context.findByImplClass(depKey).isPresent()

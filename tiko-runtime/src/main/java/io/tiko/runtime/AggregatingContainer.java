@@ -218,6 +218,19 @@ public final class AggregatingContainer implements Container {
     }
 
     @Override
+    public <T> java.util.List<T> getAll(Class<T> type) {
+        // Concatenate getAll() across every sub-container so Picker<T>.list() sees
+        // the union of all modules' impls. Sub-container order is the module load
+        // order (deterministic per Tiko.create() classpath scan); within each module,
+        // declaration order. Empty when no impls anywhere — never null.
+        java.util.List<T> all = new java.util.ArrayList<>();
+        for (Container container : moduleContainers) {
+            all.addAll(container.getAll(type));
+        }
+        return java.util.Collections.unmodifiableList(all);
+    }
+
+    @Override
     public <T> Provider<T> getProvider(Class<T> type) {
         Container container = componentToContainerMap.get(type);
         if (container == null) {
