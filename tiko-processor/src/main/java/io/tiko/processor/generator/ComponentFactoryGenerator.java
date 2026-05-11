@@ -157,18 +157,25 @@ public final class ComponentFactoryGenerator {
         String typeName =
                 dependency.isProvider() ? dependency.getUnwrappedType().get().toString() : dependency.getTypeName();
 
-        // @Pick: identity is the picked impl class, ignoring any @Component/@Produces name
-        // qualifier on the provider. PickValidator guarantees there is exactly one match
-        // and that no @Named coexists, so the lookup and call are unqualified.
+        // @Pick: identity is the picked impl class. When @Named is also present, the
+        // qualifier narrows further — the lookup goes through the composite key
+        // (impl#name) so the right named provider is selected. PickValidator guarantees
+        // there is exactly one match. Factories are addressed by their unique
+        // produce_<id>() getter; components have one getter per class regardless of
+        // any @Component(name=...) metadata.
         if (dependency.isPicked()) {
             String pickedFqn = dependency.getPickedTypeName().get();
-            Object pickedProvider = context.findByImplClass(pickedFqn).orElse(null);
-            String methodName = "get" + getSimpleClassName(pickedFqn);
-            if (pickedProvider instanceof ComponentModel pickedComponent) {
-                methodName = "get" + pickedComponent.getClassName();
-            } else if (pickedProvider instanceof io.tiko.processor.model.FactoryMethodModel pickedFactory) {
-                methodName = "get" + getSimpleClassName(pickedFactory.getReturnTypeName());
+            Object pickedProvider = dependency
+                    .getQualifier()
+                    .map(q ->
+                            context.findComponentOrFactory(pickedFqn + "#" + q).orElse(null))
+                    .orElseGet(() -> context.findByImplClass(pickedFqn).orElse(null));
+            if (pickedProvider instanceof io.tiko.processor.model.FactoryMethodModel pickedFactory) {
+                return String.format("container.produce_%s()", pickedFactory.getFactoryIdentifier());
             }
+            String methodName = (pickedProvider instanceof ComponentModel pickedComponent)
+                    ? "get" + pickedComponent.getClassName()
+                    : "get" + getSimpleClassName(pickedFqn);
             return String.format("container.%s()", methodName);
         }
 

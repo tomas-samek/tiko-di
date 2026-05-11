@@ -81,9 +81,11 @@ public final class DependencyModel {
      *
      * <p>Format:
      * <ul>
-     *   <li>{@code @Pick(X.class)} → {@code X.qualifiedName} (class identity wins;
-     *       {@code @Named} is forbidden alongside {@code @Pick} so there is never a
-     *       qualifier suffix to consider).</li>
+     *   <li>{@code @Pick(X.class)} → {@code X.qualifiedName}, optionally suffixed with
+     *       {@code #qualifier} when {@code @Named} is also present. The pair selects
+     *       a provider whose impl class is {@code X} and whose name is {@code qualifier}
+     *       — the standard composition for picking among multiple {@code @Produces}
+     *       methods that return the same type with different names.</li>
      *   <li>Picker dep → {@code typeName} (the picker base type T). Pickers are
      *       constructed inline by codegen, not looked up by provider key — this is
      *       only used for diagnostic messages and the "≥1 impl exists" check.</li>
@@ -92,7 +94,7 @@ public final class DependencyModel {
      */
     public String getDependencyKey() {
         if (pickedTypeName != null) {
-            return pickedTypeName;
+            return getQualifier().map(q -> pickedTypeName + "#" + q).orElse(pickedTypeName);
         }
         if (isPicker) {
             return unwrappedType.toString();

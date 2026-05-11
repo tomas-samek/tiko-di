@@ -20,22 +20,20 @@ import javax.lang.model.type.TypeMirror;
  *       (or to the {@code T} of {@code Provider<T>}).</li>
  *   <li>{@code @Pick} cannot reference the parameter's declared type itself —
  *       that's plain {@code @Inject}, no disambiguation needed.</li>
- *   <li>{@code @Pick} and {@code @Named} cannot coexist on one parameter; they're
- *       alternative qualifier mechanisms.</li>
  *   <li>{@code @Pick} cannot be applied to collection parameters
  *       ({@code Set<T>}, {@code List<T>}, {@code Iterable<T>}) — picking selects
  *       a single bean.</li>
- *   <li>The picked class must not be ambiguously produced by multiple
- *       {@code @Produces} factory methods returning the same type. With multiple
- *       producers the class literal cannot disambiguate; the user must reach for
- *       {@code @Named}.</li>
+ *   <li>Without {@code @Named}, the picked class must not be ambiguously produced
+ *       by multiple {@code @Produces} factory methods returning the same type. With
+ *       multiple producers the class literal alone cannot disambiguate — combine
+ *       {@code @Pick(X.class)} with {@code @Named("...")} to select one.</li>
  * </ol>
  *
- * <p>Existence of the picked class as a registered component or factory return type
- * is not enforced here in commit 1 — {@link DependencyGraphValidator} already reports
- * "Cannot resolve dependency" when no provider is found, with the picked-class FQN as
- * the dependency key. Cross-module visibility comes with the {@code components.txt}
- * manifest in a follow-up commit.
+ * <p>{@code @Pick} composes with {@code @Named}: the pair narrows by impl class first,
+ * then disambiguates among that impl's named providers. Existence of the picked class
+ * as a registered component or factory return type is not enforced here —
+ * {@link DependencyGraphValidator} already reports "Cannot resolve dependency" when no
+ * provider matches the (impl, optional name) lookup.
  */
 public final class PickValidator {
 
@@ -72,20 +70,7 @@ public final class PickValidator {
         TypeMirror pickedType = dep.getPickedType().orElseThrow();
         String pickedFqn = dep.getPickedTypeName().orElseThrow();
 
-        // Rule 4: @Pick + @Named is forbidden — pick one mechanism.
-        if (dep.getQualifier().isPresent()) {
-            context.getErrorReporter()
-                    .error(
-                            param,
-                            "@Pick and @Named cannot be combined on the same parameter",
-                            "Use @Pick(" + simpleName(pickedFqn)
-                                    + ".class) when disambiguating between @Component impls",
-                            "Use @Named(\"" + dep.getQualifier().orElse("...")
-                                    + "\") when disambiguating between @Produces factory methods");
-            return false;
-        }
-
-        // Rule 5: collection/iterable injection isn't a pick site.
+        // Rule: collection/iterable injection isn't a pick site.
         if (isCollectionType(dep.getType())) {
             context.getErrorReporter()
                     .error(
@@ -99,7 +84,7 @@ public final class PickValidator {
         // The type the picked class must be assignable to: T for plain T, T for Provider<T>.
         TypeMirror targetType = dep.getUnwrappedType().orElse(dep.getType());
 
-        // Rule 3: redundant @Pick — picked class equals the parameter type.
+        // Rule: redundant @Pick — picked class equals the parameter type.
         if (context.getTypeUtils().isSameType(pickedType, targetType)) {
             context.getErrorReporter()
                     .error(
@@ -110,7 +95,7 @@ public final class PickValidator {
             return false;
         }
 
-        // Rule 1: assignability.
+        // Rule: assignability.
         if (!context.getTypeUtils().isAssignable(pickedType, targetType)) {
             context.getErrorReporter()
                     .error(
@@ -122,17 +107,20 @@ public final class PickValidator {
             return false;
         }
 
-        // Rule 6: ambiguous @Produces target.
-        List<Object> matches = context.findAllByImplClass(pickedFqn);
-        if (matches.size() > 1) {
-            context.getErrorReporter()
-                    .error(
-                            param,
-                            "@Pick(" + simpleName(pickedFqn) + ".class) is ambiguous: " + matches.size()
-                                    + " providers return this type",
-                            "Use @Named(\"...\") to disambiguate between multiple @Produces methods",
-                            "@Pick can only resolve when exactly one provider produces the picked type");
-            return false;
+        // Rule: ambiguous @Produces target. Skipped when @Named is present — the
+        // qualifier picks one specific producer among the matches.
+        if (dep.getQualifier().isEmpty()) {
+            List<Object> matches = context.findAllByImplClass(pickedFqn);
+            if (matches.size() > 1) {
+                context.getErrorReporter()
+                        .error(
+                                param,
+                                "@Pick(" + simpleName(pickedFqn) + ".class) is ambiguous: " + matches.size()
+                                        + " providers return this type",
+                                "Add @Named(\"...\") to select one of the @Produces methods",
+                                "@Pick alone resolves only when exactly one provider produces the picked type");
+                return false;
+            }
         }
 
         return true;

@@ -18,9 +18,10 @@ import org.junit.jupiter.api.Test;
  *   <li>assignability of the picked class to the parameter type</li>
  *   <li>(cross-module manifest — separate test once that lands)</li>
  *   <li>redundant {@code @Pick} (picked class equals parameter type)</li>
- *   <li>{@code @Pick} + {@code @Named} on one parameter</li>
  *   <li>{@code @Pick} on collection parameters</li>
- *   <li>ambiguous picked type produced by multiple {@code @Produces} methods</li>
+ *   <li>ambiguous picked type produced by multiple {@code @Produces} methods —
+ *       errors only when {@code @Named} is absent; combining {@code @Pick} with
+ *       {@code @Named} is the supported way to disambiguate</li>
  * </ol>
  */
 class PickValidatorTest {
@@ -69,17 +70,30 @@ class PickValidatorTest {
     }
 
     @Test
-    void rule4_pick_combined_with_named_fails() {
+    void pick_composed_with_named_resolves_one_of_two_producers_with_same_return_type() {
         Compilation compilation = Compiler.javac()
                 .withProcessors(new TikoAnnotationProcessor())
                 .compile(
                         api("DataSource"),
                         impl("MySqlDataSource"),
-                        impl("PostgresDataSource"),
-                        consumer("OrderService", "@Pick(MySqlDataSource.class) @Named(\"primary\") DataSource ds"));
+                        twoNamedProducersOfSameType(),
+                        consumer("OrderService", "@Pick(MySqlDataSource.class) @Named(\"a\") DataSource ds"));
+
+        assertThat(compilation).succeeded();
+    }
+
+    @Test
+    void pick_composed_with_named_fails_when_no_producer_matches_the_pair() {
+        Compilation compilation = Compiler.javac()
+                .withProcessors(new TikoAnnotationProcessor())
+                .compile(
+                        api("DataSource"),
+                        impl("MySqlDataSource"),
+                        consumer("OrderService", "@Pick(MySqlDataSource.class) @Named(\"missing\") DataSource ds"));
 
         assertThat(compilation).failed();
-        assertThat(compilation).hadErrorContaining("@Pick and @Named cannot be combined");
+        assertThat(compilation).hadErrorContaining("Cannot resolve dependency");
+        assertThat(compilation).hadErrorContaining("MySqlDataSource#missing");
     }
 
     @Test
@@ -116,25 +130,25 @@ class PickValidatorTest {
                 .compile(
                         api("DataSource"),
                         impl("MySqlDataSource"),
-                        JavaFileObjects.forSourceLines(
-                                "io.tiko.processor.fixtures.pick.MoreSources",
-                                "package io.tiko.processor.fixtures.pick;",
-                                "",
-                                "import io.tiko.Scope;",
-                                "import io.tiko.annotations.Component;",
-                                "import io.tiko.annotations.Produces;",
-                                "",
-                                "@Component(scope = Scope.SINGLETON)",
-                                "public class MoreSources {",
-                                "    @Produces(scope = Scope.SINGLETON, name = \"a\")",
-                                "    public MySqlDataSource a() { return new MySqlDataSource(); }",
-                                "    @Produces(scope = Scope.SINGLETON, name = \"b\")",
-                                "    public MySqlDataSource b() { return new MySqlDataSource(); }",
-                                "}"),
+                        twoNamedProducersOfSameType(),
                         consumer("OrderService", "@Pick(MySqlDataSource.class) DataSource ds"));
 
         assertThat(compilation).failed();
         assertThat(compilation).hadErrorContaining("is ambiguous");
+    }
+
+    @Test
+    void rule6_ambiguity_resolved_by_adding_named() {
+        // Same fixture as rule6_two_produces… but the consumer adds @Named to pick one.
+        Compilation compilation = Compiler.javac()
+                .withProcessors(new TikoAnnotationProcessor())
+                .compile(
+                        api("DataSource"),
+                        impl("MySqlDataSource"),
+                        twoNamedProducersOfSameType(),
+                        consumer("OrderService", "@Pick(MySqlDataSource.class) @Named(\"a\") DataSource ds"));
+
+        assertThat(compilation).succeeded();
     }
 
     // -- fixture builders -------------------------------------------------------
@@ -177,6 +191,30 @@ class PickValidatorTest {
                 "@Component(scope = Scope.SINGLETON)",
                 "public class " + simpleName + " {",
                 "    public String value() { return \"\"; }",
+                "}");
+    }
+
+    /**
+     * Two @Produces methods on the same config class returning {@code MySqlDataSource}
+     * with different names ({@code "a"} and {@code "b"}). Used both for the rule-6
+     * ambiguity test and the "compose with @Named to resolve" test — same shape, the
+     * difference is whether the consumer adds {@code @Named}.
+     */
+    private static JavaFileObject twoNamedProducersOfSameType() {
+        return JavaFileObjects.forSourceLines(
+                "io.tiko.processor.fixtures.pick.MoreSources",
+                "package io.tiko.processor.fixtures.pick;",
+                "",
+                "import io.tiko.Scope;",
+                "import io.tiko.annotations.Component;",
+                "import io.tiko.annotations.Produces;",
+                "",
+                "@Component(scope = Scope.SINGLETON)",
+                "public class MoreSources {",
+                "    @Produces(scope = Scope.SINGLETON, name = \"a\")",
+                "    public MySqlDataSource a() { return new MySqlDataSource(); }",
+                "    @Produces(scope = Scope.SINGLETON, name = \"b\")",
+                "    public MySqlDataSource b() { return new MySqlDataSource(); }",
                 "}");
     }
 

@@ -477,8 +477,24 @@ public class DataService {
 **When to use which:**
 - **`@Pick(Class)`** — disambiguating between multiple `@Component` impls of the same interface. Always prefer when there's a distinct class to point at.
 - **`@Named("...")`** — disambiguating between multiple `@Produces` factory methods returning the same type (no class to pick), or when the bean name is genuinely string-keyed metadata.
+- **`@Pick(Class) @Named("...")` together** — narrows by impl class first, then by name. The right choice when several `@Produces` methods return the same concrete subtype with different names: `@Pick` pins the impl, `@Named` selects which producer.
 
-The two cannot be combined on the same parameter — they're alternative qualifier mechanisms. Compile-time errors enforce: the picked class must be assignable to the parameter type, must not be the parameter type itself, and (for `@Produces` targets) must be uniquely produced. See `tiko-examples/01_basic_di/Polyglot.java` for a runnable demo.
+```java
+@Component class DataSourceFactories {
+    @Produces @Named("primary") HikariDataSource primary() { ... }
+    @Produces @Named("backup")  HikariDataSource backup()  { ... }
+}
+
+@Component
+public class OrderService {
+    @Inject
+    public OrderService(@Pick(HikariDataSource.class) @Named("primary") DataSource ds) {
+        // ...
+    }
+}
+```
+
+Compile-time errors enforce: the picked class must be assignable to the parameter type, must not be the parameter type itself, and — when `@Named` is absent — must be uniquely produced. See `tiko-examples/01_basic_di/Polyglot.java` for a runnable demo.
 
 ### Fluent Lookup with `pick()`
 
