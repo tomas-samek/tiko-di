@@ -467,11 +467,17 @@ public final class ContainerGenerator {
         String typeName =
                 dependency.isProvider() ? dependency.getUnwrappedType().get().toString() : dependency.getTypeName();
 
-        // @Pick: route through findByImplClass and emit an unqualified getter call
-        // for the picked impl. Mirrors ComponentFactoryGenerator without the "container." prefix.
+        // @Pick: route to the picked impl's getter. When @Named is also present, the
+        // qualifier narrows the lookup to a specific provider via the (impl#name) key —
+        // typically one of several @Produces methods that all return the picked class.
+        // Mirrors ComponentFactoryGenerator without the "container." prefix.
         if (dependency.isPicked()) {
             String pickedFqn = dependency.getPickedTypeName().get();
-            Object pickedProvider = context.findByImplClass(pickedFqn).orElse(null);
+            Object pickedProvider = dependency
+                    .getQualifier()
+                    .map(q ->
+                            context.findComponentOrFactory(pickedFqn + "#" + q).orElse(null))
+                    .orElseGet(() -> context.findByImplClass(pickedFqn).orElse(null));
             String pickedCall;
             if (pickedProvider instanceof FactoryMethodModel pickedFactory) {
                 pickedCall = factoryGetterName(pickedFactory) + "()";

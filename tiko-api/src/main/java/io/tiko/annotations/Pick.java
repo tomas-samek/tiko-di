@@ -39,16 +39,39 @@ import java.lang.annotation.Target;
  *   <li><b>{@link Named}</b> — disambiguating between multiple {@link Produces}
  *       factory methods that return the same type (no distinct class to pick), or
  *       when the bean name is genuinely string-keyed metadata.</li>
+ *   <li><b>{@code @Pick} + {@link Named} together</b> — narrows by impl class first,
+ *       then by name. The composition is the right choice when several
+ *       {@code @Produces} methods return the same picked type with different names:
+ *       {@code @Pick} pins the impl, {@link Named} selects which producer.</li>
  * </ul>
+ *
+ * <h2>Composition example</h2>
+ * <pre>{@code
+ * @Component class DataSourceFactories {
+ *     @Produces @Named("primary") HikariDataSource primary() { ... }
+ *     @Produces @Named("backup")  HikariDataSource backup()  { ... }
+ * }
+ *
+ * @Component
+ * public class OrderService {
+ *     @Inject
+ *     public OrderService(@Pick(HikariDataSource.class) @Named("primary") DataSource ds) {
+ *         ...
+ *     }
+ * }
+ * }</pre>
  *
  * <h2>Validator rules</h2>
  * <ul>
  *   <li>The picked class must be assignable to the parameter type.</li>
- *   <li>The picked class must be a known {@code @Component} or unique {@link Produces}
- *       return type — verified at compile time.</li>
+ *   <li>The picked class must resolve to a known {@code @Component} or {@link Produces}
+ *       return type — verified at compile time. With {@link Named}, the lookup uses
+ *       the composite key {@code impl#name}; without {@link Named}, the picked class
+ *       must be unambiguous (exactly one provider).</li>
  *   <li>{@code @Pick} cannot reference the parameter type itself (use plain
  *       {@code @Inject} when no disambiguation is needed).</li>
- *   <li>{@code @Pick} and {@link Named} cannot be combined on the same parameter.</li>
+ *   <li>{@code @Pick} cannot be applied to collection or {@code Iterable} parameters —
+ *       picking selects a single bean.</li>
  * </ul>
  *
  * <p>Retention is {@link RetentionPolicy#SOURCE} — the annotation processor consumes
