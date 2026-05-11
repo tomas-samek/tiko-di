@@ -364,6 +364,10 @@ Suggested fixes:
 - Test both valid and invalid scenarios
 - Verify error messages are helpful
 
+### Issue Writing
+
+Issue bodies: scope + concrete file list + acceptance + out-of-scope. Rationale lives in linked predecessor issues, not duplicated.
+
 ## Common Patterns
 
 ### Constructor Injection (Preferred)
