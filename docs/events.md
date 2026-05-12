@@ -44,7 +44,7 @@ public class AnalyticsService {
 }
 ```
 
-The same handler code is intended to work against any `EventBus` implementation — the in-memory bus ships today (`LocalEventBus` in `tiko-runtime`); a Kafka-backed bus is on the Phase 2 roadmap.
+The same handler code works against any `EventBus` implementation. The in-memory bus (`LocalEventBus` in `tiko-runtime`) ships in core. The Kafka transport (`tiko-kafka` + `tiko-kafka-processor`) is a separate module that bridges via `@KafkaSource` / `@KafkaSink` — see [`tiko-examples/08_kafka_order_warehouse`](../tiko-examples/08_kafka_order_warehouse) for a runnable cross-JVM demo. The universal transport-adapter pattern documented in [`docs/superpowers/specs/2026-05-12-kafka-event-bus-design.md`](./superpowers/specs/2026-05-12-kafka-event-bus-design.md) generalises to HTTP / scheduler / file / gRPC.
 
 ## Trade-off positions
 
