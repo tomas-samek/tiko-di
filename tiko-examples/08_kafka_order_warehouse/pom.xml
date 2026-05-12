@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.tiko.examples</groupId>
+        <artifactId>tiko-examples</artifactId>
+        <version>0.1.0</version>
+    </parent>
+
+    <artifactId>08_kafka_order_warehouse</artifactId>
+    <packaging>pom</packaging>
+    <name>08 - Kafka Order/Warehouse Example</name>
+    <description>Cross-JVM demo: order-service publishes OrderPlaced to Kafka; warehouse-service consumes from Kafka.</description>
+
+    <modules>
+        <module>shared-events</module>
+        <module>order-service</module>
+        <module>warehouse-service</module>
+        <module>e2e</module>
+    </modules>
+</project>
