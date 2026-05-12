@@ -174,20 +174,13 @@ public final class KafkaBootstrapSupport {
     }
 
     /**
-     * The {@link Container} interface does not expose the {@link ErrorHandler}; tiko-kafka
-     * does not need to redesign tiko-api for the MVP. We pull it from the container via a
-     * package-private accessor on the runtime if available, otherwise fall back to a
-     * default that logs to {@code java.util.logging}.
+     * Returns the {@link ErrorHandler} configured on the container.
+     *
+     * <p>{@link Container#getErrorHandler()} is now part of the API so no reflection is needed.
+     * Custom {@code Container} implementations that do not override the method receive the
+     * JUL-backed default defined on the interface.
      */
     private static ErrorHandler resolveErrorHandler(Container container) {
-        try {
-            Method m = container.getClass().getMethod("getErrorHandler");
-            Object eh = m.invoke(container);
-            if (eh instanceof ErrorHandler typed) return typed;
-        } catch (ReflectiveOperationException ignored) {
-            /* fall through */
-        }
-        return ctx -> java.util.logging.Logger.getLogger("io.tiko.kafka")
-                .log(java.util.logging.Level.WARNING, ctx.getClass().getSimpleName() + ": " + ctx.cause(), ctx.cause());
+        return container.getErrorHandler();
     }
 }

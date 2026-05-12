@@ -220,6 +220,24 @@ public interface Container extends AutoCloseable {
     java.util.concurrent.ExecutorService getEventExecutor();
 
     /**
+     * Returns the error handler configured for this container.
+     *
+     * <p>Transports (e.g., Kafka) use this to route errors through the same handler
+     * that the application configured via {@code TikoOptions}, instead of relying on
+     * reflection or a hard-coded fallback.
+     *
+     * <p>The default implementation returns a JUL-backed handler so user-supplied
+     * {@code Container} implementations that do not override this method remain
+     * functional without breaking changes.
+     *
+     * @return the error handler (never {@code null})
+     */
+    default ErrorHandler getErrorHandler() {
+        return ctx -> java.util.logging.Logger.getLogger("io.tiko")
+                .log(java.util.logging.Level.WARNING, ctx.getClass().getSimpleName() + ": " + ctx.cause(), ctx.cause());
+    }
+
+    /**
      * Closes the container and releases all resources.
      * <p>
      * This method is called automatically when using try-with-resources.
