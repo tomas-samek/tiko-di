@@ -5,6 +5,7 @@ import io.tiko.annotations.EventTrigger;
 import io.tiko.kafka.KafkaSerializer;
 import io.tiko.kafka.annotations.KafkaSink;
 import io.tiko.kafka.annotations.KafkaSource;
+import io.tiko.kafka.processor.generator.KafkaTransportBootstrapGenerator;
 import io.tiko.kafka.processor.model.KafkaSinkDescriptor;
 import io.tiko.kafka.processor.model.KafkaSourceDescriptor;
 import io.tiko.kafka.processor.validation.BridgeMethodShapeValidator;
@@ -73,7 +74,15 @@ public final class KafkaAnnotationProcessor extends AbstractProcessor {
             ok &= BridgeMethodShapeValidator.validate(processingEnv.getMessager(), sources, sinks);
             ok &= PartitionKeyValidator.validate(processingEnv, processingEnv.getMessager(), sinks);
             if (!ok) return false;
-            // generator hook lands in Task 27
+            try {
+                new KafkaTransportBootstrapGenerator(processingEnv).generate(sources, sinks);
+            } catch (java.io.IOException ex) {
+                processingEnv
+                        .getMessager()
+                        .printMessage(
+                                javax.tools.Diagnostic.Kind.ERROR,
+                                "Failed to generate KafkaTransportBootstrap: " + ex.getMessage());
+            }
         }
 
         done = true;
