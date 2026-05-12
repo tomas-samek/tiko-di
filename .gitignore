@@ -46,3 +46,6 @@ build/
 
 ### Git worktrees ###
 .worktrees/
+
+# maven-shade-plugin emits these in module roots when createDependencyReducedPom=true
+dependency-reduced-pom.xml
