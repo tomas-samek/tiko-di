@@ -142,7 +142,7 @@ Scopes: `SINGLETON` > `REQUEST` > `EVENT` > `PROTOTYPE` (longest to shortest lif
 
 ## Runnable examples
 
-Eight worked examples ship under [`tiko-examples/`](./tiko-examples/README.md), each a self-contained Maven project:
+Seven worked examples ship under [`tiko-examples/`](./tiko-examples/README.md), each a self-contained Maven project:
 
 | #  | Module                                                              | Demonstrates                                                                                            |
 |----|---------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------|
