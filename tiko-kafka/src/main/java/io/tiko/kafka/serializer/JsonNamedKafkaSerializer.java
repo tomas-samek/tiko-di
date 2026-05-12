@@ -5,12 +5,11 @@ import io.tiko.kafka.NamedKafkaSerializer;
 
 /**
  * Binds the YAML name {@code "json"} to {@link JsonKafkaSerializer}. Discovered via
- * {@code ServiceLoader<NamedKafkaSerializer>}; see
- * {@code META-INF/services/io.tiko.kafka.NamedKafkaSerializer}.
+ * {@code ServiceLoader<NamedKafkaSerializer>}.
  */
 public final class JsonNamedKafkaSerializer implements NamedKafkaSerializer {
 
-    private static final KafkaSerializer<Object> INSTANCE = new JsonKafkaSerializer().asKafkaSerializer();
+    private static final JsonKafkaSerializer INSTANCE = new JsonKafkaSerializer();
 
     @Override
     public String name() {
@@ -18,7 +17,7 @@ public final class JsonNamedKafkaSerializer implements NamedKafkaSerializer {
     }
 
     @Override
-    public KafkaSerializer<?> serializer() {
+    public KafkaSerializer serializer() {
         return INSTANCE;
     }
 }

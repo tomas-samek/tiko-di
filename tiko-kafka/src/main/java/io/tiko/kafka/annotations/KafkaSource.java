@@ -43,7 +43,7 @@ public @interface KafkaSource {
      * means "use the serializer named by {@code KafkaConfig.serializer}." Setting this to
      * a concrete class pins the deserialiser for this source regardless of YAML config.
      */
-    Class<? extends KafkaSerializer<?>> serializer() default KafkaSerializer.Default.class;
+    Class<? extends KafkaSerializer> serializer() default KafkaSerializer.Default.class;
 
     /** Commit strategy. MVP ships {@link CommitMode#PER_RECORD} only. */
     CommitMode commitMode() default CommitMode.PER_RECORD;

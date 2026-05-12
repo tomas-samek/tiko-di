@@ -5,11 +5,17 @@ package io.tiko.kafka;
  * {@link io.tiko.kafka.serializer.JsonKafkaSerializer JsonKafkaSerializer}; future
  * modules (e.g. {@code tiko-kafka-avro}) ship additional impls.
  *
+ * <p>The interface is intentionally <em>not</em> parameterized at the class level: a
+ * single serializer typically handles many payload types (JSON via Jackson; Avro via a
+ * schema registry). Each call carries its own target type via {@link #deserialize}'s
+ * method-level type parameter, so {@code JsonKafkaSerializer} can answer for
+ * {@code OrderPlaced}, {@code PaymentReceived}, and any other class without one impl per
+ * type.
+ *
  * <p>Resolution order, per source/sink:
  * <ol>
  *   <li>Annotation parameter set to a concrete class other than {@link Default} →
- *       use that impl (looked up by class via {@code container.get(...)} if registered
- *       as a {@code @Component}, otherwise instantiated reflectively as a no-arg POJO).</li>
+ *       use that impl (instantiated reflectively as a no-arg POJO).</li>
  *   <li>Otherwise: the serializer named by {@code KafkaConfig.serializer} (default
  *       {@code "json"}) — looked up via {@code ServiceLoader<NamedKafkaSerializer>} by
  *       name.</li>
@@ -17,30 +23,22 @@ package io.tiko.kafka;
  *       serializer and the YAML key.</li>
  * </ol>
  *
- * <p>Custom user serializers register themselves the same way as the bundled JSON one —
- * by shipping a {@code NamedKafkaSerializer} via {@code META-INF/services}.
+ * <p>Custom user serializers register themselves by shipping a
+ * {@code NamedKafkaSerializer} via {@code META-INF/services}.
  */
-public interface KafkaSerializer<T> {
+public interface KafkaSerializer {
 
-    /**
-     * Serialize the given value to bytes. Implementations must be thread-safe — the
-     * runtime calls this from publisher threads (sinks) and the consumer thread (rare;
-     * only for round-trips that re-serialize).
-     */
-    byte[] serialize(T value);
+    /** Serialize the given value to bytes. Thread-safe. */
+    byte[] serialize(Object value);
 
-    /**
-     * Deserialize the given bytes into an instance of {@code type}. Called from the
-     * consumer thread per record. Implementations must be thread-safe.
-     */
-    T deserialize(byte[] bytes, Class<T> type);
+    /** Deserialize the given bytes into an instance of {@code type}. Thread-safe. */
+    <T> T deserialize(byte[] bytes, Class<T> type);
 
     /**
      * Marker class used as the {@code serializer} annotation default. Means "use the
-     * serializer named by {@code KafkaConfig.serializer}." Never instantiated; the
-     * runtime checks the class literal and substitutes the resolved impl.
+     * serializer named by {@code KafkaConfig.serializer}." Never instantiated.
      */
-    final class Default implements KafkaSerializer<Object> {
+    final class Default implements KafkaSerializer {
         private Default() {
             throw new UnsupportedOperationException("marker only — never instantiated");
         }
@@ -51,7 +49,7 @@ public interface KafkaSerializer<T> {
         }
 
         @Override
-        public Object deserialize(byte[] bytes, Class<Object> type) {
+        public <T> T deserialize(byte[] bytes, Class<T> type) {
             throw new UnsupportedOperationException("marker only");
         }
     }

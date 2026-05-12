@@ -45,5 +45,5 @@ public @interface KafkaSink {
      * means "use the serializer named by {@code KafkaConfig.serializer}." Setting this to
      * a concrete class pins the serialiser for this sink regardless of YAML config.
      */
-    Class<? extends KafkaSerializer<?>> serializer() default KafkaSerializer.Default.class;
+    Class<? extends KafkaSerializer> serializer() default KafkaSerializer.Default.class;
 }
