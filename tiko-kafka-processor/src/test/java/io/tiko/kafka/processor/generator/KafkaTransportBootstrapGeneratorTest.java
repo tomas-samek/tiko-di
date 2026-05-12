@@ -35,12 +35,10 @@ class KafkaTransportBootstrapGeneratorTest {
                         JavaFileObjects.forSourceString("demo.OrderPublisher", """
                                 package demo;
                                 import io.tiko.annotations.Component;
-                                import io.tiko.annotations.EventHandler;
                                 import io.tiko.kafka.annotations.KafkaSink;
                                 import io.tiko.Scope;
                                 @Component(scope = Scope.SINGLETON)
                                 public class OrderPublisher {
-                                    @EventHandler
                                     @KafkaSink(topic = "orders", partitionKey = "orderId")
                                     public OrderPlaced toKafka(OrderPlaced e) { return e; }
                                 }

@@ -34,7 +34,31 @@ class RequiredSiblingValidatorTest {
     }
 
     @Test
-    void sink_without_event_handler_fails() {
+    void sink_with_event_handler_fails() {
+        Compilation compilation = Compiler.javac()
+                .withProcessors(new TikoAnnotationProcessor(), new KafkaAnnotationProcessor())
+                .compile(
+                        JavaFileObjects.forSourceString(
+                                "demo.OrderPlaced", "package demo; public record OrderPlaced(String id) {}"),
+                        JavaFileObjects.forSourceString("demo.OrderPublisher", """
+                                package demo;
+                                import io.tiko.annotations.Component;
+                                import io.tiko.annotations.EventHandler;
+                                import io.tiko.kafka.annotations.KafkaSink;
+                                import io.tiko.Scope;
+                                @Component(scope = Scope.SINGLETON)
+                                public class OrderPublisher {
+                                    @EventHandler
+                                    @KafkaSink(topic = "orders")
+                                    public OrderPlaced toKafka(OrderPlaced e) { return e; }
+                                }
+                                """));
+        assertThat(compilation).failed();
+        assertThat(compilation).hadErrorContaining("@KafkaSink must NOT be combined with @EventHandler");
+    }
+
+    @Test
+    void sink_without_event_handler_succeeds() {
         Compilation compilation = Compiler.javac()
                 .withProcessors(new TikoAnnotationProcessor(), new KafkaAnnotationProcessor())
                 .compile(
@@ -51,8 +75,7 @@ class RequiredSiblingValidatorTest {
                                     public OrderPlaced toKafka(OrderPlaced e) { return e; }
                                 }
                                 """));
-        assertThat(compilation).failed();
-        assertThat(compilation).hadErrorContaining("@KafkaSink requires a sibling @EventHandler");
+        assertThat(compilation).succeeded();
     }
 
     @Test

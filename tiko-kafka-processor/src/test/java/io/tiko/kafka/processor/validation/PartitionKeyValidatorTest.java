@@ -22,12 +22,10 @@ class PartitionKeyValidatorTest {
                         JavaFileObjects.forSourceString("demo.Publisher", """
                                 package demo;
                                 import io.tiko.annotations.Component;
-                                import io.tiko.annotations.EventHandler;
                                 import io.tiko.kafka.annotations.KafkaSink;
                                 import io.tiko.Scope;
                                 @Component(scope = Scope.SINGLETON)
                                 public class Publisher {
-                                    @EventHandler
                                     @KafkaSink(topic = "orders", partitionKey = "orderId")
                                     public OrderPlaced toKafka(OrderPlaced e) { return e; }
                                 }
@@ -46,12 +44,10 @@ class PartitionKeyValidatorTest {
                         JavaFileObjects.forSourceString("demo.Publisher", """
                                 package demo;
                                 import io.tiko.annotations.Component;
-                                import io.tiko.annotations.EventHandler;
                                 import io.tiko.kafka.annotations.KafkaSink;
                                 import io.tiko.Scope;
                                 @Component(scope = Scope.SINGLETON)
                                 public class Publisher {
-                                    @EventHandler
                                     @KafkaSink(topic = "orders", partitionKey = "missingField")
                                     public OrderPlaced toKafka(OrderPlaced e) { return e; }
                                 }
@@ -70,12 +66,10 @@ class PartitionKeyValidatorTest {
                         JavaFileObjects.forSourceString("demo.Publisher", """
                                 package demo;
                                 import io.tiko.annotations.Component;
-                                import io.tiko.annotations.EventHandler;
                                 import io.tiko.kafka.annotations.KafkaSink;
                                 import io.tiko.Scope;
                                 @Component(scope = Scope.SINGLETON)
                                 public class Publisher {
-                                    @EventHandler
                                     @KafkaSink(topic = "orders")
                                     public OrderPlaced toKafka(OrderPlaced e) { return e; }
                                 }

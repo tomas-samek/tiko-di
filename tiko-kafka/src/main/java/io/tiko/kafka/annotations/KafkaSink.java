@@ -8,21 +8,23 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Marks a method as a Kafka outbound bridge. The method must also carry
- * {@code @io.tiko.annotations.EventHandler} (validated at compile time). The runtime
- * subscribes a callback for the handler's event type: when a matching event is published
- * locally, the callback invokes this method, serialises the return value with the resolved
- * {@link KafkaSerializer}, and sends a {@code ProducerRecord} to the named topic.
+ * Marks a method as a Kafka outbound bridge. The enclosing class must be
+ * {@code @Component(scope = Scope.SINGLETON)}.
  *
- * <p>Local handlers always run before any Kafka sink callback (sinks register after the
- * generated {@code EventRegistry} during {@code TransportBootstrap.start()}), so a sink
- * throw never blocks local processing.
+ * <p>The runtime subscribes an {@code EventBus} callback for the method's first parameter
+ * type: when a matching event is published locally, the callback invokes this method,
+ * serialises the return value with the resolved {@link KafkaSerializer}, and sends a
+ * {@code ProducerRecord} to the named topic.
  *
- * <p>For non-blocking sends, annotate the same method {@code @EventHandler(async = true)} —
- * the existing async-handler machinery moves the sink invocation onto the event executor.
- * There is no Kafka-specific async knob.
+ * <p><strong>Do NOT also annotate this method with {@code @EventHandler}.</strong>
+ * The runtime subscription via {@code EventBus.subscribe()} is the exclusive hook; adding
+ * {@code @EventHandler} would double-fire the method (once as a local handler, once as the
+ * Kafka egress callback). This constraint is enforced at compile time by
+ * {@code tiko-kafka-processor}.
  *
- * <p>The enclosing class must be {@code @Component(scope = Scope.SINGLETON)}.
+ * <p>Local {@code @EventHandler} methods always run before any Kafka sink callback (sinks
+ * register after the generated {@code EventRegistry} during {@code TransportBootstrap.start()}),
+ * so a sink throw never blocks local processing.
  */
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.SOURCE)

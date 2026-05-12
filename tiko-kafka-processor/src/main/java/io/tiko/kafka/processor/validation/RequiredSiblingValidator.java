@@ -16,8 +16,10 @@ import javax.tools.Diagnostic;
  * <ul>
  *   <li>{@code @KafkaSource} must coexist with {@code @EventTrigger} (else the message
  *       has nowhere to go).</li>
- *   <li>{@code @KafkaSink} must coexist with {@code @EventHandler} (else the runtime has
- *       no event to subscribe to).</li>
+ *   <li>{@code @KafkaSink} must NOT coexist with {@code @EventHandler}: the runtime
+ *       subscribes its own callback for the sink event type via {@code EventBus.subscribe()};
+ *       adding {@code @EventHandler} would double-fire the method — once as a local handler
+ *       and once via the Kafka egress callback.</li>
  *   <li>{@code @KafkaSource} and {@code @KafkaSink} cannot coexist on the same method.</li>
  * </ul>
  */
@@ -51,11 +53,13 @@ public final class RequiredSiblingValidator {
                 // already reported above
                 continue;
             }
-            if (m.getAnnotation(EventHandler.class) == null) {
+            if (m.getAnnotation(EventHandler.class) != null) {
                 messager.printMessage(
                         Diagnostic.Kind.ERROR,
-                        "@KafkaSink requires a sibling @EventHandler on the same method so the framework "
-                                + "knows which local event triggers the send.",
+                        "@KafkaSink must NOT be combined with @EventHandler. The Kafka runtime subscribes its "
+                                + "own EventBus callback for the sink event type; adding @EventHandler would "
+                                + "double-fire the method (once as a local handler, once as a Kafka egress "
+                                + "callback). Remove @EventHandler from this @KafkaSink method.",
                         m);
                 ok = false;
             }

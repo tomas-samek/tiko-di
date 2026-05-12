@@ -327,6 +327,11 @@ public final class Tiko {
         }
 
         @Override
+        public io.tiko.ErrorHandler getErrorHandler() {
+            return delegate.getErrorHandler();
+        }
+
+        @Override
         public void shutdown() {
             // Shut transports down BEFORE the container's @PreDestroy chain so their bridge
             // components are still live. Per-bootstrap throws are isolated so one bad

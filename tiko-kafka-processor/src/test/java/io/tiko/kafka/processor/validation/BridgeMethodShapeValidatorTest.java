@@ -21,12 +21,10 @@ class BridgeMethodShapeValidatorTest {
                         JavaFileObjects.forSourceString("demo.VoidSink", """
                                 package demo;
                                 import io.tiko.annotations.Component;
-                                import io.tiko.annotations.EventHandler;
                                 import io.tiko.kafka.annotations.KafkaSink;
                                 import io.tiko.Scope;
                                 @Component(scope = Scope.SINGLETON)
                                 public class VoidSink {
-                                    @EventHandler
                                     @KafkaSink(topic = "orders")
                                     public void toKafka(OrderPlaced e) {}
                                 }
