@@ -28,7 +28,6 @@
         <dependency>
             <groupId>io.tiko</groupId>
             <artifactId>tiko-kafka</artifactId>
-            <version>${project.version}</version>
         </dependency>
 
         <!-- Annotation processing -->
@@ -46,6 +45,18 @@
         <dependency>
             <groupId>com.palantir.javapoet</groupId>
             <artifactId>javapoet</artifactId>
+        </dependency>
+
+        <!-- For compile-testing -->
+        <dependency>
+            <groupId>io.tiko</groupId>
+            <artifactId>tiko-runtime</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.tiko</groupId>
+            <artifactId>tiko-processor</artifactId>
+            <scope>test</scope>
         </dependency>
 
         <!-- Testing -->

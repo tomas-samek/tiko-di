@@ -7,6 +7,7 @@ import io.tiko.kafka.annotations.KafkaSink;
 import io.tiko.kafka.annotations.KafkaSource;
 import io.tiko.kafka.processor.model.KafkaSinkDescriptor;
 import io.tiko.kafka.processor.model.KafkaSourceDescriptor;
+import io.tiko.kafka.processor.validation.SingletonBridgeValidator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -62,13 +63,11 @@ public final class KafkaAnnotationProcessor extends AbstractProcessor {
             if (e instanceof ExecutableElement m) sinks.add(buildSinkDescriptor(m));
         }
 
-        // Validation + generation hooks land in later tasks. For now, just record that
-        // discovery happens; subsequent tasks plug into this method.
         if (!sources.isEmpty() || !sinks.isEmpty()) {
-            // Hook for downstream tasks — see Tasks 23-30.
-            // KafkaSourceValidator.validate(processingEnv, sources);
-            // KafkaSinkValidator.validate(processingEnv, sinks);
-            // new KafkaTransportBootstrapGenerator(processingEnv).generate(sources, sinks);
+            boolean ok = SingletonBridgeValidator.validate(processingEnv.getMessager(), sources, sinks);
+            // Additional validators land in Tasks 24-28.
+            // Generation lands in Tasks 29-30.
+            if (!ok) return false;
         }
 
         done = true;
