@@ -68,6 +68,18 @@
             <artifactId>tiko-runtime</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- tiko-processor runs on test sources to emit TikoContainerImpl + EventRegistry -->
+        <dependency>
+            <groupId>io.tiko</groupId>
+            <artifactId>tiko-processor</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>4.2.2</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

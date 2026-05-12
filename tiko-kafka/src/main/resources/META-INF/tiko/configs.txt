@@ -1,0 +1,3 @@
+# Hand-maintained — see io.tiko.generated.config.ConfigBinderRegistry
+# registry=io.tiko.generated.config.ConfigBinderRegistry
+io.tiko.kafka.KafkaConfig=tiko.kafka
