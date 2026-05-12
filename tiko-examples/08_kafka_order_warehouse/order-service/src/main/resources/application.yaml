@@ -1,0 +1,4 @@
+tiko:
+  kafka:
+    bootstrap-servers: "${KAFKA_BOOTSTRAP:localhost:9092}"
+    consumer-group: order-service
