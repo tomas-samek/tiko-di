@@ -4,6 +4,7 @@ import io.tiko.ConfigSource;
 import io.tiko.Container;
 import io.tiko.ErrorHandler;
 import io.tiko.EventBus;
+import io.tiko.TransportBootstrap;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -111,7 +112,25 @@ public final class Tiko {
             // once on the shared bus and leaves per-module singleton init lazy (#45).
             container.start();
 
-            return container;
+            // 6. Discover transport modules (tiko-kafka, future tiko-http, ...). Each transport
+            //    ships its own ServiceLoader entry; the runtime knows nothing transport-specific.
+            //    Bootstraps are collected first so the wrapper can be built before start() is
+            //    called — that way start(container) receives the public wrapper, not the raw impl.
+            java.util.List<TransportBootstrap> bootstraps = new java.util.ArrayList<>();
+            for (TransportBootstrap tb : java.util.ServiceLoader.load(TransportBootstrap.class, classLoader)) {
+                bootstraps.add(tb);
+            }
+
+            if (bootstraps.isEmpty()) {
+                return container;
+            }
+
+            // Build the wrapper first so start() callers receive the public-facing handle.
+            TransportAwareContainer wrapper = new TransportAwareContainer(container, bootstraps);
+            for (TransportBootstrap tb : bootstraps) {
+                tb.start(wrapper);
+            }
+            return wrapper;
         } catch (RuntimeException e) {
             throw e;
         } catch (ClassNotFoundException e) {
@@ -229,6 +248,97 @@ public final class Tiko {
             // No event handlers registered - this is OK
         } catch (Exception e) {
             // Ignore - event registration is optional
+        }
+    }
+
+    /**
+     * Wrapper that runs every {@link TransportBootstrap#shutdown()} before delegating to the
+     * underlying container's own {@code shutdown()} / {@code close()}. Method delegation is
+     * exhaustive; we cannot use {@code Container} as a sealed type because user-supplied
+     * implementations are not on the radar of this module.
+     */
+    private static final class TransportAwareContainer implements Container {
+        private final Container delegate;
+        private final java.util.List<TransportBootstrap> bootstraps;
+
+        TransportAwareContainer(Container delegate, java.util.List<TransportBootstrap> bootstraps) {
+            this.delegate = delegate;
+            this.bootstraps = bootstraps;
+        }
+
+        @Override
+        public <T> T get(Class<T> type) {
+            return delegate.get(type);
+        }
+
+        @Override
+        public <T> T get(Class<T> type, String name) {
+            return delegate.get(type, name);
+        }
+
+        @Override
+        public <T> java.util.List<T> getAll(Class<T> type) {
+            return delegate.getAll(type);
+        }
+
+        @Override
+        public <T> io.tiko.Provider<T> getProvider(Class<T> type) {
+            return delegate.getProvider(type);
+        }
+
+        @Override
+        public <T> io.tiko.Provider<T> getProvider(Class<T> type, String name) {
+            return delegate.getProvider(type, name);
+        }
+
+        @Override
+        public void runInRequestScope(Runnable runnable) {
+            delegate.runInRequestScope(runnable);
+        }
+
+        @Override
+        public <T> T supplyInRequestScope(java.util.function.Supplier<T> s) {
+            return delegate.supplyInRequestScope(s);
+        }
+
+        @Override
+        public void runInEventScope(Runnable runnable) {
+            delegate.runInEventScope(runnable);
+        }
+
+        @Override
+        public <T> T supplyInEventScope(java.util.function.Supplier<T> s) {
+            return delegate.supplyInEventScope(s);
+        }
+
+        @Override
+        public void start() {
+            delegate.start();
+        }
+
+        @Override
+        public io.tiko.EventBus getEventBus() {
+            return delegate.getEventBus();
+        }
+
+        @Override
+        public java.util.concurrent.ExecutorService getEventExecutor() {
+            return delegate.getEventExecutor();
+        }
+
+        @Override
+        public void shutdown() {
+            // Shut transports down BEFORE the container's @PreDestroy chain so their bridge
+            // components are still live. Per-bootstrap throws are isolated so one bad
+            // transport cannot strand another's resources.
+            for (TransportBootstrap tb : bootstraps) {
+                try {
+                    tb.shutdown();
+                } catch (Exception ignored) {
+                    /* best-effort */
+                }
+            }
+            delegate.shutdown();
         }
     }
 }
