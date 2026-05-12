@@ -1,0 +1,12 @@
+# Defaults baked into tiko-kafka.jar. User application.yaml entries override these
+# per-key; values not overridden fall through to @Default annotations on KafkaConfig.
+tiko:
+  kafka:
+    bootstrap-servers: "localhost:9092"
+    consumer-group: "tiko-app"
+    serializer: json
+    auto-offset-reset: earliest
+    poll-timeout: PT0.5S
+    shutdown-timeout: PT5S
+    producer-properties: {}
+    consumer-properties: {}
