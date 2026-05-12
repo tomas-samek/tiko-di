@@ -19,6 +19,7 @@
         <module>tiko-runtime</module>
         <module>tiko-config</module>
         <module>tiko-kafka</module>
+        <module>tiko-kafka-processor</module>
         <module>tiko-examples</module>
         <module>tiko-archetype</module>
     </modules>
