@@ -24,12 +24,12 @@ The framework is suitable for early-adopter experimentation. **Production use sh
 - ✅ API/impl split example — consumer compiles against an interface-only api jar, impl loaded via runtime-scope Maven dep ([#6](https://github.com/tomas-samek/tiko-di/issues/6))
 - ✅ Handler-exception isolation + `ErrorHandler` hook — `LocalEventBus.publish()` no longer kills the dispatch loop; sealed `ErrorContext` / `EventHandlerError` route handler throws to a configurable hook (default `java.util.logging` `WARNING`, no extra dependency required), override via `TikoOptions.errorHandler(...)` ([#44](https://github.com/tomas-samek/tiko-di/issues/44))
 - ✅ `@EventHandler(async = true)` honoured — bounded `ThreadPoolExecutor` (default sized for typical small-to-medium services) with `TikoOptions.eventExecutor(...)` override; the static `EventChainContext.ASYNC_EXECUTOR` is retired and shared between async handlers and `@EventTrigger(async)` ([#43](https://github.com/tomas-samek/tiko-di/issues/43))
+- ✅ Kafka transport (`tiko-kafka`, `tiko-kafka-processor`) — universal transport-adapter pattern via `@KafkaSource` / `@KafkaSink`, `TransportBootstrap` SPI, JSON serializer, per-record commit + seek-back, `FakeKafkaBroker` for tests. Runnable cross-JVM demo at `tiko-examples/08_kafka_order_warehouse`. See [Kafka spec](./superpowers/specs/2026-05-12-kafka-event-bus-design.md).
 
 ## Planned
 
 ### Phase 2 (current) — configuration & distributed events
 
-- Kafka event bus integration
 - Configuration follow-ups: cross-module aggregation example ([#18](https://github.com/tomas-samek/tiko-di/issues/18)), YAML `file:line:col` error anchoring ([#19](https://github.com/tomas-samek/tiko-di/issues/19))
 - Event-system follow-ups: configurable executor shutdown timeout ([#48](https://github.com/tomas-samek/tiko-di/issues/48)), `ErrorContext` permits for lifecycle/config/scope errors ([#52](https://github.com/tomas-samek/tiko-di/issues/52))
 - Conditional beans
@@ -51,6 +51,16 @@ The framework is suitable for early-adopter experimentation. **Production use sh
 - Sonatype Central Portal namespace verification for `io.tiko`
 - GPG signing, `central-publishing-maven-plugin`, POM metadata polish
 - Javadoc + sources jars, BOM publication, GitHub Actions release workflow
+
+### Kafka follow-ups (future)
+
+- Avro + schema registry support (`tiko-kafka-avro`).
+- Full `@EventTrigger` semantics on bridge methods (factor trigger dispatcher out of EventRegistryGenerator).
+- Batch / at-most-once commit modes.
+- Topic/queue patterns via `@KafkaSource(consumerGroup = "...")` exercised by a demo.
+- Pluggable partition-key extractors.
+- Per-source DLQ handling.
+- Transactional / exactly-once producers.
 
 ## Known limitations
 
