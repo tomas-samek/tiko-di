@@ -23,7 +23,7 @@ import org.testcontainers.utility.DockerImageName;
  * probe file within a deadline.
  */
 @Testcontainers
-class OrderToWarehouseE2ETest {
+class OrderToWarehouseE2EIT {
 
     @Container
     static final KafkaContainer KAFKA = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.7.1"));
