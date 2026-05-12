@@ -142,7 +142,7 @@ Scopes: `SINGLETON` > `REQUEST` > `EVENT` > `PROTOTYPE` (longest to shortest lif
 
 ## Runnable examples
 
-Six worked examples ship under [`tiko-examples/`](./tiko-examples/README.md), each a self-contained Maven project:
+Eight worked examples ship under [`tiko-examples/`](./tiko-examples/README.md), each a self-contained Maven project:
 
 | #  | Module                                                              | Demonstrates                                                                                            |
 |----|---------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------|
@@ -152,6 +152,7 @@ Six worked examples ship under [`tiko-examples/`](./tiko-examples/README.md), ea
 | 04 | [`04_api_impl`](./tiko-examples/04_api_impl)                        | API/impl split — app compiles against an interface jar, impl supplied at runtime                        |
 | 05 | [`05_multi_module`](./tiko-examples/05_multi_module)                | Multi-module aggregation via `AggregatingContainer`                                                     |
 | 06 | [`06_config_multi_module`](./tiko-examples/06_config_multi_module)  | Module-baked `META-INF/tiko/defaults.yaml` discovery + user override                                    |
+| 08 | [`08_kafka_order_warehouse`](./tiko-examples/08_kafka_order_warehouse) | Cross-JVM Kafka demo — `@KafkaSource` / `@KafkaSink`, shared event class, Testcontainers e2e         |
 
 ## Measured cold-start
 
@@ -196,6 +197,7 @@ Event abstractions (`EventBus`, `EventCallback`, `Subscription`, `@EventHandler`
 | [docs/roadmap.md](./docs/roadmap.md)                  | What ships today, what's planned per phase, known limitations.                              |
 | [docs/release-process.md](./docs/release-process.md)  | Release engineering notes (maintainers).                                                    |
 | [comparisons/README.md](./comparisons/README.md)      | Side-by-side cold-start benchmarks across 8 DI frameworks.                                  |
+| [docs/superpowers/specs/2026-05-12-kafka-event-bus-design.md](./docs/superpowers/specs/2026-05-12-kafka-event-bus-design.md) | Kafka event bus design — universal transport adapter pattern. |
 
 ## Roadmap (summary)
 
