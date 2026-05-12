@@ -312,22 +312,34 @@ Custom serializers register themselves the same way (`META-INF/services/io.tiko.
 
 ## Error handling
 
-Two new permits widen the sealed `ErrorContext` in `tiko-api` (folds into the planned #52 work):
+A new `TransportError` permit widens the sealed `ErrorContext` in `tiko-api`, and the Kafka-specific records live in `tiko-kafka` (preserving the `tiko-api` → `tiko-kafka` dependency direction). Folds into the planned #52 work.
 
 ```java
+// in tiko-api:
 public sealed interface ErrorContext
-        permits EventHandlerError, KafkaIngestError, KafkaEgressError {
+        permits EventHandlerError, TransportError {
     Throwable cause();
 }
 
+public non-sealed interface TransportError extends ErrorContext {
+    String transport();   // "kafka", "http", ...
+}
+
+// in tiko-kafka:
 public record KafkaIngestError(
         String topic, int partition, long offset, Headers headers, Throwable cause)
-        implements ErrorContext {}
+        implements TransportError {
+    @Override public String transport() { return "kafka"; }
+}
 
 public record KafkaEgressError(
         String topic, Object event, Throwable cause)
-        implements ErrorContext {}
+        implements TransportError {
+    @Override public String transport() { return "kafka"; }
+}
 ```
+
+The `TransportError` permit is intentionally `non-sealed` — every later transport (`tiko-http`, `tiko-scheduler`, …) defines its own concrete error types implementing this interface without touching `tiko-api`. Exhaustive `switch` on `ErrorContext` in user code still tells the user "you handled `EventHandlerError`; you also need a branch for `TransportError`," at which point the user can pattern-match on the transport-specific concrete types within that branch.
 
 Routing identical to today's `EventHandlerError`: default `ErrorHandler` logs WARN via `java.util.logging`; users override via `TikoOptions.errorHandler(...)` and pattern-match on context type.
 
