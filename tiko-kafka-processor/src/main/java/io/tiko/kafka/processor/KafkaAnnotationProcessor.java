@@ -8,6 +8,7 @@ import io.tiko.kafka.annotations.KafkaSource;
 import io.tiko.kafka.processor.model.KafkaSinkDescriptor;
 import io.tiko.kafka.processor.model.KafkaSourceDescriptor;
 import io.tiko.kafka.processor.validation.BridgeMethodShapeValidator;
+import io.tiko.kafka.processor.validation.PartitionKeyValidator;
 import io.tiko.kafka.processor.validation.RequiredSiblingValidator;
 import io.tiko.kafka.processor.validation.SingletonBridgeValidator;
 import java.util.ArrayList;
@@ -70,7 +71,9 @@ public final class KafkaAnnotationProcessor extends AbstractProcessor {
             ok &= SingletonBridgeValidator.validate(processingEnv.getMessager(), sources, sinks);
             ok &= RequiredSiblingValidator.validate(processingEnv.getMessager(), sources, sinks);
             ok &= BridgeMethodShapeValidator.validate(processingEnv.getMessager(), sources, sinks);
+            ok &= PartitionKeyValidator.validate(processingEnv, processingEnv.getMessager(), sinks);
             if (!ok) return false;
+            // generator hook lands in Task 27
         }
 
         done = true;
