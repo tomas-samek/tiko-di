@@ -3,6 +3,7 @@ package io.tiko.examples.basic.teardown;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.tiko.AutoCloseFailure;
 import io.tiko.Container;
 import io.tiko.ErrorContext;
 import io.tiko.PostConstructFailure;
@@ -23,6 +24,8 @@ import org.junit.jupiter.api.Test;
  *   <li>{@code @PreDestroy} failures emit {@link PreDestroyFailure} via the configured
  *       {@code ErrorHandler}; teardown of sibling beans still completes (log-and-continue
  *       preserved).</li>
+ *   <li>{@code AutoCloseable.close()} failures on beans without a {@code @PreDestroy} emit
+ *       {@link AutoCloseFailure}; teardown continues just like {@code @PreDestroy}.</li>
  * </ul>
  */
 class LifecycleErrorRoutingTest {
@@ -74,6 +77,33 @@ class LifecycleErrorRoutingTest {
         assertThat(recorded).hasSize(1).first().isInstanceOfSatisfying(PreDestroyFailure.class, f -> {
             assertThat(f.component()).isEqualTo(ThrowingPreDestroyRequestBean.class);
             assertThat(f.cause()).isInstanceOf(IllegalStateException.class).hasMessage("intentional");
+        });
+    }
+
+    @Test
+    void throwingCloseEmitsAutoCloseFailureAndContinuesTeardown() {
+        var recorded = new CopyOnWriteArrayList<ErrorContext>();
+        var opts = TikoOptions.builder().errorHandler(recorded::add).build();
+
+        Container container = Tiko.create(opts);
+        try {
+            container.runInRequestScope(() -> {
+                container.get(LifoRequestA.class);
+                container.get(ThrowingCloseRequestBean.class);
+            });
+        } finally {
+            container.shutdown();
+        }
+
+        // Teardown continued past the throw.
+        assertThat(TeardownRecorder.order)
+                .as("Throwing AutoCloseable.close() must not skip sibling beans")
+                .contains("RequestA", "RequestB", "RequestC", "ThrowingClose.close");
+
+        // Routed as AutoCloseFailure (NOT PreDestroyFailure).
+        assertThat(recorded).hasSize(1).first().isInstanceOfSatisfying(AutoCloseFailure.class, f -> {
+            assertThat(f.component()).isEqualTo(ThrowingCloseRequestBean.class);
+            assertThat(f.cause()).isInstanceOf(IllegalStateException.class).hasMessage("intentional-close");
         });
     }
 }

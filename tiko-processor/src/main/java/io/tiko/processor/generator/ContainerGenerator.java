@@ -811,20 +811,19 @@ public final class ContainerGenerator {
                 }
             }
             method.nextControlFlow("catch ($T __t)", Throwable.class);
+            String hookLabel = isAutoCloseOnly ? "AutoCloseable.close()" : "@PreDestroy";
             method.addStatement(
                     "$T.getLogger($S).log($T.WARNING, $S, __t)",
                     logger,
                     "io.tiko.events",
                     level,
-                    "@PreDestroy threw on " + c.getClassName());
-            // Route annotation-driven @PreDestroy failures through ErrorHandler. Pure
-            // AutoCloseable.close() failures keep their JUL-only path per design.
-            if (!isAutoCloseOnly) {
-                method.addStatement(
-                        "errorHandler.onError(new $T($T.class, __t))",
-                        ClassName.get("io.tiko", "PreDestroyFailure"),
-                        componentType);
-            }
+                    hookLabel + " threw on " + c.getClassName());
+            // Route the failure through ErrorHandler — AutoCloseable.close() and @PreDestroy
+            // emit distinct permits so observability code can discriminate without parsing.
+            ClassName failureType = isAutoCloseOnly
+                    ? ClassName.get("io.tiko", "AutoCloseFailure")
+                    : ClassName.get("io.tiko", "PreDestroyFailure");
+            method.addStatement("errorHandler.onError(new $T($T.class, __t))", failureType, componentType);
             method.endControlFlow(); // try/catch
         }
 
@@ -846,6 +845,8 @@ public final class ContainerGenerator {
                     "io.tiko.events",
                     level,
                     "AutoCloseable.close() threw on factory-produced bean");
+            method.addStatement(
+                    "errorHandler.onError(new $T(__ac.getClass(), __t))", ClassName.get("io.tiko", "AutoCloseFailure"));
             method.endControlFlow(); // try/catch
         }
 
@@ -989,18 +990,17 @@ public final class ContainerGenerator {
                 }
             }
             method.nextControlFlow("catch ($T __t)", Throwable.class);
+            String hookLabel = isAutoCloseOnly ? "AutoCloseable.close()" : "@PreDestroy";
             method.addStatement(
                     "$T.getLogger($S).log($T.WARNING, $S, __t)",
                     logger,
                     "io.tiko.events",
                     level,
-                    "@PreDestroy threw on " + component.getClassName());
-            if (!isAutoCloseOnly) {
-                method.addStatement(
-                        "errorHandler.onError(new $T($T.class, __t))",
-                        ClassName.get("io.tiko", "PreDestroyFailure"),
-                        componentType);
-            }
+                    hookLabel + " threw on " + component.getClassName());
+            ClassName failureType = isAutoCloseOnly
+                    ? ClassName.get("io.tiko", "AutoCloseFailure")
+                    : ClassName.get("io.tiko", "PreDestroyFailure");
+            method.addStatement("errorHandler.onError(new $T($T.class, __t))", failureType, componentType);
             method.endControlFlow(); // try/catch
             method.endControlFlow(); // if non-null
         }
@@ -1035,6 +1035,10 @@ public final class ContainerGenerator {
                     "io.tiko.events",
                     level,
                     "AutoCloseable.close() threw on " + factory.getFactoryIdentifier());
+            method.addStatement(
+                    "errorHandler.onError(new $T($L.getClass(), __t))",
+                    ClassName.get("io.tiko", "AutoCloseFailure"),
+                    variableName);
             method.endControlFlow(); // try/catch
             method.endControlFlow(); // if non-null
         }
