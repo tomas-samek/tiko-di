@@ -207,8 +207,22 @@ public final class Tiko {
                     .invoke(null, "config", effective, binders, errorHandler);
             return result;
         } catch (java.lang.reflect.InvocationTargetException ite) {
-            // Surface the underlying validation exception (or any other runtime error)
-            // directly so callers see ConfigValidationException, not the reflective wrap.
+            // Method.invoke always wraps the called method's exception inside an
+            // InvocationTargetException. We have to peel that wrap so callers of
+            // Tiko.create() see ConfigValidationException directly (the type they expect
+            // to catch), not the reflective wrap. Three branches are required because
+            // `throw` needs a statically-typed throwable — Throwable is too broad and
+            // would force a `throws` clause on this method:
+            //
+            //   - RuntimeException: the common case (ConfigValidationException lands here).
+            //   - Error: should propagate unwrapped too; an OOM from bind shouldn't morph.
+            //   - fallback: the language requires it but is unreachable in practice —
+            //     ConfigBootstrap.bind declares no checked exceptions.
+            //
+            // The shape is intrinsic to using reflection here. The honest fix is to drop
+            // the reflective call entirely by depending on tiko-config at compile time
+            // with `<scope>provided</scope>` (lets users without @Configuration skip the
+            // dep, while making the runtime call a plain static method invocation).
             Throwable cause = ite.getCause();
             if (cause instanceof RuntimeException re) throw re;
             if (cause instanceof Error err) throw err;
