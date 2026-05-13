@@ -52,12 +52,9 @@ jobs:
           java-version: ${{ matrix.java }}
           distribution: 'temurin'
           cache: maven
-      # Two-step: install all reactor jars first (no tests, no integTest profile),
-      # then run the IT against the populated local repo. tiko-kafka's integTest
-      # profile references tiko-kafka-processor on its annotation processor path,
-      # but the processor builds AFTER tiko-kafka in the reactor — so the jar
-      # must already be in ~/.m2 by the time tiko-kafka's testCompile runs.
-      - name: Install reactor artifacts
-        run: mvn -B -DskipTests install --file pom.xml
+      # `install` (not `verify`) so the archetype IT — which spawns a sub-Maven
+      # build that resolves `io.tiko:tiko-bom` from the local repo — sees the
+      # parent BOM. With `verify` only, nothing is installed and the archetype IT
+      # fails to find tiko-bom in central.
       - name: Run integration tests
-        run: mvn -B verify -P integTest --file pom.xml
+        run: mvn -B install --file pom.xml

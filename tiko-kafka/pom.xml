@@ -80,17 +80,6 @@
             <version>4.2.2</version>
             <scope>test</scope>
         </dependency>
-        <!-- Testcontainers — available to both unit and integration test classpaths -->
-        <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>kafka</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <scope>test</scope>
-        </dependency>
     </dependencies>
 
     <build>
@@ -123,90 +112,4 @@
             </plugin>
         </plugins>
     </build>
-
-    <profiles>
-        <profile>
-            <id>integTest</id>
-            <build>
-                <plugins>
-                    <!-- Add src/integTest/java as an additional test source root -->
-                    <plugin>
-                        <groupId>org.codehaus.mojo</groupId>
-                        <artifactId>build-helper-maven-plugin</artifactId>
-                        <version>3.6.0</version>
-                        <executions>
-                            <execution>
-                                <id>add-integtest-sources</id>
-                                <phase>generate-test-sources</phase>
-                                <goals>
-                                    <goal>add-test-source</goal>
-                                </goals>
-                                <configuration>
-                                    <sources>
-                                        <source>src/integTest/java</source>
-                                    </sources>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
-                    <!-- Override compiler for the test-compile execution only.
-                         Applying this to default-compile would re-process src/main/java's
-                         @Configuration KafkaConfig and clash with the hand-maintained
-                         KafkaConfigBinder shipped at src/main/java/io/tiko/generated/config. -->
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-compiler-plugin</artifactId>
-                        <executions>
-                            <execution>
-                                <id>default-testCompile</id>
-                                <configuration>
-                                    <source>17</source>
-                                    <target>17</target>
-                                    <release>17</release>
-                                    <proc>full</proc>
-                                    <annotationProcessorPaths>
-                                        <path>
-                                            <groupId>io.tiko</groupId>
-                                            <artifactId>tiko-processor</artifactId>
-                                            <version>${project.version}</version>
-                                        </path>
-                                        <path>
-                                            <groupId>io.tiko</groupId>
-                                            <artifactId>tiko-kafka-processor</artifactId>
-                                            <version>${project.version}</version>
-                                        </path>
-                                    </annotationProcessorPaths>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
-                    <!-- Run *IT.java classes via Failsafe -->
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-failsafe-plugin</artifactId>
-                        <version>3.2.2</version>
-                        <executions>
-                            <execution>
-                                <goals>
-                                    <goal>integration-test</goal>
-                                    <goal>verify</goal>
-                                </goals>
-                                <configuration>
-                                    <includes>
-                                        <include>**/*IT.java</include>
-                                    </includes>
-                                    <!-- docker-java 3.4.0 (pulled by Testcontainers 1.20.4) defaults to
-                                         API 1.32, which Docker Desktop 25+ rejects. Pin a modern API
-                                         version supported by current engines. -->
-                                    <systemPropertyVariables>
-                                        <api.version>1.43</api.version>
-                                    </systemPropertyVariables>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
 </project>

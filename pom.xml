@@ -20,6 +20,7 @@
         <module>tiko-config</module>
         <module>tiko-kafka</module>
         <module>tiko-kafka-processor</module>
+        <module>tiko-kafka-it</module>
         <module>tiko-examples</module>
         <module>tiko-archetype</module>
     </modules>

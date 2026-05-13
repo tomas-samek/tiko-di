@@ -43,8 +43,7 @@ import org.testcontainers.utility.DockerImageName;
 class KafkaRealBrokerRoundTripIT {
 
     @org.testcontainers.junit.jupiter.Container
-    static final KafkaContainer KAFKA =
-            new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.7.1"));
+    static final KafkaContainer KAFKA = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.7.1"));
 
     @Test
     void produced_then_consumed_via_real_broker() {
@@ -66,7 +65,8 @@ class KafkaRealBrokerRoundTripIT {
             ItOrderRecorder recorder = container.get(ItOrderRecorder.class);
             // Wait until the source consumer delivers the round-tripped event.
             await().atMost(Duration.ofSeconds(30))
-                    .until(() -> recorder.received.stream().anyMatch(o -> o.orderId().equals("real-1")));
+                    .until(() ->
+                            recorder.received.stream().anyMatch(o -> o.orderId().equals("real-1")));
 
             assertThat(recorder.received).anyMatch(o -> o.orderId().equals("real-1") && o.amount() == 99);
         }
