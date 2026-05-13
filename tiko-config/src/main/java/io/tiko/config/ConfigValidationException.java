@@ -1,27 +1,29 @@
 package io.tiko.config;
 
-import io.tiko.config.internal.ConfigError;
+import io.tiko.ConfigIssue;
 import io.tiko.config.internal.ErrorReporter;
 import java.util.List;
 
 /**
  * Thrown once at container startup if the loaded configuration fails validation.
  * The exception message is the entire numbered report — anchored to YAML
- * file:line:col where applicable.
+ * {@code file:line:col} where applicable.
+ *
+ * <p>The structured per-issue list is available via {@link #issues()}; observability code
+ * that prefers programmatic dispatch on {@link io.tiko.ConfigIssueCode} should use that
+ * rather than parsing the message.
  */
 public final class ConfigValidationException extends RuntimeException {
 
-    // transient because ConfigError is intentionally an internal, non-Serializable type;
-    // the formatted message in super(...) survives serialization regardless.
-    private final transient List<ConfigError> errors;
+    private final transient List<ConfigIssue> issues;
 
-    public ConfigValidationException(String source, List<ConfigError> errors) {
-        super(ErrorReporter.format(source, errors));
-        this.errors = List.copyOf(errors);
+    public ConfigValidationException(String source, List<ConfigIssue> issues) {
+        super(ErrorReporter.format(source, issues));
+        this.issues = List.copyOf(issues);
     }
 
-    /** The raw error list, in the order they were accumulated. */
-    public List<ConfigError> errors() {
-        return errors == null ? List.of() : errors;
+    /** The structured issue list, in the order accumulated. */
+    public List<ConfigIssue> issues() {
+        return issues == null ? List.of() : issues;
     }
 }

@@ -1,6 +1,9 @@
 package io.tiko.config.runtime;
 
+import io.tiko.ConfigIssueCode;
 import io.tiko.ConfigSource;
+import io.tiko.ConfigurationFailure;
+import io.tiko.ErrorHandler;
 import io.tiko.config.BindContext;
 import io.tiko.config.ConfigBinder;
 import io.tiko.config.ConfigValidationException;
@@ -21,11 +24,25 @@ public final class ConfigBootstrap {
     private ConfigBootstrap() {}
 
     /**
+     * Three-arg form for direct callers (tests, ad-hoc tools). Equivalent to
+     * {@link #bind(String, ConfigSource, List, ErrorHandler)} with a {@code null}
+     * error handler — failures still throw, just without observability routing.
+     */
+    public static Map<Class<?>, Object> bind(String sourceLabel, ConfigSource source, List<ConfigBinder<?>> binders) {
+        return bind(sourceLabel, source, binders, null);
+    }
+
+    /**
      * Loads the YAML, interpolates {@code ${VAR}}s, validates top-level prefixes,
      * runs every binder, and either returns a {@code Map<Class<?>, Object>} of bound
      * records or throws {@link ConfigValidationException} with the full report.
+     *
+     * <p>When {@code errorHandler} is non-{@code null} and binding accumulates errors,
+     * a single {@link ConfigurationFailure} carrying every issue is dispatched through
+     * the handler immediately before the exception is thrown.
      */
-    public static Map<Class<?>, Object> bind(String sourceLabel, ConfigSource source, List<ConfigBinder<?>> binders) {
+    public static Map<Class<?>, Object> bind(
+            String sourceLabel, ConfigSource source, List<ConfigBinder<?>> binders, ErrorHandler errorHandler) {
         BindContext ctx = new BindContext(sourceLabel);
 
         // 1. Load
@@ -46,9 +63,11 @@ public final class ConfigBootstrap {
         for (Map.Entry<String, List<Class<?>>> e : prefixToTypes.entrySet()) {
             if (e.getValue().size() > 1) {
                 String types = e.getValue().stream().map(Class::getName).collect(Collectors.joining(", "));
-                ctx.report("duplicate @Configuration prefix '" + e.getKey()
-                        + "' declared by: " + types
-                        + ". Each prefix must be unique across all modules.");
+                ctx.report(
+                        ConfigIssueCode.DUPLICATE_PREFIX,
+                        "duplicate @Configuration prefix '" + e.getKey()
+                                + "' declared by: " + types
+                                + ". Each prefix must be unique across all modules.");
             }
         }
 
@@ -58,7 +77,7 @@ public final class ConfigBootstrap {
             if (!claimed.contains(k)) {
                 String suggestion = nearest(k, claimed);
                 String hint = suggestion != null ? " Did you mean '" + suggestion + "'?" : "";
-                ctx.report("unknown top-level section '" + k + "'." + hint);
+                ctx.report(ConfigIssueCode.UNKNOWN_SECTION, "unknown top-level section '" + k + "'." + hint);
             }
         }
 
@@ -69,9 +88,16 @@ public final class ConfigBootstrap {
             bound.put(b.type(), instance);
         }
 
-        // 5. Throw if anything accumulated
+        // 5. Throw if anything accumulated, after routing the bundled failure through
+        // the user's ErrorHandler so observability code sees it before the exception
+        // surfaces from Tiko.create(...).
         if (ctx.hasErrors()) {
-            throw new ConfigValidationException(sourceLabel, ctx.errors());
+            var issues = ctx.issues();
+            var cve = new ConfigValidationException(sourceLabel, issues);
+            if (errorHandler != null) {
+                errorHandler.onError(new ConfigurationFailure(issues, cve));
+            }
+            throw cve;
         }
         return bound;
     }

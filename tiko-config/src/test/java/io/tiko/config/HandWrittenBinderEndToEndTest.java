@@ -94,7 +94,7 @@ class HandWrittenBinderEndToEndTest {
         BindContext ctx = new BindContext("test");
         new DbConfigBinder().bind(src.load(), ctx);
         assertThatThrownBy(() -> {
-                    throw new ConfigValidationException(ctx.source(), ctx.errors());
+                    throw new ConfigValidationException(ctx.source(), ctx.issues());
                 })
                 .isInstanceOf(ConfigValidationException.class)
                 .hasMessageContaining("db.url is required")

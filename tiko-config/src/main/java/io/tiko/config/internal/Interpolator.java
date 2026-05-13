@@ -1,6 +1,7 @@
 // tiko-config/src/main/java/io/tiko/config/internal/Interpolator.java
 package io.tiko.config.internal;
 
+import io.tiko.ConfigIssueCode;
 import io.tiko.config.BindContext;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -51,7 +52,8 @@ public final class Interpolator {
                 if (def != null) {
                     value = def;
                 } else {
-                    ctx.report("${" + name + "} is not set and has no default");
+                    ctx.report(
+                            ConfigIssueCode.INTERPOLATION_UNRESOLVED, "${" + name + "} is not set and has no default");
                     value = "";
                 }
             }

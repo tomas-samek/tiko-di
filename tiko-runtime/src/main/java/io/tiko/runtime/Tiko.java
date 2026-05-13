@@ -101,7 +101,7 @@ public final class Tiko {
             // Defaults from META-INF/tiko/defaults.yaml are always layered under the user
             // source — modules can ship a self-sufficient bean even when the user provides
             // no ConfigSource. bindConfigs is a no-op when no @Configuration records exist.
-            Map<Class<?>, Object> bound = bindConfigs(options.configSource(), classLoader);
+            Map<Class<?>, Object> bound = bindConfigs(options.configSource(), classLoader, errorHandler);
             if (!bound.isEmpty()) {
                 container.getClass().getMethod("injectConfigs", Map.class).invoke(container, bound);
             }
@@ -153,7 +153,8 @@ public final class Tiko {
      * the classpath. Uses reflection to avoid a circular compile dependency on
      * tiko-config.</p>
      */
-    private static Map<Class<?>, Object> bindConfigs(ConfigSource userSource, ClassLoader cl) throws Exception {
+    private static Map<Class<?>, Object> bindConfigs(ConfigSource userSource, ClassLoader cl, ErrorHandler errorHandler)
+            throws Exception {
         List<Object> binders = new ArrayList<>();
         var resources = cl.getResources("META-INF/tiko/configs.txt");
         while (resources.hasMoreElements()) {
@@ -193,13 +194,40 @@ public final class Tiko {
                             new ConfigSource[] {defaults, userSource});
         }
 
-        // Delegate to ConfigBootstrap via reflection (avoids circular compile dep).
+        // Delegate to ConfigBootstrap via reflection (avoids a tiko-runtime → tiko-config
+        // compile dependency). ConfigBootstrap.bind itself routes a single
+        // ConfigurationFailure through the supplied ErrorHandler before throwing, so this
+        // call site doesn't need to unwrap reflective exceptions or detect specific cause
+        // types — it just surfaces whatever the underlying call threw.
         Class<?> bootstrapClass = Class.forName("io.tiko.config.runtime.ConfigBootstrap", true, cl);
-        @SuppressWarnings("unchecked")
-        Map<Class<?>, Object> result = (Map<Class<?>, Object>) bootstrapClass
-                .getMethod("bind", String.class, ConfigSource.class, List.class)
-                .invoke(null, "config", effective, binders);
-        return result;
+        try {
+            @SuppressWarnings("unchecked")
+            Map<Class<?>, Object> result = (Map<Class<?>, Object>) bootstrapClass
+                    .getMethod("bind", String.class, ConfigSource.class, List.class, ErrorHandler.class)
+                    .invoke(null, "config", effective, binders, errorHandler);
+            return result;
+        } catch (java.lang.reflect.InvocationTargetException ite) {
+            // Method.invoke always wraps the called method's exception inside an
+            // InvocationTargetException. We have to peel that wrap so callers of
+            // Tiko.create() see ConfigValidationException directly (the type they expect
+            // to catch), not the reflective wrap. Three branches are required because
+            // `throw` needs a statically-typed throwable — Throwable is too broad and
+            // would force a `throws` clause on this method:
+            //
+            //   - RuntimeException: the common case (ConfigValidationException lands here).
+            //   - Error: should propagate unwrapped too; an OOM from bind shouldn't morph.
+            //   - fallback: the language requires it but is unreachable in practice —
+            //     ConfigBootstrap.bind declares no checked exceptions.
+            //
+            // The shape is intrinsic to using reflection here. The honest fix is to drop
+            // the reflective call entirely by depending on tiko-config at compile time
+            // with `<scope>provided</scope>` (lets users without @Configuration skip the
+            // dep, while making the runtime call a plain static method invocation).
+            Throwable cause = ite.getCause();
+            if (cause instanceof RuntimeException re) throw re;
+            if (cause instanceof Error err) throw err;
+            throw ite;
+        }
     }
 
     /**
