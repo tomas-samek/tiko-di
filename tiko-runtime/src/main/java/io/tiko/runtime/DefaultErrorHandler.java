@@ -1,13 +1,13 @@
 package io.tiko.runtime;
 
 import io.tiko.AutoCloseFailure;
-import io.tiko.ConfigIssue;
 import io.tiko.ConfigurationFailure;
 import io.tiko.ErrorContext;
 import io.tiko.ErrorHandler;
 import io.tiko.EventHandlerError;
 import io.tiko.PostConstructFailure;
 import io.tiko.PreDestroyFailure;
+import io.tiko.TransportError;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -24,6 +24,10 @@ import java.util.logging.Logger;
  *     .errorHandler(ctx -> slf4j.warn("{}", ctx.cause().toString(), ctx.cause()))
  *     .build());
  * }</pre>
+ *
+ * <p>Dispatch is an exhaustive {@code switch} on the sealed {@link ErrorContext}. Adding a
+ * new top-level permit makes this class fail to compile until a corresponding case is
+ * added — the project's intentional compile-time-loud contract.
  */
 public final class DefaultErrorHandler implements ErrorHandler {
 
@@ -35,52 +39,38 @@ public final class DefaultErrorHandler implements ErrorHandler {
 
     @Override
     public void onError(ErrorContext context) {
-        if (context instanceof EventHandlerError e) {
-            LoggerHolder.LOG.log(
-                    Level.WARNING,
-                    String.format(
-                            "EventHandler %s#%s on event %s threw: %s",
-                            e.handler().declaringClass().getName(),
-                            e.handler().methodName(),
-                            e.handler().eventType().getName(),
-                            e.cause().toString()),
-                    e.cause());
-        } else if (context instanceof PostConstructFailure f) {
-            LoggerHolder.LOG.log(
-                    Level.WARNING,
-                    String.format(
-                            "@PostConstruct on %s threw: %s",
-                            f.component().getName(), f.cause().toString()),
-                    f.cause());
-        } else if (context instanceof PreDestroyFailure f) {
-            LoggerHolder.LOG.log(
-                    Level.WARNING,
-                    String.format(
-                            "@PreDestroy on %s threw: %s",
-                            f.component().getName(), f.cause().toString()),
-                    f.cause());
-        } else if (context instanceof AutoCloseFailure f) {
-            LoggerHolder.LOG.log(
-                    Level.WARNING,
-                    String.format(
-                            "AutoCloseable.close() on %s threw: %s",
-                            f.component().getName(), f.cause().toString()),
-                    f.cause());
-        } else if (context instanceof ConfigurationFailure f) {
-            // One log line per issue at WARNING — keep them grepable / metric-friendly.
-            for (ConfigIssue issue : f.issues()) {
+        switch (context) {
+            case EventHandlerError(var handler, var event, var cause) ->
                 LoggerHolder.LOG.log(
-                        Level.WARNING, String.format("@Configuration [%s] %s", issue.code(), issue.description()));
+                        Level.WARNING,
+                        "EventHandler %s#%s on event %s threw: %s"
+                                .formatted(
+                                        handler.declaringClass().getName(),
+                                        handler.methodName(),
+                                        handler.eventType().getName(),
+                                        cause),
+                        cause);
+            case PostConstructFailure(var component, var cause) ->
+                LoggerHolder.LOG.log(
+                        Level.WARNING, "@PostConstruct on %s threw: %s".formatted(component.getName(), cause), cause);
+            case PreDestroyFailure(var component, var cause) ->
+                LoggerHolder.LOG.log(
+                        Level.WARNING, "@PreDestroy on %s threw: %s".formatted(component.getName(), cause), cause);
+            case AutoCloseFailure(var component, var cause) ->
+                LoggerHolder.LOG.log(
+                        Level.WARNING,
+                        "AutoCloseable.close() on %s threw: %s".formatted(component.getName(), cause),
+                        cause);
+            case ConfigurationFailure f -> {
+                // One log line per issue at WARNING — keep them grepable / metric-friendly.
+                for (var issue : f.issues()) {
+                    LoggerHolder.LOG.log(
+                            Level.WARNING, "@Configuration [%s] %s".formatted(issue.code(), issue.description()));
+                }
             }
-        } else {
-            // Forward-compatible: future ErrorContext subtypes log a generic message
-            // until this default handler is updated to match the new permits.
-            LoggerHolder.LOG.log(
-                    Level.WARNING,
-                    String.format(
-                            "Framework error: %s: %s",
-                            context.getClass().getSimpleName(), context.cause().toString()),
-                    context.cause());
+            case TransportError t ->
+                LoggerHolder.LOG.log(
+                        Level.WARNING, "Transport %s error: %s".formatted(t.transport(), t.cause()), t.cause());
         }
     }
 }
