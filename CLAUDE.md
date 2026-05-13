@@ -433,8 +433,12 @@ what they do, not where they're called from.
 
 - **Framework: JUnit 5 only.** No JUnit 4, no mixing. AssertJ for assertions
   (no Hamcrest, no JUnit's `Assertions`).
-- **Naming:** `xxxTest` for unit tests, `xxxIT` for integration tests (Failsafe
-  picks up `*IT`).
+- **Class naming:** `xxxTest` for unit tests, `xxxIT` for integration tests
+  (Failsafe picks up `*IT`).
+- **Method naming: camelCase, no underscores.** New tests use
+  `applicationStartedPublishedOnceAfterContainerBoot`, not
+  `application_started_published_once`. Existing snake_case tests stay until
+  they're touched for other reasons; don't churn the tree just to rename.
 - **No `@Disabled` tests.** Fix or delete.
 - **No bare `Thread.sleep`.** Either remove if the assertion is trivially
   satisfied (e.g. `>= Duration.ZERO`), or use Awaitility:
@@ -450,6 +454,21 @@ what they do, not where they're called from.
 - **No test side effects bleed across tests.** Reset system properties; use
   `@TempDir` for filesystem fixtures; no ThreadLocal contamination.
 - **Verify error messages are helpful** — see "Error Message Format" above.
+
+### Adding Dependencies
+
+When introducing a new third-party dependency, look up the latest stable version
+on Maven Central (or `mvnrepository.com`) before writing the `<version>` into
+the pom. Don't copy a version from the first Stack Overflow result or a sibling
+project — those go stale.
+
+- Pin the version in `tiko-bom/pom.xml` and the root `pom.xml`
+  `<dependencyManagement>` (the project is BOM-managed).
+- Confirm the artifact's license is compatible (Apache 2.0, MIT, BSD, EPL all
+  fine; LGPL/GPL/SSPL need a separate discussion).
+- For existing dependencies, use `mvn versions:display-dependency-updates` to
+  spot bumps, and `mvn versions:set -DprocessAllModules=true` for the bump
+  itself. Don't string-replace versions in `pom.xml` by hand.
 
 ### Issue Writing
 
