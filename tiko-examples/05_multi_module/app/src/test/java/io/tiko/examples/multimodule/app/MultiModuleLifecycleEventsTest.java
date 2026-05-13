@@ -26,7 +26,7 @@ import org.junit.jupiter.api.Test;
 class MultiModuleLifecycleEventsTest {
 
     @Test
-    void aggregating_container_publishes_application_started_event_exactly_once() throws Exception {
+    void aggregating_container_publishes_application_started_event_exactly_once() {
         EventBus eventBus = newLocalEventBus();
         AtomicInteger startedCount = new AtomicInteger(0);
         eventBus.subscribe(ApplicationStartedEvent.class, e -> startedCount.incrementAndGet());
@@ -45,7 +45,7 @@ class MultiModuleLifecycleEventsTest {
     }
 
     @Test
-    void aggregating_container_publishes_application_ending_event_exactly_once() throws Exception {
+    void aggregating_container_publishes_application_ending_event_exactly_once() {
         EventBus eventBus = newLocalEventBus();
         AtomicInteger endingCount = new AtomicInteger(0);
         eventBus.subscribe(ApplicationEndingEvent.class, e -> endingCount.incrementAndGet());

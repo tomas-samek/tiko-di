@@ -116,21 +116,18 @@ public class Main {
             System.out.println("\n6. DEMONSTRATING EVENT CHAINING");
             System.out.println("-".repeat(70));
             System.out.println("@EventTrigger enables declarative event workflows:");
-            container.runInRequestScope(() -> {
-                container.runInEventScope(() -> {
-                    System.out.println("\n>>> Publishing OrderCreatedEvent...");
-                    // With @EventTrigger, this would automatically trigger:
-                    // OrderCreatedEvent -> ValidationResult -> PaymentProcessedEvent
-                    // Each handler's return value becomes the next event's payload
-                    System.out.println("    Event chaining flow:");
-                    System.out.println("    1. OrderCreatedEvent published");
-                    System.out.println("    2. Handler validates -> returns ValidationResult");
-                    System.out.println("    3. ValidationResult triggers next handler");
-                    System.out.println("    4. Handler processes payment -> returns PaymentProcessedEvent");
-                    System.out.println(
-                            "    5. Origin chain: [OrderCreatedEvent, ValidationResult, PaymentProcessedEvent]");
-                });
-            });
+            container.runInRequestScope(() -> container.runInEventScope(() -> {
+                System.out.println("\n>>> Publishing OrderCreatedEvent...");
+                // With @EventTrigger, this would automatically trigger:
+                // OrderCreatedEvent -> ValidationResult -> PaymentProcessedEvent
+                // Each handler's return value becomes the next event's payload
+                System.out.println("    Event chaining flow:");
+                System.out.println("    1. OrderCreatedEvent published");
+                System.out.println("    2. Handler validates -> returns ValidationResult");
+                System.out.println("    3. ValidationResult triggers next handler");
+                System.out.println("    4. Handler processes payment -> returns PaymentProcessedEvent");
+                System.out.println("    5. Origin chain: [OrderCreatedEvent, ValidationResult, PaymentProcessedEvent]");
+            }));
 
             System.out.println("\n7. AUDIT LOG");
             System.out.println("-".repeat(70));

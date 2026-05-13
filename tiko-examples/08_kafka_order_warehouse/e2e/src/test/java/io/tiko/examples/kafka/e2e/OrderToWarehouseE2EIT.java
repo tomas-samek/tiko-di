@@ -3,7 +3,6 @@ package io.tiko.examples.kafka.e2e;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -46,26 +45,26 @@ class OrderToWarehouseE2EIT {
 
     @Test
     void order_placed_in_order_service_reaches_warehouse_service() throws Exception {
-        String orderJar = jarPath("order-service");
-        String warehouseJar = jarPath("warehouse-service");
+        var orderJar = jarPath("order-service");
+        var warehouseJar = jarPath("warehouse-service");
 
-        String bootstrapServers = KAFKA.getBootstrapServers();
+        var bootstrapServers = KAFKA.getBootstrapServers();
 
-        ProcessBuilder warehousePb = new ProcessBuilder(
-                        "java", "-Dprobe.file=" + probeFile.toAbsolutePath(), "-jar", warehouseJar)
+        var warehousePb = new ProcessBuilder("java", "-Dprobe.file=" + probeFile.toAbsolutePath(), "-jar", warehouseJar)
                 .inheritIO();
         warehousePb.environment().put("KAFKA_BOOTSTRAP", bootstrapServers);
         warehouseProc = warehousePb.start();
 
-        // Give the warehouse a moment to subscribe.
-        Thread.sleep(2_000);
+        // Intentional pause expressed via Awaitility: warehouse-service exposes no externally
+        // observable "subscribed" signal, so wait the typical Kafka consumer-group join time.
+        await().pollDelay(Duration.ofSeconds(2)).until(() -> true);
 
-        ProcessBuilder orderPb = new ProcessBuilder("java", "-jar", orderJar).redirectErrorStream(true);
+        var orderPb = new ProcessBuilder("java", "-jar", orderJar).redirectErrorStream(true);
         orderPb.environment().put("KAFKA_BOOTSTRAP", bootstrapServers);
         orderProc = orderPb.start();
 
         // Feed a price to order-service's stdin to place an order.
-        try (OutputStream out = orderProc.getOutputStream()) {
+        try (var out = orderProc.getOutputStream()) {
             out.write("19.99\n".getBytes(StandardCharsets.UTF_8));
         }
 
@@ -73,7 +72,7 @@ class OrderToWarehouseE2EIT {
                 .until(() ->
                         Files.exists(probeFile) && !Files.readString(probeFile).isBlank());
 
-        String probeContent = Files.readString(probeFile);
+        var probeContent = Files.readString(probeFile);
         assertThat(probeContent).isNotBlank();
     }
 

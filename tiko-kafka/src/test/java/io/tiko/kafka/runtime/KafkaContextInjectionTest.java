@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test;
 class KafkaContextInjectionTest {
 
     @Test
-    void second_parameter_receives_kafka_context() throws Exception {
+    void second_parameter_receives_kafka_context() {
         FakeKafkaBroker broker = new FakeKafkaBroker();
 
         List<GeneratedSourceDescriptor> sources = List.of(new GeneratedSourceDescriptor(

@@ -2,6 +2,7 @@ package io.tiko.processor.config;
 
 import com.palantir.javapoet.*;
 import io.tiko.config.ConfigBinder;
+import io.tiko.processor.util.GeneratorAnnotations;
 import java.io.IOException;
 import java.util.List;
 import java.util.StringJoiner;
@@ -49,6 +50,7 @@ public final class ConfigBinderRegistryGenerator {
                 .build();
 
         TypeSpec registry = TypeSpec.classBuilder(className)
+                .addAnnotation(GeneratorAnnotations.generatedBy(ConfigBinderRegistryGenerator.class))
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                 .addMethod(MethodSpec.constructorBuilder()
                         .addModifiers(Modifier.PRIVATE)

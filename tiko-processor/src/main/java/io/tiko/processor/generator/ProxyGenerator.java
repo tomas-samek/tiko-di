@@ -2,6 +2,7 @@ package io.tiko.processor.generator;
 
 import com.palantir.javapoet.*;
 import io.tiko.processor.model.ComponentModel;
+import io.tiko.processor.util.GeneratorAnnotations;
 import io.tiko.processor.util.ProcessorContext;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -70,6 +71,7 @@ public final class ProxyGenerator {
         String proxyClassName = component.getClassName() + "Proxy";
 
         TypeSpec proxyClass = TypeSpec.classBuilder(proxyClassName)
+                .addAnnotation(GeneratorAnnotations.generatedBy(ProxyGenerator.class))
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                 .addSuperinterface(TypeName.get(interfaceType))
                 .addField(createContainerField())

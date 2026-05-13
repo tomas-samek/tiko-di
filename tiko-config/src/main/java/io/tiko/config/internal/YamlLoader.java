@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 /** SnakeYAML-backed loader that produces a {@code Map<String, Object>} tree. */
 public final class YamlLoader {
@@ -14,10 +15,13 @@ public final class YamlLoader {
     private YamlLoader() {}
 
     public static Map<String, Object> load(InputStream input) {
-        LoaderOptions opts = new LoaderOptions();
+        var opts = new LoaderOptions();
         opts.setAllowDuplicateKeys(false);
-        Yaml yaml = new Yaml(opts);
-        Object loaded = yaml.load(input);
+        // SafeConstructor pinned explicitly: we only ever load data (Map/List/scalar), never
+        // instantiate arbitrary Java types. SnakeYAML 2.x already defaults to safe behavior,
+        // but spelling it out makes the security property a code-level invariant.
+        var yaml = new Yaml(new SafeConstructor(opts));
+        var loaded = yaml.load(input);
         if (loaded == null) return new LinkedHashMap<>();
         if (loaded instanceof Map<?, ?> m) {
             @SuppressWarnings("unchecked")
@@ -28,7 +32,6 @@ public final class YamlLoader {
                 "YAML root must be a mapping; got " + loaded.getClass().getSimpleName());
     }
 
-    @SuppressWarnings("unchecked")
     private static Map<String, Object> stringKeyed(Map<Object, Object> in) {
         Map<String, Object> out = new LinkedHashMap<>(in.size());
         for (Map.Entry<Object, Object> e : in.entrySet()) {

@@ -27,7 +27,7 @@ class MultiModuleErrorHandlerPropagationTest {
     @Test
     void user_supplied_error_handler_reaches_per_module_containers() throws Exception {
         AtomicReference<Object> recorder = new AtomicReference<>();
-        ErrorHandler custom = ctx -> recorder.set(ctx);
+        ErrorHandler custom = recorder::set;
 
         TikoOptions opts = TikoOptions.builder().errorHandler(custom).build();
         try (Container aggregator = Tiko.create(opts)) {

@@ -148,36 +148,45 @@ public final class AggregatingContainer implements Container {
 
         moduleContainers.add(moduleContainer);
 
-        // Load components mapping
-        String resourcePath = resourceUrl.getPath();
-        String componentsPath = resourcePath.replace("container.properties", "components.txt");
-        URL componentsUrl =
-                new URL(resourceUrl.getProtocol(), resourceUrl.getHost(), resourceUrl.getPort(), componentsPath);
+        loadComponentsMapping(resourceUrl, classLoader, moduleContainer);
+        loadConfigsMapping(resourceUrl, classLoader, moduleContainer);
+    }
 
+    /**
+     * Reads the components.txt sibling of {@code resourceUrl} and maps each FQN to the given module container.
+     */
+    private void loadComponentsMapping(URL resourceUrl, ClassLoader classLoader, Container moduleContainer)
+            throws Exception {
+        var componentsUrl = siblingResource(resourceUrl, "components.txt");
         try (var reader = new BufferedReader(new InputStreamReader(componentsUrl.openStream()))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 line = line.trim();
                 if (!line.isEmpty() && !line.startsWith("#")) {
-                    Class<?> componentClass = Class.forName(line, false, classLoader);
+                    var componentClass = Class.forName(line, false, classLoader);
                     componentToContainerMap.put(componentClass, moduleContainer);
                 }
             }
         }
+    }
 
-        // Load configs.txt mappings (one entry per @Configuration record)
-        String configsPath = resourcePath.replace("container.properties", "configs.txt");
-        URL configsUrl = new URL(resourceUrl.getProtocol(), resourceUrl.getHost(), resourceUrl.getPort(), configsPath);
-        try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(configsUrl.openStream()))) {
+    /**
+     * Reads the configs.txt sibling of {@code resourceUrl} (one entry per {@code @Configuration} record) and
+     * maps each FQN to the given module container. Missing configs.txt is treated as "no configs for this
+     * module" and silently ignored.
+     */
+    private void loadConfigsMapping(URL resourceUrl, ClassLoader classLoader, Container moduleContainer) {
+        var configsUrl = siblingResource(resourceUrl, "configs.txt");
+        try (var reader = new BufferedReader(new InputStreamReader(configsUrl.openStream()))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 line = line.trim();
                 if (line.isEmpty() || line.startsWith("#")) continue;
-                int eq = line.indexOf('=');
+                var eq = line.indexOf('=');
                 if (eq > 0) {
-                    String fqn = line.substring(0, eq).trim();
+                    var fqn = line.substring(0, eq).trim();
                     try {
-                        Class<?> typeClass = Class.forName(fqn, false, classLoader);
+                        var typeClass = Class.forName(fqn, false, classLoader);
                         configToContainer.put(typeClass, moduleContainer);
                     } catch (ClassNotFoundException e) {
                         // Module declared a config record class that's not on the classpath — surface a clear failure.
@@ -189,6 +198,15 @@ public final class AggregatingContainer implements Container {
             }
         } catch (java.io.IOException ignored) {
             // No configs.txt for this module — fine, this module has no @Configuration records.
+        }
+    }
+
+    private static URL siblingResource(URL base, String sibling) {
+        var siblingPath = base.getPath().replace("container.properties", sibling);
+        try {
+            return new URL(base.getProtocol(), base.getHost(), base.getPort(), siblingPath);
+        } catch (java.net.MalformedURLException e) {
+            throw new IllegalStateException("Failed to derive " + sibling + " URL from " + base, e);
         }
     }
 
@@ -350,7 +368,7 @@ public final class AggregatingContainer implements Container {
                 moduleContainers.get(i).shutdown();
             } catch (Exception e) {
                 // Log but continue shutting down other containers
-                System.err.println("Error shutting down module container: " + e.getMessage());
+                Logger.getLogger("io.tiko.events").log(Level.WARNING, "Error shutting down module container", e);
             }
         }
         // Shut down framework-owned event executor (#51). User-supplied executors are not

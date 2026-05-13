@@ -48,13 +48,12 @@ public final class ContainerPicker<T> implements Picker<T> {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public <S extends T> Optional<S> byImplClass(Class<S> implClass) {
         try {
             // container.get(implClass) returns an instance of implClass. The S extends T
             // bound guarantees Java-level type safety; the unchecked cast is for the
             // raw container call which is parameterised on its own argument.
-            S bean = (S) container.get(implClass);
+            S bean = container.get(implClass);
             // Defensive: if a custom Container ever returns a non-T (shouldn't happen
             // because S extends T is enforced at the call site, but extra safety here),
             // treat it as not found rather than letting a ClassCastException leak out.

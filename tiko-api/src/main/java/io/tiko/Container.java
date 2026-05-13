@@ -226,15 +226,14 @@ public interface Container extends AutoCloseable {
      * that the application configured via {@code TikoOptions}, instead of relying on
      * reflection or a hard-coded fallback.
      *
-     * <p>The default implementation returns a JUL-backed handler so user-supplied
-     * {@code Container} implementations that do not override this method remain
-     * functional without breaking changes.
+     * <p>The default implementation returns {@link FallbackErrorHandler}, a JUL-backed
+     * fallback so user-supplied {@code Container} implementations that do not override
+     * this method remain functional without breaking changes.
      *
      * @return the error handler (never {@code null})
      */
     default ErrorHandler getErrorHandler() {
-        return ctx -> java.util.logging.Logger.getLogger("io.tiko")
-                .log(java.util.logging.Level.WARNING, ctx.getClass().getSimpleName() + ": " + ctx.cause(), ctx.cause());
+        return FallbackErrorHandler.INSTANCE;
     }
 
     /**

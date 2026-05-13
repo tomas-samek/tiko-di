@@ -5,6 +5,7 @@ import io.tiko.Event;
 import io.tiko.EventBus;
 import io.tiko.processor.model.EventHandlerModel;
 import io.tiko.processor.model.EventTriggerModel;
+import io.tiko.processor.util.GeneratorAnnotations;
 import io.tiko.processor.util.ProcessorContext;
 import java.io.IOException;
 import java.util.List;
@@ -52,7 +53,9 @@ public final class EventRegistryGenerator {
             return;
         }
 
-        TypeSpec.Builder registry = TypeSpec.classBuilder(REGISTRY_CLASS).addModifiers(Modifier.PUBLIC, Modifier.FINAL);
+        TypeSpec.Builder registry = TypeSpec.classBuilder(REGISTRY_CLASS)
+                .addAnnotation(GeneratorAnnotations.generatedBy(EventRegistryGenerator.class))
+                .addModifiers(Modifier.PUBLIC, Modifier.FINAL);
 
         registry.addMethod(createRegisterMethod(eventHandlers));
 
@@ -125,7 +128,7 @@ public final class EventRegistryGenerator {
         ClassName eventClass = ClassName.bestGuess(handler.getEventTypeName());
         ClassName declaringClass = ClassName.bestGuess(
                 handler.getDeclaringClass().getQualifiedName().toString());
-        String getterName = "get" + handler.getDeclaringClass().getSimpleName().toString();
+        String getterName = "get" + handler.getDeclaringClass().getSimpleName();
 
         ClassName errorHandler = ClassName.get("io.tiko", "ErrorHandler");
         ClassName eventHandlerError = ClassName.get("io.tiko", "EventHandlerError");
@@ -329,9 +332,6 @@ public final class EventRegistryGenerator {
     private static String dispatcherName(EventHandlerModel handler, int index) {
         // Include both class and method names for readability when debugging generated code,
         // and an index so two methods with the same name on different classes don't collide.
-        return "dispatch_"
-                + handler.getDeclaringClass().getSimpleName().toString()
-                + "_" + handler.getMethodName()
-                + "_" + index;
+        return "dispatch_" + handler.getDeclaringClass().getSimpleName() + "_" + handler.getMethodName() + "_" + index;
     }
 }

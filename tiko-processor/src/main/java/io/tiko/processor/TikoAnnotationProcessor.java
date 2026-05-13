@@ -4,10 +4,8 @@ import com.google.auto.service.AutoService;
 import io.tiko.EventTriggerGuard;
 import io.tiko.Scope;
 import io.tiko.annotations.*;
-import io.tiko.annotations.Configuration;
 import io.tiko.processor.generator.*;
 import io.tiko.processor.model.*;
-import io.tiko.processor.model.EventTriggerModel;
 import io.tiko.processor.util.ProcessorContext;
 import io.tiko.processor.util.TypeUtil;
 import io.tiko.processor.validation.*;
@@ -144,10 +142,7 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         } catch (Exception e) {
             processingEnv
                     .getMessager()
-                    .printMessage(
-                            Diagnostic.Kind.ERROR,
-                            "Tiko DI processing failed: " + e.getMessage() + "\n" + Arrays.toString(e.getStackTrace()));
-            e.printStackTrace();
+                    .printMessage(Diagnostic.Kind.ERROR, "Tiko DI processing failed:\n" + formatStackTrace(e));
             return false;
         }
 
@@ -704,7 +699,7 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
     private String computeContainerClassName() {
         // Create deterministic ID based on component names
         List<String> componentKeys = context.getActiveComponents().stream()
-                .map(c -> c.getComponentKey())
+                .map(ComponentModel::getComponentKey)
                 .sorted()
                 .toList();
 
@@ -713,5 +708,21 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         String suffix = Integer.toHexString(hash & 0x7FFFFFFF);
 
         return "TikoContainerImpl_" + suffix;
+    }
+
+    private static String formatStackTrace(Throwable t) {
+        var sb = new StringBuilder();
+        sb.append(t.getClass().getName());
+        if (t.getMessage() != null) {
+            sb.append(": ").append(t.getMessage());
+        }
+        for (var frame : t.getStackTrace()) {
+            sb.append("\n  at ").append(frame);
+        }
+        var cause = t.getCause();
+        if (cause != null && cause != t) {
+            sb.append("\nCaused by: ").append(formatStackTrace(cause));
+        }
+        return sb.toString();
     }
 }

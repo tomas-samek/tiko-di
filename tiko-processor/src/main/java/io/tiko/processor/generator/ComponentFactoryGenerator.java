@@ -3,6 +3,7 @@ package io.tiko.processor.generator;
 import com.palantir.javapoet.*;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
+import io.tiko.processor.util.GeneratorAnnotations;
 import io.tiko.processor.util.ProcessorContext;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -50,6 +51,7 @@ public final class ComponentFactoryGenerator {
         String factoryClassName = component.getClassName() + "Factory";
 
         TypeSpec factoryClass = TypeSpec.classBuilder(factoryClassName)
+                .addAnnotation(GeneratorAnnotations.generatedBy(ComponentFactoryGenerator.class))
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                 .addField(createContainerField())
                 .addMethod(createConstructor())

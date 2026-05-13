@@ -6,7 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
 import java.net.URI;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
@@ -14,8 +14,13 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.UUID;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class CoercersTest {
 
@@ -73,17 +78,43 @@ class CoercersTest {
         assertThat(Coercers.uuidCoercer().coerce(u.toString())).isEqualTo(u);
     }
 
-    @Test
-    void uri_path_charset_pattern_bigdecimal_zoneId_localDateTime_round_trip() {
-        assertThat(Coercers.uriCoercer().coerce("https://example.com")).isEqualTo(URI.create("https://example.com"));
-        assertThat(Coercers.pathCoercer().coerce("/tmp/foo")).isEqualTo(Path.of("/tmp/foo"));
-        assertThat(Coercers.charsetCoercer().coerce("UTF-8")).isEqualTo(Charset.forName("UTF-8"));
-        assertThat(Coercers.patternCoercer().coerce("[a-z]+").pattern())
-                .isEqualTo(Pattern.compile("[a-z]+").pattern());
-        assertThat(Coercers.bigDecimalCoercer().coerce("3.14")).isEqualTo(new BigDecimal("3.14"));
-        assertThat(Coercers.zoneIdCoercer().coerce("Europe/Prague")).isEqualTo(ZoneId.of("Europe/Prague"));
-        assertThat(Coercers.localDateTimeCoercer().coerce("2026-05-04T12:00:00"))
-                .isEqualTo(LocalDateTime.parse("2026-05-04T12:00:00"));
+    @ParameterizedTest(name = "{0}_coercer_round_trips")
+    @MethodSource("roundTripCoercers")
+    void coercer_round_trips(String name, Supplier<Object> actual, Object expected) {
+        assertThat(actual.get()).isEqualTo(expected);
+    }
+
+    static Stream<Arguments> roundTripCoercers() {
+        return Stream.of(
+                Arguments.of(
+                        "uri",
+                        (Supplier<Object>) () -> Coercers.uriCoercer().coerce("https://example.com"),
+                        URI.create("https://example.com")),
+                Arguments.of(
+                        "path",
+                        (Supplier<Object>) () -> Coercers.pathCoercer().coerce("/tmp/foo"),
+                        Path.of("/tmp/foo")),
+                Arguments.of(
+                        "charset",
+                        (Supplier<Object>) () -> Coercers.charsetCoercer().coerce("UTF-8"),
+                        StandardCharsets.UTF_8),
+                Arguments.of(
+                        "pattern",
+                        (Supplier<Object>)
+                                () -> Coercers.patternCoercer().coerce("[a-z]+").pattern(),
+                        Pattern.compile("[a-z]+").pattern()),
+                Arguments.of(
+                        "bigDecimal",
+                        (Supplier<Object>) () -> Coercers.bigDecimalCoercer().coerce("3.14"),
+                        new BigDecimal("3.14")),
+                Arguments.of(
+                        "zoneId",
+                        (Supplier<Object>) () -> Coercers.zoneIdCoercer().coerce("Europe/Prague"),
+                        ZoneId.of("Europe/Prague")),
+                Arguments.of(
+                        "localDateTime",
+                        (Supplier<Object>) () -> Coercers.localDateTimeCoercer().coerce("2026-05-04T12:00:00"),
+                        LocalDateTime.parse("2026-05-04T12:00:00")));
     }
 
     @Test

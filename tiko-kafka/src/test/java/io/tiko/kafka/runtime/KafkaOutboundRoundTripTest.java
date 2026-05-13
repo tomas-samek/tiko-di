@@ -17,7 +17,7 @@ class KafkaOutboundRoundTripTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void publishing_locally_sends_a_kafka_record_with_partition_key() throws Exception {
+    void publishing_locally_sends_a_kafka_record_with_partition_key() {
         FakeKafkaBroker broker = new FakeKafkaBroker();
 
         List<GeneratedSinkDescriptor> sinks = List.of(new GeneratedSinkDescriptor(
@@ -37,8 +37,7 @@ class KafkaOutboundRoundTripTest {
             ProducerRecord<String, byte[]> rec = produced.get(0);
             assertThat(rec.key()).isEqualTo("o-5");
 
-            OrderPlaced roundTripped =
-                    (OrderPlaced) new JsonKafkaSerializer().deserialize(rec.value(), (Class) OrderPlaced.class);
+            OrderPlaced roundTripped = new JsonKafkaSerializer().deserialize(rec.value(), OrderPlaced.class);
             assertThat(roundTripped).isEqualTo(new OrderPlaced("o-5", 21));
         }
     }

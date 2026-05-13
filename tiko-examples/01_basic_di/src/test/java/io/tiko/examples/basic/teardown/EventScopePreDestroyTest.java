@@ -20,9 +20,7 @@ class EventScopePreDestroyTest {
     void predestroy_fires_in_lifo_order_for_each_event_scoped_bean() {
         Container container = Tiko.create();
         try {
-            container.runInEventScope(() -> {
-                container.get(LifoEventA.class);
-            });
+            container.runInEventScope(() -> container.get(LifoEventA.class));
         } finally {
             container.shutdown();
         }
@@ -42,9 +40,7 @@ class EventScopePreDestroyTest {
                 .subscribe(EventEndingEvent.class, e -> endingEventIndex.set(TeardownRecorder.order.size()));
 
         try {
-            container.runInEventScope(() -> {
-                container.get(LifoEventA.class);
-            });
+            container.runInEventScope(() -> container.get(LifoEventA.class));
         } finally {
             container.shutdown();
         }

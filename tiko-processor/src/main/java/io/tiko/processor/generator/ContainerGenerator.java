@@ -7,12 +7,12 @@ import io.tiko.Scope;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
+import io.tiko.processor.util.GeneratorAnnotations;
 import io.tiko.processor.util.ProcessorContext;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import javax.lang.model.element.Modifier;
 
@@ -44,6 +44,7 @@ public final class ContainerGenerator {
         String containerClassName = context.getContainerClassName();
 
         TypeSpec.Builder containerBuilder = TypeSpec.classBuilder(containerClassName)
+                .addAnnotation(GeneratorAnnotations.generatedBy(ContainerGenerator.class))
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                 .addSuperinterface(Container.class);
 
@@ -581,10 +582,8 @@ public final class ContainerGenerator {
                             method, returnType, "eventScoped.get()", storageKey, factoryFieldName + ".create()");
                 }
             }
-            case PROTOTYPE -> {
-                // Always create new instance
+            case PROTOTYPE -> // Always create new instance
                 method.addStatement("return $L.create()", factoryFieldName);
-            }
         }
 
         return method.build();

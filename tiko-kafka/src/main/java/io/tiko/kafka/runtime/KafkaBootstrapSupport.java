@@ -110,7 +110,6 @@ public final class KafkaBootstrapSupport {
 
     // --- helpers ------------------------------------------------------------------
 
-    @SuppressWarnings("unchecked")
     private <T> EventCallback<T> wrapSinkCallback(
             GeneratedSinkDescriptor sink, KafkaSerializer serializer, ErrorHandler errorHandler) {
         return (T event) -> {
@@ -143,7 +142,6 @@ public final class KafkaBootstrapSupport {
         return result;
     }
 
-    @SuppressWarnings("unchecked")
     private static KafkaSerializer resolveSerializer(
             Class<? extends KafkaSerializer> declared, KafkaConfig config, Map<String, KafkaSerializer> named) {
         if (declared != KafkaSerializer.Default.class) {

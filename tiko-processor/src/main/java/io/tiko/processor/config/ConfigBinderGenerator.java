@@ -8,6 +8,7 @@ import io.tiko.config.internal.coercers.Coercers;
 import io.tiko.config.internal.coercers.CompositeCoercers;
 import io.tiko.config.internal.coercers.NestedRecordSupport;
 import io.tiko.config.internal.coercers.TypeCoercer;
+import io.tiko.processor.util.GeneratorAnnotations;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -161,6 +162,7 @@ public final class ConfigBinderGenerator {
                 .build();
 
         TypeSpec binderClass = TypeSpec.classBuilder(cfg.binderSimpleName())
+                .addAnnotation(GeneratorAnnotations.generatedBy(ConfigBinderGenerator.class))
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                 .addSuperinterface(ParameterizedTypeName.get(ClassName.get(ConfigBinder.class), recordType))
                 .addMethod(typeM)
@@ -304,6 +306,7 @@ public final class ConfigBinderGenerator {
                 .build();
 
         TypeSpec coercerClass = TypeSpec.classBuilder(coercerName)
+                .addAnnotation(GeneratorAnnotations.generatedBy(ConfigBinderGenerator.class))
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                 .addJavadoc("Generated nested-record coercer for $T (#17).\n", recordType)
                 .addMethod(coercerM)
@@ -321,7 +324,7 @@ public final class ConfigBinderGenerator {
     static String nestedCoercerSimpleName(TypeElement record) {
         String fqn = record.getQualifiedName().toString();
         String hash = String.format("%08x", fqn.hashCode());
-        return record.getSimpleName().toString() + "NestedCoercer_" + hash;
+        return record.getSimpleName() + "NestedCoercer_" + hash;
     }
 
     static String nestedCoercerQualifiedName(TypeElement record) {
