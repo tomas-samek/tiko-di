@@ -1,6 +1,6 @@
 # tiko-di skill
 
-This project uses **tiko-di**, a compile-time dependency injection framework for Java 17+.
+This project uses **tiko-di**, a compile-time dependency injection framework for Java 21+.
 
 ## Where to find framework documentation
 

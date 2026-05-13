@@ -10,7 +10,7 @@
     <packaging>jar</packaging>
 
     <properties>
-        <maven.compiler.release>17</maven.compiler.release>
+        <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <tiko.version>0.1.0</tiko.version>
     </properties>
@@ -59,7 +59,7 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.13.0</version>
                 <configuration>
-                    <release>17</release>
+                    <release>21</release>
                     <!-- Required for JDK 23+: annotation processing is silently skipped without it. -->
                     <proc>full</proc>
                     <annotationProcessorPaths>

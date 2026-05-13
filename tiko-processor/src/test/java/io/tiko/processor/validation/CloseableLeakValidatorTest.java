@@ -74,9 +74,9 @@ class CloseableLeakValidatorTest {
         }
     }
 
-    // Note: tests use java.io.InputStream (Closeable since JDK 1.5) rather than
-    // ExecutorService — the latter only became AutoCloseable in JDK 19, which would
-    // make these tests pass on JDK 19+ but fail on the JDK 17 baseline.
+    // Note: tests use java.io.InputStream (Closeable since JDK 1.5) as the canonical
+    // resource type. ExecutorService also works (AutoCloseable since JDK 19) but the
+    // InputStream choice keeps the fixtures readable.
 
     private static final JavaFileObject LEAKY_COMPONENT = JavaFileObjects.forSourceLines(
             "io.tiko.processor.fixtures.leaky.LeakyService",
