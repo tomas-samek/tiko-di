@@ -1,5 +1,6 @@
 package io.tiko.runtime;
 
+import io.tiko.AutoCloseFailure;
 import io.tiko.ConfigIssue;
 import io.tiko.ConfigurationFailure;
 import io.tiko.ErrorContext;
@@ -56,6 +57,13 @@ public final class DefaultErrorHandler implements ErrorHandler {
                     Level.WARNING,
                     String.format(
                             "@PreDestroy on %s threw: %s",
+                            f.component().getName(), f.cause().toString()),
+                    f.cause());
+        } else if (context instanceof AutoCloseFailure f) {
+            LoggerHolder.LOG.log(
+                    Level.WARNING,
+                    String.format(
+                            "AutoCloseable.close() on %s threw: %s",
                             f.component().getName(), f.cause().toString()),
                     f.cause());
         } else if (context instanceof ConfigurationFailure f) {
