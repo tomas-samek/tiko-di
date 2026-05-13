@@ -324,7 +324,7 @@ public final class ConfigBinderGenerator {
     static String nestedCoercerSimpleName(TypeElement record) {
         String fqn = record.getQualifiedName().toString();
         String hash = String.format("%08x", fqn.hashCode());
-        return record.getSimpleName().toString() + "NestedCoercer_" + hash;
+        return record.getSimpleName() + "NestedCoercer_" + hash;
     }
 
     static String nestedCoercerQualifiedName(TypeElement record) {

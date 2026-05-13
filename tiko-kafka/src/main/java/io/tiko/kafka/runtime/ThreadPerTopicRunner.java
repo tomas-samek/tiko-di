@@ -87,33 +87,30 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
     }
 
     private void run() {
-        try {
-            while (running.get()) {
-                ConsumerRecords<String, byte[]> records;
+        while (running.get()) {
+            ConsumerRecords<String, byte[]> records;
+            try {
+                records = consumer.poll(config.pollTimeout());
+            } catch (WakeupException wakeup) {
+                return;
+            }
+            for (ConsumerRecord<String, byte[]> r : records) {
+                TopicPartition tp = new TopicPartition(r.topic(), r.partition());
                 try {
-                    records = consumer.poll(config.pollTimeout());
-                } catch (WakeupException wakeup) {
-                    return;
-                }
-                for (ConsumerRecord<String, byte[]> r : records) {
-                    TopicPartition tp = new TopicPartition(r.topic(), r.partition());
-                    try {
-                        Object payload = serializer.deserialize(r.value(), source.payloadType());
-                        KafkaContext ctx = new KafkaContext(
-                                r.topic(), r.partition(), r.offset(), Instant.ofEpochMilli(r.timestamp()), r.headers());
-                        Object event = source.dispatcher().dispatch(container, payload, ctx);
-                        eventBus.publish(event);
-                        consumer.commitSync(Map.of(tp, new OffsetAndMetadata(r.offset() + 1)));
-                    } catch (Exception ex) {
-                        errorHandler.onError(
-                                new KafkaIngestError(r.topic(), r.partition(), r.offset(), r.headers(), ex));
-                        consumer.seek(tp, r.offset());
-                        break;
-                    }
+                    Object payload = serializer.deserialize(r.value(), source.payloadType());
+                    KafkaContext ctx = new KafkaContext(
+                            r.topic(), r.partition(), r.offset(), Instant.ofEpochMilli(r.timestamp()), r.headers());
+                    Object event = source.dispatcher().dispatch(container, payload, ctx);
+                    eventBus.publish(event);
+                    consumer.commitSync(Map.of(tp, new OffsetAndMetadata(r.offset() + 1)));
+                } catch (Exception ex) {
+                    errorHandler.onError(
+                            new KafkaIngestError(r.topic(), r.partition(), r.offset(), r.headers(), ex));
+                    consumer.seek(tp, r.offset());
+                    break;
                 }
             }
-        } finally {
-            // close is handled by stop() to ensure exactly-once close
         }
+        // close is handled by stop() to ensure exactly-once close
     }
 }

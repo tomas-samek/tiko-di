@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test;
 class KafkaEgressErrorTest {
 
     @Test
-    void sink_throw_routes_to_egress_error_and_local_handlers_still_ran() throws Exception {
+    void sink_throw_routes_to_egress_error_and_local_handlers_still_ran() {
         FakeKafkaBroker broker = new FakeKafkaBroker();
         List<ErrorContext> errors = new CopyOnWriteArrayList<>();
         TikoOptions opts = TikoOptions.builder().errorHandler(errors::add).build();

@@ -20,9 +20,7 @@ class RequestScopePreDestroyTest {
     void predestroy_fires_for_each_request_scoped_bean() {
         Container container = Tiko.create();
         try {
-            container.runInRequestScope(() -> {
-                container.get(LifoRequestA.class);
-            });
+            container.runInRequestScope(() -> container.get(LifoRequestA.class));
         } finally {
             container.shutdown();
         }
@@ -60,9 +58,7 @@ class RequestScopePreDestroyTest {
                 .subscribe(RequestEndingEvent.class, e -> endingEventIndex.set(TeardownRecorder.order.size()));
 
         try {
-            container.runInRequestScope(() -> {
-                container.get(LifoRequestA.class);
-            });
+            container.runInRequestScope(() -> container.get(LifoRequestA.class));
         } finally {
             container.shutdown();
         }

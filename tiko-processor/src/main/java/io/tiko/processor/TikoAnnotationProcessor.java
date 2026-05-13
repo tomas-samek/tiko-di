@@ -4,10 +4,8 @@ import com.google.auto.service.AutoService;
 import io.tiko.EventTriggerGuard;
 import io.tiko.Scope;
 import io.tiko.annotations.*;
-import io.tiko.annotations.Configuration;
 import io.tiko.processor.generator.*;
 import io.tiko.processor.model.*;
-import io.tiko.processor.model.EventTriggerModel;
 import io.tiko.processor.util.ProcessorContext;
 import io.tiko.processor.util.TypeUtil;
 import io.tiko.processor.validation.*;
@@ -701,7 +699,7 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
     private String computeContainerClassName() {
         // Create deterministic ID based on component names
         List<String> componentKeys = context.getActiveComponents().stream()
-                .map(c -> c.getComponentKey())
+                .map(ComponentModel::getComponentKey)
                 .sorted()
                 .toList();
 

@@ -64,7 +64,7 @@ public final class LocalEventBus implements EventBus {
                 LoggerHolder.LOG.log(
                         Level.WARNING,
                         String.format(
-                                "Programmatic event callback threw on event %s: %s", eventType.getName(), e.toString()),
+                                "Programmatic event callback threw on event %s: %s", eventType.getName(), e),
                         e);
             }
         }

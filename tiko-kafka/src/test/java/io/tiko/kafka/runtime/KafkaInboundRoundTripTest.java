@@ -22,7 +22,7 @@ import org.junit.jupiter.api.Test;
 class KafkaInboundRoundTripTest {
 
     @Test
-    void payload_round_trips_to_local_handler() throws Exception {
+    void payload_round_trips_to_local_handler() {
         FakeKafkaBroker broker = new FakeKafkaBroker();
 
         List<GeneratedSourceDescriptor> sources = List.of(new GeneratedSourceDescriptor(

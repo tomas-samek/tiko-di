@@ -22,7 +22,7 @@ import org.junit.jupiter.api.Test;
 class KafkaIngestErrorTest {
 
     @Test
-    void bridge_throws_then_seek_back_replays_and_succeeds() throws Exception {
+    void bridge_throws_then_seek_back_replays_and_succeeds() {
         FakeKafkaBroker broker = new FakeKafkaBroker();
         List<ErrorContext> errors = new CopyOnWriteArrayList<>();
         TikoOptions opts = TikoOptions.builder().errorHandler(errors::add).build();

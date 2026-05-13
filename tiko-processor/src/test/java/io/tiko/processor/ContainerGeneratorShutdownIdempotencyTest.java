@@ -1,6 +1,5 @@
 package io.tiko.processor;
 
-import static com.google.testing.compile.CompilationSubject.assertThat;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.google.testing.compile.Compilation;

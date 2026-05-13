@@ -128,7 +128,7 @@ public final class EventRegistryGenerator {
         ClassName eventClass = ClassName.bestGuess(handler.getEventTypeName());
         ClassName declaringClass = ClassName.bestGuess(
                 handler.getDeclaringClass().getQualifiedName().toString());
-        String getterName = "get" + handler.getDeclaringClass().getSimpleName().toString();
+        String getterName = "get" + handler.getDeclaringClass().getSimpleName();
 
         ClassName errorHandler = ClassName.get("io.tiko", "ErrorHandler");
         ClassName eventHandlerError = ClassName.get("io.tiko", "EventHandlerError");
@@ -333,7 +333,7 @@ public final class EventRegistryGenerator {
         // Include both class and method names for readability when debugging generated code,
         // and an index so two methods with the same name on different classes don't collide.
         return "dispatch_"
-                + handler.getDeclaringClass().getSimpleName().toString()
+                + handler.getDeclaringClass().getSimpleName()
                 + "_" + handler.getMethodName()
                 + "_" + index;
     }

@@ -32,7 +32,6 @@ public final class YamlLoader {
                 "YAML root must be a mapping; got " + loaded.getClass().getSimpleName());
     }
 
-    @SuppressWarnings("unchecked")
     private static Map<String, Object> stringKeyed(Map<Object, Object> in) {
         Map<String, Object> out = new LinkedHashMap<>(in.size());
         for (Map.Entry<Object, Object> e : in.entrySet()) {

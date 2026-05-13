@@ -1,6 +1,5 @@
 package io.tiko.processor.config;
 
-import static com.google.testing.compile.CompilationSubject.assertThat;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.google.testing.compile.Compilation;
@@ -158,7 +157,7 @@ class ConfigBinderGeneratorTest {
     }
 
     @Test
-    void deeply_nested_records_emit_cascaded_coercers() throws IOException {
+    void deeply_nested_records_emit_cascaded_coercers() {
         JavaFileObject outer = JavaFileObjects.forSourceLines(
                 "io.example.AppConfig",
                 "package io.example;",
@@ -182,7 +181,7 @@ class ConfigBinderGeneratorTest {
     }
 
     @Test
-    void same_nested_record_used_in_two_configs_emits_one_coercer() throws IOException {
+    void same_nested_record_used_in_two_configs_emits_one_coercer() {
         JavaFileObject cfgA = JavaFileObjects.forSourceLines(
                 "io.example.A",
                 "package io.example;",

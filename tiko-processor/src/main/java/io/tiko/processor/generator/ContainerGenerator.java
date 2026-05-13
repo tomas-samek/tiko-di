@@ -13,7 +13,6 @@ import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import javax.lang.model.element.Modifier;
 
@@ -583,10 +582,8 @@ public final class ContainerGenerator {
                             method, returnType, "eventScoped.get()", storageKey, factoryFieldName + ".create()");
                 }
             }
-            case PROTOTYPE -> {
-                // Always create new instance
+            case PROTOTYPE -> // Always create new instance
                 method.addStatement("return $L.create()", factoryFieldName);
-            }
         }
 
         return method.build();
