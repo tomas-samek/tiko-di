@@ -3,6 +3,8 @@ package io.tiko.runtime;
 import io.tiko.ErrorContext;
 import io.tiko.ErrorHandler;
 import io.tiko.EventHandlerError;
+import io.tiko.PostConstructFailure;
+import io.tiko.PreDestroyFailure;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -40,6 +42,20 @@ public final class DefaultErrorHandler implements ErrorHandler {
                             e.handler().eventType().getName(),
                             e.cause().toString()),
                     e.cause());
+        } else if (context instanceof PostConstructFailure f) {
+            LoggerHolder.LOG.log(
+                    Level.WARNING,
+                    String.format(
+                            "@PostConstruct on %s threw: %s",
+                            f.component().getName(), f.cause().toString()),
+                    f.cause());
+        } else if (context instanceof PreDestroyFailure f) {
+            LoggerHolder.LOG.log(
+                    Level.WARNING,
+                    String.format(
+                            "@PreDestroy on %s threw: %s",
+                            f.component().getName(), f.cause().toString()),
+                    f.cause());
         } else {
             // Forward-compatible: future ErrorContext subtypes log a generic message
             // until this default handler is updated to match the new permits.
