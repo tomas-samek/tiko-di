@@ -1,5 +1,6 @@
 package io.tiko.config.runtime;
 
+import io.tiko.ConfigIssueCode;
 import io.tiko.ConfigSource;
 import io.tiko.config.BindContext;
 import io.tiko.config.ConfigBinder;
@@ -46,9 +47,11 @@ public final class ConfigBootstrap {
         for (Map.Entry<String, List<Class<?>>> e : prefixToTypes.entrySet()) {
             if (e.getValue().size() > 1) {
                 String types = e.getValue().stream().map(Class::getName).collect(Collectors.joining(", "));
-                ctx.report("duplicate @Configuration prefix '" + e.getKey()
-                        + "' declared by: " + types
-                        + ". Each prefix must be unique across all modules.");
+                ctx.report(
+                        ConfigIssueCode.DUPLICATE_PREFIX,
+                        "duplicate @Configuration prefix '" + e.getKey()
+                                + "' declared by: " + types
+                                + ". Each prefix must be unique across all modules.");
             }
         }
 
@@ -58,7 +61,7 @@ public final class ConfigBootstrap {
             if (!claimed.contains(k)) {
                 String suggestion = nearest(k, claimed);
                 String hint = suggestion != null ? " Did you mean '" + suggestion + "'?" : "";
-                ctx.report("unknown top-level section '" + k + "'." + hint);
+                ctx.report(ConfigIssueCode.UNKNOWN_SECTION, "unknown top-level section '" + k + "'." + hint);
             }
         }
 
@@ -71,7 +74,7 @@ public final class ConfigBootstrap {
 
         // 5. Throw if anything accumulated
         if (ctx.hasErrors()) {
-            throw new ConfigValidationException(sourceLabel, ctx.errors());
+            throw new ConfigValidationException(sourceLabel, ctx.issues());
         }
         return bound;
     }

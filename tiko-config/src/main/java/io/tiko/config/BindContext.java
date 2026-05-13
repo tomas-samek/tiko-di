@@ -1,6 +1,8 @@
 // tiko-config/src/main/java/io/tiko/config/BindContext.java
 package io.tiko.config;
 
+import io.tiko.ConfigIssue;
+import io.tiko.ConfigIssueCode;
 import io.tiko.config.internal.ConfigError;
 import io.tiko.config.internal.coercers.CoercionException;
 import io.tiko.config.internal.coercers.TypeCoercer;
@@ -29,13 +31,13 @@ public final class BindContext {
     // -- Error accumulation ------------------------------------------------
 
     /** Reports an error against a known YAML location. */
-    public void reportAt(int line, int column, String message) {
-        errors.add(ConfigError.at(source, line, column, message));
+    public void reportAt(ConfigIssueCode code, int line, int column, String message) {
+        errors.add(ConfigError.at(code, source, line, column, message));
     }
 
     /** Reports an error with no specific location. */
-    public void report(String message) {
-        errors.add(ConfigError.unanchored(message));
+    public void report(ConfigIssueCode code, String message) {
+        errors.add(ConfigError.unanchored(code, message));
     }
 
     public boolean hasErrors() {
@@ -44,6 +46,22 @@ public final class BindContext {
 
     public List<ConfigError> errors() {
         return List.copyOf(errors);
+    }
+
+    /**
+     * Returns the accumulated errors as public {@link ConfigIssue} records — anchor info
+     * (source/line/column) folded into each issue's description string. Used by
+     * {@link ConfigValidationException} and by {@code Tiko.create(...)} to populate the
+     * {@code ConfigurationFailure} ErrorContext.
+     */
+    public List<ConfigIssue> issues() {
+        List<ConfigIssue> out = new ArrayList<>(errors.size());
+        for (ConfigError e : errors) {
+            String desc =
+                    e.line() > 0 ? e.source() + ":" + e.line() + ":" + e.column() + " " + e.message() : e.message();
+            out.add(new ConfigIssue(e.code(), desc));
+        }
+        return List.copyOf(out);
     }
 
     public String source() {
@@ -61,12 +79,14 @@ public final class BindContext {
     public Map<String, Object> requireSection(Map<String, Object> root, String key) {
         Object v = root.get(key);
         if (v == null) {
-            report("missing required section '" + key + "'");
+            report(ConfigIssueCode.MISSING_SECTION, "missing required section '" + key + "'");
             return new LinkedHashMap<>();
         }
         if (!(v instanceof Map<?, ?>)) {
-            report("expected section '" + key + "' to be a mapping, got "
-                    + v.getClass().getSimpleName());
+            report(
+                    ConfigIssueCode.INVALID_VALUE,
+                    "expected section '" + key + "' to be a mapping, got "
+                            + v.getClass().getSimpleName());
             return new LinkedHashMap<>();
         }
         return new LinkedHashMap<>((Map<String, Object>) v);
@@ -84,14 +104,14 @@ public final class BindContext {
     public <T> T requireScalar(
             Map<String, Object> node, String key, String fullPath, TypeCoercer<T> coercer, T fallback) {
         if (!node.containsKey(key)) {
-            report(fullPath + " is required but missing");
+            report(ConfigIssueCode.MISSING_KEY, fullPath + " is required but missing");
             return fallback;
         }
         Object raw = node.remove(key);
         try {
             return coercer.coerce(raw);
         } catch (CoercionException e) {
-            report(fullPath + " " + e.getMessage());
+            report(ConfigIssueCode.INVALID_VALUE, fullPath + " " + e.getMessage());
             return fallback;
         }
     }
@@ -108,7 +128,7 @@ public final class BindContext {
         try {
             return coercer.coerce(raw);
         } catch (CoercionException e) {
-            report(fullPath + " " + e.getMessage());
+            report(ConfigIssueCode.INVALID_VALUE, fullPath + " " + e.getMessage());
             return defaultValue;
         }
     }
@@ -124,7 +144,7 @@ public final class BindContext {
         try {
             return Optional.of(coercer.coerce(raw));
         } catch (CoercionException e) {
-            report(fullPath + " " + e.getMessage());
+            report(ConfigIssueCode.INVALID_VALUE, fullPath + " " + e.getMessage());
             return Optional.empty();
         }
     }
@@ -138,7 +158,7 @@ public final class BindContext {
     public void checkUnknownKeys(Map<String, Object> node, String sectionPath, Set<String> known) {
         for (String k : node.keySet()) {
             if (!known.contains(k)) {
-                report("unknown key '" + sectionPath + "." + k + "'");
+                report(ConfigIssueCode.UNKNOWN_KEY, "unknown key '" + sectionPath + "." + k + "'");
             }
         }
     }
