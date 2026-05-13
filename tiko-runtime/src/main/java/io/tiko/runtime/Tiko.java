@@ -1,8 +1,6 @@
 package io.tiko.runtime;
 
-import io.tiko.ConfigIssue;
 import io.tiko.ConfigSource;
-import io.tiko.ConfigurationFailure;
 import io.tiko.Container;
 import io.tiko.ErrorHandler;
 import io.tiko.EventBus;
@@ -197,26 +195,21 @@ public final class Tiko {
         }
 
         // Delegate to ConfigBootstrap via reflection (avoids a tiko-runtime → tiko-config
-        // compile dependency). Validation failures are unwrapped from InvocationTargetException
-        // and routed through the configured ErrorHandler before being re-thrown.
+        // compile dependency). ConfigBootstrap.bind itself routes a single
+        // ConfigurationFailure through the supplied ErrorHandler before throwing, so this
+        // call site doesn't need to unwrap reflective exceptions or detect specific cause
+        // types — it just surfaces whatever the underlying call threw.
         Class<?> bootstrapClass = Class.forName("io.tiko.config.runtime.ConfigBootstrap", true, cl);
         try {
             @SuppressWarnings("unchecked")
             Map<Class<?>, Object> result = (Map<Class<?>, Object>) bootstrapClass
-                    .getMethod("bind", String.class, ConfigSource.class, List.class)
-                    .invoke(null, "config", effective, binders);
+                    .getMethod("bind", String.class, ConfigSource.class, List.class, ErrorHandler.class)
+                    .invoke(null, "config", effective, binders, errorHandler);
             return result;
         } catch (java.lang.reflect.InvocationTargetException ite) {
+            // Surface the underlying validation exception (or any other runtime error)
+            // directly so callers see ConfigValidationException, not the reflective wrap.
             Throwable cause = ite.getCause();
-            if (cause != null
-                    && "io.tiko.config.ConfigValidationException"
-                            .equals(cause.getClass().getName())) {
-                @SuppressWarnings("unchecked")
-                List<ConfigIssue> issues =
-                        (List<ConfigIssue>) cause.getClass().getMethod("issues").invoke(cause);
-                errorHandler.onError(new ConfigurationFailure(issues, cause));
-                throw (RuntimeException) cause;
-            }
             if (cause instanceof RuntimeException re) throw re;
             if (cause instanceof Error err) throw err;
             throw ite;
