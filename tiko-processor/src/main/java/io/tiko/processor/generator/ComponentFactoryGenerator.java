@@ -142,9 +142,19 @@ public final class ComponentFactoryGenerator {
             methodBuilder.addStatement("$T instance = new $T($L)", componentClass, componentClass, params);
         }
 
-        // Call @PostConstruct methods
+        // Call @PostConstruct methods. Failures route through ErrorHandler before re-throwing
+        // so observability sees the lifecycle hook failure; container start / get() still halts
+        // as before (PostConstructFailure is emitted, then the original throwable propagates).
         for (ExecutableElement postConstruct : component.getPostConstructMethods()) {
+            methodBuilder.beginControlFlow("try");
             methodBuilder.addStatement("instance.$L()", postConstruct.getSimpleName());
+            methodBuilder.nextControlFlow("catch ($T | $T __t)", RuntimeException.class, Error.class);
+            methodBuilder.addStatement(
+                    "container.getErrorHandler().onError(new $T($T.class, __t))",
+                    ClassName.get("io.tiko", "PostConstructFailure"),
+                    componentClass);
+            methodBuilder.addStatement("throw __t");
+            methodBuilder.endControlFlow();
         }
 
         methodBuilder.addStatement("return instance");
