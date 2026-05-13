@@ -332,9 +332,6 @@ public final class EventRegistryGenerator {
     private static String dispatcherName(EventHandlerModel handler, int index) {
         // Include both class and method names for readability when debugging generated code,
         // and an index so two methods with the same name on different classes don't collide.
-        return "dispatch_"
-                + handler.getDeclaringClass().getSimpleName()
-                + "_" + handler.getMethodName()
-                + "_" + index;
+        return "dispatch_" + handler.getDeclaringClass().getSimpleName() + "_" + handler.getMethodName() + "_" + index;
     }
 }

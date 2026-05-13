@@ -104,8 +104,7 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
                     eventBus.publish(event);
                     consumer.commitSync(Map.of(tp, new OffsetAndMetadata(r.offset() + 1)));
                 } catch (Exception ex) {
-                    errorHandler.onError(
-                            new KafkaIngestError(r.topic(), r.partition(), r.offset(), r.headers(), ex));
+                    errorHandler.onError(new KafkaIngestError(r.topic(), r.partition(), r.offset(), r.headers(), ex));
                     consumer.seek(tp, r.offset());
                     break;
                 }

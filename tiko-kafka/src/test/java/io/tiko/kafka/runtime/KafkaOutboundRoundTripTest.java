@@ -37,8 +37,7 @@ class KafkaOutboundRoundTripTest {
             ProducerRecord<String, byte[]> rec = produced.get(0);
             assertThat(rec.key()).isEqualTo("o-5");
 
-            OrderPlaced roundTripped =
-                new JsonKafkaSerializer().deserialize(rec.value(), OrderPlaced.class);
+            OrderPlaced roundTripped = new JsonKafkaSerializer().deserialize(rec.value(), OrderPlaced.class);
             assertThat(roundTripped).isEqualTo(new OrderPlaced("o-5", 21));
         }
     }

@@ -126,8 +126,7 @@ public class Main {
                 System.out.println("    2. Handler validates -> returns ValidationResult");
                 System.out.println("    3. ValidationResult triggers next handler");
                 System.out.println("    4. Handler processes payment -> returns PaymentProcessedEvent");
-                System.out.println(
-                        "    5. Origin chain: [OrderCreatedEvent, ValidationResult, PaymentProcessedEvent]");
+                System.out.println("    5. Origin chain: [OrderCreatedEvent, ValidationResult, PaymentProcessedEvent]");
             }));
 
             System.out.println("\n7. AUDIT LOG");

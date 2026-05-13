@@ -6,7 +6,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
 import java.net.URI;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -98,7 +97,7 @@ class CoercersTest {
                 Arguments.of(
                         "charset",
                         (Supplier<Object>) () -> Coercers.charsetCoercer().coerce("UTF-8"),
-                    StandardCharsets.UTF_8),
+                        StandardCharsets.UTF_8),
                 Arguments.of(
                         "pattern",
                         (Supplier<Object>)
