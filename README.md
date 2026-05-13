@@ -1,9 +1,9 @@
 # Tiko DI
 
-> A modern, compile-time dependency injection framework for Java 17+ with event-driven architecture
+> A modern, compile-time dependency injection framework for Java 21+ with event-driven architecture
 
 [![Build](https://github.com/tomas-samek/tiko-di/actions/workflows/maven.yml/badge.svg?branch=main)](https://github.com/tomas-samek/tiko-di/actions/workflows/maven.yml)
-[![Java](https://img.shields.io/badge/Java-17%20%7C%2021%20%7C%2025%20%7C%2026-blue.svg)](https://www.oracle.com/java/)
+[![Java](https://img.shields.io/badge/Java-21%20%7C%2025%20%7C%2026-blue.svg)](https://www.oracle.com/java/)
 [![Maven](https://img.shields.io/badge/Maven-3.8+-red.svg)](https://maven.apache.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -219,7 +219,7 @@ mvn clean install -DskipTests  # build without tests
 mvn clean install -pl tiko-api # build specific module
 ```
 
-Requires Java 17+ and Maven 3.8+.
+Requires Java 21+ and Maven 3.8+.
 
 ## Philosophy
 
@@ -263,4 +263,4 @@ Project: <https://github.com/tomas-samek/tiko-di>
 
 ---
 
-**Tiko** — Compile-time dependency injection for Java 17+, with first-class event handling.
+**Tiko** — Compile-time dependency injection for Java 21+, with first-class event handling.
