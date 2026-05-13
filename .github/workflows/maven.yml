@@ -52,5 +52,12 @@ jobs:
           java-version: ${{ matrix.java }}
           distribution: 'temurin'
           cache: maven
+      # Two-step: install all reactor jars first (no tests, no integTest profile),
+      # then run the IT against the populated local repo. tiko-kafka's integTest
+      # profile references tiko-kafka-processor on its annotation processor path,
+      # but the processor builds AFTER tiko-kafka in the reactor — so the jar
+      # must already be in ~/.m2 by the time tiko-kafka's testCompile runs.
+      - name: Install reactor artifacts
+        run: mvn -B -DskipTests install --file pom.xml
       - name: Run integration tests
         run: mvn -B verify -P integTest --file pom.xml
