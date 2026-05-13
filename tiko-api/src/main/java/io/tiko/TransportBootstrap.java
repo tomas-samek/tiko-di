@@ -28,6 +28,18 @@ public interface TransportBootstrap {
     /**
      * Wire transport-specific subscriptions / launch consumer threads. Called once
      * after {@code container.start()} returns.
+     *
+     * <p><strong>Must return promptly.</strong> Any blocking work — network IO,
+     * partition assignment, handshake — belongs on a background thread the
+     * implementation owns. The runtime calls {@code start} on the caller's
+     * {@code Tiko.create(...)} thread; time spent here lengthens container startup
+     * one-for-one. {@code tiko-kafka} spawns its consumer threads and returns
+     * immediately; user implementations should follow the same pattern.
+     *
+     * <p>In particular, any in-memory subscription on the shared {@link EventBus}
+     * (typically a {@code @KafkaSink}-style callback) <em>must</em> be registered
+     * before {@code start} returns. The local bus has no buffering: events
+     * published while a sink is not yet subscribed are dropped silently.
      */
     void start(Container container);
 
