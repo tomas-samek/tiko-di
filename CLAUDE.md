@@ -352,17 +352,104 @@ Suggested fixes:
 
 ### Java 17+ Feature Usage
 
-- **Records** - For immutable DTOs, configuration, metadata
-- **Sealed classes** - For scope hierarchies, injection point types
-- **Pattern matching** - For clean switch statements in processor
-- **Text blocks** - For code generation templates
+- **Records** — for immutable DTOs, descriptors, lifecycle events, error contexts.
+- **Sealed classes / interfaces** — for closed type hierarchies (e.g. `ErrorContext`
+  + non-sealed `TransportError` escape hatch).
+- **Pattern matching for `instanceof`** — wherever a downcast follows a type check.
+  No `if (x instanceof Foo) { Foo f = (Foo) x; ... }` patterns.
+- **Switch expressions** — arrow syntax for non-trivial dispatch.
+- **Text blocks** — for multi-line strings, especially in code-generation templates
+  and diagnostic messages.
+- **`var` for local variables** — prefer `var` when the right-hand side makes the
+  type obvious (constructors, static factories, named getters returning typed
+  results). Don't use `var` when the type isn't visible at the call site. Fields,
+  parameters, and return types stay explicit (the language requires it).
+- **Enum constants over string `.name()`** — compare
+  `getKind() == ElementKind.RECORD_COMPONENT`, never
+  `getKind().name().equals("RECORD_COMPONENT")`. Applies to any enum.
+- **For-loops vs. Streams.** For-loops are correct when: the body throws checked
+  exceptions (Stream APIs can't propagate them cleanly), the loop has side effects
+  on a shared builder, recursion with early-return is needed, or reverse iteration
+  / explicit indexing matters. Streams are correct for pure
+  filter/map/reduce/collect pipelines.
+
+### Annotation Retention
+
+- Annotations the processor reads are `RetentionPolicy.SOURCE`. There is no good
+  reason for a compile-time concern to leak into runtime bytecode.
+- `@PostConstruct` and `@PreDestroy` are `RUNTIME` because the container invokes
+  them via generated code at runtime — that is the bar for keeping `RUNTIME`.
+- When adding a new annotation, audit it: if the bytecode doesn't read it, it must
+  be `SOURCE`.
+
+### Logging in Framework Code
+
+- All framework output goes through `java.util.logging.Logger`. Never
+  `System.err.println` or `e.printStackTrace()` in framework or generated code.
+- Default namespace: `io.tiko.events`, or a per-subsystem name like
+  `io.tiko.config`.
+- Use the lazy-holder pattern to defer `LogManager` init cost on cold start:
+  ```java
+  private static final class LoggerHolder {
+      static final Logger LOG = Logger.getLogger("io.tiko.events");
+  }
+  ```
+- Annotation processor failures format their stack via
+  `TikoAnnotationProcessor.formatStackTrace(Throwable)` (multi-line `\n  at …`
+  with cause chain). Do not embed `Arrays.toString(e.getStackTrace())` in
+  messager messages.
+
+### Generated Code Markings
+
+Every top-level type emitted by an annotation processor carries
+`@javax.annotation.processing.Generated(...)`. Use the shared helper
+`GeneratorAnnotations.generatedBy(GeneratorClass.class)` (in
+`tiko-processor/util`). This lets IDEs grey out generated sources and coverage
+tools exclude them.
+
+### Interface Default Methods
+
+Default methods on `tiko-api` interfaces are one-liners — typically a delegation
+to another method on the same interface, or a return of a singleton instance.
+Executable fallback logic (e.g. a JUL-backed error handler) goes in a
+package-private named class (see `FallbackErrorHandler`), not inline in the
+interface body. Keeps the API surface free of implementation.
+
+### YAML Loading
+
+`Yaml` instances must be constructed with an explicit `SafeConstructor`, even
+though SnakeYAML 2.x's default constructor is already safe today. Spelling out
+the safe-load intent makes it a code-level invariant rather than a
+version-pinning one.
+
+### Method Length
+
+Methods longer than ~50 LOC that mix multiple distinct concerns (e.g. reading
+three resources, decoding plus validating, parsing plus dispatching) should be
+split into private helpers along concern boundaries. Helpers should be named for
+what they do, not where they're called from.
 
 ### Testing Strategy
 
-- Unit tests for annotation processor logic
-- Integration tests with actual `@Component` classes
-- Test both valid and invalid scenarios
-- Verify error messages are helpful
+- **Framework: JUnit 5 only.** No JUnit 4, no mixing. AssertJ for assertions
+  (no Hamcrest, no JUnit's `Assertions`).
+- **Naming:** `xxxTest` for unit tests, `xxxIT` for integration tests (Failsafe
+  picks up `*IT`).
+- **No `@Disabled` tests.** Fix or delete.
+- **No bare `Thread.sleep`.** Either remove if the assertion is trivially
+  satisfied (e.g. `>= Duration.ZERO`), or use Awaitility:
+  `await().atMost(...).until(...)` for condition polls,
+  `await().pollDelay(...).until(() -> true)` for intentional pauses where no
+  observable signal exists.
+- **Parameterize multi-assertion methods.** Multiple `assertThat` calls in one
+  test body covering distinct cases → `@ParameterizedTest` + `@MethodSource`
+  returning `Arguments.of(name, ...)` so failures report which row failed.
+- **Annotation-processor coverage:** use Google's `compile-testing` to compile
+  sample sources and assert on generated output. Negative paths (invalid scopes,
+  missing deps, circular deps, bad config) need explicit tests.
+- **No test side effects bleed across tests.** Reset system properties; use
+  `@TempDir` for filesystem fixtures; no ThreadLocal contamination.
+- **Verify error messages are helpful** — see "Error Message Format" above.
 
 ### Issue Writing
 
