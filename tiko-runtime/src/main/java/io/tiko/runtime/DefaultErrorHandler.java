@@ -1,5 +1,7 @@
 package io.tiko.runtime;
 
+import io.tiko.ConfigIssue;
+import io.tiko.ConfigurationFailure;
 import io.tiko.ErrorContext;
 import io.tiko.ErrorHandler;
 import io.tiko.EventHandlerError;
@@ -56,6 +58,12 @@ public final class DefaultErrorHandler implements ErrorHandler {
                             "@PreDestroy on %s threw: %s",
                             f.component().getName(), f.cause().toString()),
                     f.cause());
+        } else if (context instanceof ConfigurationFailure f) {
+            // One log line per issue at WARNING — keep them grepable / metric-friendly.
+            for (ConfigIssue issue : f.issues()) {
+                LoggerHolder.LOG.log(
+                        Level.WARNING, String.format("@Configuration [%s] %s", issue.code(), issue.description()));
+            }
         } else {
             // Forward-compatible: future ErrorContext subtypes log a generic message
             // until this default handler is updated to match the new permits.
