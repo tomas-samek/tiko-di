@@ -11,7 +11,6 @@ import io.tiko.events.RequestEndingEvent;
 import io.tiko.events.RequestStartedEvent;
 import io.tiko.runtime.Tiko;
 import java.time.Duration;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class LifecycleEventsTest {
@@ -34,13 +33,8 @@ class LifecycleEventsTest {
         LifecycleRecorder recorder;
         try (Container container = Tiko.create()) {
             recorder = container.get(LifecycleRecorder.class);
-            // Sleep briefly so uptime is measurable
-            try {
-                Thread.sleep(5);
-            } catch (InterruptedException ignored) {
-            }
         }
-        ApplicationEndingEvent ending = recorder.getEvents().stream()
+        var ending = recorder.getEvents().stream()
                 .filter(ApplicationEndingEvent.class::isInstance)
                 .map(ApplicationEndingEvent.class::cast)
                 .findFirst()
@@ -52,24 +46,19 @@ class LifecycleEventsTest {
     @Test
     void requestScope_publishesStartAndEndingWithSameRequestIdAndDuration() {
         try (Container container = Tiko.create()) {
-            LifecycleRecorder recorder = container.get(LifecycleRecorder.class);
-            int before = recorder.getEvents().size();
+            var recorder = container.get(LifecycleRecorder.class);
+            var before = recorder.getEvents().size();
 
-            container.runInRequestScope(() -> {
-                try {
-                    Thread.sleep(2);
-                } catch (InterruptedException ignored) {
-                }
-            });
+            container.runInRequestScope(() -> {});
 
-            List<Object> after =
+            var after =
                     recorder.getEvents().subList(before, recorder.getEvents().size());
-            RequestStartedEvent started = after.stream()
+            var started = after.stream()
                     .filter(RequestStartedEvent.class::isInstance)
                     .map(RequestStartedEvent.class::cast)
                     .findFirst()
                     .orElseThrow();
-            RequestEndingEvent ending = after.stream()
+            var ending = after.stream()
                     .filter(RequestEndingEvent.class::isInstance)
                     .map(RequestEndingEvent.class::cast)
                     .findFirst()
@@ -85,13 +74,13 @@ class LifecycleEventsTest {
     @Test
     void supplyInRequestScope_publishesLifecycleEvents() {
         try (Container container = Tiko.create()) {
-            LifecycleRecorder recorder = container.get(LifecycleRecorder.class);
-            int before = recorder.getEvents().size();
+            var recorder = container.get(LifecycleRecorder.class);
+            var before = recorder.getEvents().size();
 
-            String result = container.supplyInRequestScope(() -> "ok");
+            var result = container.supplyInRequestScope(() -> "ok");
             assertThat(result).isEqualTo("ok");
 
-            List<Object> after =
+            var after =
                     recorder.getEvents().subList(before, recorder.getEvents().size());
             assertThat(after).hasAtLeastOneElementOfType(RequestStartedEvent.class);
             assertThat(after).hasAtLeastOneElementOfType(RequestEndingEvent.class);
@@ -101,24 +90,19 @@ class LifecycleEventsTest {
     @Test
     void eventScope_publishesStartAndEndingWithSameEventIdAndDuration() {
         try (Container container = Tiko.create()) {
-            LifecycleRecorder recorder = container.get(LifecycleRecorder.class);
-            int before = recorder.getEvents().size();
+            var recorder = container.get(LifecycleRecorder.class);
+            var before = recorder.getEvents().size();
 
-            container.runInEventScope(() -> {
-                try {
-                    Thread.sleep(2);
-                } catch (InterruptedException ignored) {
-                }
-            });
+            container.runInEventScope(() -> {});
 
-            List<Object> after =
+            var after =
                     recorder.getEvents().subList(before, recorder.getEvents().size());
-            EventStartedEvent started = after.stream()
+            var started = after.stream()
                     .filter(EventStartedEvent.class::isInstance)
                     .map(EventStartedEvent.class::cast)
                     .findFirst()
                     .orElseThrow();
-            EventEndingEvent ending = after.stream()
+            var ending = after.stream()
                     .filter(EventEndingEvent.class::isInstance)
                     .map(EventEndingEvent.class::cast)
                     .findFirst()
@@ -134,13 +118,13 @@ class LifecycleEventsTest {
     @Test
     void supplyInEventScope_publishesLifecycleEvents() {
         try (Container container = Tiko.create()) {
-            LifecycleRecorder recorder = container.get(LifecycleRecorder.class);
-            int before = recorder.getEvents().size();
+            var recorder = container.get(LifecycleRecorder.class);
+            var before = recorder.getEvents().size();
 
-            Integer result = container.supplyInEventScope(() -> 42);
+            var result = container.supplyInEventScope(() -> 42);
             assertThat(result).isEqualTo(42);
 
-            List<Object> after =
+            var after =
                     recorder.getEvents().subList(before, recorder.getEvents().size());
             assertThat(after).hasAtLeastOneElementOfType(EventStartedEvent.class);
             assertThat(after).hasAtLeastOneElementOfType(EventEndingEvent.class);
@@ -150,12 +134,12 @@ class LifecycleEventsTest {
     @Test
     void nestedRequestAndEventScopes_publishLifecycleEventsInOrder() {
         try (Container container = Tiko.create()) {
-            LifecycleRecorder recorder = container.get(LifecycleRecorder.class);
-            int before = recorder.getEvents().size();
+            var recorder = container.get(LifecycleRecorder.class);
+            var before = recorder.getEvents().size();
 
             container.runInRequestScope(() -> container.runInEventScope(() -> {}));
 
-            List<Object> after =
+            var after =
                     recorder.getEvents().subList(before, recorder.getEvents().size());
             // Expected order: RequestStarted, EventStarted, EventEnding, RequestEnding
             assertThat(after).hasSize(4);
