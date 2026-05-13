@@ -34,3 +34,27 @@ jobs:
           cache: maven
       - name: Build with Maven
         run: mvn -B package --file pom.xml
+
+  integration-test:
+    name: Integration Tests (JDK ${{ matrix.java }}, Docker / Testcontainers)
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        java: [ '17', '26' ]
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: 'temurin'
+          cache: maven
+      # `install` (not `verify`) so the archetype IT — which spawns a sub-Maven
+      # build that resolves `io.tiko:tiko-bom` from the local repo — sees the
+      # parent BOM. With `verify` only, nothing is installed and the archetype IT
+      # fails to find tiko-bom in central.
+      - name: Run integration tests
+        run: mvn -B install --file pom.xml

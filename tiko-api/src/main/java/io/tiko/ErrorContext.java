@@ -8,17 +8,21 @@ package io.tiko;
  * public void onError(ErrorContext ctx) {
  *     switch (ctx) {
  *         case EventHandlerError e -> metrics.eventHandlerError(e.handler());
+ *         case TransportError t    -> metrics.transportError(t.transport(), t.cause());
  *     }
  * }
  * }</pre>
  *
- * <p>Only {@link EventHandlerError} is permitted in this release. Future framework-error
- * categories (lifecycle, configuration, scope) will add new permits in follow-up PRs.
- * Adding a permit is intentionally a compile-time-loud breaking change for users with
- * exhaustive {@code switch} expressions — when a new category appears, callers are told
- * to handle it.
+ * <p>{@link EventHandlerError} is in-process / handler-side errors raised by the local
+ * {@code EventBus}. {@link TransportError} is the non-sealed permit every transport
+ * module ({@code tiko-kafka}, future {@code tiko-http}, ...) extends to surface its own
+ * concrete error types without forcing a tiko-api update.
+ *
+ * <p>Adding a new top-level permit here is intentionally a compile-time-loud breaking
+ * change for users with exhaustive {@code switch} expressions — they are told to handle
+ * the new category.
  */
-public sealed interface ErrorContext permits EventHandlerError {
+public sealed interface ErrorContext permits EventHandlerError, TransportError {
 
     /**
      * The throwable that caused this error context to be raised.

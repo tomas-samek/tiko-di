@@ -25,6 +25,7 @@
         <module>05_multi_module</module>
         <module>06_config_multi_module</module>
         <module>07_async_start</module>
+        <module>08_kafka_order_warehouse</module>
     </modules>
 
     <!--

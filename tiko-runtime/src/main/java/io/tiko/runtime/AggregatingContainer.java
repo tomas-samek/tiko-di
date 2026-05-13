@@ -253,6 +253,11 @@ public final class AggregatingContainer implements Container {
     }
 
     @Override
+    public ErrorHandler getErrorHandler() {
+        return errorHandler;
+    }
+
+    @Override
     public EventBus getEventBus() {
         return sharedEventBus;
     }

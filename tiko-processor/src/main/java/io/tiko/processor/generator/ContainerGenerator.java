@@ -1322,13 +1322,14 @@ public final class ContainerGenerator {
     }
 
     /**
-     * Creates getErrorHandler method — public accessor on the generated impl class for the
-     * generated dispatcher to invoke. Not added to the Container interface (intentionally
-     * not user-facing).
+     * Creates getErrorHandler method — overrides {@link io.tiko.Container#getErrorHandler()}
+     * to return the stored field, giving transports typed access to the configured handler
+     * without reflection.
      */
     private MethodSpec createGetErrorHandlerMethod() {
         return MethodSpec.methodBuilder("getErrorHandler")
                 .addModifiers(Modifier.PUBLIC)
+                .addAnnotation(Override.class)
                 .returns(ClassName.get("io.tiko", "ErrorHandler"))
                 .addStatement("return this.errorHandler")
                 .build();
