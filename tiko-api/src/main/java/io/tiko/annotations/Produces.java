@@ -217,7 +217,7 @@ import java.lang.annotation.Target;
  * @since 1.0
  */
 @Target(ElementType.METHOD)
-@Retention(RetentionPolicy.RUNTIME)
+@Retention(RetentionPolicy.SOURCE)
 public @interface Produces {
 
     /**
