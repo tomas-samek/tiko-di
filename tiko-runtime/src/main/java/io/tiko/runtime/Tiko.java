@@ -1,6 +1,8 @@
 package io.tiko.runtime;
 
+import io.tiko.ConfigIssue;
 import io.tiko.ConfigSource;
+import io.tiko.ConfigurationFailure;
 import io.tiko.Container;
 import io.tiko.ErrorHandler;
 import io.tiko.EventBus;
@@ -101,7 +103,7 @@ public final class Tiko {
             // Defaults from META-INF/tiko/defaults.yaml are always layered under the user
             // source — modules can ship a self-sufficient bean even when the user provides
             // no ConfigSource. bindConfigs is a no-op when no @Configuration records exist.
-            Map<Class<?>, Object> bound = bindConfigs(options.configSource(), classLoader);
+            Map<Class<?>, Object> bound = bindConfigs(options.configSource(), classLoader, errorHandler);
             if (!bound.isEmpty()) {
                 container.getClass().getMethod("injectConfigs", Map.class).invoke(container, bound);
             }
@@ -153,7 +155,8 @@ public final class Tiko {
      * the classpath. Uses reflection to avoid a circular compile dependency on
      * tiko-config.</p>
      */
-    private static Map<Class<?>, Object> bindConfigs(ConfigSource userSource, ClassLoader cl) throws Exception {
+    private static Map<Class<?>, Object> bindConfigs(ConfigSource userSource, ClassLoader cl, ErrorHandler errorHandler)
+            throws Exception {
         List<Object> binders = new ArrayList<>();
         var resources = cl.getResources("META-INF/tiko/configs.txt");
         while (resources.hasMoreElements()) {
@@ -193,13 +196,31 @@ public final class Tiko {
                             new ConfigSource[] {defaults, userSource});
         }
 
-        // Delegate to ConfigBootstrap via reflection (avoids circular compile dep).
+        // Delegate to ConfigBootstrap via reflection (avoids a tiko-runtime → tiko-config
+        // compile dependency). Validation failures are unwrapped from InvocationTargetException
+        // and routed through the configured ErrorHandler before being re-thrown.
         Class<?> bootstrapClass = Class.forName("io.tiko.config.runtime.ConfigBootstrap", true, cl);
-        @SuppressWarnings("unchecked")
-        Map<Class<?>, Object> result = (Map<Class<?>, Object>) bootstrapClass
-                .getMethod("bind", String.class, ConfigSource.class, List.class)
-                .invoke(null, "config", effective, binders);
-        return result;
+        try {
+            @SuppressWarnings("unchecked")
+            Map<Class<?>, Object> result = (Map<Class<?>, Object>) bootstrapClass
+                    .getMethod("bind", String.class, ConfigSource.class, List.class)
+                    .invoke(null, "config", effective, binders);
+            return result;
+        } catch (java.lang.reflect.InvocationTargetException ite) {
+            Throwable cause = ite.getCause();
+            if (cause != null
+                    && "io.tiko.config.ConfigValidationException"
+                            .equals(cause.getClass().getName())) {
+                @SuppressWarnings("unchecked")
+                List<ConfigIssue> issues =
+                        (List<ConfigIssue>) cause.getClass().getMethod("issues").invoke(cause);
+                errorHandler.onError(new ConfigurationFailure(issues, cause));
+                throw (RuntimeException) cause;
+            }
+            if (cause instanceof RuntimeException re) throw re;
+            if (cause instanceof Error err) throw err;
+            throw ite;
+        }
     }
 
     /**
