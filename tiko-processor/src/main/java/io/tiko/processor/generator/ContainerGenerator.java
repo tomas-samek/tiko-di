@@ -801,7 +801,9 @@ public final class ContainerGenerator {
                 method.nextControlFlow("else if (__inst instanceof $T $L)", componentType, varName);
             }
             method.beginControlFlow("try");
-            if (c.isAutoCloseable() && c.getPreDestroyMethods().isEmpty()) {
+            boolean isAutoCloseOnly =
+                    c.isAutoCloseable() && c.getPreDestroyMethods().isEmpty();
+            if (isAutoCloseOnly) {
                 method.addStatement("$L.close()", varName);
             } else {
                 for (var preDestroy : c.getPreDestroyMethods()) {
@@ -815,6 +817,14 @@ public final class ContainerGenerator {
                     "io.tiko.events",
                     level,
                     "@PreDestroy threw on " + c.getClassName());
+            // Route annotation-driven @PreDestroy failures through ErrorHandler. Pure
+            // AutoCloseable.close() failures keep their JUL-only path per design.
+            if (!isAutoCloseOnly) {
+                method.addStatement(
+                        "errorHandler.onError(new $T($T.class, __t))",
+                        ClassName.get("io.tiko", "PreDestroyFailure"),
+                        componentType);
+            }
             method.endControlFlow(); // try/catch
         }
 
@@ -969,7 +979,9 @@ public final class ContainerGenerator {
 
             method.beginControlFlow("if ($L != null)", variableName);
             method.beginControlFlow("try");
-            if (component.isAutoCloseable() && component.getPreDestroyMethods().isEmpty()) {
+            boolean isAutoCloseOnly = component.isAutoCloseable()
+                    && component.getPreDestroyMethods().isEmpty();
+            if (isAutoCloseOnly) {
                 method.addStatement("$L.close()", variableName);
             } else {
                 for (var preDestroy : component.getPreDestroyMethods()) {
@@ -983,6 +995,12 @@ public final class ContainerGenerator {
                     "io.tiko.events",
                     level,
                     "@PreDestroy threw on " + component.getClassName());
+            if (!isAutoCloseOnly) {
+                method.addStatement(
+                        "errorHandler.onError(new $T($T.class, __t))",
+                        ClassName.get("io.tiko", "PreDestroyFailure"),
+                        componentType);
+            }
             method.endControlFlow(); // try/catch
             method.endControlFlow(); // if non-null
         }
