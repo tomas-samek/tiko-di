@@ -50,14 +50,12 @@ class KafkaRealBrokerRoundTripIT {
     void produced_then_consumed_via_real_broker() {
         TikoOptions opts = TikoOptions.builder()
                 .configSource(io.tiko.config.ConfigSources.fromMap(Map.of(
-                        "tiko",
+                        "tiko.kafka",
                         Map.of(
-                                "kafka",
-                                Map.of(
-                                        "bootstrap-servers", KAFKA.getBootstrapServers(),
-                                        "consumer-group", "kafka-it",
-                                        "serializer", "json",
-                                        "auto-offset-reset", "earliest")))))
+                                "bootstrap-servers", KAFKA.getBootstrapServers(),
+                                "consumer-group", "kafka-it",
+                                "serializer", "json",
+                                "auto-offset-reset", "earliest"))))
                 .build();
 
         try (io.tiko.Container container = Tiko.create(opts)) {
