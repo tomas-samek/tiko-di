@@ -5,6 +5,7 @@ import io.tiko.Event;
 import io.tiko.EventBus;
 import io.tiko.processor.model.EventHandlerModel;
 import io.tiko.processor.model.EventTriggerModel;
+import io.tiko.processor.util.GeneratorAnnotations;
 import io.tiko.processor.util.ProcessorContext;
 import java.io.IOException;
 import java.util.List;
@@ -52,7 +53,9 @@ public final class EventRegistryGenerator {
             return;
         }
 
-        TypeSpec.Builder registry = TypeSpec.classBuilder(REGISTRY_CLASS).addModifiers(Modifier.PUBLIC, Modifier.FINAL);
+        TypeSpec.Builder registry = TypeSpec.classBuilder(REGISTRY_CLASS)
+                .addAnnotation(GeneratorAnnotations.generatedBy(EventRegistryGenerator.class))
+                .addModifiers(Modifier.PUBLIC, Modifier.FINAL);
 
         registry.addMethod(createRegisterMethod(eventHandlers));
 

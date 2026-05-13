@@ -7,6 +7,7 @@ import io.tiko.Scope;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
+import io.tiko.processor.util.GeneratorAnnotations;
 import io.tiko.processor.util.ProcessorContext;
 import java.io.IOException;
 import java.time.Duration;
@@ -44,6 +45,7 @@ public final class ContainerGenerator {
         String containerClassName = context.getContainerClassName();
 
         TypeSpec.Builder containerBuilder = TypeSpec.classBuilder(containerClassName)
+                .addAnnotation(GeneratorAnnotations.generatedBy(ContainerGenerator.class))
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                 .addSuperinterface(Container.class);
 

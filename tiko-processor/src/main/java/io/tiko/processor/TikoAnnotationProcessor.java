@@ -144,10 +144,7 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         } catch (Exception e) {
             processingEnv
                     .getMessager()
-                    .printMessage(
-                            Diagnostic.Kind.ERROR,
-                            "Tiko DI processing failed: " + e.getMessage() + "\n" + Arrays.toString(e.getStackTrace()));
-            e.printStackTrace();
+                    .printMessage(Diagnostic.Kind.ERROR, "Tiko DI processing failed:\n" + formatStackTrace(e));
             return false;
         }
 
@@ -713,5 +710,21 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         String suffix = Integer.toHexString(hash & 0x7FFFFFFF);
 
         return "TikoContainerImpl_" + suffix;
+    }
+
+    private static String formatStackTrace(Throwable t) {
+        var sb = new StringBuilder();
+        sb.append(t.getClass().getName());
+        if (t.getMessage() != null) {
+            sb.append(": ").append(t.getMessage());
+        }
+        for (var frame : t.getStackTrace()) {
+            sb.append("\n  at ").append(frame);
+        }
+        var cause = t.getCause();
+        if (cause != null && cause != t) {
+            sb.append("\nCaused by: ").append(formatStackTrace(cause));
+        }
+        return sb.toString();
     }
 }

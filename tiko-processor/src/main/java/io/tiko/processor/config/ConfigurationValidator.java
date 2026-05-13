@@ -113,10 +113,10 @@ public final class ConfigurationValidator {
             return false;
         }
         for (var member : type.getEnclosedElements()) {
-            if (!member.getKind().name().equals("RECORD_COMPONENT")) continue;
-            TypeMirror t = unwrapOptional(member.asType());
+            if (member.getKind() != ElementKind.RECORD_COMPONENT) continue;
+            var t = unwrapOptional(member.asType());
             if (t.getKind() == TypeKind.DECLARED) {
-                TypeElement child = (TypeElement) ((DeclaredType) t).asElement();
+                var child = (TypeElement) ((DeclaredType) t).asElement();
                 if (child.getKind() == ElementKind.RECORD) {
                     if (!walk(child, visiting, root)) return false;
                 }
