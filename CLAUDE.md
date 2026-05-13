@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Tiko DI** is a modern, compile-time dependency injection framework for Java 17+ with event-driven architecture.
+**Tiko DI** is a modern, compile-time dependency injection framework for Java 21+ with event-driven architecture.
 
 **Key Features:**
 - **Compile-time validation** - Zero runtime DI exceptions
 - **Minimal API surface** - Learn in 15 minutes
 - **Event-driven** - Seamless local/distributed event handling
-- **Java 17+ only** - Leverages records, sealed classes, pattern matching
+- **Java 21+ only** - Leverages records, sealed classes, pattern matching
 - **No reflection at runtime** - All wiring via generated code
 
 **Project Coordinates:**
@@ -350,7 +350,7 @@ Suggested fixes:
 2. Make RequestContext implement the interface
 ```
 
-### Java 17+ Feature Usage
+### Java 21+ Feature Usage
 
 - **Records** — for immutable DTOs, descriptors, lifecycle events, error contexts.
 - **Sealed classes / interfaces** — for closed type hierarchies (e.g. `ErrorContext`

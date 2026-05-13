@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        java: [ '17', '21', '25', '26' ]
+        java: [ '21', '25', '26' ]
 
     steps:
       - uses: actions/checkout@v4
@@ -42,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        java: [ '17', '26' ]
+        java: [ '21', '26' ]
 
     steps:
       - uses: actions/checkout@v4

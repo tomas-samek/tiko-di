@@ -43,7 +43,7 @@ import javax.lang.model.type.TypeMirror;
  * </ol>
  */
 @AutoService(Processor.class)
-@SupportedSourceVersion(SourceVersion.RELEASE_17)
+@SupportedSourceVersion(SourceVersion.RELEASE_21)
 public final class KafkaAnnotationProcessor extends AbstractProcessor {
 
     private boolean done;
