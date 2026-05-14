@@ -12,9 +12,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * still fires on {@code ApplicationStartedEvent} despite the bean being
  * unreachable via {@code container.get(...)}.
  */
-@Component(
-        scope = Scope.SINGLETON,
-        exposeSelf = false)
+@Component(scope = Scope.SINGLETON, exposeSelf = false)
 public class HiddenEventListener {
 
     /** Reset before each test; set when the event handler fires. */
