@@ -175,6 +175,41 @@ framework's async executor; the HTTP handler does not wait on it. Exposes a
 5. No event published. No subscribers fire. The point is to show that **the
    event bus is not implicitly involved in every endpoint**.
 
+## Event payload sourcing
+
+The example publishes `TicketCreated` constructed from the **response side** —
+the canonical `Ticket` returned by `ticketService.create(req)`, not from the
+raw `CreateTicketRequest`. The principle:
+
+> The event represents *what actually happened*, not *what was asked for*.
+
+Side effects (audit log, metrics, downstream notifications) need the
+server-assigned identity and any computed fields — the new UUID, the storage
+timestamp, defaulted values. The raw request lacks all of that, and feeding
+subscribers a pre-commit view is a footgun: an audit log entry that doesn't
+match the row in storage is worse than no entry at all.
+
+When a side effect needs request-only data (the caller's IP, a correlation
+header, the raw input for diff-tracking), the bridge stitches those into the
+event record as additional fields. The bridge owns the "merge what the request
+brought + what the service computed" step; subscribers always see one
+consistent record.
+
+**Why this example does not use `@EventTrigger`.** Today's `@EventTrigger`
+fires *after* an `@EventHandler` completes — the method's return value becomes
+the chained event's payload. Issue 1's bridge does not handle an incoming Tiko
+event (the trigger is the HTTP request itself, which Issue 1 deliberately does
+not model as a bus event — that's Issue 2). So the bridge publishes
+explicitly. This is the same pattern any code uses when an external system
+kicks off a workflow without first putting an event on the bus.
+
+**Issue 2 unifies the two paths.** Once a native HTTP transport models a
+request as an event in its own right, `@EventTrigger` falls into place: the
+bridge method's return value can drive both the HTTP response *and* a chained
+event in a single declaration. Issue 1 is the no-magic, public-API-only
+version of the same pattern; Issue 2 turns it into a declarative one-liner
+with compile-time pipeline analysis.
+
 ## Error handling
 
 Two failure modes, each exercising existing Tiko behavior:
