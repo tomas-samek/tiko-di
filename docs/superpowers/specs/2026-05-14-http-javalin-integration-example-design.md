@@ -69,11 +69,15 @@ tiko-examples/
     pom.xml
     src/main/java/io/tiko/examples/http/
       Main.java
+      TikoJavalin.java
       TicketService.java
       TicketHttpRoutes.java
       CreateTicketRequest.java
       Ticket.java
       TicketCreated.java
+      RequestId.java
+      RequestIdImpl.java
+      RequestTimer.java
       AuditLogger.java
       MetricsCounter.java
       NotificationSender.java
@@ -102,21 +106,62 @@ container, not the other way around).
 and `Optional<Ticket> find(UUID)`. **Has no Javalin or HTTP imports.** This is
 the bean a future Issue-2 native-HTTP refactor would target as the handler.
 
-**`TicketHttpRoutes`** — the bridge layer. Injects `TicketService` and
-`EventBus`. Exposes two methods:
+**`TicketHttpRoutes`** — the bridge layer. Injects `EventBus`, `TicketService`,
+and `RequestId` (a REQUEST-scoped bean — automatic proxy generation kicks in
+for the cross-scope injection). Exposes two methods:
 
-- `handleCreate(io.javalin.http.Context ctx)` — parses
-  `CreateTicketRequest` from the JSON body, calls `ticketService.create(...)`,
-  publishes `TicketCreated` on the event bus, writes the created `Ticket` to
-  the response, sets status 201.
+- `handleCreate(io.javalin.http.Context ctx)` — parses `CreateTicketRequest`
+  from the JSON body, calls `ticketService.create(...)`, publishes
+  `TicketCreated` on the event bus (stamped with `requestId.value()`), writes
+  the created `Ticket` to the response, sets status 201.
 - `handleGet(io.javalin.http.Context ctx)` — parses the `{id}` path parameter,
   calls `ticketService.find(...)`, writes the result to the response (200 if
   present, 404 if absent). **Does not publish any event** — by design, to make
   the "events are a choice, not automatic" point obvious.
 
+The bridge methods are plain straight-line code — **they do not call
+`runInRequestScope` themselves**. The request scope is applied as middleware at
+registration time via `TikoJavalin.scoped(...)` (see below). This is the
+ergonomic point: the user writes business code, the helper opens and closes
+the scope around every matched handler.
+
 Each method takes a single `io.javalin.http.Context` parameter and returns
-{@code void}, matching Javalin's `Handler` contract by method reference. The
-class is `final`.
+void, matching Javalin's `Handler` contract by method reference. The class is
+`final`.
+
+**`TikoJavalin`** — final utility class with a single static method,
+`Handler scoped(Container container, Handler delegate)`. Wraps a Javalin
+`Handler` so that each invocation runs inside `container.runInRequestScope(...)`.
+Translates the `Handler`'s checked-exception signature into the `Runnable`
+shape `runInRequestScope` accepts (catch, wrap in `RuntimeException`, let
+Javalin's exception mapping unwrap on its side). Six lines of real code, plus
+imports — this is the "middleware" piece of the integration. Lives in the
+example module rather than a shared library because Issue 1 deliberately ships
+no framework code; if real users hit ergonomic friction we promote it to a
+`tiko-http-bridge` module in a follow-up.
+
+**`RequestId`** — interface with one method `String value()`. Two reasons it
+exists: (a) cross-scope injection from SINGLETON into a REQUEST-scoped bean
+requires an interface so the framework can generate a proxy, (b) it makes the
+scoped state explicit at injection points.
+
+**`RequestIdImpl`** — `@Component(scope = Scope.REQUEST)` implementing
+`RequestId`. Generates a UUID at construction (once per HTTP request, since
+the scope is opened once per `runInRequestScope` call). Both the bridge and
+any other scoped collaborator can read the same per-request value.
+
+**`RequestTimer`** — `@Component(scope = Scope.SINGLETON)`. Subscribes to
+Tiko's framework lifecycle events with two `@EventHandler` methods:
+`onRequestStarted(RequestStartedEvent)` and
+`onRequestEnding(RequestEndingEvent)`. Logs `[REQ <framework-id>] started` and
+`[REQ <framework-id>] completed in <duration>`. Demonstrates that **the
+lifecycle events fire automatically for every HTTP request** — no per-route
+wiring needed. Note: the framework's `RequestStartedEvent.requestId()` is a
+distinct identifier from the application's `RequestId.value()`; both exist on
+purpose. The framework ID identifies the *scope instance*; the application ID
+is whatever the app considers a correlation key (could be derived from an
+incoming `X-Request-Id` header, generated fresh, etc.). The example
+generates fresh for simplicity.
 
 **`AuditLogger`** — `@EventHandler` on `TicketCreated`, synchronous. Writes
 `[AUDIT] ticket <id> '<title>' created at <timestamp>` to stdout. Runs inline
@@ -138,42 +183,119 @@ framework's async executor; the HTTP handler does not wait on it. Exposes a
    `TicketHttpRoutes` get constructed; `ApplicationStartedEvent` fires.
 2. `TicketHttpRoutes routes = container.get(TicketHttpRoutes.class);`
 3. Construct a `Javalin` app, configure JSON via Jackson (Javalin's default).
-4. Register routes: `app.post("/tickets", routes::handleCreate)` and
-   `app.get("/tickets/{id}", routes::handleGet)`.
+4. Register routes wrapped by the middleware decorator:
+   `app.post("/tickets", TikoJavalin.scoped(container, routes::handleCreate))`
+   and
+   `app.get("/tickets/{id}", TikoJavalin.scoped(container, routes::handleGet))`.
 5. Read port from `TIKO_HTTP_PORT` env var (default 8080).
 6. `app.start(port);`
 7. Register a JVM shutdown hook that stops Javalin first (drains in-flight
    requests), then calls `container.shutdown()` (runs Tiko's `@PreDestroy` /
    `AutoCloseable.close()` cleanup, fires `ApplicationEndingEvent`).
 
+## Middleware: applying the request scope via a Handler decorator
+
+Every HTTP request to a registered route runs inside a Tiko request scope —
+not because each bridge method opens one, but because the registration goes
+through `TikoJavalin.scoped(container, handler)`. In `Main`:
+
+```java
+app.post("/tickets",     TikoJavalin.scoped(container, routes::handleCreate));
+app.get("/tickets/{id}", TikoJavalin.scoped(container, routes::handleGet));
+```
+
+`TikoJavalin.scoped(...)` returns a new `Handler` whose `handle(ctx)`
+method calls `container.runInRequestScope(() -> delegate.handle(ctx))`. From
+Javalin's perspective it's just a `Handler` like any other; from Tiko's
+perspective the scope is open for the entire delegate invocation.
+
+The decorator covers the **entire** request lifecycle — body parsing,
+business call, event publish, response serialization — for three reasons that
+matter independently:
+
+1. **Lifecycle events fire automatically.** `RequestStartedEvent` is published
+   at scope entry and `RequestEndingEvent` (with `Duration`) at exit. The
+   example wires `RequestTimer` to demonstrate this; users get per-request
+   observability with zero per-route boilerplate.
+2. **REQUEST-scoped beans are reachable inside the handler chain.** `RequestId`
+   in the example demonstrates this; future apps will plug in their own
+   per-request context (authenticated principal, correlation header, tenant
+   selector). Without the decorator, any REQUEST-scoped injection from inside
+   the bridge would throw "no scope active."
+3. **Response serialization sees the scope too.** This is the subtle one. A
+   custom Jackson serializer, a HATEOAS link builder, or a computed response
+   field that delegates to a Tiko bean will run during `ctx.json(value)` —
+   *after* the bridge has finished its own logic but *before* Javalin actually
+   writes bytes. That serialization callback runs on the same thread as the
+   bridge. If the scope exits before `ctx.json(...)` completes, anything
+   DI-driven inside the serializer fails. The decorator pattern guarantees
+   the scope stays open across the full delegate body, including serialization.
+
+Exceptions thrown from any step propagate normally: the decorator catches the
+Javalin `Handler`'s checked-exception declaration and wraps in
+`RuntimeException`; `runInRequestScope` runs scope teardown (and
+`RequestEndingEvent`) in a finally block regardless; the `RuntimeException`
+re-surfaces to Javalin, which applies the user's configured exception mapper
+and writes whatever error response that mapper produces. Cleanup is guaranteed
+in all paths.
+
+Sync `@EventHandler` subscribers fired by `EventBus.publish(...)` run on the
+caller's thread and therefore *also* see the scope — they can read scoped
+beans freely. Async subscribers run on the framework executor, on a different
+thread, and the scope is thread-local — they cannot see it. Async handlers
+that need request data read it from the event payload (which is why the
+bridge stamps `requestId` onto `TicketCreated` — see "Event payload sourcing"
+below).
+
 ## Data flow
 
-**`POST /tickets`** — sync path with side effects:
+**`POST /tickets`** — sync path with side effects, all inside one request
+scope opened by the `TikoJavalin.scoped(...)` decorator:
 
-1. Javalin receives the request, parses the JSON body into `CreateTicketRequest`
-   via Jackson.
-2. `routes.handleCreate(ctx)` runs on a Javalin worker thread.
-3. It calls `ticketService.create(req)`. The new `Ticket` is created and
-   stored. The bean's method returns it.
-4. The bridge method publishes `new TicketCreated(ticket.id(), ticket.title(),
-   Instant.now())` on the event bus.
-5. `EventBus.publish` invokes sync subscribers in registration order:
+1. Javalin's worker thread invokes the wrapped `Handler`.
+2. The decorator calls `container.runInRequestScope(() -> delegate.handle(ctx))`.
+   The framework publishes `RequestStartedEvent`;
+   `RequestTimer.onRequestStarted` logs the start.
+3. Inside the scope, the decorator's delegate is `routes::handleCreate`, so
+   `handleCreate(ctx)` runs.
+4. The bridge calls `ctx.bodyAsClass(CreateTicketRequest.class)`. Javalin (via
+   Jackson) parses the JSON body.
+5. The bridge calls `ticketService.create(req)`. The new `Ticket` is created
+   and stored. The bean's method returns it.
+6. The bridge reads the per-request UUID from the proxied `RequestId` bean
+   and publishes `new TicketCreated(ticket.id(), ticket.title(),
+   requestId.value(), Instant.now())` on the event bus.
+7. `EventBus.publish` invokes sync subscribers in registration order:
    `AuditLogger` writes to stdout; `MetricsCounter` increments its `AtomicLong`.
-6. The framework also schedules `NotificationSender.onTicketCreated` on the
-   async executor — `publish` returns immediately after scheduling.
-7. The bridge writes the created `Ticket` to `ctx` as JSON, sets status 201.
-8. Javalin sends the response. The HTTP client unblocks with 201 + JSON body.
-9. `NotificationSender` finishes its work whenever the executor gets to it.
-   The client has been responded to already.
+   Both run inside the request scope.
+8. The framework also schedules `NotificationSender.onTicketCreated` on the
+   async executor — `publish` returns immediately after scheduling. The async
+   handler will run later on a different thread; it reads `requestId` from
+   the event payload, not from the (now-unavailable) scope.
+9. Still inside the scope, the bridge calls `ctx.status(201).json(ticket)`.
+   Jackson serializes (any DI-aware serializer machinery is reachable).
+10. The bridge returns to the decorator, which exits the scope. The framework
+    publishes `RequestEndingEvent` with the accumulated `Duration`;
+    `RequestTimer.onRequestEnding` logs completion. Scoped beans
+    (`RequestIdImpl`) are torn down.
+11. Javalin sends the response bytes. The HTTP client unblocks with 201 +
+    JSON body.
+12. `NotificationSender` finishes its work whenever the executor gets to it.
+    The client has been responded to already.
 
-**`GET /tickets/{id}`** — pure sync, no events:
+**`GET /tickets/{id}`** — pure sync, no domain events, but **still inside a
+request scope** because the registration goes through the same
+`TikoJavalin.scoped(...)` decorator:
 
-1. Javalin parses the path param.
-2. `routes.handleGet(ctx)` calls `ticketService.find(id)`.
-3. If present, writes the `Ticket` JSON with status 200.
-4. If absent, sets status 404 with an empty body.
-5. No event published. No subscribers fire. The point is to show that **the
-   event bus is not implicitly involved in every endpoint**.
+1. Javalin invokes the wrapped `Handler`; decorator opens the scope.
+2. `routes::handleGet` runs. The bridge reads the path param, calls
+   `ticketService.find(id)`, and either writes `Ticket` JSON with status 200
+   (serialization inside the scope) or sets status 404 with an empty body.
+3. Bridge returns; decorator exits the scope; `RequestEndingEvent` fires;
+   `RequestTimer` logs.
+4. No domain event was published. **No `TicketCreated` subscribers fire.**
+   The point is to show that the event bus is not implicitly involved in
+   every endpoint — but the lifecycle events are.
 
 ## Event payload sourcing
 
@@ -193,7 +315,11 @@ When a side effect needs request-only data (the caller's IP, a correlation
 header, the raw input for diff-tracking), the bridge stitches those into the
 event record as additional fields. The bridge owns the "merge what the request
 brought + what the service computed" step; subscribers always see one
-consistent record.
+consistent record. The example demonstrates this with the `requestId` field
+on `TicketCreated`: the bridge reads it from the REQUEST-scoped `RequestId`
+bean and stamps it onto the event. Async subscribers running off-thread can
+still read the original request's ID from the payload, even though the
+request scope has already torn down by then.
 
 **Why this example does not use `@EventTrigger`.** Today's `@EventTrigger`
 fires *after* an `@EventHandler` completes — the method's return value becomes
@@ -258,7 +384,7 @@ the project rule.
 `TicketHttpRoutes` on a real `Javalin` instance bound to port `0` (OS picks).
 Uses `java.net.http.HttpClient` to exercise the endpoints.
 
-Three test methods:
+Four test methods:
 
 - `postCreatesTicketAndReturns201` — `POST /tickets` with a valid body; asserts
   201, response body has an `id`, `MetricsCounter.count()` increased by exactly
@@ -266,10 +392,16 @@ Three test methods:
   timeout (`Awaitility` already on the example classpath via `tiko-runtime`'s
   test deps — or pulled in fresh; check whichever is cheaper).
 - `getReturnsTicketAfterPost` — POST a ticket, capture its `id`, GET it,
-  assert the body matches.
+  assert the body matches. Asserts the `requestId` on the recorded `TicketCreated`
+  event differs across two separate POSTs (proving REQUEST-scoped state is
+  truly per-request).
 - `getReturns404ForUnknownId` — GET a random UUID, assert 404, assert
   `MetricsCounter.count()` did NOT change (proving the read path doesn't fire
-  events).
+  domain events).
+- `lifecycleEventsFireForEveryHttpRequest` — counts the number of
+  `RequestStartedEvent`s observed by `RequestTimer` (or by a test-only
+  subscriber injected via a custom `ErrorHandler`-style hook) and asserts it
+  matches the number of HTTP requests made, including the GET.
 
 The integration test boots / tears the container down per-test via JUnit's
 `@BeforeEach` / `@AfterEach`. No Testcontainers, no Docker, no external state.
