@@ -117,4 +117,23 @@ class TicketHttpIntegrationTest {
         assertThat(got.statusCode()).isEqualTo(200);
         assertThat(JSON.readTree(got.body()).get("title").asText()).isEqualTo("a");
     }
+
+    @Test
+    void getReturns404ForUnknownIdAndDoesNotFireDomainEvent() throws Exception {
+        var metrics = container.get(MetricsCounter.class);
+        var recorder = container.get(TicketCreatedRecorder.class);
+        long metricsBefore = metrics.count();
+        int eventsBefore = recorder.events().size();
+
+        HttpResponse<String> resp = client.send(
+                HttpRequest.newBuilder()
+                        .uri(URI.create("http://localhost:" + port + "/tickets/" + java.util.UUID.randomUUID()))
+                        .GET()
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
+
+        assertThat(resp.statusCode()).isEqualTo(404);
+        assertThat(metrics.count()).as("read path must not fire TicketCreated").isEqualTo(metricsBefore);
+        assertThat(recorder.events()).hasSize(eventsBefore);
+    }
 }
