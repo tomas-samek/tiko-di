@@ -67,4 +67,47 @@ public @interface Component {
      * @return array of profile names
      */
     String[] profiles() default {};
+
+    /**
+     * Optional allowlist narrowing which types this component is injectable as.
+     * <p>
+     * When <strong>empty (the default)</strong>, the component behaves permissively: it is
+     * registered under every interface it implements (and under itself if {@link #exposeSelf()}
+     * is {@code true}). Existing code that does not declare {@code expose} keeps today's
+     * Spring-style behavior — every implemented interface is routable.
+     * <p>
+     * When <strong>non-empty</strong>, only the listed types are routable for injection /
+     * {@code container.get(Class)}. Marker or side-effect interfaces such as
+     * {@link AutoCloseable} that the framework dispatches on (e.g. for implicit teardown)
+     * remain recognised regardless of this list — see the class-level note on the
+     * separation between <em>injection routing</em> and <em>framework dispatch</em>.
+     * <p>
+     * Every type listed here must be implemented by the annotated class (or be the class
+     * itself). The annotation processor validates this at compile time.
+     *
+     * <pre>{@code
+     * @Component(scope = Scope.SINGLETON, expose = { NotificationApi.class })
+     * public class EmailNotificationService
+     *         implements NotificationApi, AutoCloseable, MetricsSource {
+     *     // Routable via NotificationApi only.
+     *     // AutoCloseable is still recognised for implicit teardown.
+     *     // MetricsSource is implementation-internal — no @Inject MetricsSource gets this bean.
+     * }
+     * }</pre>
+     *
+     * @return the explicit allowlist of types to expose; empty for the permissive default
+     */
+    Class<?>[] expose() default {};
+
+    /**
+     * Whether the concrete implementation class itself is routable via
+     * {@code container.get(MyClass.class)}.
+     * <p>
+     * Defaults to {@code true} (today's behavior). Set to {@code false} to hide the impl
+     * class so only the declared interfaces — either the permissive default set or an
+     * explicit {@link #expose()} list — name this bean.
+     *
+     * @return {@code true} if the impl class is routable; {@code false} for interface-only
+     */
+    boolean exposeSelf() default true;
 }
