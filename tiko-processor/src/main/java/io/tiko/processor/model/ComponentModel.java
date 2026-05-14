@@ -29,6 +29,8 @@ public final class ComponentModel {
     private final boolean requiresProxy;
     private final ExecutableElement staticFactoryMethod; // Optional self-@Produces (nullable)
     private final boolean autoCloseable;
+    private final List<TypeMirror> exposeTypes; // @Component(expose = {...}); empty = permissive default
+    private final boolean exposeSelf; // @Component(exposeSelf = ...); defaults to true
 
     private ComponentModel(Builder builder) {
         this.typeElement = builder.typeElement;
@@ -46,6 +48,8 @@ public final class ComponentModel {
         this.requiresProxy = builder.requiresProxy;
         this.staticFactoryMethod = builder.staticFactoryMethod;
         this.autoCloseable = builder.autoCloseable;
+        this.exposeTypes = List.copyOf(builder.exposeTypes);
+        this.exposeSelf = builder.exposeSelf;
     }
 
     public static Builder builder() {
@@ -136,6 +140,29 @@ public final class ComponentModel {
         return getName().map(n -> qualifiedName + "#" + n).orElse(qualifiedName);
     }
 
+    /**
+     * The user-declared {@code @Component(expose = {...})} list. Empty list means
+     * "permissive default" — the bean is exposed under every implemented interface (and
+     * under itself if {@link #isExposeSelf()} is true). Non-empty list means
+     * "explicit restriction" — only the listed types route to this bean.
+     */
+    public List<TypeMirror> getExposeTypes() {
+        return exposeTypes;
+    }
+
+    /** True when {@link #getExposeTypes()} is non-empty (i.e. user opted into restriction). */
+    public boolean isExposeRestricted() {
+        return !exposeTypes.isEmpty();
+    }
+
+    /**
+     * Whether the concrete impl class itself routes via {@code container.get(MyClass.class)}.
+     * Defaults to {@code true}. Independent of {@link #getExposeTypes()}.
+     */
+    public boolean isExposeSelf() {
+        return exposeSelf;
+    }
+
     public static final class Builder {
         private TypeElement typeElement;
         private String packageName;
@@ -152,6 +179,8 @@ public final class ComponentModel {
         private boolean requiresProxy = false;
         private ExecutableElement staticFactoryMethod;
         private boolean autoCloseable = false;
+        private List<TypeMirror> exposeTypes = new ArrayList<>();
+        private boolean exposeSelf = true;
 
         private Builder() {}
 
@@ -242,6 +271,16 @@ public final class ComponentModel {
 
         public Builder autoCloseable(boolean autoCloseable) {
             this.autoCloseable = autoCloseable;
+            return this;
+        }
+
+        public Builder exposeTypes(List<TypeMirror> exposeTypes) {
+            this.exposeTypes = new ArrayList<>(exposeTypes);
+            return this;
+        }
+
+        public Builder exposeSelf(boolean exposeSelf) {
+            this.exposeSelf = exposeSelf;
             return this;
         }
 

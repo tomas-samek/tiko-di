@@ -212,6 +212,16 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         // Check if component implements an interface (for proxy generation)
         Optional<TypeMirror> implementedInterface = typeUtil.getFirstInterface(typeElement);
 
+        // Read @Component(expose = {...}) — uses the MirroredTypesException dance because
+        // Class<?>[] annotation values are not directly accessible at processor time.
+        List<TypeMirror> exposeTypes;
+        try {
+            annotation.expose();
+            exposeTypes = List.of();
+        } catch (MirroredTypesException mte) {
+            exposeTypes = List.copyOf(mte.getTypeMirrors());
+        }
+
         ComponentModel.Builder builder = ComponentModel.builder()
                 .typeElement(typeElement)
                 .packageName(typeUtil.getPackageName(typeElement))
@@ -223,7 +233,9 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
                 .dependencies(dependencies)
                 .postConstructMethods(postConstructMethods)
                 .preDestroyMethods(preDestroyMethods)
-                .autoCloseable(autoCloseable);
+                .autoCloseable(autoCloseable)
+                .exposeTypes(exposeTypes)
+                .exposeSelf(annotation.exposeSelf());
 
         if (constructor != null) {
             builder.constructor(constructor);
@@ -578,8 +590,14 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
             }
         }
 
+        // Validate @Component(expose = {...}) entries are actually implemented.
+        ExposureValidator exposureValidator = new ExposureValidator(context, typeUtil);
+        if (!exposureValidator.validate()) {
+            valid = false;
+        }
+
         // Validate dependencies exist
-        DependencyGraphValidator graphValidator = new DependencyGraphValidator(context);
+        DependencyGraphValidator graphValidator = new DependencyGraphValidator(context, typeUtil);
         if (!graphValidator.validate()) {
             valid = false;
         }

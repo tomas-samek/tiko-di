@@ -81,6 +81,19 @@ public final class ErrorReporter {
                 "Check if the dependency has the correct qualifier (@Named)");
     }
 
+    public void missingDependencyHiddenByExpose(
+            Element element, String dependencyKey, String injectingClass, String hidingComponent) {
+        error(
+                element,
+                hidingComponent + " implements " + dependencyKey
+                        + " but does not expose it for injection (used by "
+                        + injectingClass + ")",
+                "Add " + dependencyKey + ".class to " + hidingComponent + "'s @Component(expose = {...}) list",
+                "Drop the expose attribute on " + hidingComponent
+                        + " to fall back to the permissive default (expose every implemented interface)",
+                "Inject a different type that " + hidingComponent + " does expose");
+    }
+
     public void circularDependency(Element element, String cycle) {
         error(
                 element,
