@@ -313,3 +313,17 @@ The `Event<?>` parameter is optional — most handlers don't need it. When prese
 - **Conditional** — guards model branching without `if/else` inside handlers.
 - **Async-aware** — each link in the chain controls its own sync/async semantics.
 - **Only on success** — a thrown handler never triggers its follow-ons, so partial-success states don't propagate.
+
+## Using Tiko behind an existing HTTP server
+
+Tiko has no opinion about which HTTP server you use. The recommended pattern
+keeps your sync request → response path independent of the event bus, while
+publishing one event per business action that subscribers can react to
+without the HTTP client waiting on them.
+
+See `tiko-examples/09_http_javalin/` for a runnable example with Javalin: a
+six-line `Handler` decorator opens a Tiko request scope around each route,
+the bridge bean stays plain straight-line code, and three subscribers
+(audit, metrics, async notification) demonstrate the sync-vs-async-side-effect
+axis. The pattern ports to Helidon, Jetty, the JDK's `HttpServer`, etc. — swap
+the imports and registration syntax; everything else stays.
