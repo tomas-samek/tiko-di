@@ -73,4 +73,48 @@ class TicketHttpIntegrationTest {
         boolean fired = notifications.await(5, TimeUnit.SECONDS);
         assertThat(fired).as("async NotificationSender ran").isTrue();
     }
+
+    @Test
+    void getReturnsTicketAfterPostAndPerRequestIdsAreDistinct() throws Exception {
+        var recorder = container.get(TicketCreatedRecorder.class);
+        int eventsBefore = recorder.events().size();
+
+        // POST twice
+        HttpResponse<String> first = client.send(
+                HttpRequest.newBuilder()
+                        .uri(URI.create("http://localhost:" + port + "/tickets"))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString("{\"title\":\"a\"}"))
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> second = client.send(
+                HttpRequest.newBuilder()
+                        .uri(URI.create("http://localhost:" + port + "/tickets"))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString("{\"title\":\"b\"}"))
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
+
+        assertThat(first.statusCode()).isEqualTo(201);
+        assertThat(second.statusCode()).isEqualTo(201);
+
+        var emitted = recorder.events();
+        assertThat(emitted).hasSize(eventsBefore + 2);
+
+        var lastTwo = emitted.subList(emitted.size() - 2, emitted.size());
+        assertThat(lastTwo.get(0).requestId())
+                .as("each request gets its own REQUEST-scoped requestId")
+                .isNotEqualTo(lastTwo.get(1).requestId());
+
+        // GET back the first one.
+        String firstId = JSON.readTree(first.body()).get("id").asText();
+        HttpResponse<String> got = client.send(
+                HttpRequest.newBuilder()
+                        .uri(URI.create("http://localhost:" + port + "/tickets/" + firstId))
+                        .GET()
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertThat(got.statusCode()).isEqualTo(200);
+        assertThat(JSON.readTree(got.body()).get("title").asText()).isEqualTo("a");
+    }
 }
