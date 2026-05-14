@@ -30,6 +30,25 @@ import java.lang.annotation.Target;
  * )
  * public class ProductionDatabase implements Database { }
  * }</pre>
+ *
+ * <p><strong>Hidden event handler (uninjectable side-effect bean).</strong> Combine
+ * {@code expose = {}} with {@code exposeSelf = false} on a SINGLETON to declare a bean
+ * that exists solely to react to events — constructed eagerly at container start, its
+ * {@code @EventHandler} methods participate normally, but nothing else can inject it:</p>
+ * <pre>{@code
+ * @Component(scope = Scope.SINGLETON, expose = {}, exposeSelf = false)
+ * public class StartupBookkeeper {
+ *     @EventHandler
+ *     public void onAppStart(ApplicationStartedEvent e) {
+ *         // side-effect-only work — metrics, telemetry, etc.
+ *     }
+ * }
+ * }</pre>
+ * <p>Event-handler dispatch is independent of {@link #expose()} /
+ * {@link #exposeSelf()} — those control the public {@code container.get(Class)} routing,
+ * not framework wiring. Use SINGLETON scope: REQUEST/EVENT-scoped hidden beans would
+ * only exist while their scope is active, and PROTOTYPE has no canonical instance to
+ * subscribe.</p>
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.SOURCE)

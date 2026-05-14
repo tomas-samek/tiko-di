@@ -84,4 +84,19 @@ class ExposureRoutingTest {
         // expose list — framework dispatch is orthogonal to injection routing.
         assertThat(RestrictedCloseable.CLOSED).isTrue();
     }
+
+    @Test
+    void hiddenComponentEventHandlersStillFire() {
+        HiddenEventListener.FIRED.set(false);
+        try (Container container = Tiko.create()) {
+            // Tiko.create() publishes ApplicationStartedEvent; the hidden listener handles it.
+            assertThat(HiddenEventListener.FIRED)
+                    .as("uninjectable bean's @EventHandler still receives lifecycle events")
+                    .isTrue();
+            // The bean itself remains unreachable from the public lookup API.
+            assertThatThrownBy(() -> container.get(HiddenEventListener.class))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining(HiddenEventListener.class.getName());
+        }
+    }
 }
