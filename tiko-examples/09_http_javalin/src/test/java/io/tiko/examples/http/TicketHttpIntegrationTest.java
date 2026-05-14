@@ -136,4 +136,42 @@ class TicketHttpIntegrationTest {
         assertThat(metrics.count()).as("read path must not fire TicketCreated").isEqualTo(metricsBefore);
         assertThat(recorder.events()).hasSize(eventsBefore);
     }
+
+    @Test
+    void lifecycleEventsFireForEveryHttpRequest() throws Exception {
+        var timer = container.get(RequestTimer.class);
+        int startedBefore = timer.startedCount();
+        int endedBefore = timer.endedCount();
+
+        // Three requests: 1 POST, 1 GET success, 1 GET 404. The framework
+        // publishes RequestStarted + RequestEnding for each — three of each.
+        HttpResponse<String> post = client.send(
+                HttpRequest.newBuilder()
+                        .uri(URI.create("http://localhost:" + port + "/tickets"))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString("{\"title\":\"lifecycle\"}"))
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertThat(post.statusCode()).isEqualTo(201);
+
+        String createdId = JSON.readTree(post.body()).get("id").asText();
+        HttpResponse<String> getOk = client.send(
+                HttpRequest.newBuilder()
+                        .uri(URI.create("http://localhost:" + port + "/tickets/" + createdId))
+                        .GET()
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertThat(getOk.statusCode()).isEqualTo(200);
+
+        HttpResponse<String> get404 = client.send(
+                HttpRequest.newBuilder()
+                        .uri(URI.create("http://localhost:" + port + "/tickets/" + java.util.UUID.randomUUID()))
+                        .GET()
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertThat(get404.statusCode()).isEqualTo(404);
+
+        assertThat(timer.startedCount() - startedBefore).isEqualTo(3);
+        assertThat(timer.endedCount() - endedBefore).isEqualTo(3);
+    }
 }
