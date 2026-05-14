@@ -322,7 +322,7 @@ publishing one event per business action that subscribers can react to
 without the HTTP client waiting on them.
 
 See `tiko-examples/09_http_javalin/` for a runnable example with Javalin: a
-six-line `Handler` decorator opens a Tiko request scope around each route,
+tiny `Handler` decorator opens a Tiko request scope around each route,
 the bridge bean stays plain straight-line code, and three subscribers
 (audit, metrics, async notification) demonstrate the sync-vs-async-side-effect
 axis. The pattern ports to Helidon, Jetty, the JDK's `HttpServer`, etc. — swap

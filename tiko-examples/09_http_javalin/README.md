@@ -23,7 +23,7 @@ finishes — async side effects keep running on Tiko's framework executor.
 ## Request-scope wrapping (the middleware)
 
 Every route is registered via `TikoJavalin.scoped(container, handler)`, a
-six-line `Handler` decorator that opens a Tiko request scope around the entire
+tiny `Handler` decorator that opens a Tiko request scope around the entire
 delegate body — including body parsing, the handler, the event publish, and
 **response serialization** (so a custom Jackson serializer needing DI can
 still reach Tiko-managed beans).
@@ -73,14 +73,18 @@ Default port is `8080`; override with `TIKO_HTTP_PORT=9090 java -jar ...`.
   `RequestEndingEvent`. Demonstrates the framework's lifecycle events.
 - `AuditLogger`, `MetricsCounter`, `NotificationSender` — the three
   side-effect handlers (two sync, one async).
+- `TicketCreatedRecorder` — test scaffold; a sync `@EventHandler` that captures
+  every published `TicketCreated` so the integration test can assert per-request
+  `requestId` distinctness. Lives in main sources so the annotation processor
+  wires it like any other subscriber.
 - `Main` — bootstrap.
 
 ## What this example deliberately does NOT show
 
-- **A native HTTP transport.** That's the follow-up issue tracked separately
-  ("Issue 2" — native HTTP with compile-time request-response pipeline
-  detection). The point of this example is that Tiko integrates cleanly with
-  whatever HTTP server you already have.
+- **A native HTTP transport.** A future direction is a Tiko-native HTTP layer
+  with compile-time request-response pipeline detection — discussed in the
+  design notes but not yet on the roadmap. The point of this example is that
+  Tiko already integrates cleanly with whatever HTTP server you already have.
 - **Authentication, middleware chains, TLS.** Layer those in via Javalin's own
   facilities; they're orthogonal to the Tiko integration.
 - **Multiple HTTP servers.** Javalin is one choice; the same pattern ports to
