@@ -1226,8 +1226,9 @@ This gives the example three things for free:
   request. `RequestTimer` subscribes to demonstrate per-request observability
   with zero per-route boilerplate.
 - REQUEST-scoped beans (here: `RequestIdImpl`) are reachable from inside the
-  handler chain. The bridge injects `RequestId` (proxied) and stamps each
-  request's UUID onto the published `TicketCreated` event.
+  handler chain. The bridge resolves `RequestId` per-request via
+  `container.get(RequestId.class)` from inside the open scope, and stamps
+  each request's UUID onto the published `TicketCreated` event.
 - Sync `@EventHandler` subscribers run inside the same scope and can read
   REQUEST-scoped beans directly. Async subscribers run on a different thread,
   don't see the scope, and read whatever they need from the event payload.
@@ -1256,8 +1257,10 @@ Default port is `8080`; override with `TIKO_HTTP_PORT=9090 java -jar ...`.
   `runInRequestScope` lives in the decorator, not here.
 - `TikoJavalin` — `Handler scoped(Container, Handler)`. The middleware.
 - `RequestIdImpl` — REQUEST-scoped `@Component` implementing `RequestId`.
-  Cross-scope injection into the SINGLETON bridge works via a compile-time
-  proxy.
+  Resolved per-request via `container.get(RequestId.class)` from inside the
+  scope opened by `TikoJavalin.scoped`. (Tiko's auto-proxy mechanism for
+  REQUEST→SINGLETON injection is demonstrated in `01_basic_di`; this example
+  uses container-lookup because the bridge isn't a `@Component`.)
 - `RequestTimer` — `@EventHandler` on `RequestStartedEvent` /
   `RequestEndingEvent`. Demonstrates the framework's lifecycle events.
 - `AuditLogger`, `MetricsCounter`, `NotificationSender` — the three
