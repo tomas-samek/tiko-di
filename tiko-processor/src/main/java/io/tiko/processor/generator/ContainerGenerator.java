@@ -1095,30 +1095,29 @@ public final class ContainerGenerator {
         method.addStatement("return type.cast(configSingletons.get(type))");
         method.endControlFlow();
 
-        // Generate if-else chain for each component.
-        // Named components match only their concrete class; unnamed components also match
-        // their implemented interface (the "default" for that interface).
+        // Generate if-else chain for each component, dispatching under its effective
+        // routable types — that is the explicit expose list (or every directly-implemented
+        // interface for the permissive default), plus the concrete class when exposeSelf
+        // is true. Named components only match by the concrete-class entry of that set
+        // (their interface entries are reachable via get(Class, String) instead).
         boolean first = true;
         for (ComponentModel component : context.getActiveComponents()) {
             TypeName componentType = ClassName.get(component.getTypeElement());
             String getterName = "get" + component.getClassName();
-            boolean includeInterface = component.getName().isEmpty()
-                    && component.getImplementedInterface().isPresent();
-
-            if (includeInterface) {
-                TypeName ifaceType =
-                        TypeName.get(component.getImplementedInterface().get());
-                if (first) {
-                    method.beginControlFlow("if (type == $T.class || type == $T.class)", componentType, ifaceType);
-                } else {
-                    method.nextControlFlow("else if (type == $T.class || type == $T.class)", componentType, ifaceType);
-                }
+            List<TypeName> keys;
+            if (component.getName().isPresent()) {
+                keys = component.isExposeSelf() ? List.of(componentType) : List.of();
             } else {
-                if (first) {
-                    method.beginControlFlow("if (type == $T.class)", componentType);
-                } else {
-                    method.nextControlFlow("else if (type == $T.class)", componentType);
-                }
+                keys = effectiveRoutableTypes(component);
+            }
+            if (keys.isEmpty()) continue;
+
+            String predicate = renderTypeOrPredicate("type", keys);
+            Object[] args = keys.toArray();
+            if (first) {
+                method.beginControlFlow("if (" + predicate + ")", args);
+            } else {
+                method.nextControlFlow("else if (" + predicate + ")", args);
             }
             first = false;
             method.addStatement("return (T) $L()", getterName);
@@ -1185,17 +1184,21 @@ public final class ContainerGenerator {
 
         boolean first = true;
         for (ComponentModel component : named) {
-            TypeName componentType = ClassName.get(component.getTypeElement());
             String getterName = "get" + component.getClassName();
             String componentName = component.getName().get();
+            List<TypeName> keys = effectiveRoutableTypes(component);
+            if (keys.isEmpty()) continue;
+
+            String predicate = "$S.equals(name) && (" + renderTypeOrPredicate("type", keys) + ")";
+            Object[] args = new Object[keys.size() + 1];
+            args[0] = componentName;
+            for (int i = 0; i < keys.size(); i++) args[i + 1] = keys.get(i);
 
             if (first) {
-                method.beginControlFlow(
-                        "if ($S.equals(name) && type.isAssignableFrom($T.class))", componentName, componentType);
+                method.beginControlFlow("if (" + predicate + ")", args);
                 first = false;
             } else {
-                method.nextControlFlow(
-                        "else if ($S.equals(name) && type.isAssignableFrom($T.class))", componentName, componentType);
+                method.nextControlFlow("else if (" + predicate + ")", args);
             }
             method.addStatement("return (T) $L()", getterName);
         }
@@ -1264,12 +1267,17 @@ public final class ContainerGenerator {
         method.beginControlFlow("try");
         method.addStatement("$T<T> __result = new $T<>()", List.class, ArrayList.class);
 
-        // One assignability check per component. type.isAssignableFrom(ComponentClass.class)
-        // catches both interface-typed and concrete-typed picker base types.
+        // One effective-routable-type check per component. Honours @Component(expose = {…})
+        // — a component listed under expose=[Foo] is collected by getAll(Foo) but NOT by
+        // getAll(OtherInterfaceItImplements). For permissive default beans this matches
+        // every directly-implemented interface plus the class itself.
         for (ComponentModel component : context.getActiveComponents()) {
-            TypeName componentType = ClassName.get(component.getTypeElement());
             String getterName = "get" + component.getClassName();
-            method.beginControlFlow("if (type.isAssignableFrom($T.class))", componentType);
+            List<TypeName> keys = effectiveRoutableTypes(component);
+            if (keys.isEmpty()) continue;
+            String predicate = renderTypeOrPredicate("type", keys);
+            Object[] args = keys.toArray();
+            method.beginControlFlow("if (" + predicate + ")", args);
             method.addStatement("__result.add(type.cast($L()))", getterName);
             method.endControlFlow();
         }
@@ -1366,6 +1374,56 @@ public final class ContainerGenerator {
                 .returns(ClassName.get("java.util.concurrent", "ExecutorService"))
                 .addStatement("return this.eventExecutor")
                 .build();
+    }
+
+    /**
+     * Returns the types under which a component is routable via {@code get(Class)} /
+     * {@code get(Class, String)} / {@code getAll(Class)}. Honours both the explicit
+     * {@code @Component(expose = {…})} list and the {@code exposeSelf} flag:
+     *
+     * <ul>
+     *   <li>When {@code expose} is empty (permissive default), the list is every
+     *       directly-implemented interface of the component class.</li>
+     *   <li>When {@code expose} is non-empty (opt-in restriction), the list is exactly
+     *       those declared types.</li>
+     *   <li>The concrete component class itself is appended when {@code exposeSelf} is
+     *       true (the default), and deduped if it was already listed.</li>
+     * </ul>
+     *
+     * Returns an empty list only when a user explicitly sets {@code expose = {}} together
+     * with {@code exposeSelf = false} on a class with no interfaces — that's a
+     * "fully hidden" bean, callable only via {@code Provider} chains held by other beans.
+     */
+    private List<TypeName> effectiveRoutableTypes(ComponentModel component) {
+        TypeName componentType = ClassName.get(component.getTypeElement());
+        List<TypeName> keys = new ArrayList<>();
+        List<? extends javax.lang.model.type.TypeMirror> declared = component.isExposeRestricted()
+                ? component.getExposeTypes()
+                : component.getTypeElement().getInterfaces();
+        for (javax.lang.model.type.TypeMirror iface : declared) {
+            TypeName n = TypeName.get(iface);
+            if (!keys.contains(n)) keys.add(n);
+        }
+        if (component.isExposeSelf() && !keys.contains(componentType)) {
+            keys.add(componentType);
+        }
+        return keys;
+    }
+
+    /**
+     * Renders an OR-of-equalities JavaPoet predicate over a list of types,
+     * e.g. {@code type == Foo.class || type == Bar.class}. Caller passes a placeholder
+     * for the variable being compared (typically {@code "type"}); the result is a
+     * single-line predicate suitable for use inside a {@code beginControlFlow} format
+     * string. Returned object's second element is the variadic arg array.
+     */
+    private static String renderTypeOrPredicate(String varName, List<TypeName> types) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < types.size(); i++) {
+            if (i > 0) sb.append(" || ");
+            sb.append(varName).append(" == $T.class");
+        }
+        return sb.toString();
     }
 
     /**

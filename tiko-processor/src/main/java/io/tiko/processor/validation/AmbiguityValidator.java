@@ -36,8 +36,18 @@ public final class AmbiguityValidator {
 
             ProviderInfo info = new ProviderInfo(component.getTypeElement(), component.getClassName(), "@Component");
 
-            register(providersByType, component.getQualifiedName(), info);
-            component.getImplementedInterface().ifPresent(iface -> register(providersByType, iface.toString(), info));
+            // Register the component under every type it is actually routable as — so two
+            // unnamed beans listing the same interface in @Component(expose = {…}), or
+            // implementing the same interface under the permissive default, collide here.
+            if (component.isExposeSelf()) {
+                register(providersByType, component.getQualifiedName(), info);
+            }
+            var declared = component.isExposeRestricted()
+                    ? component.getExposeTypes()
+                    : component.getTypeElement().getInterfaces();
+            for (var iface : declared) {
+                register(providersByType, iface.toString(), info);
+            }
         }
 
         for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
