@@ -40,7 +40,7 @@ public class OrderRepository {
         this.connection = connection;
     }
 
-    public void insert(Order order) throws SQLException {
+    public void insertHeader(Order order) throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement(INSERT_ORDER)) {
             ps.setObject(1, order.id());
             ps.setString(2, order.customer());
@@ -48,15 +48,23 @@ public class OrderRepository {
             ps.setTimestamp(4, Timestamp.from(order.createdAt()));
             ps.executeUpdate();
         }
+    }
+
+    public void insertItem(UUID orderId, OrderItem item) throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement(INSERT_ITEM)) {
-            for (OrderItem item : order.items()) {
-                ps.setObject(1, order.id());
-                ps.setInt(2, item.lineNo());
-                ps.setString(3, item.sku());
-                ps.setInt(4, item.qty());
-                ps.addBatch();
-            }
-            ps.executeBatch();
+            ps.setObject(1, orderId);
+            ps.setInt(2, item.lineNo());
+            ps.setString(3, item.sku());
+            ps.setInt(4, item.qty());
+            ps.executeUpdate();
+        }
+    }
+
+    /** Convenience: insert header + all items. Used by tests + batch entry. */
+    public void insert(Order order) throws SQLException {
+        insertHeader(order);
+        for (OrderItem item : order.items()) {
+            insertItem(order.id(), item);
         }
     }
 
