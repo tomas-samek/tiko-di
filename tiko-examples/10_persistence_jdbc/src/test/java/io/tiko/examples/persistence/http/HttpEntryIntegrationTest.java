@@ -128,4 +128,40 @@ class HttpEntryIntegrationTest {
                     .isEqualTo(0);
         }
     }
+
+    @Test
+    void getReturnsCreatedOrder() throws Exception {
+        HttpResponse<String> postResp = client.send(
+                HttpRequest.newBuilder()
+                        .uri(URI.create("http://localhost:" + port + "/orders"))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(
+                                "{\"customer\":\"carol\",\"items\":[{\"lineNo\":1,\"sku\":\"sku-x\",\"qty\":5}]}"))
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertThat(postResp.statusCode()).isEqualTo(201);
+        String id = JSON.readTree(postResp.body()).get("id").asText();
+
+        HttpResponse<String> getResp = client.send(
+                HttpRequest.newBuilder()
+                        .uri(URI.create("http://localhost:" + port + "/orders/" + id))
+                        .GET()
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertThat(getResp.statusCode()).isEqualTo(200);
+        JsonNode body = JSON.readTree(getResp.body());
+        assertThat(body.get("customer").asText()).isEqualTo("carol");
+        assertThat(body.get("items").get(0).get("sku").asText()).isEqualTo("sku-x");
+    }
+
+    @Test
+    void getReturns404ForUnknownId() throws Exception {
+        HttpResponse<String> resp = client.send(
+                HttpRequest.newBuilder()
+                        .uri(URI.create("http://localhost:" + port + "/orders/" + java.util.UUID.randomUUID()))
+                        .GET()
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertThat(resp.statusCode()).isEqualTo(404);
+    }
 }
