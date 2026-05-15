@@ -7,11 +7,14 @@ import io.tiko.processor.util.GeneratorAnnotations;
 import io.tiko.processor.util.ProcessorContext;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 
 /**
@@ -149,23 +152,17 @@ public final class ProxyGenerator {
     }
 
     /**
-     * Creates delegating methods for all interface methods.
+     * Creates delegating methods for all interface methods, including those inherited
+     * from superinterfaces (e.g. {@code java.sql.Connection} inherits {@code unwrap}
+     * and {@code isWrapperFor} from {@code java.sql.Wrapper}). Without this, the
+     * generated proxy fails to compile against any interface that declares abstract
+     * methods on a parent interface.
      */
     private List<MethodSpec> createDelegatingMethods(ComponentModel component, TypeElement interfaceElement) {
         List<MethodSpec> methods = new ArrayList<>();
-
-        for (Element enclosedElement : interfaceElement.getEnclosedElements()) {
-            if (enclosedElement instanceof ExecutableElement method) {
-                // Skip static and default methods
-                if (method.getModifiers().contains(Modifier.STATIC)
-                        || method.getModifiers().contains(Modifier.DEFAULT)) {
-                    continue;
-                }
-
-                methods.add(createDelegatingMethod(component, method));
-            }
+        for (ExecutableElement method : collectAbstractMethods(interfaceElement)) {
+            methods.add(createDelegatingMethod(component, method));
         }
-
         return methods;
     }
 
@@ -178,6 +175,16 @@ public final class ProxyGenerator {
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
                 .returns(TypeName.get(method.getReturnType()));
+
+        // Carry over type parameters (e.g. `<T> T unwrap(Class<T>)` from java.sql.Wrapper).
+        for (var typeParam : method.getTypeParameters()) {
+            methodBuilder.addTypeVariable(TypeVariableName.get(typeParam));
+        }
+
+        // Forward declared exceptions so the proxy preserves the interface's `throws` contract.
+        for (TypeMirror thrown : method.getThrownTypes()) {
+            methodBuilder.addException(TypeName.get(thrown));
+        }
 
         // Add parameters
         List<String> paramNames = new ArrayList<>();
@@ -208,17 +215,52 @@ public final class ProxyGenerator {
     private List<MethodSpec> createFactoryDelegatingMethods(FactoryMethodModel factory, TypeElement interfaceElement) {
         List<MethodSpec> methods = new ArrayList<>();
         String delegateCall = "container.produce_" + factory.getFactoryIdentifier() + "()";
+        for (ExecutableElement method : collectAbstractMethods(interfaceElement)) {
+            methods.add(createFactoryDelegatingMethod(method, delegateCall));
+        }
+        return methods;
+    }
 
-        for (Element enclosedElement : interfaceElement.getEnclosedElements()) {
-            if (enclosedElement instanceof ExecutableElement method) {
+    /**
+     * Walks the interface and all its superinterfaces, collecting abstract methods
+     * (excluding {@code static} and {@code default}). Deduplicates by a signature
+     * key (name plus erasure of parameter types) so that a method re-declared in a
+     * subinterface doesn't appear twice.
+     */
+    private List<ExecutableElement> collectAbstractMethods(TypeElement interfaceElement) {
+        LinkedHashMap<String, ExecutableElement> bySig = new LinkedHashMap<>();
+        collectInto(interfaceElement, bySig);
+        return new ArrayList<>(bySig.values());
+    }
+
+    private void collectInto(TypeElement interfaceElement, LinkedHashMap<String, ExecutableElement> sink) {
+        for (Element enclosed : interfaceElement.getEnclosedElements()) {
+            if (enclosed instanceof ExecutableElement method) {
                 if (method.getModifiers().contains(Modifier.STATIC)
                         || method.getModifiers().contains(Modifier.DEFAULT)) {
                     continue;
                 }
-                methods.add(createFactoryDelegatingMethod(method, delegateCall));
+                sink.putIfAbsent(signatureKey(method), method);
             }
         }
-        return methods;
+        for (TypeMirror superInterface : interfaceElement.getInterfaces()) {
+            if (superInterface.getKind() != TypeKind.DECLARED) continue;
+            var superElement = ((DeclaredType) superInterface).asElement();
+            if (superElement instanceof TypeElement parent) {
+                collectInto(parent, sink);
+            }
+        }
+    }
+
+    private String signatureKey(ExecutableElement method) {
+        var sb = new StringBuilder(method.getSimpleName().toString()).append('(');
+        boolean first = true;
+        for (var param : method.getParameters()) {
+            if (!first) sb.append(',');
+            first = false;
+            sb.append(context.getTypeUtils().erasure(param.asType()).toString());
+        }
+        return sb.append(')').toString();
     }
 
     private MethodSpec createFactoryDelegatingMethod(ExecutableElement method, String delegateCall) {
@@ -227,6 +269,11 @@ public final class ProxyGenerator {
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
                 .returns(TypeName.get(method.getReturnType()));
+
+        // Carry over type parameters (e.g. `<T> T unwrap(Class<T>)` from java.sql.Wrapper).
+        for (var typeParam : method.getTypeParameters()) {
+            methodBuilder.addTypeVariable(TypeVariableName.get(typeParam));
+        }
 
         // Forward declared exceptions so the proxy preserves the interface's `throws` contract
         // (e.g. java.sql.Connection's checked SQLException).
