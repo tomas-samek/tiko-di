@@ -86,13 +86,23 @@ public class JdbcConnectionProvider {
     @Inject JdbcConnectionProvider(DataSource ds) { this.ds = ds; }
 
     @Produces(scope = Scope.REQUEST)
-    public Connection connection() throws SQLException {
-        var c = ds.getConnection();
-        c.setAutoCommit(false);
-        return c;
+    public Connection connection() {
+        try {
+            var c = ds.getConnection();
+            c.setAutoCommit(false);
+            return c;
+        } catch (SQLException e) {
+            throw new IllegalStateException("Failed to acquire JDBC connection", e);
+        }
     }
 }
 ```
+
+The checked-exception wrap is a current-Tiko quirk: the annotation processor
+emits `produce_*()` accessors with no `throws` clause, so `@Produces` methods
+can't declare checked exceptions today. The same constraint applies to
+`@PostConstruct` (you'll see it again in `SchemaInitializer`). Tracking the
+gap as a framework follow-up — for now, wrap and propagate the cause.
 
 The interesting part — repositories inject `Connection` directly:
 
@@ -212,7 +222,7 @@ distinction earns its keep here:
   them do.
 - `CurrentOrderContext` is EVENT-scoped, so each iteration gets its own
   instance with its own `orderId`. `BatchAuditLogger` is a SINGLETON
-  `@EventHandler(EventEndingEvent.class)` that injects `CurrentOrder` as
+  `@EventHandler` on `EventEndingEvent` that injects `CurrentOrder` as
   a proxy and reads the current iteration's id at scope-end — no
   parameter threading.
 

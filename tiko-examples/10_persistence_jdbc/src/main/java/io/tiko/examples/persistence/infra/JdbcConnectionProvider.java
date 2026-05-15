@@ -5,6 +5,7 @@ import io.tiko.annotations.Component;
 import io.tiko.annotations.Inject;
 import io.tiko.annotations.Produces;
 import java.sql.Connection;
+import java.sql.SQLException;
 import javax.sql.DataSource;
 
 /**
@@ -34,7 +35,7 @@ public class JdbcConnectionProvider {
             var c = ds.getConnection();
             c.setAutoCommit(false);
             return c;
-        } catch (java.sql.SQLException e) {
+        } catch (SQLException e) {
             throw new IllegalStateException("Failed to acquire JDBC connection", e);
         }
     }
