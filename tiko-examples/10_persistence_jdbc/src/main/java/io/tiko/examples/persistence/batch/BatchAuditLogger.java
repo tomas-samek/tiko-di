@@ -4,15 +4,17 @@ import io.tiko.Scope;
 import io.tiko.annotations.Component;
 import io.tiko.annotations.EventHandler;
 import io.tiko.annotations.Inject;
-import io.tiko.events.EventStartedEvent;
+import io.tiko.events.EventEndingEvent;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.Logger;
 
 /**
- * Sync subscriber to {@link EventStartedEvent} that records the EVENT-scoped
- * {@link CurrentOrder}'s id on each iteration. Proves two things at once:
+ * Sync subscriber to {@link EventEndingEvent} that records the EVENT-scoped
+ * {@link CurrentOrder}'s id on each iteration. Listens at scope end (not
+ * start) so the order id set by {@code BatchEntry} during the body has been
+ * applied before this read. Proves two things at once:
  * (a) Tiko's auto-proxy works for EVENT-scoped beans injected into SINGLETONs,
  * (b) the batch loop actually opens N distinct EVENT scopes inside one REQUEST.
  *
@@ -34,7 +36,7 @@ public class BatchAuditLogger {
     }
 
     @EventHandler
-    public void onEventStarted(EventStartedEvent event) {
+    public void onEventEnding(EventEndingEvent event) {
         UUID id = current.orderId();
         if (id != null) {
             seen.add(id);

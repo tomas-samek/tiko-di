@@ -45,7 +45,7 @@ public final class BatchEntry {
             var repo = container.get(OrderRepository.class);
             for (Order o : orders) {
                 container.runInEventScope(() -> {
-                    var ctx = container.get(CurrentOrderContext.class);
+                    var ctx = container.get(CurrentOrder.class);
                     ctx.setOrderId(o.id());
                     try {
                         repo.insert(o);
