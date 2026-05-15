@@ -25,6 +25,7 @@ public final class FactoryMethodModel {
     private final List<DependencyModel> dependencies;
     private final boolean isStatic;
     private final boolean autoCloseable;
+    private final boolean requiresProxy;
 
     private FactoryMethodModel(Builder builder) {
         this.methodElement = builder.methodElement;
@@ -38,6 +39,7 @@ public final class FactoryMethodModel {
         this.dependencies = List.copyOf(builder.dependencies);
         this.isStatic = builder.isStatic;
         this.autoCloseable = builder.autoCloseable;
+        this.requiresProxy = builder.requiresProxy;
     }
 
     public static Builder builder() {
@@ -114,6 +116,21 @@ public final class FactoryMethodModel {
         return declaringClass.getSimpleName() + "_" + methodName;
     }
 
+    /**
+     * True when this factory's output needs an auto-proxy class so that a
+     * longer-lived consumer can hold a stable reference that resolves to
+     * the current scope's value on every method call. Triggered when the
+     * factory's scope is REQUEST or EVENT and its return type is an
+     * interface (proxying a concrete class would require bytecode tricks
+     * Tiko deliberately avoids). The decision to actually <em>use</em> the
+     * proxy at a particular consumer site is the consumer side's call —
+     * the proxy class itself is generated unconditionally when this flag
+     * is true.
+     */
+    public boolean requiresProxy() {
+        return requiresProxy;
+    }
+
     public static final class Builder {
         private ExecutableElement methodElement;
         private TypeElement declaringClass;
@@ -126,6 +143,7 @@ public final class FactoryMethodModel {
         private List<DependencyModel> dependencies = new ArrayList<>();
         private boolean isStatic = false;
         private boolean autoCloseable = false;
+        private boolean requiresProxy = false;
 
         private Builder() {}
 
@@ -187,6 +205,11 @@ public final class FactoryMethodModel {
 
         public Builder autoCloseable(boolean autoCloseable) {
             this.autoCloseable = autoCloseable;
+            return this;
+        }
+
+        public Builder requiresProxy(boolean requiresProxy) {
+            this.requiresProxy = requiresProxy;
             return this;
         }
 

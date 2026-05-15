@@ -2,6 +2,7 @@ package io.tiko.processor.generator;
 
 import com.palantir.javapoet.*;
 import io.tiko.processor.model.ComponentModel;
+import io.tiko.processor.model.FactoryMethodModel;
 import io.tiko.processor.util.GeneratorAnnotations;
 import io.tiko.processor.util.ProcessorContext;
 import java.io.IOException;
@@ -86,6 +87,45 @@ public final class ProxyGenerator {
     }
 
     /**
+     * Generates a proxy class for a {@code @Produces} factory method whose output is an
+     * interface in a shorter-lived scope than its consumers. The generated class is named
+     * {@code <FactoryIdentifier>Proxy} (e.g., {@code JdbcConnectionProvider_connectionProxy})
+     * and delegates each interface method to {@code container.produce_<id>().method(args)} —
+     * which resolves to the current scope's value on every call.
+     *
+     * <p>Counterpart to {@link #generate(ComponentModel)} for the case where the
+     * shorter-lived bean is sourced from a {@code @Produces} factory rather than a
+     * {@code @Component} class.
+     */
+    public boolean generate(FactoryMethodModel factory) throws IOException {
+        if (!factory.requiresProxy()) {
+            return false;
+        }
+
+        TypeMirror returnType = factory.getReturnType();
+        TypeElement interfaceElement = context.getElementUtils().getTypeElement(factory.getReturnTypeName());
+        if (interfaceElement == null) {
+            return false;
+        }
+
+        String proxyClassName = factory.getFactoryIdentifier() + "Proxy";
+
+        TypeSpec proxyClass = TypeSpec.classBuilder(proxyClassName)
+                .addAnnotation(GeneratorAnnotations.generatedBy(ProxyGenerator.class))
+                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                .addSuperinterface(TypeName.get(returnType))
+                .addField(createContainerField())
+                .addMethod(createConstructor())
+                .addMethods(createFactoryDelegatingMethods(factory, interfaceElement))
+                .build();
+
+        JavaFile javaFile = JavaFile.builder(GENERATED_PACKAGE, proxyClass).build();
+
+        javaFile.writeTo(context.getFiler());
+        return true;
+    }
+
+    /**
      * Creates the container field.
      */
     private FieldSpec createContainerField() {
@@ -155,6 +195,58 @@ public final class ProxyGenerator {
             methodBuilder.addStatement("$L.$L($L)", getActualCall, method.getSimpleName(), params);
         } else {
             methodBuilder.addStatement("return $L.$L($L)", getActualCall, method.getSimpleName(), params);
+        }
+
+        return methodBuilder.build();
+    }
+
+    /**
+     * Creates delegating methods for a factory-output proxy. Each method body
+     * resolves the current scope's value via {@code container.produce_<id>()} and
+     * forwards the call.
+     */
+    private List<MethodSpec> createFactoryDelegatingMethods(FactoryMethodModel factory, TypeElement interfaceElement) {
+        List<MethodSpec> methods = new ArrayList<>();
+        String delegateCall = "container.produce_" + factory.getFactoryIdentifier() + "()";
+
+        for (Element enclosedElement : interfaceElement.getEnclosedElements()) {
+            if (enclosedElement instanceof ExecutableElement method) {
+                if (method.getModifiers().contains(Modifier.STATIC)
+                        || method.getModifiers().contains(Modifier.DEFAULT)) {
+                    continue;
+                }
+                methods.add(createFactoryDelegatingMethod(method, delegateCall));
+            }
+        }
+        return methods;
+    }
+
+    private MethodSpec createFactoryDelegatingMethod(ExecutableElement method, String delegateCall) {
+        MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder(
+                        method.getSimpleName().toString())
+                .addModifiers(Modifier.PUBLIC)
+                .addAnnotation(Override.class)
+                .returns(TypeName.get(method.getReturnType()));
+
+        // Forward declared exceptions so the proxy preserves the interface's `throws` contract
+        // (e.g. java.sql.Connection's checked SQLException).
+        for (TypeMirror thrown : method.getThrownTypes()) {
+            methodBuilder.addException(TypeName.get(thrown));
+        }
+
+        List<String> paramNames = new ArrayList<>();
+        method.getParameters().forEach(param -> {
+            String paramName = param.getSimpleName().toString();
+            paramNames.add(paramName);
+            methodBuilder.addParameter(TypeName.get(param.asType()), paramName);
+        });
+
+        String params = String.join(", ", paramNames);
+
+        if (method.getReturnType().getKind() == javax.lang.model.type.TypeKind.VOID) {
+            methodBuilder.addStatement("$L.$L($L)", delegateCall, method.getSimpleName(), params);
+        } else {
+            methodBuilder.addStatement("return $L.$L($L)", delegateCall, method.getSimpleName(), params);
         }
 
         return methodBuilder.build();

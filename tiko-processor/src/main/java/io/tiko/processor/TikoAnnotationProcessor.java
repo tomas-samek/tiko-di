@@ -458,6 +458,16 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         // HttpClient, KafkaProducer, etc.).
         boolean factoryAutoCloseable = typeUtil.isAssignableTo(returnType, "java.lang.AutoCloseable");
 
+        // Auto-proxy: when a REQUEST/EVENT-scoped factory produces an interface, a longer-lived
+        // consumer (SINGLETON injecting a REQUEST-scoped Connection, for example) needs a proxy
+        // that resolves to the current scope's value on every method call — same teaching as
+        // @Component-based cross-scope proxies. Proxying a concrete class would require bytecode
+        // tricks Tiko deliberately avoids, so we only emit a proxy for interface returns.
+        boolean requiresProxy = (annotation.scope() == Scope.REQUEST || annotation.scope() == Scope.EVENT)
+                && returnType.getKind() == javax.lang.model.type.TypeKind.DECLARED
+                && ((javax.lang.model.type.DeclaredType) returnType).asElement().getKind()
+                        == javax.lang.model.element.ElementKind.INTERFACE;
+
         return FactoryMethodModel.builder()
                 .methodElement(methodElement)
                 .declaringClass(declaringClass)
@@ -469,6 +479,7 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
                 .profiles(Arrays.asList(annotation.profiles()))
                 .dependencies(dependencies)
                 .autoCloseable(factoryAutoCloseable)
+                .requiresProxy(requiresProxy)
                 .build();
     }
 
@@ -666,6 +677,19 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
                                 Diagnostic.Kind.NOTE, "Tiko DI: Generating proxy for " + component.getClassName());
             }
             proxyGenerator.generate(component);
+        }
+        // Factory outputs that are interfaces in shorter-lived scopes also need proxies so
+        // longer-lived consumers (e.g., SINGLETON repo injecting a REQUEST-scoped Connection)
+        // resolve per-call to the current scope's value instead of capturing the first one.
+        for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
+            if (factory.requiresProxy()) {
+                processingEnv
+                        .getMessager()
+                        .printMessage(
+                                Diagnostic.Kind.NOTE,
+                                "Tiko DI: Generating proxy for " + factory.getFactoryIdentifier());
+                proxyGenerator.generate(factory);
+            }
         }
 
         // Generate event registry

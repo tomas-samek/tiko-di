@@ -108,7 +108,7 @@ public final class ComponentFactoryGenerator {
                         "$T $L = () -> $L",
                         TypeName.get(dependency.getType()),
                         paramName,
-                        generateContainerGetCall(dependency));
+                        generateContainerGetCall(dependency, component));
             } else if (dependency.isPicker()) {
                 // Picker<T> is constructed inline via the generic ContainerPicker<T> impl —
                 // one runtime class services every Picker injection point regardless of T.
@@ -125,7 +125,7 @@ public final class ComponentFactoryGenerator {
                         "$T $L = $L",
                         TypeName.get(dependency.getType()),
                         paramName,
-                        generateContainerGetCall(dependency));
+                        generateContainerGetCall(dependency, component));
             }
         }
 
@@ -164,8 +164,15 @@ public final class ComponentFactoryGenerator {
 
     /**
      * Generates a call to container.getXxx() for the given dependency.
+     *
+     * @param dependency the dependency to resolve
+     * @param consumer the consuming component — needed for cross-scope proxy decisions
+     *     when the provider is a {@code @Produces} factory output (a longer-lived consumer
+     *     of a REQUEST/EVENT-scoped factory output gets a generated proxy instead of a
+     *     direct {@code container.produce_*()} call so the value resolves per-call to the
+     *     current scope).
      */
-    private String generateContainerGetCall(DependencyModel dependency) {
+    private String generateContainerGetCall(DependencyModel dependency, ComponentModel consumer) {
         String typeName =
                 dependency.isProvider() ? dependency.getUnwrappedType().get().toString() : dependency.getTypeName();
 
@@ -210,6 +217,15 @@ public final class ComponentFactoryGenerator {
             // of qualifier — the qualifier already disambiguated which factory the
             // dependency resolves to during processor lookup. Mirrors the @Pick branch
             // above and the corresponding logic in ContainerGenerator's dependency wiring.
+            //
+            // Cross-scope: when the consumer outlives the factory's scope AND the factory
+            // produces an interface, instantiate the generated proxy so each method call
+            // resolves to the current scope's value. Without the proxy, a SINGLETON consumer
+            // would capture the first scope's instance and reuse a stale (often closed)
+            // reference on subsequent scope frames.
+            if (factory.requiresProxy() && scopeLevel(consumer.getScope()) < scopeLevel(factory.getScope())) {
+                return String.format("new %sProxy(container)", factory.getFactoryIdentifier());
+            }
             return String.format("container.produce_%s()", factory.getFactoryIdentifier());
         } else if (provider instanceof io.tiko.processor.config.ConfigurationModel) {
             // @Configuration records are stored in configSingletons and retrieved via container.get(Class)
@@ -234,5 +250,18 @@ public final class ComponentFactoryGenerator {
     private String getSimpleClassName(String qualifiedName) {
         int lastDot = qualifiedName.lastIndexOf('.');
         return lastDot >= 0 ? qualifiedName.substring(lastDot + 1) : qualifiedName;
+    }
+
+    /**
+     * Scope ordinal where lower = longer-lived. Used to decide whether a factory output
+     * needs a per-call-resolving proxy when injected into a longer-lived consumer.
+     */
+    private static int scopeLevel(io.tiko.Scope scope) {
+        return switch (scope) {
+            case SINGLETON -> 0;
+            case REQUEST -> 1;
+            case EVENT -> 2;
+            case PROTOTYPE -> 3;
+        };
     }
 }
