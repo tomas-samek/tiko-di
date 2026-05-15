@@ -206,15 +206,11 @@ public final class ComponentFactoryGenerator {
                 return String.format("container.%s()", methodName);
             }
         } else if (provider instanceof io.tiko.processor.model.FactoryMethodModel factory) {
-            // Use the factory's return type
-            String className = getSimpleClassName(factory.getReturnTypeName());
-            String methodName = "get" + className;
-            if (dependency.getQualifier().isPresent()) {
-                String qualifier = dependency.getQualifier().get();
-                return String.format("container.%s(\"%s\")", methodName, qualifier);
-            } else {
-                return String.format("container.%s()", methodName);
-            }
+            // Factories are addressed by their unique produce_<id>() getter regardless
+            // of qualifier — the qualifier already disambiguated which factory the
+            // dependency resolves to during processor lookup. Mirrors the @Pick branch
+            // above and the corresponding logic in ContainerGenerator's dependency wiring.
+            return String.format("container.produce_%s()", factory.getFactoryIdentifier());
         } else if (provider instanceof io.tiko.processor.config.ConfigurationModel) {
             // @Configuration records are stored in configSingletons and retrieved via container.get(Class)
             return String.format("container.get(%s.class)", typeName);
