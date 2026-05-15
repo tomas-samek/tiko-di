@@ -43,6 +43,8 @@
         <maven-shade.version>3.6.0</maven-shade.version>
         <testcontainers.version>1.20.4</testcontainers.version>
         <javalin.version>6.7.0</javalin.version>
+        <hikari.version>6.2.1</hikari.version>
+        <h2.version>2.3.232</h2.version>
     </properties>
 
     <dependencyManagement>
@@ -182,6 +184,16 @@
                 <groupId>io.javalin</groupId>
                 <artifactId>javalin</artifactId>
                 <version>${javalin.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.zaxxer</groupId>
+                <artifactId>HikariCP</artifactId>
+                <version>${hikari.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.h2database</groupId>
+                <artifactId>h2</artifactId>
+                <version>${h2.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
