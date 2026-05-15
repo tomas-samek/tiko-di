@@ -63,6 +63,45 @@ class BatchEntryIntegrationTest {
                 .containsExactlyElementsOf(orders.stream().map(Order::id).toList());
     }
 
+    @Test
+    void batchRollsBackEverythingWhenAnyOrderFails() throws Exception {
+        // 5 orders, index 2 is poison: a duplicate primary key (line_no=1 twice).
+        UUID poisonId = UUID.randomUUID();
+        List<Order> orders = new ArrayList<>(makeOrders(5));
+        orders.set(
+                2,
+                new Order(
+                        poisonId,
+                        "poison",
+                        "NEW",
+                        Instant.now(),
+                        List.of(new OrderItem(1, "sku-dup-a", 1), new OrderItem(1, "sku-dup-b", 1))));
+
+        try {
+            BatchEntry.processBatch(container, orders);
+            org.junit.jupiter.api.Assertions.fail("expected an exception from the poison record");
+        } catch (RuntimeException expected) {
+            // Expected — primary-key violation on order_items.
+        }
+
+        // Cross-connection check: nothing committed. Not the poison row, not
+        // the 2 orders that came before it, not the 2 after.
+        try (Connection c = DriverManager.getConnection(JDBC_URL, "sa", "");
+                Statement st = c.createStatement();
+                var rs = st.executeQuery("SELECT COUNT(*) FROM orders")) {
+            rs.next();
+            assertThat(rs.getInt(1))
+                    .as("the whole batch must roll back, all-or-none")
+                    .isEqualTo(0);
+        }
+        try (Connection c = DriverManager.getConnection(JDBC_URL, "sa", "");
+                Statement st = c.createStatement();
+                var rs = st.executeQuery("SELECT COUNT(*) FROM order_items")) {
+            rs.next();
+            assertThat(rs.getInt(1)).as("no items survived either").isEqualTo(0);
+        }
+    }
+
     private List<Order> makeOrders(int n) {
         var out = new ArrayList<Order>();
         for (int i = 0; i < n; i++) {
