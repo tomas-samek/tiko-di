@@ -26,6 +26,7 @@
         <module>06_config_multi_module</module>
         <module>07_async_start</module>
         <module>08_kafka_order_warehouse</module>
+        <module>09_http_javalin</module>
     </modules>
 
     <!--

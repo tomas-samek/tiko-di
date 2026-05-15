@@ -31,7 +31,7 @@
 | `src/main/java/io/tiko/examples/http/AuditLogger.java` | SINGLETON `@Component`: sync `@EventHandler` on `TicketCreated`, writes to stdout. |
 | `src/main/java/io/tiko/examples/http/MetricsCounter.java` | SINGLETON `@Component`: sync `@EventHandler` on `TicketCreated`, increments `AtomicLong`, exposes `count()`. |
 | `src/main/java/io/tiko/examples/http/NotificationSender.java` | SINGLETON `@Component`: `@EventHandler(async = true)` on `TicketCreated`, decrements a `CountDownLatch`. |
-| `src/main/java/io/tiko/examples/http/TicketHttpRoutes.java` | SINGLETON `@Component` (the bridge): injects deps, two `handle*` methods. Plain straight-line code; no `runInRequestScope` (the decorator handles it). |
+| `src/main/java/io/tiko/examples/http/TicketHttpRoutes.java` | Plain class (the bridge); not a `@Component` because it needs `EventBus`/`Container`, neither of which are DI-injectable. `Main` constructs one instance after container bootstrap. Two `handle*` methods, straight-line code; no `runInRequestScope` (the decorator handles it). |
 | `src/test/java/io/tiko/examples/http/TicketServiceTest.java` | Unit test for the in-memory store (no container). |
 | `src/test/java/io/tiko/examples/http/TicketHttpIntegrationTest.java` | Integration test: real container + real Javalin on random port, real HTTP via `java.net.http.HttpClient`. |
 | `README.md` | Module-level docs walking through the dichotomy. |
@@ -706,16 +706,16 @@ git commit -m "feat(examples): TikoJavalin.scoped Handler decorator"
 **Files:**
 - Create: `tiko-examples/09_http_javalin/src/main/java/io/tiko/examples/http/TicketHttpRoutes.java`
 
+**Note on design:** Tiko does not expose `EventBus` (or `Container`) as an injectable bean — both are framework infrastructure, reachable only via `container.getEventBus()` after bootstrap. So this bridge is *not* a `@Component`: `Main` constructs it once after the container is built and passes it to route registration. `RequestId` resolves per-request via `container.get(RequestId.class)` from inside the open scope. The example still teaches the REQUEST-scoped bean concept; it just resolves the scoped bean via the container rather than via auto-proxy injection.
+
 - [ ] **Step 1: Create `TicketHttpRoutes.java`**
 
 ```java
 package io.tiko.examples.http;
 
 import io.javalin.http.Context;
+import io.tiko.Container;
 import io.tiko.EventBus;
-import io.tiko.Scope;
-import io.tiko.annotations.Component;
-import io.tiko.annotations.Inject;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -726,27 +726,31 @@ import java.util.UUID;
  * <p>Bridge methods are plain straight-line code — they do not call
  * {@code runInRequestScope} themselves; the {@code TikoJavalin.scoped(...)}
  * decorator wraps the entire delegate invocation at registration time.
+ *
+ * <p>Not a {@code @Component}: it depends on {@link EventBus}, which Tiko
+ * exposes off the {@link Container} rather than via DI. {@link Main} builds
+ * one instance after container bootstrap. {@link RequestId} is resolved
+ * per-request via {@code container.get(RequestId.class)} from inside the
+ * open scope.
  */
-@Component(scope = Scope.SINGLETON)
 public final class TicketHttpRoutes {
 
     private final TicketService tickets;
     private final EventBus eventBus;
-    private final RequestId requestId; // proxied to current REQUEST scope instance
+    private final Container container;
 
-    @Inject
-    public TicketHttpRoutes(TicketService tickets, EventBus eventBus, RequestId requestId) {
+    public TicketHttpRoutes(TicketService tickets, EventBus eventBus, Container container) {
         this.tickets = tickets;
         this.eventBus = eventBus;
-        this.requestId = requestId;
+        this.container = container;
     }
 
     public void handleCreate(Context ctx) {
         var req = ctx.bodyAsClass(CreateTicketRequest.class);
         try {
             var ticket = tickets.create(req);
-            eventBus.publish(new TicketCreated(
-                    ticket.id(), ticket.title(), requestId.value(), Instant.now()));
+            var reqId = container.get(RequestId.class).value();
+            eventBus.publish(new TicketCreated(ticket.id(), ticket.title(), reqId, Instant.now()));
             ctx.status(201).json(ticket);
         } catch (IllegalArgumentException badInput) {
             ctx.status(400).json(java.util.Map.of("error", badInput.getMessage()));
@@ -755,9 +759,7 @@ public final class TicketHttpRoutes {
 
     public void handleGet(Context ctx) {
         var id = UUID.fromString(ctx.pathParam("id"));
-        tickets.find(id).ifPresentOrElse(
-                t -> ctx.status(200).json(t),
-                () -> ctx.status(404));
+        tickets.find(id).ifPresentOrElse(t -> ctx.status(200).json(t), () -> ctx.status(404));
     }
 }
 ```
@@ -765,7 +767,7 @@ public final class TicketHttpRoutes {
 - [ ] **Step 2: Verify compile**
 
 Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/09_http_javalin compile`
-Expected: `BUILD SUCCESS`. The Tiko processor sees a SINGLETON injecting a REQUEST-scoped `RequestId` (via interface) and generates a proxy.
+Expected: `BUILD SUCCESS`. Component count unchanged (this file is not a `@Component`).
 
 - [ ] **Step 3: Commit**
 
@@ -802,7 +804,8 @@ public final class Main {
 
     public static void main(String[] args) {
         Container container = Tiko.create();
-        TicketHttpRoutes routes = container.get(TicketHttpRoutes.class);
+        TicketHttpRoutes routes = new TicketHttpRoutes(
+                container.get(TicketService.class), container.getEventBus(), container);
 
         Javalin app = Javalin.create();
         app.post("/tickets", TikoJavalin.scoped(container, routes::handleCreate));
@@ -831,7 +834,7 @@ public final class Main {
 - [ ] **Step 2: Verify compile**
 
 Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/09_http_javalin compile`
-Expected: `BUILD SUCCESS`. The Tiko processor now generates `TikoContainerImpl_<hash>` covering all 8 `@Component` classes in the module.
+Expected: `BUILD SUCCESS`. The Tiko processor generates `TikoContainerImpl_<hash>` covering the module's `@Component` classes (TicketHttpRoutes is constructed manually, so it is not a component).
 
 - [ ] **Step 3: Verify the shaded jar builds**
 
@@ -903,7 +906,8 @@ class TicketHttpIntegrationTest {
     @BeforeEach
     void setUp() {
         container = Tiko.create();
-        var routes = container.get(TicketHttpRoutes.class);
+        var routes = new TicketHttpRoutes(
+                container.get(TicketService.class), container.getEventBus(), container);
         app = Javalin.create();
         app.post("/tickets", TikoJavalin.scoped(container, routes::handleCreate));
         app.get("/tickets/{id}", TikoJavalin.scoped(container, routes::handleGet));
@@ -1222,8 +1226,9 @@ This gives the example three things for free:
   request. `RequestTimer` subscribes to demonstrate per-request observability
   with zero per-route boilerplate.
 - REQUEST-scoped beans (here: `RequestIdImpl`) are reachable from inside the
-  handler chain. The bridge injects `RequestId` (proxied) and stamps each
-  request's UUID onto the published `TicketCreated` event.
+  handler chain. The bridge resolves `RequestId` per-request via
+  `container.get(RequestId.class)` from inside the open scope, and stamps
+  each request's UUID onto the published `TicketCreated` event.
 - Sync `@EventHandler` subscribers run inside the same scope and can read
   REQUEST-scoped beans directly. Async subscribers run on a different thread,
   don't see the scope, and read whatever they need from the event payload.
@@ -1252,8 +1257,10 @@ Default port is `8080`; override with `TIKO_HTTP_PORT=9090 java -jar ...`.
   `runInRequestScope` lives in the decorator, not here.
 - `TikoJavalin` — `Handler scoped(Container, Handler)`. The middleware.
 - `RequestIdImpl` — REQUEST-scoped `@Component` implementing `RequestId`.
-  Cross-scope injection into the SINGLETON bridge works via a compile-time
-  proxy.
+  Resolved per-request via `container.get(RequestId.class)` from inside the
+  scope opened by `TikoJavalin.scoped`. (Tiko's auto-proxy mechanism for
+  REQUEST→SINGLETON injection is demonstrated in `01_basic_di`; this example
+  uses container-lookup because the bridge isn't a `@Component`.)
 - `RequestTimer` — `@EventHandler` on `RequestStartedEvent` /
   `RequestEndingEvent`. Demonstrates the framework's lifecycle events.
 - `AuditLogger`, `MetricsCounter`, `NotificationSender` — the three
