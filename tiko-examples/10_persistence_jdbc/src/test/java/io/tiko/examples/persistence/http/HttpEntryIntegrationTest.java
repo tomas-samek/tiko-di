@@ -95,4 +95,37 @@ class HttpEntryIntegrationTest {
             assertThat(rs.getString(1)).isEqualTo("alice");
         }
     }
+
+    @Test
+    void postFailingMidTransactionRollsBackEverything() throws Exception {
+        // Negative qty on the second item triggers the bridge's validation
+        // AFTER the orders row + first item insert succeeded. The
+        // TransactionalScope wrapper rolls back. Nothing must be committed.
+        HttpResponse<String> resp = client.send(
+                HttpRequest.newBuilder()
+                        .uri(URI.create("http://localhost:" + port + "/orders"))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString("{\"customer\":\"poison\",\"items\":["
+                                + "{\"lineNo\":1,\"sku\":\"a\",\"qty\":1},"
+                                + "{\"lineNo\":2,\"sku\":\"b\",\"qty\":-1}]}"))
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
+
+        assertThat(resp.statusCode()).isEqualTo(500);
+
+        try (Connection c = DriverManager.getConnection(JDBC_URL, "sa", "");
+                Statement st = c.createStatement();
+                var rs = st.executeQuery("SELECT COUNT(*) FROM orders WHERE customer = 'poison'")) {
+            rs.next();
+            assertThat(rs.getInt(1)).as("orders row must be rolled back").isEqualTo(0);
+        }
+        try (Connection c = DriverManager.getConnection(JDBC_URL, "sa", "");
+                Statement st = c.createStatement();
+                var rs = st.executeQuery("SELECT COUNT(*) FROM order_items WHERE sku IN ('a','b')")) {
+            rs.next();
+            assertThat(rs.getInt(1))
+                    .as("any inserted items must be rolled back")
+                    .isEqualTo(0);
+        }
+    }
 }
