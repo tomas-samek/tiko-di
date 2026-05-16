@@ -190,9 +190,11 @@ public final class EventRegistryGenerator {
             runBody.addStatement("$T.exit(__asyncPrev)", CHAIN_CONTEXT);
             runBody.endControlFlow();
 
-            // Build the whenComplete body
+            // Build the whenComplete body. Skip Error so the four user-facing throw paths
+            // (sync/async event, @PostConstruct, @Produces) stay consistent on Exception:
+            // Errors propagate without going through ErrorHandler.
             CodeBlock.Builder wcBody = CodeBlock.builder();
-            wcBody.beginControlFlow("if (__t != null)");
+            wcBody.beginControlFlow("if (__t != null && !(__t instanceof $T))", Error.class);
             wcBody.addStatement(
                     "$T __cause = (__t instanceof $T && __t.getCause() != null) ? __t.getCause() : __t",
                     Throwable.class,

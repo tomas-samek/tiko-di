@@ -148,12 +148,15 @@ public final class ComponentFactoryGenerator {
         for (ExecutableElement postConstruct : component.getPostConstructMethods()) {
             methodBuilder.beginControlFlow("try");
             methodBuilder.addStatement("instance.$L()", postConstruct.getSimpleName());
-            methodBuilder.nextControlFlow("catch ($T | $T __t)", RuntimeException.class, Error.class);
+            methodBuilder.nextControlFlow("catch ($T __t)", Exception.class);
             methodBuilder.addStatement(
                     "container.getErrorHandler().onError(new $T($T.class, __t))",
                     ClassName.get("io.tiko", "PostConstructFailure"),
                     componentClass);
-            methodBuilder.addStatement("throw __t");
+            methodBuilder.addStatement(
+                    "throw $T.<$T>sneakyThrow(__t)",
+                    ClassName.get("io.tiko.runtime", "Unchecked"),
+                    RuntimeException.class);
             methodBuilder.endControlFlow();
         }
 

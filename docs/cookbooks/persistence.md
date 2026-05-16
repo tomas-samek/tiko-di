@@ -86,23 +86,13 @@ public class JdbcConnectionProvider {
     @Inject JdbcConnectionProvider(DataSource ds) { this.ds = ds; }
 
     @Produces(scope = Scope.REQUEST)
-    public Connection connection() {
-        try {
-            var c = ds.getConnection();
-            c.setAutoCommit(false);
-            return c;
-        } catch (SQLException e) {
-            throw new IllegalStateException("Failed to acquire JDBC connection", e);
-        }
+    public Connection connection() throws SQLException {
+        var c = ds.getConnection();
+        c.setAutoCommit(false);
+        return c;
     }
 }
 ```
-
-The checked-exception wrap is a current-Tiko quirk: the annotation processor
-emits `produce_*()` accessors with no `throws` clause, so `@Produces` methods
-can't declare checked exceptions today. The same constraint applies to
-`@PostConstruct` (you'll see it again in `SchemaInitializer`). Tracking the
-gap as a framework follow-up — for now, wrap and propagate the cause.
 
 The interesting part — repositories inject `Connection` directly:
 

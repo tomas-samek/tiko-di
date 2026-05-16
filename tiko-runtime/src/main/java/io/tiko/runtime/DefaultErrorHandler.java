@@ -7,6 +7,7 @@ import io.tiko.ErrorHandler;
 import io.tiko.EventHandlerError;
 import io.tiko.PostConstructFailure;
 import io.tiko.PreDestroyFailure;
+import io.tiko.ProduceFailure;
 import io.tiko.TransportError;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -68,6 +69,11 @@ public final class DefaultErrorHandler implements ErrorHandler {
                             Level.WARNING, "@Configuration [%s] %s".formatted(issue.code(), issue.description()));
                 }
             }
+            case ProduceFailure(var declaringClass, var methodName, var cause) ->
+                LoggerHolder.LOG.log(
+                        Level.WARNING,
+                        "@Produces %s#%s threw: %s".formatted(declaringClass.getName(), methodName, cause),
+                        cause);
             case TransportError t ->
                 LoggerHolder.LOG.log(
                         Level.WARNING, "Transport %s error: %s".formatted(t.transport(), t.cause()), t.cause());
