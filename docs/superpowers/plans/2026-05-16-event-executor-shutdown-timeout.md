@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** `TikoOptions.shutdownTimeout(Duration)` lets users override the hardcoded 10-second `awaitTermination` window used when shutting down the framework-owned event executor; default stays 10s; `09_http_javalin` example gains a runnable drain demo.
+**Goal:** `TikoOptions.shutdownTimeout(Duration)` (programmatic) OR `tiko.shutdownTimeout` (YAML key) lets users override the hardcoded 10-second `awaitTermination` window used when shutting down the framework-owned event executor; default stays 10s; `09_http_javalin` example demonstrates the YAML-config path end-to-end.
 
-**Architecture:** The 10s constant lives in TWO places: `AggregatingContainer.shutdown()` (multi-module path) AND inside generated `TikoContainerImpl_<hash>.shutdown()` (single-module path) — `ContainerGenerator` emits the same shape. Both need the timeout, so the generator gains a 5-arg constructor overload that accepts `Duration shutdownTimeout`; the existing 4-arg constructor stays as a delegating shim with the 10s default. `Tiko.create()` threads `options.shutdownTimeout()` to both the aggregator and the single-module reflective constructor call.
+**Architecture:** The 10s constant lives in TWO places: `AggregatingContainer.shutdown()` (multi-module path) AND inside generated `TikoContainerImpl_<hash>.shutdown()` (single-module path). `ContainerGenerator` gains a 5-arg constructor overload that accepts `Duration shutdownTimeout`; the existing 4-arg constructor stays as a delegating shim with the 10s default. A new package-private `Tiko.resolveShutdownTimeout(options, classLoader)` computes the effective Duration with precedence programmatic > YAML > 10s. `Tiko.create(...)` calls the resolver and threads the result to both container paths. `TikoOptions.shutdownTimeout()` becomes nullable (matches the existing pattern for `configSource()`/`errorHandler()`/`eventExecutor()`).
 
 **Tech Stack:** Java 21, JUnit 5, AssertJ, JavaPoet, Google `compile-testing`.
 
-**Spec:** `docs/superpowers/specs/2026-05-16-event-executor-shutdown-timeout-design.md` (committed at `d3ace66` on `feat/event-executor-shutdown-timeout`).
+**Spec:** `docs/superpowers/specs/2026-05-16-event-executor-shutdown-timeout-design.md` (current head — YAML configurability added at `28dcc85`).
 
 ---
 
@@ -16,14 +16,15 @@
 
 ```
 tiko-runtime/src/main/java/io/tiko/runtime/
-├── TikoOptions.java                       (modify — add shutdownTimeout field/builder/accessor)
+├── TikoOptions.java                       (modify — nullable shutdownTimeout field/builder/accessor)
 ├── AggregatingContainer.java              (modify — 4-arg ctor gains Duration; 5-arg reflective call for module containers)
-└── Tiko.java                              (modify — thread options.shutdownTimeout() to both paths)
+└── Tiko.java                              (modify — resolveShutdownTimeout helper + thread to both paths)
 
 tiko-runtime/src/test/java/io/tiko/runtime/
-├── TikoOptionsTest.java                   (modify — 4 new tests)
-├── AggregatingContainerShutdownTimeoutTest.java   (create — forced + graceful runtime test)
-└── StubContainer.java                     (modify — add 5-arg constructor)
+├── TikoOptionsTest.java                          (modify — 4 new tests; default accessor returns null)
+├── TikoResolveShutdownTimeoutTest.java           (create — precedence resolver tests)
+├── AggregatingContainerShutdownTimeoutTest.java  (create — forced + graceful runtime test)
+└── StubContainer.java                            (modify — add 5-arg constructor)
 
 tiko-processor/src/main/java/io/tiko/processor/generator/
 └── ContainerGenerator.java                (modify — emit shutdownTimeout field + 5-arg ctor + use field in shutdown)
@@ -32,19 +33,23 @@ tiko-processor/src/test/java/io/tiko/processor/
 └── ContainerGeneratorShutdownTimeoutTest.java     (create — assert generated code uses field, not hardcoded 10)
 
 tiko-examples/09_http_javalin/src/main/java/io/tiko/examples/http/
-├── Main.java                              (rewrite — drain flow demo + Error caveat Javadoc)
+├── Main.java                              (rewrite — drain flow demo + Error caveat Javadoc; YAML-sourced timeout)
 └── SlowAuditService.java                  (create — slow async handler with latch)
 
-tiko-examples/09_http_javalin/src/test/java/io/tiko/examples/http/
-└── HttpAsyncDrainTest.java                (create — CountDownLatch e2e)
+tiko-examples/09_http_javalin/src/main/resources/
+└── config.yaml                            (create — tiko.shutdownTimeout: 5s)
 
-docs/events.md                             (modify — graceful drain subsection)
+tiko-examples/09_http_javalin/src/test/java/io/tiko/examples/http/
+└── HttpAsyncDrainTest.java                (create — CountDownLatch e2e, programmatic timeout for test isolation)
+
+docs/events.md                             (modify — graceful drain subsection mentioning both API + YAML)
+docs/configuration.md                      (modify — short note on tiko.* reserved namespace)
 docs/roadmap.md                            (modify — "What ships today" closes #48)
 ```
 
 ---
 
-## Task 1: `TikoOptions.shutdownTimeout(Duration)` field + builder + accessor (TDD)
+## Task 1: `TikoOptions.shutdownTimeout(Duration)` nullable field + builder + accessor (TDD)
 
 **Files:**
 - Modify: `tiko-runtime/src/main/java/io/tiko/runtime/TikoOptions.java`
@@ -52,7 +57,7 @@ docs/roadmap.md                            (modify — "What ships today" closes
 
 - [ ] **Step 1: Write the failing tests**
 
-Open `tiko-runtime/src/test/java/io/tiko/runtime/TikoOptionsTest.java`. Existing imports already include AssertJ and `assertThatNullPointerException`. Add this import:
+Open `tiko-runtime/src/test/java/io/tiko/runtime/TikoOptionsTest.java`. Existing imports already include AssertJ and `assertThatNullPointerException`. Add these imports:
 
 ```java
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
@@ -71,10 +76,12 @@ Append these 4 tests inside the class body:
     }
 
     @Test
-    void builder_shutdown_timeout_default_is_ten_seconds() {
+    void builder_shutdown_timeout_default_is_null() {
         TikoOptions options = TikoOptions.builder().build();
 
-        assertThat(options.shutdownTimeout()).isEqualTo(Duration.ofSeconds(10));
+        // null means "not explicitly set" — matches the pattern for configSource/errorHandler/eventExecutor.
+        // The 10s framework default is applied by Tiko.resolveShutdownTimeout, not by this field.
+        assertThat(options.shutdownTimeout()).isNull();
     }
 
     @Test
@@ -97,7 +104,7 @@ Append these 4 tests inside the class body:
 Run: `mvn -pl tiko-runtime test -Dtest=TikoOptionsTest`
 Expected: compile failure — `shutdownTimeout` method does not exist.
 
-- [ ] **Step 3: Add field/builder/accessor to `TikoOptions.java`**
+- [ ] **Step 3: Add nullable field/builder/accessor to `TikoOptions.java`**
 
 In `TikoOptions.java`:
 
@@ -124,18 +131,19 @@ Update the private constructor:
 Add the public accessor (after `eventExecutor()`):
 ```java
     /**
-     * @return the configured graceful shutdown window for the framework-owned event executor;
-     *         defaults to {@code Duration.ofSeconds(10)}. Has no effect when {@link #eventExecutor()}
-     *         is set — the user owns the executor's lifecycle.
+     * @return the configured graceful drain window, or {@code null} if not set. When
+     *         {@code null}, the effective value is taken from the YAML key
+     *         {@code tiko.shutdownTimeout} if present in the layered config sources,
+     *         otherwise {@code Duration.ofSeconds(10)}.
      */
     public Duration shutdownTimeout() {
         return shutdownTimeout;
     }
 ```
 
-Add a field to the Builder (with the default initializer):
+Add a field to the Builder (NO default initializer — null means "not set"):
 ```java
-        private Duration shutdownTimeout = Duration.ofSeconds(10);
+        private Duration shutdownTimeout;
 ```
 
 Add the builder method (after `eventExecutor(...)`):
@@ -143,7 +151,8 @@ Add the builder method (after `eventExecutor(...)`):
         /**
          * Maximum time {@link io.tiko.Container#shutdown()} waits for the framework's event
          * executor to terminate gracefully before falling back to {@code shutdownNow()}.
-         * Defaults to {@code Duration.ofSeconds(10)}.
+         * When unset programmatically, the framework resolves the effective value in this
+         * precedence order: programmatic > YAML {@code tiko.shutdownTimeout} > {@code Duration.ofSeconds(10)}.
          *
          * <p>Has <strong>no effect</strong> when {@link #eventExecutor(java.util.concurrent.ExecutorService)}
          * is set — the user owns the executor's lifecycle and the container does not stop it.
@@ -173,7 +182,7 @@ Also add a cross-reference paragraph to the existing `eventExecutor(...)` builde
          * has no effect when this executor is user-supplied (you own its lifecycle).
 ```
 
-(Insert near the end of `eventExecutor`'s existing Javadoc, before the `@param` or `@throws` block if present, otherwise as the last paragraph.)
+(Insert near the end of `eventExecutor`'s existing Javadoc, as the last paragraph.)
 
 - [ ] **Step 4: Run tests, expect pass**
 
@@ -185,7 +194,7 @@ Expected: `Tests run: 11, Failures: 0, Errors: 0` (7 existing + 4 new).
 ```
 mvn -pl '!tiko-bom' spotless:apply
 git add tiko-runtime/src/main/java/io/tiko/runtime/TikoOptions.java tiko-runtime/src/test/java/io/tiko/runtime/TikoOptionsTest.java
-git commit -m "feat(runtime): TikoOptions.shutdownTimeout(Duration) for event executor drain"
+git commit -m "feat(runtime): TikoOptions.shutdownTimeout(Duration) builder + nullable accessor"
 ```
 
 ---
@@ -196,7 +205,7 @@ git commit -m "feat(runtime): TikoOptions.shutdownTimeout(Duration) for event ex
 - Modify: `tiko-processor/src/main/java/io/tiko/processor/generator/ContainerGenerator.java`
 - Create: `tiko-processor/src/test/java/io/tiko/processor/ContainerGeneratorShutdownTimeoutTest.java`
 
-Why this comes before AggregatingContainer: the generated `TikoContainerImpl_<hash>` is reflectively constructed by both `AggregatingContainer.processContainerResource` (multi-module) and `Tiko.createSingleModuleContainer` (single-module). To avoid an intermediate broken state, the generator first emits an additional 5-arg constructor that takes `Duration shutdownTimeout`, while keeping the existing 4-arg constructor as a delegating shim with the 10s default. Then Task 3 switches AggregatingContainer to the 5-arg form, Task 4 wires `Tiko.create` to read from `TikoOptions`.
+Why this comes before AggregatingContainer: the generated `TikoContainerImpl_<hash>` is reflectively constructed by both `AggregatingContainer.processContainerResource` (multi-module) and `Tiko.createSingleModuleContainer` (single-module). To avoid an intermediate broken state, the generator first emits an additional 5-arg constructor that takes `Duration shutdownTimeout`, while keeping the existing 4-arg constructor as a delegating shim with the 10s default. Then Task 3 switches AggregatingContainer to the 5-arg form; Task 5 wires `Tiko.create` to read from the resolver.
 
 - [ ] **Step 1: Write the failing test `ContainerGeneratorShutdownTimeoutTest.java`**
 
@@ -288,28 +297,14 @@ Several edits to `tiko-processor/src/main/java/io/tiko/processor/generator/Conta
     }
 ```
 
-(If JavaPoet's `FieldSpec` and `Modifier` are already imported, use the short names. The file imports vary — keep the existing import style.)
+(If JavaPoet's `FieldSpec` and `Modifier` are already imported, use the short names. Keep the existing import style.)
 
 **Edit B — register the new field** in the spot that adds fields to the type (search the file for `createOwnsEventExecutorField` calls and add a `.addField(createShutdownTimeoutField())` alongside).
 
-**Edit C — extend the constructor.** Find the existing 4-arg constructor at the `MethodSpec` builder that adds `EventBus`, `ErrorHandler`, `ExecutorService`, `boolean publishLifecycleEvents` parameters and the `this.errorHandler = errorHandler` / `this.ownsEventExecutor = ...` body. Refactor:
+**Edit C — extend the constructor.** Find the existing 4-arg constructor `MethodSpec` builder that adds `EventBus`, `ErrorHandler`, `ExecutorService`, `boolean publishLifecycleEvents` parameters. Refactor:
 
 1. **Build the canonical 5-arg constructor** with the original four parameters plus `Duration shutdownTimeout`. Body assigns `this.shutdownTimeout = shutdownTimeout;` in addition to today's assignments.
-2. **Keep the 4-arg constructor** as a public delegating shim that calls `this(eventBus, errorHandler, userEventExecutor, publishLifecycleEvents, java.time.Duration.ofSeconds(10));`. This preserves the discovery contract for any caller that hasn't been updated yet (Task 3 updates `AggregatingContainer`; Task 4 updates `Tiko.createSingleModuleContainer`).
-
-Concretely, the 4-arg shim emits as something like:
-
-```java
-public TikoContainerImpl(
-        io.tiko.EventBus eventBus,
-        io.tiko.ErrorHandler errorHandler,
-        java.util.concurrent.ExecutorService userEventExecutor,
-        boolean publishLifecycleEvents) {
-    this(eventBus, errorHandler, userEventExecutor, publishLifecycleEvents, java.time.Duration.ofSeconds(10));
-}
-```
-
-And the 5-arg form contains all the existing body statements PLUS one new `this.shutdownTimeout = shutdownTimeout;`.
+2. **Keep the 4-arg constructor** as a public delegating shim that calls `this(eventBus, errorHandler, userEventExecutor, publishLifecycleEvents, java.time.Duration.ofSeconds(10));`. This preserves the discovery contract for any caller that hasn't been updated yet.
 
 JavaPoet emission sketch (adapt to the existing builder pattern used in the file):
 
@@ -342,7 +337,7 @@ MethodSpec ctor4 = MethodSpec.constructorBuilder()
         .build();
 ```
 
-**Edit D — rewrite the shutdown block** (around line 1108–1118). Replace the hardcoded `10, SECONDS` with the field. Current shape:
+**Edit D — rewrite the shutdown block** (around line 1108–1118). Current shape:
 
 ```java
 method.beginControlFlow("if (this.ownsEventExecutor)");
@@ -385,7 +380,7 @@ Expected: `Tests run: 1, Failures: 0, Errors: 0`.
 - [ ] **Step 5: Run the full processor test suite to confirm no regressions**
 
 Run: `mvn -pl tiko-processor test`
-Expected: BUILD SUCCESS. Any existing test that asserts on the OLD 4-arg-only constructor shape may need updating — if `ContainerGeneratorEventExecutorTest` (or similar) checks for the specific string `awaitTermination(10, ` in generated source, update it to `awaitTermination(this.shutdownTimeout.toNanos(),` and add `assertThat(body).contains("Duration.ofSeconds(10)")` to verify the default delegation. Do NOT loosen the test's intent.
+Expected: BUILD SUCCESS. Any existing test that asserts on the OLD 4-arg-only constructor or `awaitTermination(10, ` shape may need updating — adjust to match the new pattern. Do NOT loosen the test's intent.
 
 - [ ] **Step 6: Format + commit**
 
@@ -394,7 +389,7 @@ mvn -pl '!tiko-bom' spotless:apply
 git add tiko-processor/src/main/java/io/tiko/processor/generator/ContainerGenerator.java tiko-processor/src/test/java/io/tiko/processor/ContainerGeneratorShutdownTimeoutTest.java
 ```
 
-If any existing processor test was updated for the new shutdown shape, include it in the same commit.
+If any existing processor test was updated, include it in the same commit.
 
 ```
 git commit -m "feat(processor): generated container accepts shutdownTimeout in new 5-arg ctor"
@@ -426,6 +421,7 @@ package io.tiko.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.tiko.EventBus;
 import io.tiko.ErrorHandler;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
@@ -503,8 +499,6 @@ class AggregatingContainerShutdownTimeoutTest {
 }
 ```
 
-Note: `EventBus` is `io.tiko.EventBus` — imported via the test's own package since `AggregatingContainer` and `LocalEventBus` are in `io.tiko.runtime` (same package).
-
 - [ ] **Step 3: Run, expect failure**
 
 Run: `mvn -pl tiko-runtime test -Dtest=AggregatingContainerShutdownTimeoutTest`
@@ -514,9 +508,7 @@ Expected: compile failure — the 4-arg `AggregatingContainer(EventBus, ErrorHan
 
 In `tiko-runtime/src/main/java/io/tiko/runtime/AggregatingContainer.java`:
 
-**Edit A — add import** (file already imports `java.time.Duration` at line 13):
-
-(No new import needed.)
+**Edit A — confirm import** (file already imports `java.time.Duration` at line 13). No new import needed.
 
 **Edit B — add private final field** alongside `eventExecutor`:
 
@@ -524,13 +516,7 @@ In `tiko-runtime/src/main/java/io/tiko/runtime/AggregatingContainer.java`:
     private final Duration shutdownTimeout;
 ```
 
-**Edit C — refactor constructors.** The current shape (line 50–95) is:
-
-- 1-arg `(EventBus)` → delegates to 3-arg with `(null)` executor
-- 2-arg `(EventBus, ErrorHandler)` → delegates to 3-arg with `(null)` executor
-- 3-arg `(EventBus, ErrorHandler, ExecutorService)` → the main constructor
-
-Make the 4-arg `(EventBus, ErrorHandler, ExecutorService, Duration)` the canonical form. All existing constructors delegate down to it. Concretely:
+**Edit C — refactor constructors.** Make the 4-arg `(EventBus, ErrorHandler, ExecutorService, Duration)` the canonical form. Existing constructors delegate down to it with `Duration.ofSeconds(10)`:
 
 ```java
     public AggregatingContainer(EventBus eventBus) {
@@ -633,7 +619,7 @@ With:
 
 - [ ] **Step 5: Update `StubContainer.java` to expose the 5-arg constructor**
 
-Open `tiko-runtime/src/test/java/io/tiko/runtime/StubContainer.java`. The current constructor (line 21–22) is 4-arg. Add a 5-arg variant that matches the new reflective protocol:
+Open `tiko-runtime/src/test/java/io/tiko/runtime/StubContainer.java`. Add a 5-arg constructor that matches the new reflective protocol:
 
 ```java
     // Tiko.createSingleModuleContainer + AggregatingContainer.processContainerResource
@@ -646,12 +632,12 @@ Open `tiko-runtime/src/test/java/io/tiko/runtime/StubContainer.java`. The curren
             java.time.Duration shutdownTimeout) {}
 ```
 
-Keep the existing 4-arg constructor too — older callers (if any) and the existing single-module reflective call path still need it until Task 4 switches over. (After Task 4 it could be removed, but leaving it costs nothing.)
+Keep the existing 4-arg constructor too.
 
 - [ ] **Step 6: Run the new test, expect pass**
 
 Run: `mvn -pl tiko-runtime test -Dtest=AggregatingContainerShutdownTimeoutTest`
-Expected: `Tests run: 2, Failures: 0, Errors: 0`. Both forced and graceful paths green.
+Expected: `Tests run: 2, Failures: 0, Errors: 0`.
 
 - [ ] **Step 7: Run the full tiko-runtime test suite**
 
@@ -668,7 +654,232 @@ git commit -m "feat(runtime): AggregatingContainer accepts shutdownTimeout, uses
 
 ---
 
-## Task 4: `Tiko.create` threads `options.shutdownTimeout()` to both paths
+## Task 4: `Tiko.resolveShutdownTimeout(options, classLoader)` helper (TDD)
+
+**Files:**
+- Modify: `tiko-runtime/src/main/java/io/tiko/runtime/Tiko.java`
+- Create: `tiko-runtime/src/test/java/io/tiko/runtime/TikoResolveShutdownTimeoutTest.java`
+
+This task adds the precedence resolver that computes the effective `Duration` from programmatic + YAML + default. It's package-private so the test can call it directly without booting a container.
+
+- [ ] **Step 1: Write the failing test `TikoResolveShutdownTimeoutTest.java`**
+
+Create `tiko-runtime/src/test/java/io/tiko/runtime/TikoResolveShutdownTimeoutTest.java`:
+
+```java
+package io.tiko.runtime;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import io.tiko.ConfigSource;
+import java.time.Duration;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
+
+/**
+ * Verifies Tiko.resolveShutdownTimeout precedence: programmatic > YAML > 10s default.
+ * A malformed YAML value surfaces as a coerce-time exception.
+ */
+class TikoResolveShutdownTimeoutTest {
+
+    private static final ClassLoader CL = Thread.currentThread().getContextClassLoader();
+
+    @Test
+    void programmatic_wins_over_yaml() {
+        // YAML says 7s but the user explicitly set 3s programmatically.
+        ConfigSource source = new MapConfigSource(Map.of("tiko", Map.of("shutdownTimeout", "7s")));
+        TikoOptions opts = TikoOptions.builder()
+                .shutdownTimeout(Duration.ofSeconds(3))
+                .configSource(source)
+                .build();
+
+        assertThat(Tiko.resolveShutdownTimeout(opts, CL)).isEqualTo(Duration.ofSeconds(3));
+    }
+
+    @Test
+    void yaml_value_used_when_programmatic_unset() {
+        ConfigSource source = new MapConfigSource(Map.of("tiko", Map.of("shutdownTimeout", "7s")));
+        TikoOptions opts = TikoOptions.builder().configSource(source).build();
+
+        assertThat(Tiko.resolveShutdownTimeout(opts, CL)).isEqualTo(Duration.ofSeconds(7));
+    }
+
+    @Test
+    void default_10s_when_neither_set() {
+        TikoOptions opts = TikoOptions.builder().build();
+
+        assertThat(Tiko.resolveShutdownTimeout(opts, CL)).isEqualTo(Duration.ofSeconds(10));
+    }
+
+    @Test
+    void default_10s_when_yaml_has_no_tiko_section() {
+        ConfigSource source = new MapConfigSource(Map.of("db", Map.of("url", "jdbc:test")));
+        TikoOptions opts = TikoOptions.builder().configSource(source).build();
+
+        assertThat(Tiko.resolveShutdownTimeout(opts, CL)).isEqualTo(Duration.ofSeconds(10));
+    }
+
+    @Test
+    void negative_yaml_value_throws_at_bootstrap() {
+        ConfigSource source = new MapConfigSource(Map.of("tiko", Map.of("shutdownTimeout", "-1s")));
+        TikoOptions opts = TikoOptions.builder().configSource(source).build();
+
+        assertThatThrownBy(() -> Tiko.resolveShutdownTimeout(opts, CL))
+                .hasMessageContaining("shutdownTimeout")
+                .hasMessageContaining("negative");
+    }
+
+    /**
+     * Minimal in-memory ConfigSource — avoids depending on ConfigSources.fromMap (which lives
+     * in tiko-config and may not be on the tiko-runtime test classpath at this point).
+     */
+    private record MapConfigSource(Map<String, Object> data) implements ConfigSource {
+        @Override
+        public Map<String, Object> load() {
+            return data;
+        }
+    }
+}
+```
+
+- [ ] **Step 2: Run, expect compile failure**
+
+Run: `mvn -pl tiko-runtime test -Dtest=TikoResolveShutdownTimeoutTest`
+Expected: compile failure — `Tiko.resolveShutdownTimeout` does not exist.
+
+- [ ] **Step 3: Add the resolver to `Tiko.java`**
+
+In `tiko-runtime/src/main/java/io/tiko/runtime/Tiko.java`, add this package-private static method (near the top-level public `create(...)` methods, or in a "helpers" section near `bindConfigs`):
+
+```java
+    /**
+     * Computes the effective event-executor shutdown timeout with precedence:
+     * programmatic ({@link TikoOptions#shutdownTimeout()}) > YAML ({@code tiko.shutdownTimeout}
+     * in the layered config sources) > {@code Duration.ofSeconds(10)}.
+     *
+     * <p>Package-private for testability — {@code TikoResolveShutdownTimeoutTest} drives this
+     * helper directly without booting a container.
+     *
+     * <p>The YAML lookup is reflective (mirrors the existing {@code bindConfigs} path) so
+     * tiko-runtime does not gain a compile dep on tiko-config. If tiko-config is not on the
+     * classpath, the YAML path silently falls through to the default. No {@code ${VAR}}
+     * interpolation is applied on {@code tiko.shutdownTimeout} in v1.
+     */
+    static java.time.Duration resolveShutdownTimeout(TikoOptions options, ClassLoader classLoader) {
+        java.time.Duration explicit = options.shutdownTimeout();
+        if (explicit != null) {
+            return explicit;
+        }
+
+        java.time.Duration fromYaml = readYamlShutdownTimeout(options.configSource(), classLoader);
+        if (fromYaml != null) {
+            if (fromYaml.isNegative()) {
+                throw new IllegalArgumentException(
+                        "tiko.shutdownTimeout must not be negative; got " + fromYaml);
+            }
+            return fromYaml;
+        }
+
+        return java.time.Duration.ofSeconds(10);
+    }
+
+    /**
+     * Returns the value of {@code tiko.shutdownTimeout} from the layered config (defaults +
+     * user source) coerced via {@code Coercers.durationCoercer()}, or {@code null} if the key
+     * is absent or tiko-config is not on the classpath.
+     */
+    private static java.time.Duration readYamlShutdownTimeout(
+            ConfigSource userSource, ClassLoader classLoader) {
+        try {
+            // Build the layered source the same way bindConfigs does — defaults first,
+            // user override on top.
+            Class<?> sourcesClass = Class.forName("io.tiko.config.ConfigSources", true, classLoader);
+            ConfigSource defaults = (ConfigSource) sourcesClass
+                    .getMethod("classpathAll", String.class)
+                    .invoke(null, "META-INF/tiko/defaults.yaml");
+            ConfigSource effective;
+            if (userSource == null) {
+                effective = defaults;
+            } else {
+                effective = (ConfigSource) sourcesClass
+                        .getMethod("layered", ConfigSource[].class)
+                        .invoke(null, (Object) new ConfigSource[] {defaults, userSource});
+            }
+
+            // Read raw map, walk to tiko.shutdownTimeout.
+            java.util.Map<String, Object> raw = effective.load();
+            Object tikoSection = raw.get("tiko");
+            if (!(tikoSection instanceof java.util.Map<?, ?> tikoMap)) {
+                return null;
+            }
+            Object value = tikoMap.get("shutdownTimeout");
+            if (value == null) {
+                return null;
+            }
+
+            // Coerce via the canonical durationCoercer (handles "5s", "PT5S", etc).
+            Class<?> coercersClass =
+                    Class.forName("io.tiko.config.internal.coercers.Coercers", true, classLoader);
+            Object durationCoercer =
+                    coercersClass.getMethod("durationCoercer").invoke(null);
+            Class<?> coercerInterface = Class.forName(
+                    "io.tiko.config.internal.coercers.TypeCoercer", true, classLoader);
+            Object coerced = coercerInterface
+                    .getMethod("coerce", Object.class)
+                    .invoke(durationCoercer, value);
+            return (java.time.Duration) coerced;
+        } catch (ClassNotFoundException notOnClasspath) {
+            // tiko-config absent — YAML config not available; programmatic + default still work.
+            return null;
+        } catch (java.lang.reflect.InvocationTargetException ite) {
+            // CoercionException or similar from the coercer — surface its message.
+            Throwable cause = ite.getCause();
+            throw new IllegalArgumentException(
+                    "Invalid tiko.shutdownTimeout in YAML: " + cause.getMessage(), cause);
+        } catch (Exception e) {
+            // Reflective infrastructure error (e.g. method missing). Surface as runtime to
+            // avoid silently masking a wiring bug.
+            throw new IllegalStateException("Failed to read tiko.shutdownTimeout from YAML", e);
+        }
+    }
+```
+
+Note on the "negative value in YAML" path: the test asserts the resolver throws when the YAML value is `-1s`. The check is in `resolveShutdownTimeout` after the YAML returns a Duration — symmetrical with the builder's `isNegative()` rejection.
+
+- [ ] **Step 4: Run, expect pass (4 of 5 tests)**
+
+Run: `mvn -pl tiko-runtime test -Dtest=TikoResolveShutdownTimeoutTest`
+Expected: 4 tests pass. The fifth (`negative_yaml_value_throws_at_bootstrap`) may pass or fail depending on whether tiko-config is on the test classpath. If tiko-config is NOT on tiko-runtime's test classpath, the `Class.forName("io.tiko.config.ConfigSources", ...)` throws `ClassNotFoundException`, the resolver returns `null` from the YAML path, and the test expecting a "negative duration" exception will instead see `Duration.ofSeconds(10)` returned.
+
+If that happens:
+- Add `tiko-config` to `tiko-runtime/pom.xml` `<scope>test</scope>` so the test classpath sees it.
+- Re-run; all 5 should pass.
+
+- [ ] **Step 5: Verify the full reactor still builds**
+
+Run: `mvn -pl '!tiko-bom' install -DskipTests`
+Expected: BUILD SUCCESS. No downstream module breakage.
+
+- [ ] **Step 6: Format + commit**
+
+```
+mvn -pl '!tiko-bom' spotless:apply
+git add tiko-runtime/src/main/java/io/tiko/runtime/Tiko.java tiko-runtime/src/test/java/io/tiko/runtime/TikoResolveShutdownTimeoutTest.java
+```
+
+If `tiko-runtime/pom.xml` was updated for the test-scoped tiko-config dep, include it:
+```
+git add tiko-runtime/pom.xml
+```
+
+```
+git commit -m "feat(runtime): Tiko.resolveShutdownTimeout precedence resolver (programmatic > YAML > 10s)"
+```
+
+---
+
+## Task 5: `Tiko.create` threads the resolved timeout to both paths
 
 **Files:**
 - Modify: `tiko-runtime/src/main/java/io/tiko/runtime/Tiko.java`
@@ -690,27 +901,22 @@ In `Tiko.java`, find around line 92–98:
 Replace with:
 
 ```java
+            java.time.Duration effectiveShutdownTimeout = resolveShutdownTimeout(options, classLoader);
+
             Container container;
             if (moduleCount > 1) {
                 container = new AggregatingContainer(
-                        eventBus, errorHandler, options.eventExecutor(), options.shutdownTimeout());
+                        eventBus, errorHandler, options.eventExecutor(), effectiveShutdownTimeout);
             } else {
                 // Single module: Direct instantiation (does NOT call start yet)
                 container = createSingleModuleContainer(
-                        eventBus, errorHandler, options.eventExecutor(), options.shutdownTimeout());
+                        eventBus, errorHandler, options.eventExecutor(), effectiveShutdownTimeout);
             }
 ```
 
 - [ ] **Step 2: Update `createSingleModuleContainer` signature + reflective call**
 
-Around line 237–265, the method currently has signature:
-
-```java
-private static Container createSingleModuleContainer(
-        EventBus eventBus, ErrorHandler errorHandler, ExecutorService userEventExecutor) throws Exception {
-```
-
-Update to:
+Around line 237–265, update the method signature:
 
 ```java
 private static Container createSingleModuleContainer(
@@ -722,14 +928,6 @@ private static Container createSingleModuleContainer(
 ```
 
 And the reflective constructor lookup at line 257–259:
-
-```java
-        Container container = (Container) implClass
-                .getDeclaredConstructor(EventBus.class, ErrorHandler.class, ExecutorService.class, boolean.class)
-                .newInstance(eventBus, errorHandler, userEventExecutor, /* publishLifecycleEvents */ true);
-```
-
-Update to use the 5-arg constructor:
 
 ```java
         Container container = (Container) implClass
@@ -752,23 +950,22 @@ Update to use the 5-arg constructor:
 Run: `mvn -pl '!tiko-bom' install`
 Expected: BUILD SUCCESS. All modules build, all tests pass. This is the first point where end-to-end wiring is verified.
 
-If a downstream test fails because a 4-arg constructor was the only one tried at a reflective call site, fix that call site (it likely needs to match the new 5-arg protocol). The processor-generated container's 4-arg shim still exists for tests that don't go through `Tiko.create`, so they remain unaffected.
-
 - [ ] **Step 4: Format + commit**
 
 ```
 mvn -pl '!tiko-bom' spotless:apply
 git add tiko-runtime/src/main/java/io/tiko/runtime/Tiko.java
-git commit -m "feat(runtime): Tiko.create threads shutdownTimeout to both paths"
+git commit -m "feat(runtime): Tiko.create threads resolved shutdownTimeout to both paths"
 ```
 
 ---
 
-## Task 5: `09_http_javalin` slow async handler + `Main.java` drain demo + Error caveat Javadoc
+## Task 6: `09_http_javalin` slow async handler + YAML-config Main + Error caveat Javadoc
 
 **Files:**
 - Create: `tiko-examples/09_http_javalin/src/main/java/io/tiko/examples/http/SlowAuditService.java`
 - Modify: `tiko-examples/09_http_javalin/src/main/java/io/tiko/examples/http/Main.java`
+- Create: `tiko-examples/09_http_javalin/src/main/resources/config.yaml`
 
 - [ ] **Step 1: Create `SlowAuditService.java`**
 
@@ -822,7 +1019,18 @@ public class SlowAuditService {
 }
 ```
 
-- [ ] **Step 2: Rewrite `Main.java` to demonstrate the drain**
+- [ ] **Step 2: Create `config.yaml`**
+
+Create `tiko-examples/09_http_javalin/src/main/resources/config.yaml`:
+
+```yaml
+# Framework-level knobs live under the reserved `tiko:` top-level section (#48).
+# Currently only shutdownTimeout is defined; Phase 6 (Resiliency) will add more.
+tiko:
+  shutdownTimeout: 5s
+```
+
+- [ ] **Step 3: Rewrite `Main.java` to demonstrate the YAML-config drain**
 
 Replace the contents of `tiko-examples/09_http_javalin/src/main/java/io/tiko/examples/http/Main.java`:
 
@@ -831,20 +1039,24 @@ package io.tiko.examples.http;
 
 import io.javalin.Javalin;
 import io.tiko.Container;
+import io.tiko.config.ConfigSources;
 import io.tiko.runtime.Tiko;
 import io.tiko.runtime.TikoOptions;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.time.Duration;
 
 /**
- * Bootstrap + runnable drain demo. Builds the Tiko container with a 5-second
- * shutdownTimeout, runs Javalin, fires a ticket-creation request that triggers
- * a 2-second async audit handler, then stops Javalin while the audit is still
- * in flight. The container's {@code close()} (via try-with-resources) waits
- * for the in-flight async work to drain before tearing the executor down.
+ * Bootstrap + runnable drain demo. The shutdown-timeout window comes from
+ * {@code tiko.shutdownTimeout: 5s} in {@code config.yaml} — this example
+ * demonstrates the YAML-config path introduced by #48. (The equivalent
+ * programmatic form is {@code TikoOptions.builder().shutdownTimeout(Duration.ofSeconds(5))}.)
+ *
+ * <p>Runs Javalin, fires a ticket-creation request that triggers a 2-second
+ * async audit handler, then stops Javalin while the audit is still in flight.
+ * The container's {@code close()} (via try-with-resources) waits for the
+ * in-flight async work to drain before tearing the executor down.
  *
  * <p>Expected console output:
  *
@@ -866,8 +1078,10 @@ public final class Main {
     private Main() {}
 
     public static void main(String[] args) throws Exception {
-        TikoOptions opts =
-                TikoOptions.builder().shutdownTimeout(Duration.ofSeconds(5)).build();
+        // Timeout sourced from YAML — see config.yaml -> tiko.shutdownTimeout.
+        TikoOptions opts = TikoOptions.builder()
+                .configSource(ConfigSources.classpath("config.yaml"))
+                .build();
 
         try (Container container = Tiko.create(opts)) {
             TicketHttpRoutes routes = new TicketHttpRoutes(
@@ -894,7 +1108,7 @@ public final class Main {
 
     private static void fireCreateTicketRequest(int port) throws Exception {
         // Manual JSON literal — jackson-databind is test-scoped on this module, so the
-        // production main can't use ObjectMapper. The shape mirrors CreateTicketRequest(String title).
+        // production main can't use ObjectMapper. Shape mirrors CreateTicketRequest(String title).
         String body = "{\"title\":\"drain demo\"}";
         HttpClient client = HttpClient.newHttpClient();
         HttpRequest request = HttpRequest.newBuilder()
@@ -916,18 +1130,18 @@ public final class Main {
 }
 ```
 
-Note: `jackson-databind` is `<scope>test</scope>` in this module's `pom.xml`, so `Main.java` cannot use `ObjectMapper`. The manual JSON literal sidesteps that — the body's shape is `{"title": "<value>"}` mirroring `CreateTicketRequest(String title)`. Confirm `CreateTicketRequest.java`'s canonical constructor; if it gained additional required fields since this plan was written, extend the literal accordingly.
-
-- [ ] **Step 3: Compile to verify**
+- [ ] **Step 4: Compile to verify**
 
 Run: `mvn -pl tiko-examples/09_http_javalin compile`
 Expected: BUILD SUCCESS — no new dependency needed since `Main.java` uses only `java.net.http` + a manual JSON string literal.
 
-- [ ] **Step 4: Run the example manually to verify expected output**
+If `io.tiko.config.ConfigSources` isn't resolvable, this module already pulls tiko-config transitively via the parent — verify with `mvn -pl tiko-examples/09_http_javalin dependency:tree | grep tiko-config`. If absent, add it as a direct compile dep.
 
-Run: `mvn -pl tiko-examples/09_http_javalin compile exec:java -Dexec.mainClass=io.tiko.examples.http.Main`
+- [ ] **Step 5: Run the example manually to verify expected output**
 
-(If the example's `pom.xml` doesn't configure `exec:java`, use a direct invocation: build the jar and run `java -cp ...`. The implementer can choose the most ergonomic path.)
+Run: `mvn -pl tiko-examples/09_http_javalin exec:java -Dexec.mainClass=io.tiko.examples.http.Main`
+
+(If `exec:java` isn't configured, use a direct invocation through the shaded jar that `maven-shade-plugin` builds; check the module's pom.)
 
 Expected console output (interleaved with Javalin's own startup logs):
 
@@ -938,22 +1152,24 @@ Expected console output (interleaved with Javalin's own startup logs):
 [main] Container closed cleanly.
 ```
 
-The ordering of the middle two lines AND the final `[main] Container closed cleanly.` line is the load-bearing observation: the executor was not torn down when Javalin was; the container waited for the slow handler within the 5-second budget.
+The ordering of those four lines is the load-bearing observation.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```
 mvn -pl '!tiko-bom' spotless:apply
-git add tiko-examples/09_http_javalin/src/main/java/io/tiko/examples/http/SlowAuditService.java tiko-examples/09_http_javalin/src/main/java/io/tiko/examples/http/Main.java
-git commit -m "feat(examples): 09_http_javalin demonstrates graceful shutdown drain"
+git add tiko-examples/09_http_javalin/src/main/java/io/tiko/examples/http/SlowAuditService.java tiko-examples/09_http_javalin/src/main/java/io/tiko/examples/http/Main.java tiko-examples/09_http_javalin/src/main/resources/config.yaml
+git commit -m "feat(examples): 09_http_javalin demonstrates graceful drain via YAML tiko.shutdownTimeout"
 ```
 
 ---
 
-## Task 6: `HttpAsyncDrainTest` end-to-end with `CountDownLatch`
+## Task 7: `HttpAsyncDrainTest` end-to-end with `CountDownLatch`
 
 **Files:**
 - Create: `tiko-examples/09_http_javalin/src/test/java/io/tiko/examples/http/HttpAsyncDrainTest.java`
+
+The test uses the **programmatic** path (not YAML) to keep test isolation: each test method should be able to pick its own timeout without sharing state with the example's `config.yaml`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -982,7 +1198,10 @@ import org.junit.jupiter.api.Test;
  * End-to-end verification of #48: the framework's event executor is NOT
  * torn down when the HTTP server stops. In-flight async event handlers are
  * allowed to complete within the configured {@code shutdownTimeout} before
- * {@code container.close()} returns.
+ * {@code container.close()} returns. Uses the programmatic path
+ * ({@code TikoOptions.builder().shutdownTimeout(...)}) for test isolation
+ * — the example's {@code config.yaml} is bypassed here so each test method
+ * controls its own timeout.
  */
 class HttpAsyncDrainTest {
 
@@ -1001,25 +1220,21 @@ class HttpAsyncDrainTest {
 
         Javalin app = Javalin.create();
         app.post("/tickets", TikoJavalin.scoped(container, routes::handleCreate));
-        app.start(0); // ephemeral port; honest concurrent-test hygiene
+        app.start(0);
         int port = app.port();
 
-        // Fire the request — server publishes TicketCreated which routes to the slow async handler.
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:" + port + "/tickets"))
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(JSON.writeValueAsString(new CreateTicketRequest("drain")))) 
+                .POST(HttpRequest.BodyPublishers.ofString(JSON.writeValueAsString(new CreateTicketRequest("drain"))))
                 .build();
         HttpResponse<String> response =
                 HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
         assertThat(response.statusCode()).isEqualTo(201);
 
-        // Stop HTTP layer immediately — async work still in flight at this point.
+        // Stop HTTP layer immediately — async work still in flight.
         app.stop();
 
-        // The load-bearing assertion: close MUST drain the in-flight async handler
-        // before returning. We do not await the latch here — container.close() is
-        // the bound.
         long startNanos = System.nanoTime();
         container.close();
         Duration elapsed = Duration.ofNanos(System.nanoTime() - startNanos);
@@ -1034,8 +1249,7 @@ class HttpAsyncDrainTest {
 
     @Test
     void shortTimeoutForcesAsyncHandlerInterruption() throws Exception {
-        // Tight timeout: 200ms vs the slow handler's 2s sleep. Close() returns within ~500ms,
-        // and the handler did NOT complete (latch still has count 1).
+        // Tight timeout: 200ms vs the slow handler's 2s sleep. Close() returns within ~500ms.
         TikoOptions opts =
                 TikoOptions.builder().shutdownTimeout(Duration.ofMillis(200)).build();
         Container container = Tiko.create(opts);
@@ -1076,17 +1290,12 @@ class HttpAsyncDrainTest {
 }
 ```
 
-Note: `app.port()` returns the ephemeral port chosen by `start(0)`. If Javalin's API exposes this under a different method name in the version this project pins, adapt — the intent is "bind to any free port and read it back."
-
 - [ ] **Step 2: Run, expect pass**
 
 Run: `mvn -pl tiko-examples/09_http_javalin test -Dtest=HttpAsyncDrainTest`
-
 Expected: `Tests run: 2, Failures: 0, Errors: 0`.
 
-If the second test (forced interruption) flakes on slow CI runners, raise the upper-bound tolerance (`Duration.ofMillis(800)` → `Duration.ofSeconds(1)`). Do NOT loosen the latch-not-counted-down assertion — that's the proof the handler was actually interrupted.
-
-If the first test fails because `close()` returns before the async handler runs (race between `bus.publish` and `app.stop()`), insert a tiny barrier: after `response = client.send(...)`, briefly poll until the executor reports a non-zero active task count, then proceed. This is sometimes needed in CI; flag if observed.
+If the forced-interruption upper bound flakes on slow CI runners, raise it (e.g. `Duration.ofMillis(800)` → `Duration.ofSeconds(1)`). Do NOT loosen the latch-not-counted-down assertion.
 
 - [ ] **Step 3: Format + commit**
 
@@ -1098,29 +1307,30 @@ git commit -m "test(examples): HttpAsyncDrainTest pins graceful-shutdown drain b
 
 ---
 
-## Task 7: `docs/events.md` graceful drain subsection
+## Task 8: `docs/events.md` + `docs/configuration.md` documentation
 
 **Files:**
 - Modify: `docs/events.md`
+- Modify: `docs/configuration.md`
 
-- [ ] **Step 1: Pick the insertion point**
+- [ ] **Step 1: Add graceful drain subsection to `docs/events.md`**
 
-`docs/events.md` covers the event bus, async executor, lifecycle events, and `@EventTrigger` chains. Find the section that introduces the async executor (search for "async" or "executor"). The drain subsection sits naturally near the end of that block, before lifecycle events.
+Pick the insertion point — find the section that introduces the async executor (search for "async" or "executor"). The drain subsection sits naturally near the end of that block, before lifecycle events. If no obvious section exists, add at end of file with an explicit heading.
 
-If no obvious "executor / async behaviour" section exists, add the subsection at the end of the file with an explicit `## Graceful shutdown drain` heading.
-
-- [ ] **Step 2: Insert the subsection**
-
-Add this content:
+Insert:
 
 ```markdown
 ## Graceful shutdown drain
 
 When `Container.shutdown()` runs, in-flight async event handlers are allowed to
-finish within `TikoOptions.shutdownTimeout(Duration)` (default 10 seconds) before
-the framework-owned executor is forced via `shutdownNow()`. This means a server
-shutdown signal does not abruptly cancel async side-effects already queued on
-the executor — they drain cleanly within the configured budget.
+finish within a configurable budget before the framework-owned executor is
+forced via `shutdownNow()`. This means a server shutdown signal does not
+abruptly cancel async side-effects already queued on the executor — they drain
+cleanly within the configured window.
+
+Two equivalent ways to configure the budget:
+
+**Programmatically:**
 
 ```java
 TikoOptions opts = TikoOptions.builder()
@@ -1128,101 +1338,131 @@ TikoOptions opts = TikoOptions.builder()
         .build();
 ```
 
+**Via YAML** (any source loaded by your `ConfigSource`):
+
+```yaml
+tiko:
+  shutdownTimeout: 30s
+```
+
+The `tiko:` top-level section is reserved for framework-level config; see
+[configuration.md](./configuration.md) for the namespace policy.
+
+**Precedence:** programmatic > YAML > default 10 seconds.
+
 `Duration.ZERO` skips the graceful wait and calls `shutdownNow()` immediately —
 useful for test harnesses where you don't want to wait on a wedged handler. The
 knob has no effect when you supply your own executor via `TikoOptions.eventExecutor(...)`
 (you own that executor's lifecycle).
 
 See [`tiko-examples/09_http_javalin`](../tiko-examples/09_http_javalin) for a
-runnable demo: `Main.java` triggers a slow async handler, stops the HTTP server,
-and shows that `container.close()` waits for the handler to complete.
+runnable demo that sources the timeout from `config.yaml`.
 
 **Caveat:** a JVM `Error` (`OutOfMemoryError`, `StackOverflowError`) bypasses
 this graceful drain — the JVM may tear down threads abruptly when in an
 unrecoverable state. For everything short of a JVM-level fatal, `shutdownTimeout`
 is the bound.
+
+**v1 limitation:** `${VAR}` interpolation on `tiko.shutdownTimeout` is not
+supported. Use the programmatic API if you need env-var resolution.
+```
+
+- [ ] **Step 2: Add `tiko:` namespace note to `docs/configuration.md`**
+
+Find a logical insertion point in `docs/configuration.md` — probably near the existing "Nested records" or "ConfigSources factories" sections. Add a short subsection:
+
+```markdown
+## The `tiko:` reserved namespace
+
+Top-level `tiko:` in your YAML is reserved for framework-level configuration knobs
+that Tiko itself consumes (not your `@Configuration` records). v1 defines one key:
+
+```yaml
+tiko:
+  shutdownTimeout: 5s    # event-executor graceful drain window; see events.md
+```
+
+Phase 6 (Resiliency) will add sibling keys (executor sizing, queue capacity, etc.).
+Do not declare your own `@Configuration(prefix = "tiko")` — that prefix is the
+framework's.
 ```
 
 - [ ] **Step 3: Commit**
 
 ```
-git add docs/events.md
-git commit -m "docs(events): graceful shutdown drain subsection (TikoOptions.shutdownTimeout)"
+git add docs/events.md docs/configuration.md
+git commit -m "docs: graceful drain subsection + tiko: reserved namespace policy"
 ```
 
 ---
 
-## Task 8: Roadmap entry + full reactor build + push + PR
+## Task 9: Roadmap entry + full reactor build + push + PR
 
 **Files:**
 - Modify: `docs/roadmap.md`
 
 - [ ] **Step 1: Update the roadmap**
 
-In `docs/roadmap.md`, the **"What ships today"** block has a tail of `✅` entries (most recent ones closing #19, #63). Append a new bullet:
+In `docs/roadmap.md`, append to the "What ships today" tail:
 
 ```markdown
-- ✅ `TikoOptions.shutdownTimeout(Duration)` — graceful drain window for the framework-owned event executor; default 10s, `Duration.ZERO` skips the wait. `09_http_javalin` example demonstrates the behaviour end-to-end: stopping the HTTP server does not interrupt in-flight async event handlers; they finish within the configured budget before `container.close()` returns. (Closes #48.)
+- ✅ `TikoOptions.shutdownTimeout(Duration)` + `tiko.shutdownTimeout` YAML key — graceful drain window for the framework-owned event executor; default 10s, `Duration.ZERO` skips the wait. Precedence: programmatic > YAML > default. `09_http_javalin` example sources the value from `config.yaml` end-to-end: stopping the HTTP server does not interrupt in-flight async event handlers; they finish within the configured budget before `container.close()` returns. (Closes #48.)
 ```
 
-In the **Phase 2** section, find the bullet that references #48:
-
-```markdown
-- **Event system:** configurable executor shutdown timeout ([#48](https://github.com/tomas-samek/coverage/tiko-di/issues/48)); `ErrorContext` permits for lifecycle/config/scope errors ([#52](https://github.com/tomas-samek/tiko-di/issues/52)).
-```
-
-Remove the `#48` clause; if `#52` was the other item, leave it. If `#48` was the only item on that bullet, delete the bullet entirely. Read the actual current state of `docs/roadmap.md` Phase 2 block to confirm — the line wording may have drifted.
+In the **Phase 2** section, remove the `#48` reference from whichever bullet currently mentions it (read the file's Phase 2 block to confirm the exact wording).
 
 - [ ] **Step 2: Run the full reactor build**
 
 Run: `mvn -pl '!tiko-bom' install`
-Expected: BUILD SUCCESS. All modules, all tests pass.
+Expected: BUILD SUCCESS.
 
-- [ ] **Step 3: Confirm clean working tree**
-
-Run: `git status`
-Expected: only `docs/roadmap.md` modified.
-
-- [ ] **Step 4: Commit roadmap**
+- [ ] **Step 3: Commit roadmap**
 
 ```
 git add docs/roadmap.md
-git commit -m "docs(roadmap): shutdownTimeout knob shipped"
+git commit -m "docs(roadmap): shutdownTimeout knob + YAML key shipped"
 ```
 
-- [ ] **Step 5: Push**
+- [ ] **Step 4: Push**
 
 ```
 git push -u origin feat/event-executor-shutdown-timeout
 ```
 
-- [ ] **Step 6: Open the PR**
+- [ ] **Step 5: Open the PR**
 
 ```bash
 "C:/Program Files/GitHub CLI/gh.exe" pr create \
-    --title "feat(runtime): TikoOptions.shutdownTimeout for event executor drain (#48)" \
+    --title "feat(runtime): TikoOptions.shutdownTimeout + tiko.shutdownTimeout YAML key (#48)" \
     --body "$(cat <<'EOF'
 ## Summary
 
-Closes #48. `TikoOptions.shutdownTimeout(Duration)` lets users override the hardcoded 10-second `awaitTermination` window used when shutting down the framework-owned event executor. Default stays 10s. `Duration.ZERO` skips the graceful wait and calls `shutdownNow()` immediately. Has no effect when the user supplies their own executor via `TikoOptions.eventExecutor(...)`.
+Closes #48. The framework's event-executor graceful-shutdown window is now configurable in two equivalent ways:
 
-The `09_http_javalin` example is rewritten to demonstrate the drain end-to-end: stopping the HTTP server does not interrupt in-flight async event handlers — they finish within the configured budget before `container.close()` returns. A new `HttpAsyncDrainTest` pins this behaviour.
+- **Programmatically:** `TikoOptions.builder().shutdownTimeout(Duration.ofSeconds(30)).build()`.
+- **Via YAML:** `tiko.shutdownTimeout: 30s` in any layered `ConfigSource`.
+
+Precedence: programmatic > YAML > default `Duration.ofSeconds(10)`. `Duration.ZERO` skips the graceful wait and calls `shutdownNow()` immediately. Has no effect when the user supplies their own executor via `TikoOptions.eventExecutor(...)`.
+
+The `09_http_javalin` example is rewritten to demonstrate the YAML-config path end-to-end: `config.yaml` declares `tiko.shutdownTimeout: 5s`; `Main.java` stops Javalin while a 2s async audit handler is in flight; `container.close()` drains the handler before returning. A new `HttpAsyncDrainTest` pins this behaviour.
 
 Spec at `docs/superpowers/specs/2026-05-16-event-executor-shutdown-timeout-design.md`. Plan at `docs/superpowers/plans/2026-05-16-event-executor-shutdown-timeout.md`.
 
 ### Key pieces
 
-- **`TikoOptions.shutdownTimeout(Duration)`** — additive builder method; default `Duration.ofSeconds(10)`; rejects negative durations; accepts `Duration.ZERO`.
+- **`TikoOptions.shutdownTimeout(Duration)`** — additive builder method; **nullable accessor** (matches existing `configSource()`/`errorHandler()` pattern); rejects negative durations; accepts `Duration.ZERO`.
+- **`Tiko.resolveShutdownTimeout(options, classLoader)`** — package-private resolver implementing programmatic > YAML > 10s precedence. YAML lookup is reflective (mirrors existing `bindConfigs` path); no new compile dep on tiko-runtime.
 - **`ContainerGenerator`** — emits a new 5-arg constructor on `TikoContainerImpl_<hash>` taking `Duration shutdownTimeout`; the existing 4-arg constructor stays as a delegating shim with the 10s default. Generated `shutdown()` uses `awaitTermination(this.shutdownTimeout.toNanos(), NANOSECONDS)` instead of the hardcoded `10, SECONDS`.
 - **`AggregatingContainer`** — new 4-arg canonical constructor `(EventBus, ErrorHandler, ExecutorService, Duration)`; switches reflective per-module construction to the 5-arg protocol; uses the timeout in its own shutdown block.
-- **`Tiko.create(...)`** — threads `options.shutdownTimeout()` to both the multi-module aggregator path and the single-module reflective path.
-- **`09_http_javalin`** — new `SlowAuditService` (slow async handler with latch test hook); `Main.java` rewritten as a runnable drain demo; class Javadoc documents the JVM `Error` caveat.
-- **`HttpAsyncDrainTest`** — end-to-end CountDownLatch assertion: handler completes during `container.close()` with default-ish timeout, AND a tight 200ms timeout forces an interrupt (latch does NOT count down).
-- **`docs/events.md`** — new "Graceful shutdown drain" subsection.
+- **`Tiko.create(...)`** — calls `resolveShutdownTimeout` once, threads the result to both the multi-module aggregator path and the single-module reflective path.
+- **`09_http_javalin`** — new `SlowAuditService` (slow async handler with latch test hook); `config.yaml` ships `tiko.shutdownTimeout: 5s`; `Main.java` sources the timeout from YAML; class Javadoc documents the JVM `Error` caveat.
+- **`HttpAsyncDrainTest`** — end-to-end CountDownLatch assertion: handler completes during `container.close()` with 5s budget, AND a tight 200ms budget forces an interrupt (latch does NOT count down).
+- **Docs** — `docs/events.md` has a new "Graceful shutdown drain" subsection covering both APIs; `docs/configuration.md` documents the reserved `tiko:` namespace policy.
 
 ### Test plan
 
-- [x] `TikoOptionsTest` — round-trip, default 10s, negative rejection, null rejection (4 new tests; 11/11 pass).
+- [x] `TikoOptionsTest` — round-trip, default null, negative rejection, null rejection (4 new tests; 11/11 pass).
+- [x] `TikoResolveShutdownTimeoutTest` — programmatic-wins, YAML-fallback, default-fallback, no-tiko-section-fallback, negative-YAML-rejected.
 - [x] `ContainerGeneratorShutdownTimeoutTest` — asserts the generated container has the 5-arg constructor, the 4-arg delegating shim with the 10s default, and the field-driven shutdown logic.
 - [x] `AggregatingContainerShutdownTimeoutTest` — forced-path (50ms timeout vs 500ms task) AND graceful-path (10s default with 50ms task).
 - [x] `HttpAsyncDrainTest` — slow handler completes during 5s budget; tight 200ms budget forces interrupt.
@@ -1230,30 +1470,32 @@ Spec at `docs/superpowers/specs/2026-05-16-event-executor-shutdown-timeout-desig
 
 ### Backwards compatibility
 
-Pure addition. Default behaviour unchanged (10s graceful wait) for every existing `Tiko.create(...)` call. The 4-arg generated `TikoContainerImpl` constructor still exists as a delegating shim, so any external code reflectively constructing it via the old protocol continues to work with the default timeout.
+Pure addition. Default behaviour unchanged (10s graceful wait) for every existing `Tiko.create(...)` call. The 4-arg generated `TikoContainerImpl` constructor still exists as a delegating shim. `TikoOptions.shutdownTimeout()` returning nullable matches the existing pattern (configSource/errorHandler/eventExecutor are all nullable accessors).
 
-### Out of scope (mentioned to set boundary)
+### Known limitations (documented, deferred)
 
-- Separate timeouts for `@PreDestroy` and `AutoCloseable.close()` — filed under Phase 6 (Resiliency layer) as #106.
-- Per-event-handler shutdown overrides.
-- Multiple executor pools (the pool management knobs are #110).
-- Configuring `shutdownTimeout` from YAML — `TikoOptions` is programmatic-only today.
-- JVM `Error` is documented as a caveat, not mitigated.
+- No `${VAR}` interpolation on `tiko.shutdownTimeout`. Use the programmatic API if env-var resolution is needed.
+- No source-anchoring on malformed YAML values (the #19 anchoring is gated through ConfigBootstrap.bind, which isn't on this code path).
+- Phase 6 may promote framework knobs to a proper `@Configuration` record when more knobs justify the migration. The flat `tiko:` schema established here forward-extends naturally.
+
+### Out of scope
+
+- Per-`@PreDestroy` / `AutoCloseable.close()` timeouts — filed under Phase 6 as #106.
+- Multiple executor pools — Phase 6 #110.
+- JVM `Error` mitigation — documented as a caveat.
 EOF
 )"
 ```
 
-- [ ] **Step 7: Watch CI**
+- [ ] **Step 6: Watch CI**
 
 ```
 "C:/Program Files/GitHub CLI/gh.exe" pr checks --watch
 ```
 
-Expected: all checks pass. If Spotless fails, run `mvn -pl '!tiko-bom' spotless:apply` locally, commit, push.
+- [ ] **Step 7: Hand off for manual merge**
 
-- [ ] **Step 8: Hand off for manual merge**
-
-Per project policy (branch protection), the user merges in the GitHub UI. After confirmation:
+Per project policy, the user merges via the GitHub UI. After confirmation:
 
 ```
 git checkout main
@@ -1266,4 +1508,4 @@ git fetch --prune origin
 
 ## Done
 
-`TikoOptions.shutdownTimeout(Duration)` ships. The `09_http_javalin` example now visibly demonstrates the graceful drain behaviour the knob controls. Issue #48 closes. Phase 2 milestone has one open issue remaining: #74 (java.lang.System.Logger refactor).
+`TikoOptions.shutdownTimeout(Duration)` + `tiko.shutdownTimeout` YAML key ship together. The `09_http_javalin` example visibly demonstrates the graceful drain via YAML config. Issue #48 closes. Phase 2 milestone has one open issue remaining: #74 (java.lang.System.Logger refactor).
