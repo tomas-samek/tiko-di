@@ -70,8 +70,8 @@ public final class Main {
     }
 
     private static void fireCreateTicketRequest(int port) throws Exception {
-        // Manual JSON literal — jackson-databind is test-scoped on this module, so the
-        // production main can't use ObjectMapper. Shape mirrors CreateTicketRequest(String title).
+        // Manual JSON literal — keeps the demo's main path free of an ObjectMapper
+        // dependency. Shape mirrors CreateTicketRequest(String title).
         String body = "{\"title\":\"drain demo\"}";
         HttpClient client = HttpClient.newHttpClient();
         HttpRequest request = HttpRequest.newBuilder()
