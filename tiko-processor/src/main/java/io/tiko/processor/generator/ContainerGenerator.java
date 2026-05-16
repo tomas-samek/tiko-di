@@ -662,11 +662,21 @@ public final class ContainerGenerator {
      * Emits a reentrant-safe get-or-create for a scope map. Plain
      * {@code computeIfAbsent} on {@link LinkedHashMap} throws
      * {@link java.util.ConcurrentModificationException} when the create lambda
-     * recursively pulls another bean from the same map (e.g., dependency chains).
-     * The map is single-threaded (per-thread {@code ThreadLocal}) so this
-     * non-atomic get/put pair is safe — and produces the desired insertion order:
-     * dependencies are put first, dependents last, which is exactly what scope
-     * teardown's reverse iteration relies on for LIFO destruction.
+     * recursively pulls another bean from the same map (e.g., dependency chains
+     * like REQUEST {@code TransactionContext} depending on REQUEST {@code Connection}
+     * in {@code tiko-examples/10_persistence_jdbc}). The map is single-threaded
+     * (per-thread {@code ThreadLocal}) so this non-atomic get/put pair is safe —
+     * and produces the desired insertion order: dependencies are put first,
+     * dependents last, which is exactly what scope teardown's reverse iteration
+     * relies on for LIFO destruction.
+     *
+     * <p>This is intentionally different from the SINGLETON case above, which
+     * uses {@code singletons.computeIfAbsent(...)}: {@code singletons} is a
+     * {@link java.util.concurrent.ConcurrentHashMap} (chosen for thread safety,
+     * since SINGLETON beans are reachable from any thread) and tolerates
+     * recursive update on different keys in practice. SWAPPING THIS HELPER TO
+     * {@code computeIfAbsent} TO MATCH SINGLETON WILL BREAK any REQUEST/EVENT
+     * dependency chain — see closed issue #100 for the analysis.
      */
     private void emitScopedGetOrCreate(
             MethodSpec.Builder method, TypeName returnType, String mapExpr, String storageKey, String createExpr) {
