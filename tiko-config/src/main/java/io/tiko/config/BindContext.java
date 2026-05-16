@@ -3,6 +3,7 @@ package io.tiko.config;
 
 import io.tiko.ConfigIssue;
 import io.tiko.ConfigIssueCode;
+import io.tiko.SourceLocation;
 import io.tiko.config.internal.ConfigError;
 import io.tiko.config.internal.coercers.CoercionException;
 import io.tiko.config.internal.coercers.TypeCoercer;
@@ -22,10 +23,16 @@ import java.util.Set;
 public final class BindContext {
 
     private final String source;
+    private final Map<String, SourceLocation> locations;
     private final List<ConfigError> errors = new ArrayList<>();
 
     public BindContext(String source) {
+        this(source, Map.of());
+    }
+
+    public BindContext(String source, Map<String, SourceLocation> locations) {
         this.source = source;
+        this.locations = Map.copyOf(locations);
     }
 
     // -- Error accumulation ------------------------------------------------
@@ -38,6 +45,24 @@ public final class BindContext {
     /** Reports an error with no specific location. */
     public void report(ConfigIssueCode code, String message) {
         errors.add(ConfigError.unanchored(code, message));
+    }
+
+    /**
+     * Reports an error against the known location for {@code dotPath} when one is
+     * available, else falls back to {@link #report(ConfigIssueCode, String)} unanchored.
+     */
+    private void reportAtPath(ConfigIssueCode code, String dotPath, String message) {
+        SourceLocation loc = locations.get(dotPath);
+        if (loc != null) {
+            reportAt(code, loc.line(), loc.column(), message);
+        } else {
+            report(code, message);
+        }
+    }
+
+    private static String parentSectionPath(String fullPath) {
+        int lastDot = fullPath.lastIndexOf('.');
+        return lastDot < 0 ? fullPath : fullPath.substring(0, lastDot);
     }
 
     public boolean hasErrors() {
@@ -79,12 +104,13 @@ public final class BindContext {
     public Map<String, Object> requireSection(Map<String, Object> root, String key) {
         Object v = root.get(key);
         if (v == null) {
-            report(ConfigIssueCode.MISSING_SECTION, "missing required section '" + key + "'");
+            reportAtPath(ConfigIssueCode.MISSING_SECTION, key, "missing required section '" + key + "'");
             return new LinkedHashMap<>();
         }
         if (!(v instanceof Map<?, ?>)) {
-            report(
+            reportAtPath(
                     ConfigIssueCode.INVALID_VALUE,
+                    key,
                     "expected section '" + key + "' to be a mapping, got "
                             + v.getClass().getSimpleName());
             return new LinkedHashMap<>();
@@ -104,14 +130,15 @@ public final class BindContext {
     public <T> T requireScalar(
             Map<String, Object> node, String key, String fullPath, TypeCoercer<T> coercer, T fallback) {
         if (!node.containsKey(key)) {
-            report(ConfigIssueCode.MISSING_KEY, fullPath + " is required but missing");
+            reportAtPath(
+                    ConfigIssueCode.MISSING_KEY, parentSectionPath(fullPath), fullPath + " is required but missing");
             return fallback;
         }
         Object raw = node.remove(key);
         try {
             return coercer.coerce(raw);
         } catch (CoercionException e) {
-            report(ConfigIssueCode.INVALID_VALUE, fullPath + " " + e.getMessage());
+            reportAtPath(ConfigIssueCode.INVALID_VALUE, fullPath, fullPath + " " + e.getMessage());
             return fallback;
         }
     }
@@ -128,7 +155,7 @@ public final class BindContext {
         try {
             return coercer.coerce(raw);
         } catch (CoercionException e) {
-            report(ConfigIssueCode.INVALID_VALUE, fullPath + " " + e.getMessage());
+            reportAtPath(ConfigIssueCode.INVALID_VALUE, fullPath, fullPath + " " + e.getMessage());
             return defaultValue;
         }
     }
@@ -144,7 +171,7 @@ public final class BindContext {
         try {
             return Optional.of(coercer.coerce(raw));
         } catch (CoercionException e) {
-            report(ConfigIssueCode.INVALID_VALUE, fullPath + " " + e.getMessage());
+            reportAtPath(ConfigIssueCode.INVALID_VALUE, fullPath, fullPath + " " + e.getMessage());
             return Optional.empty();
         }
     }
@@ -158,7 +185,10 @@ public final class BindContext {
     public void checkUnknownKeys(Map<String, Object> node, String sectionPath, Set<String> known) {
         for (String k : node.keySet()) {
             if (!known.contains(k)) {
-                report(ConfigIssueCode.UNKNOWN_KEY, "unknown key '" + sectionPath + "." + k + "'");
+                reportAtPath(
+                        ConfigIssueCode.UNKNOWN_KEY,
+                        sectionPath + "." + k,
+                        "unknown key '" + sectionPath + "." + k + "'");
             }
         }
     }
