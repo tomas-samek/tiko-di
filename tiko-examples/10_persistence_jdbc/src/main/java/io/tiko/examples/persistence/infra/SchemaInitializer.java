@@ -33,15 +33,13 @@ public class SchemaInitializer {
     }
 
     @PostConstruct
-    public void initialize() {
+    public void initialize() throws SQLException, IOException {
         String script;
         try (InputStream in = SchemaInitializer.class.getResourceAsStream("/schema.sql")) {
             if (in == null) throw new IllegalStateException("schema.sql not found on classpath");
             try (var reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
                 script = reader.lines().collect(Collectors.joining("\n"));
             }
-        } catch (IOException e) {
-            throw new IllegalStateException("failed to read schema.sql", e);
         }
         try (Connection c = ds.getConnection();
                 Statement st = c.createStatement()) {
@@ -50,8 +48,6 @@ public class SchemaInitializer {
                 if (!trimmed.isEmpty()) st.execute(trimmed);
             }
             c.commit();
-        } catch (SQLException e) {
-            throw new IllegalStateException("failed to execute schema.sql", e);
         }
     }
 }

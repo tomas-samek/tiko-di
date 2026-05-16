@@ -30,13 +30,9 @@ public class JdbcConnectionProvider {
     }
 
     @Produces(scope = Scope.REQUEST)
-    public Connection connection() {
-        try {
-            var c = ds.getConnection();
-            c.setAutoCommit(false);
-            return c;
-        } catch (SQLException e) {
-            throw new IllegalStateException("Failed to acquire JDBC connection", e);
-        }
+    public Connection connection() throws SQLException {
+        var c = ds.getConnection();
+        c.setAutoCommit(false);
+        return c;
     }
 }
