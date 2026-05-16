@@ -231,6 +231,91 @@ public final class Tiko {
     }
 
     /**
+     * Computes the effective event-executor shutdown timeout with precedence:
+     * programmatic ({@link TikoOptions#shutdownTimeout()}) > YAML ({@code tiko.shutdownTimeout}
+     * in the layered config sources) > {@code Duration.ofSeconds(10)}.
+     *
+     * <p>Package-private for testability — {@code TikoResolveShutdownTimeoutTest} drives this
+     * helper directly without booting a container.
+     *
+     * <p>The YAML lookup is reflective (mirrors the existing {@code bindConfigs} path) so
+     * tiko-runtime does not gain a compile dep on tiko-config. If tiko-config is not on the
+     * classpath, the YAML path silently falls through to the default. No {@code ${VAR}}
+     * interpolation is applied on {@code tiko.shutdownTimeout} in v1.
+     */
+    static java.time.Duration resolveShutdownTimeout(TikoOptions options, ClassLoader classLoader) {
+        java.time.Duration explicit = options.shutdownTimeout();
+        if (explicit != null) {
+            return explicit;
+        }
+
+        java.time.Duration fromYaml = readYamlShutdownTimeout(options.configSource(), classLoader);
+        if (fromYaml != null) {
+            if (fromYaml.isNegative()) {
+                throw new IllegalArgumentException("tiko.shutdownTimeout must not be negative; got " + fromYaml);
+            }
+            return fromYaml;
+        }
+
+        return java.time.Duration.ofSeconds(10);
+    }
+
+    /**
+     * Returns the value of {@code tiko.shutdownTimeout} from the layered config (defaults +
+     * user source) coerced via {@code Coercers.durationCoercer()}, or {@code null} if the key
+     * is absent or tiko-config is not on the classpath.
+     */
+    private static java.time.Duration readYamlShutdownTimeout(ConfigSource userSource, ClassLoader classLoader) {
+        try {
+            // Build the layered source the same way bindConfigs does — defaults first,
+            // user override on top.
+            Class<?> sourcesClass = Class.forName("io.tiko.config.ConfigSources", true, classLoader);
+            ConfigSource defaults = (ConfigSource)
+                    sourcesClass.getMethod("classpathAll", String.class).invoke(null, "META-INF/tiko/defaults.yaml");
+            ConfigSource effective;
+            if (userSource == null) {
+                effective = defaults;
+            } else {
+                effective = (ConfigSource)
+                        sourcesClass.getMethod("layered", ConfigSource[].class).invoke(null, (Object)
+                                new ConfigSource[] {defaults, userSource});
+            }
+
+            // Read raw map, walk to tiko.shutdownTimeout.
+            Map<String, Object> raw = effective.load();
+            Object tikoSection = raw.get("tiko");
+            if (!(tikoSection instanceof Map<?, ?> tikoMap)) {
+                return null;
+            }
+            Object value = tikoMap.get("shutdownTimeout");
+            if (value == null) {
+                return null;
+            }
+
+            // Coerce via the canonical durationCoercer (handles ISO-8601 like "PT5S").
+            Class<?> coercersClass = Class.forName("io.tiko.config.internal.coercers.Coercers", true, classLoader);
+            Object durationCoercer = coercersClass.getMethod("durationCoercer").invoke(null);
+            Class<?> coercerInterface =
+                    Class.forName("io.tiko.config.internal.coercers.TypeCoercer", true, classLoader);
+            Object coerced = coercerInterface.getMethod("coerce", Object.class).invoke(durationCoercer, value);
+            return (java.time.Duration) coerced;
+        } catch (ClassNotFoundException notOnClasspath) {
+            // tiko-config absent — YAML config not available; programmatic + default still work.
+            return null;
+        } catch (java.lang.reflect.InvocationTargetException ite) {
+            // CoercionException or similar from the coercer — surface its message.
+            Throwable cause = ite.getCause();
+            throw new IllegalArgumentException(
+                    "Invalid tiko.shutdownTimeout in YAML: " + (cause == null ? ite.getMessage() : cause.getMessage()),
+                    cause);
+        } catch (Exception e) {
+            // Reflective infrastructure error (e.g. method missing). Surface as runtime to
+            // avoid silently masking a wiring bug.
+            throw new IllegalStateException("Failed to read tiko.shutdownTimeout from YAML", e);
+        }
+    }
+
+    /**
      * Creates a single-module container. Does NOT call start() — that is done in createInternal
      * after injectConfigs() runs.
      */
