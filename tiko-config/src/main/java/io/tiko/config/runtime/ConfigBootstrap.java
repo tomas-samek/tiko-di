@@ -4,6 +4,7 @@ import io.tiko.ConfigIssueCode;
 import io.tiko.ConfigSource;
 import io.tiko.ConfigurationFailure;
 import io.tiko.ErrorHandler;
+import io.tiko.SourceLocation;
 import io.tiko.config.BindContext;
 import io.tiko.config.ConfigBinder;
 import io.tiko.config.ConfigValidationException;
@@ -43,10 +44,10 @@ public final class ConfigBootstrap {
      */
     public static Map<Class<?>, Object> bind(
             String sourceLabel, ConfigSource source, List<ConfigBinder<?>> binders, ErrorHandler errorHandler) {
-        BindContext ctx = new BindContext(sourceLabel);
-
         // 1. Load
         Map<String, Object> raw = source.load();
+        Map<String, SourceLocation> locations = source.locations();
+        BindContext ctx = new BindContext(sourceLabel, locations);
 
         // 2. Interpolate
         @SuppressWarnings("unchecked")
@@ -77,7 +78,7 @@ public final class ConfigBootstrap {
             if (!claimed.contains(k)) {
                 String suggestion = nearest(k, claimed);
                 String hint = suggestion != null ? " Did you mean '" + suggestion + "'?" : "";
-                ctx.report(ConfigIssueCode.UNKNOWN_SECTION, "unknown top-level section '" + k + "'." + hint);
+                ctx.reportAtPath(ConfigIssueCode.UNKNOWN_SECTION, k, "unknown top-level section '" + k + "'." + hint);
             }
         }
 
