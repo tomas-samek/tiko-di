@@ -192,7 +192,7 @@ public final class ConfigBinderGenerator {
         String fqn = el.getQualifiedName().toString();
 
         // Walk through container types into their value-type parameters.
-        if (fqn.equals("java.util.Optional") || fqn.equals("java.util.List")) {
+        if (fqn.equals("java.util.Optional") || fqn.equals("java.util.List") || fqn.equals("java.util.Set")) {
             if (!dt.getTypeArguments().isEmpty()) {
                 emitNestedCoercersFor(dt.getTypeArguments().get(0));
             }
@@ -379,14 +379,16 @@ public final class ConfigBinderGenerator {
         if (type.getKind() == javax.lang.model.type.TypeKind.DECLARED) {
             TypeElement el = (TypeElement) ((DeclaredType) type).asElement();
             String fqn = el.getQualifiedName().toString();
-            if (fqn.equals("java.util.List") || fqn.equals("java.util.Map")) {
+            if (fqn.equals("java.util.List") || fqn.equals("java.util.Set") || fqn.equals("java.util.Map")) {
                 DeclaredType dt = (DeclaredType) type;
                 int valueArgIdx = fqn.equals("java.util.Map") ? 1 : 0;
                 CodeBlock elemCoercer = coercerExpr(dt.getTypeArguments().get(valueArgIdx));
                 ClassName helper = ClassName.get(CompositeCoercers.class);
-                return fqn.equals("java.util.List")
-                        ? CodeBlock.of("$T.list($L)", helper, elemCoercer)
-                        : CodeBlock.of("$T.map($L)", helper, elemCoercer);
+                return switch (fqn) {
+                    case "java.util.List" -> CodeBlock.of("$T.list($L)", helper, elemCoercer);
+                    case "java.util.Set" -> CodeBlock.of("$T.set($L)", helper, elemCoercer);
+                    default -> CodeBlock.of("$T.map($L)", helper, elemCoercer);
+                };
             }
             if (el.getKind() == ElementKind.ENUM) {
                 ClassName enumType = ClassName.get(el);
