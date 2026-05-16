@@ -1,0 +1,17 @@
+# Deliberately malformed fixture for ConfigurationAnchoredErrorsTest.
+# Anchors expected:
+#   - "db.url" MISSING_KEY      -> anchored to the "db" section header
+#   - "app.server.port"         -> anchored to the bad scalar line
+#     INVALID_VALUE
+#   - "garbage" UNKNOWN_SECTION -> anchored to the section's own line
+db:
+  maxConnections: 5
+  connectTimeout: PT3S
+app:
+  name: anchored-error-fixture
+  logLevel: INFO
+  server:
+    host: 0.0.0.0
+    port: not-a-number
+garbage:
+  key: value
