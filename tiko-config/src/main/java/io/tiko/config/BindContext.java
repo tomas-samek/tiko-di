@@ -37,8 +37,13 @@ public final class BindContext {
 
     // -- Error accumulation ------------------------------------------------
 
-    /** Reports an error against a known YAML location. */
+    /** Reports an error against a known YAML location, using the context's default source. */
     public void reportAt(ConfigIssueCode code, int line, int column, String message) {
+        reportAt(code, this.source, line, column, message);
+    }
+
+    /** Reports an error against a known YAML location with an explicit source label. */
+    public void reportAt(ConfigIssueCode code, String source, int line, int column, String message) {
         errors.add(ConfigError.at(code, source, line, column, message));
     }
 
@@ -54,7 +59,7 @@ public final class BindContext {
     public void reportAtPath(ConfigIssueCode code, String dotPath, String message) {
         SourceLocation loc = locations.get(dotPath);
         if (loc != null) {
-            reportAt(code, loc.line(), loc.column(), message);
+            reportAt(code, loc.source(), loc.line(), loc.column(), message);
         } else {
             report(code, message);
         }
