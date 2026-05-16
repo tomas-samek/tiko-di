@@ -2,6 +2,7 @@ package io.tiko.runtime;
 
 import io.tiko.ConfigSource;
 import io.tiko.ErrorHandler;
+import java.time.Duration;
 import java.util.Objects;
 
 /**
@@ -27,11 +28,13 @@ public final class TikoOptions {
     private final ConfigSource configSource;
     private final ErrorHandler errorHandler;
     private final java.util.concurrent.ExecutorService eventExecutor;
+    private final Duration shutdownTimeout;
 
     private TikoOptions(Builder b) {
         this.configSource = b.configSource;
         this.errorHandler = b.errorHandler;
         this.eventExecutor = b.eventExecutor;
+        this.shutdownTimeout = b.shutdownTimeout;
     }
 
     /**
@@ -58,6 +61,16 @@ public final class TikoOptions {
         return eventExecutor;
     }
 
+    /**
+     * @return the configured graceful drain window, or {@code null} if not set. When
+     *         {@code null}, the effective value is taken from the YAML key
+     *         {@code tiko.shutdownTimeout} if present in the layered config sources,
+     *         otherwise {@code Duration.ofSeconds(10)}.
+     */
+    public Duration shutdownTimeout() {
+        return shutdownTimeout;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -67,6 +80,7 @@ public final class TikoOptions {
         private ConfigSource configSource;
         private ErrorHandler errorHandler;
         private java.util.concurrent.ExecutorService eventExecutor;
+        private Duration shutdownTimeout;
 
         private Builder() {}
 
@@ -80,8 +94,40 @@ public final class TikoOptions {
             return this;
         }
 
+        /**
+         * Supplies a user-owned event executor in place of the framework default.
+         *
+         * <p>See {@link #shutdownTimeout(Duration)} for the related drain window — that knob
+         * has no effect when this executor is user-supplied (you own its lifecycle).
+         */
         public Builder eventExecutor(java.util.concurrent.ExecutorService executor) {
             this.eventExecutor = Objects.requireNonNull(executor, "eventExecutor");
+            return this;
+        }
+
+        /**
+         * Maximum time {@link io.tiko.Container#shutdown()} waits for the framework's event
+         * executor to terminate gracefully before falling back to {@code shutdownNow()}.
+         * When unset programmatically, the framework resolves the effective value in this
+         * precedence order: programmatic > YAML {@code tiko.shutdownTimeout} > {@code Duration.ofSeconds(10)}.
+         *
+         * <p>Has <strong>no effect</strong> when {@link #eventExecutor(java.util.concurrent.ExecutorService)}
+         * is set — the user owns the executor's lifecycle and the container does not stop it.
+         *
+         * <p>Note: a JVM {@link Error} (e.g. {@code OutOfMemoryError}) bypasses this graceful
+         * drain. Threads may be torn down abruptly when the JVM is in an unrecoverable state.
+         *
+         * @param timeout non-negative duration; {@link Duration#ZERO} skips the graceful wait
+         *                and calls {@code shutdownNow()} immediately
+         * @throws IllegalArgumentException if {@code timeout} is negative
+         * @throws NullPointerException if {@code timeout} is null
+         */
+        public Builder shutdownTimeout(Duration timeout) {
+            Objects.requireNonNull(timeout, "shutdownTimeout");
+            if (timeout.isNegative()) {
+                throw new IllegalArgumentException("shutdownTimeout must not be negative");
+            }
+            this.shutdownTimeout = timeout;
             return this;
         }
 
