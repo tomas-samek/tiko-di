@@ -23,25 +23,31 @@ public final class Interpolator {
     private Interpolator() {}
 
     public static Object interpolate(Object node, Function<String, String> env, BindContext ctx) {
+        return interpolate(node, "", env, ctx);
+    }
+
+    private static Object interpolate(Object node, String path, Function<String, String> env, BindContext ctx) {
         if (node instanceof Map<?, ?> m) {
             Map<String, Object> out = new LinkedHashMap<>(m.size());
             for (Map.Entry<?, ?> e : m.entrySet()) {
-                out.put(e.getKey().toString(), interpolate(e.getValue(), env, ctx));
+                String key = e.getKey().toString();
+                String childPath = path.isEmpty() ? key : path + "." + key;
+                out.put(key, interpolate(e.getValue(), childPath, env, ctx));
             }
             return out;
         }
         if (node instanceof List<?> l) {
             List<Object> out = new ArrayList<>(l.size());
-            for (Object e : l) out.add(interpolate(e, env, ctx));
+            for (Object e : l) out.add(interpolate(e, path, env, ctx));
             return out;
         }
         if (node instanceof String s) {
-            return interpolateScalar(s, env, ctx);
+            return interpolateScalar(s, path, env, ctx);
         }
         return node;
     }
 
-    private static String interpolateScalar(String s, Function<String, String> env, BindContext ctx) {
+    private static String interpolateScalar(String s, String path, Function<String, String> env, BindContext ctx) {
         Matcher m = PLACEHOLDER.matcher(s);
         StringBuilder sb = new StringBuilder();
         while (m.find()) {
@@ -52,8 +58,10 @@ public final class Interpolator {
                 if (def != null) {
                     value = def;
                 } else {
-                    ctx.report(
-                            ConfigIssueCode.INTERPOLATION_UNRESOLVED, "${" + name + "} is not set and has no default");
+                    ctx.reportAtPath(
+                            ConfigIssueCode.INTERPOLATION_UNRESOLVED,
+                            path,
+                            "${" + name + "} is not set and has no default");
                     value = "";
                 }
             }

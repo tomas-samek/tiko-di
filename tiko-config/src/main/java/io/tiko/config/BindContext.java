@@ -51,7 +51,7 @@ public final class BindContext {
      * Reports an error against the known location for {@code dotPath} when one is
      * available, else falls back to {@link #report(ConfigIssueCode, String)} unanchored.
      */
-    private void reportAtPath(ConfigIssueCode code, String dotPath, String message) {
+    public void reportAtPath(ConfigIssueCode code, String dotPath, String message) {
         SourceLocation loc = locations.get(dotPath);
         if (loc != null) {
             reportAt(code, loc.line(), loc.column(), message);
