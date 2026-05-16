@@ -108,6 +108,86 @@ class ConfigBinderGeneratorTest {
         assertThat(outerContent).contains("EndpointNestedCoercer_");
     }
 
+    // ---- #63: Set<X> support ----
+
+    @Test
+    void set_of_string_emits_CompositeCoercers_set_call() throws IOException {
+        JavaFileObject src = JavaFileObjects.forSourceLines(
+                "io.example.AllowlistConfig",
+                "package io.example;",
+                "import java.util.Set;",
+                "import io.tiko.annotations.Configuration;",
+                "@Configuration(prefix = \"allow\")",
+                "public record AllowlistConfig(Set<String> hosts) {}");
+        Compilation c =
+                Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(src);
+        com.google.testing.compile.CompilationSubject.assertThat(c).succeeded();
+
+        JavaFileObject binder = c.generatedSourceFiles().stream()
+                .filter(f -> f.getName().contains("AllowlistConfigBinder"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("AllowlistConfigBinder not generated"));
+
+        String content = new String(binder.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        assertThat(content).contains("CompositeCoercers.set(");
+        assertThat(content).contains("stringCoercer()");
+        assertThat(content).contains("ctx.requireScalar(node, \"hosts\"");
+    }
+
+    @Test
+    void set_of_enum_emits_set_with_enumCoercer_inner() throws IOException {
+        JavaFileObject src = JavaFileObjects.forSourceLines(
+                "io.example.FeatureConfig",
+                "package io.example;",
+                "import java.util.Set;",
+                "import io.tiko.annotations.Configuration;",
+                "@Configuration(prefix = \"features\")",
+                "public record FeatureConfig(Set<Mode> enabled) { public enum Mode { A, B, C } }");
+        Compilation c =
+                Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(src);
+        com.google.testing.compile.CompilationSubject.assertThat(c).succeeded();
+
+        JavaFileObject binder = c.generatedSourceFiles().stream()
+                .filter(f -> f.getName().contains("FeatureConfigBinder"))
+                .findFirst()
+                .orElseThrow();
+
+        String content = new String(binder.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        assertThat(content).contains("CompositeCoercers.set(");
+        assertThat(content).contains("enumCoercer(");
+        assertThat(content).contains(".Mode.class");
+    }
+
+    @Test
+    void set_of_nested_records_emits_nested_coercer_and_set_composition() throws IOException {
+        JavaFileObject outer = JavaFileObjects.forSourceLines(
+                "io.example.AppConfig",
+                "package io.example;",
+                "import java.util.Set;",
+                "import io.tiko.annotations.Configuration;",
+                "@Configuration(prefix = \"app\")",
+                "public record AppConfig(Set<Endpoint> endpoints) {}");
+        JavaFileObject inner = JavaFileObjects.forSourceLines(
+                "io.example.Endpoint", "package io.example;", "public record Endpoint(String host, int port) {}");
+        Compilation c =
+                Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(outer, inner);
+        com.google.testing.compile.CompilationSubject.assertThat(c).succeeded();
+
+        JavaFileObject nested = c.generatedSourceFiles().stream()
+                .filter(f -> f.getName().contains("EndpointNestedCoercer_"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("EndpointNestedCoercer_<hash> not generated"));
+
+        JavaFileObject outerBinder = c.generatedSourceFiles().stream()
+                .filter(f -> f.getName().contains("AppConfigBinder"))
+                .findFirst()
+                .orElseThrow();
+        String outerContent = new String(outerBinder.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        assertThat(outerContent).contains("CompositeCoercers.set(");
+        assertThat(outerContent).contains("EndpointNestedCoercer_");
+        assertThat(outerContent).contains(".coercer()");
+    }
+
     @Test
     void map_of_nested_records_composes_with_CompositeCoercers_map() throws IOException {
         JavaFileObject outer = JavaFileObjects.forSourceLines(
