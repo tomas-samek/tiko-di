@@ -72,7 +72,7 @@ public final class ConfigBootstrap {
             }
         }
 
-        // 4. Top-level prefix check
+        // 5. Top-level prefix check
         Set<String> claimed = new LinkedHashSet<>(prefixToTypes.keySet());
         for (String k : interpolated.keySet()) {
             if (!claimed.contains(k)) {
@@ -82,14 +82,14 @@ public final class ConfigBootstrap {
             }
         }
 
-        // 4. Bind each record
+        // 6. Bind each record
         Map<Class<?>, Object> bound = new LinkedHashMap<>();
         for (ConfigBinder<?> b : binders) {
             Object instance = b.bind(interpolated, ctx);
             bound.put(b.type(), instance);
         }
 
-        // 5. Throw if anything accumulated, after routing the bundled failure through
+        // 7. Throw if anything accumulated, after routing the bundled failure through
         // the user's ErrorHandler so observability code sees it before the exception
         // surfaces from Tiko.create(...).
         if (ctx.hasErrors()) {
