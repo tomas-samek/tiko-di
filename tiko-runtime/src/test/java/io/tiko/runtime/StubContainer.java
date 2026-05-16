@@ -21,6 +21,15 @@ public final class StubContainer implements Container {
     public StubContainer(
             EventBus eventBus, ErrorHandler errorHandler, ExecutorService executor, boolean publishLifecycle) {}
 
+    // Tiko.createSingleModuleContainer + AggregatingContainer.processContainerResource
+    // both reflectively look up the 5-arg constructor after #48.
+    public StubContainer(
+            EventBus eventBus,
+            ErrorHandler errorHandler,
+            ExecutorService executor,
+            boolean publishLifecycle,
+            java.time.Duration shutdownTimeout) {}
+
     @Override
     public <T> T get(Class<T> type) {
         throw new UnsupportedOperationException("stub");
