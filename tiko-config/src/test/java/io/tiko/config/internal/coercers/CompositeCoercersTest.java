@@ -7,6 +7,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 import org.junit.jupiter.api.Test;
 
 class CompositeCoercersTest {
@@ -34,5 +40,62 @@ class CompositeCoercersTest {
         TypeCoercer<Optional<Integer>> c = CompositeCoercers.optional(Coercers.intCoercer());
         assertThat(c.coerce(42)).contains(42);
         assertThat(c.coerce(null)).isEmpty();
+    }
+
+    @Test
+    void set_coercer_delegates_to_element_coercer() {
+        TypeCoercer<Set<Integer>> c = CompositeCoercers.set(Coercers.intCoercer());
+        assertThat(c.coerce(List.of(1, 2, "3"))).containsExactly(1, 2, 3);
+    }
+
+    @Test
+    void set_coercer_dedupes_with_order_preservation() {
+        TypeCoercer<Set<String>> c = CompositeCoercers.set(Coercers.stringCoercer());
+        Set<String> result = c.coerce(List.of("alpha", "beta", "alpha", "gamma", "beta"));
+        assertThat(result).containsExactly("alpha", "beta", "gamma");
+    }
+
+    @Test
+    void set_coercer_rejects_non_list_input() {
+        TypeCoercer<Set<Integer>> c = CompositeCoercers.set(Coercers.intCoercer());
+        assertThatThrownBy(() -> c.coerce("not a list")).hasMessageContaining("expected list");
+    }
+
+    @Test
+    void set_coercer_handles_empty_list() {
+        TypeCoercer<Set<String>> c = CompositeCoercers.set(Coercers.stringCoercer());
+        assertThat(c.coerce(List.of())).isEmpty();
+    }
+
+    @Test
+    void set_coercer_emits_jul_warning_per_duplicate() {
+        Logger logger = Logger.getLogger("io.tiko.config");
+        var records = new CopyOnWriteArrayList<LogRecord>();
+        Handler handler = new Handler() {
+            @Override
+            public void publish(LogRecord r) {
+                records.add(r);
+            }
+
+            @Override
+            public void flush() {}
+
+            @Override
+            public void close() {}
+        };
+        logger.addHandler(handler);
+        try {
+            TypeCoercer<Set<String>> c = CompositeCoercers.set(Coercers.stringCoercer());
+            c.coerce(List.of("a", "b", "a", "c", "b"));
+
+            assertThat(records)
+                    .filteredOn(r -> r.getLevel() == Level.WARNING)
+                    .extracting(LogRecord::getMessage)
+                    .containsExactly(
+                            "@Configuration Set<X> field: duplicate value 'a' deduped",
+                            "@Configuration Set<X> field: duplicate value 'b' deduped");
+        } finally {
+            logger.removeHandler(handler);
+        }
     }
 }

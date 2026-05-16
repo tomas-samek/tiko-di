@@ -2,15 +2,25 @@
 package io.tiko.config.internal.coercers;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.logging.Logger;
 
-/** Coercers for {@code List<X>}, {@code Map<String,X>}, {@code Optional<X>}. */
+/** Coercers for {@code List<X>}, {@code Set<X>}, {@code Map<String,X>}, {@code Optional<X>}. */
 public final class CompositeCoercers {
 
     private CompositeCoercers() {}
+
+    // Lazy holder — defers java.util.logging.LogManager init until the first
+    // duplicate actually fires. Matches the pattern used by DefaultErrorHandler.
+    private static final class LoggerHolder {
+        static final Logger LOG = Logger.getLogger("io.tiko.config");
+    }
 
     public static <X> TypeCoercer<List<X>> list(TypeCoercer<X> elementCoercer) {
         return v -> {
@@ -21,6 +31,25 @@ public final class CompositeCoercers {
             List<X> out = new ArrayList<>(raw.size());
             for (Object e : raw) out.add(elementCoercer.coerce(e));
             return List.copyOf(out);
+        };
+    }
+
+    public static <X> TypeCoercer<Set<X>> set(TypeCoercer<X> elementCoercer) {
+        return v -> {
+            if (!(v instanceof List<?> raw)) {
+                throw new CoercionException("expected list, got "
+                        + (v == null ? "null" : v.getClass().getSimpleName()));
+            }
+            Set<X> out = new LinkedHashSet<>(raw.size());
+            for (Object e : raw) {
+                X coerced = elementCoercer.coerce(e);
+                if (!out.add(coerced)) {
+                    LoggerHolder.LOG.warning("@Configuration Set<X> field: duplicate value '" + coerced + "' deduped");
+                }
+            }
+            // Collections.unmodifiableSet preserves the LinkedHashSet iteration order;
+            // Set.copyOf would lose order (returns an unordered immutable set).
+            return Collections.unmodifiableSet(out);
         };
     }
 
