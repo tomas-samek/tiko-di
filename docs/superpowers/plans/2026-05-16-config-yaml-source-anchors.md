@@ -69,7 +69,7 @@ public record SourceLocation(String source, int line, int column) {}
 
 - [ ] **Step 2: Verify compile**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-api compile`
+Run: `mvn -pl tiko-api compile`
 Expected: BUILD SUCCESS.
 
 - [ ] **Step 3: Commit**
@@ -116,7 +116,7 @@ Add this method after the existing `load()` declaration (and the matching import
 
 - [ ] **Step 3: Verify compile**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-api compile`
+Run: `mvn -pl tiko-api compile`
 Expected: BUILD SUCCESS.
 
 - [ ] **Step 4: Commit**
@@ -197,7 +197,7 @@ class YamlLoaderTest {
 
 - [ ] **Step 2: Run the test — expect failure**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-api install -DskipTests && W:/tools/apache-maven/bin/mvn -pl tiko-config test -Dtest=YamlLoaderTest`
+Run: `mvn -pl tiko-api install -DskipTests && mvn -pl tiko-config test -Dtest=YamlLoaderTest`
 Expected: compile failure (`cannot find symbol: LoadedYaml`).
 
 - [ ] **Step 3: Rewrite `YamlLoader.java`**
@@ -339,7 +339,7 @@ Note: SnakeYAML's `Mark.getLine()` / `getColumn()` are 0-based; we shift to 1-ba
 
 - [ ] **Step 4: Run the test — expect pass**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-api install -DskipTests && W:/tools/apache-maven/bin/mvn -pl tiko-config test -Dtest=YamlLoaderTest`
+Run: `mvn -pl tiko-api install -DskipTests && mvn -pl tiko-config test -Dtest=YamlLoaderTest`
 Expected: `Tests run: 4, Failures: 0, Errors: 0`.
 
 - [ ] **Step 5: Commit**
@@ -434,7 +434,7 @@ public static ConfigSource layered(ConfigSource... sources) {
 
 - [ ] **Step 3: Verify compile**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-config compile`
+Run: `mvn -pl tiko-config compile`
 Expected: BUILD SUCCESS.
 
 - [ ] **Step 4: Commit**
@@ -523,7 +523,7 @@ Note: `IntCoercer` is the existing coercer at `io.tiko.config.internal.coercers.
 
 - [ ] **Step 2: Run the test — expect failure**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-config test -Dtest=BindContextLocationTest`
+Run: `mvn -pl tiko-config test -Dtest=BindContextLocationTest`
 Expected: compile failure (`BindContext` constructor signature doesn't accept the locations map).
 
 - [ ] **Step 3: Modify `BindContext.java` — add 2-arg constructor + `reportAtPath` + update read methods**
@@ -610,12 +610,12 @@ Apply the analogous replacement (use `reportAtPath` with the right path) to `sca
 
 - [ ] **Step 4: Run the test — expect pass**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-config test -Dtest=BindContextLocationTest`
+Run: `mvn -pl tiko-config test -Dtest=BindContextLocationTest`
 Expected: `Tests run: 3, Failures: 0, Errors: 0`.
 
 - [ ] **Step 5: Run the full tiko-config test suite**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-config test`
+Run: `mvn -pl tiko-config test`
 Expected: BUILD SUCCESS. Existing tests still pass. (Issue descriptions now have anchors where locations are known — any test asserting an exact full description will fail here and be fixed in Task 9.)
 
 If existing tests fail at this point, note the failing test names but proceed; Task 9 will sweep them.
@@ -727,7 +727,7 @@ Then update `Interpolator.interpolateScalar` to call `ctx.reportAtPath(...)` (no
 
 - [ ] **Step 3: Verify compile + test**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-config test`
+Run: `mvn -pl tiko-config test`
 Expected: BUILD SUCCESS. (Existing tests still pass since `interpolate(node, env, ctx)` 3-arg form still exists as a public delegating overload; we just added a 4-arg internal form.)
 
 - [ ] **Step 4: Commit**
@@ -793,7 +793,7 @@ The `DUPLICATE_PREFIX` report stays unanchored — it's a processor-time configu
 
 - [ ] **Step 3: Run the full tiko-config + 02_config test suites**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-config,tiko-examples/02_config test`
+Run: `mvn -pl tiko-config,tiko-examples/02_config test`
 Expected: BUILD SUCCESS (or note failing tests with exact-description assertions for Task 9 to sweep).
 
 - [ ] **Step 4: Commit**
@@ -884,7 +884,7 @@ Note: line numbers above assume the fixture lines as written. If line numbers sh
 
 - [ ] **Step 3: Run the test**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/02_config test -Dtest=ConfigurationAnchoredErrorsTest`
+Run: `mvn -pl tiko-examples/02_config test -Dtest=ConfigurationAnchoredErrorsTest`
 Expected: `Tests run: 1, Failures: 0, Errors: 0`.
 
 If line numbers differ, adjust the assertion line numbers to match the actual issue descriptions emitted (the test output will print them).
@@ -905,7 +905,7 @@ git commit -m "test(examples): 02_config e2e — malformed YAML produces anchore
 
 - [ ] **Step 1: Run the full reactor test suite**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl '!tiko-bom' install`
+Run: `mvn -pl '!tiko-bom' install`
 Expected: build will either succeed (no breaking tests) OR fail on tests that previously asserted exact unanchored descriptions like `assertThat(issue.description()).isEqualTo("db.url is required but missing")`.
 
 - [ ] **Step 2: Catalogue any failing tests**
@@ -929,7 +929,7 @@ This pattern is forward-compatible: it passes both with and without the anchor.
 
 - [ ] **Step 4: Run the full reactor test suite again**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl '!tiko-bom' install`
+Run: `mvn -pl '!tiko-bom' install`
 Expected: BUILD SUCCESS.
 
 - [ ] **Step 5: Commit**
@@ -958,7 +958,7 @@ In the `## What ships today` block, AFTER the existing entries, add:
 
 - [ ] **Step 2: Run the full reactor build**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl "!tiko-bom" install`
+Run: `mvn -pl "!tiko-bom" install`
 Expected: BUILD SUCCESS. All modules build, all tests pass.
 
 - [ ] **Step 3: Confirm working tree clean**

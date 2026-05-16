@@ -12,8 +12,6 @@
 
 **Branch strategy:** Implementation work happens on a fresh `feat/kafka-mvp` branched from `main` **after** the spec PR (the current `feat/kafka-spec`) merges. Phase 12 lays out the PR strategy.
 
-**Maven invocation:** `mvn` lives at `W:\tools\apache-maven\bin\mvn.cmd` (not on PATH in spawned shells). Either prepend the full path or ensure PATH is set before running tasks. All `mvn` references below assume the binary is callable.
-
 **Formatting gate:** Spotless runs at `validate` and fails the build on any `palantir-java-format` deviation. Run `mvn spotless:apply -pl '!tiko-bom'` before every commit if your IDE doesn't format on save.
 
 ---
