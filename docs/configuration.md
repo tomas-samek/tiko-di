@@ -64,7 +64,7 @@ Two modules cannot independently claim the same `@Configuration(prefix="...")` �
 
 ## Nested records
 
-A `@Configuration` record can contain plain records as field types — directly, or inside `Optional<X>`, `List<X>`, `Map<String,X>`. The codegen emits a per-record nested coercer and composes via the existing collection coercers. The nested record itself is **not** annotated `@Configuration`; it's bound by recursion under its parent's prefix.
+A `@Configuration` record can contain plain records as field types — directly, or inside `Optional<X>`, `List<X>`, `Set<X>`, `Map<String,X>`. The codegen emits a per-record nested coercer and composes via the existing collection coercers. The nested record itself is **not** annotated `@Configuration`; it's bound by recursion under its parent's prefix.
 
 ```java
 @Configuration(prefix = "app")
@@ -72,6 +72,7 @@ public record AppConfig(
         String name,
         DbConfig db,                            // direct nested
         List<Endpoint> endpoints,               // list of nested
+        Set<String> allowedHosts,               // set of scalars (deduped, order-preserving)
         Map<String, FeatureFlag> flags,         // map of nested
         Optional<DbConfig> readReplica          // optional nested
         ) {}
