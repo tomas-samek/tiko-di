@@ -215,7 +215,7 @@ Run: `New-Item tiko-examples/10_persistence_jdbc/src/main/java/io/tiko/examples/
 
 - [ ] **Step 7: Verify the module resolves**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/10_persistence_jdbc validate`
+Run: `mvn -pl tiko-examples/10_persistence_jdbc validate`
 Expected: `BUILD SUCCESS`.
 
 - [ ] **Step 8: Commit**
@@ -267,7 +267,7 @@ db:
 
 - [ ] **Step 3: Verify compile (no Java code yet, but resources must be syntactically clean)**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/10_persistence_jdbc process-resources`
+Run: `mvn -pl tiko-examples/10_persistence_jdbc process-resources`
 Expected: `BUILD SUCCESS`.
 
 - [ ] **Step 4: Commit**
@@ -343,7 +343,7 @@ public record DbConfig(String url, String user, String password, @Default("4") i
 
 - [ ] **Step 5: Verify compile**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/10_persistence_jdbc compile`
+Run: `mvn -pl tiko-examples/10_persistence_jdbc compile`
 Expected: `BUILD SUCCESS`. The Tiko processor sees `DbConfig` as a `@Configuration` record and generates a binder for it.
 
 - [ ] **Step 6: Commit**
@@ -462,7 +462,7 @@ public class SchemaInitializer {
 
 - [ ] **Step 3: Verify compile**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/10_persistence_jdbc compile`
+Run: `mvn -pl tiko-examples/10_persistence_jdbc compile`
 Expected: `BUILD SUCCESS`.
 
 - [ ] **Step 4: Commit**
@@ -524,7 +524,7 @@ public class JdbcConnectionProvider {
 
 - [ ] **Step 2: Verify compile**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/10_persistence_jdbc compile`
+Run: `mvn -pl tiko-examples/10_persistence_jdbc compile`
 Expected: `BUILD SUCCESS`. Processor reports the new REQUEST-scoped component.
 
 - [ ] **Step 3: Commit**
@@ -638,7 +638,7 @@ class TransactionContextTest {
 
 - [ ] **Step 2: Run the test — expect failure (class doesn't exist yet)**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/10_persistence_jdbc test`
+Run: `mvn -pl tiko-examples/10_persistence_jdbc test`
 Expected: compile failure (`cannot find symbol: TransactionContext`).
 
 - [ ] **Step 3: Create `TransactionContext.java`**
@@ -702,7 +702,7 @@ public class TransactionContext implements AutoCloseable {
 
 - [ ] **Step 4: Run the test — expect pass**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/10_persistence_jdbc test`
+Run: `mvn -pl tiko-examples/10_persistence_jdbc test`
 Expected: `Tests run: 3, Failures: 0, Errors: 0, Skipped: 0` for `TransactionContextTest`. `BUILD SUCCESS`.
 
 - [ ] **Step 5: Commit**
@@ -771,7 +771,7 @@ public final class TransactionalScope {
 
 - [ ] **Step 2: Verify compile**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/10_persistence_jdbc compile`
+Run: `mvn -pl tiko-examples/10_persistence_jdbc compile`
 Expected: `BUILD SUCCESS`.
 
 - [ ] **Step 3: Commit**
@@ -914,7 +914,7 @@ class OrderRepositoryTest {
 
 - [ ] **Step 2: Run the test — expect failure (class doesn't exist)**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/10_persistence_jdbc test`
+Run: `mvn -pl tiko-examples/10_persistence_jdbc test`
 Expected: compile failure (`cannot find symbol: OrderRepository`).
 
 - [ ] **Step 3: Create `OrderRepository.java`**
@@ -1013,7 +1013,7 @@ public class OrderRepository {
 
 - [ ] **Step 4: Run the test — expect pass**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/10_persistence_jdbc test`
+Run: `mvn -pl tiko-examples/10_persistence_jdbc test`
 Expected: `Tests run: 6` (3 from `TransactionContextTest` + 3 from `OrderRepositoryTest`), all passing. `BUILD SUCCESS`.
 
 - [ ] **Step 5: Commit**
@@ -1093,7 +1093,7 @@ public final class OrderHttpRoutes {
 
 - [ ] **Step 2: Verify compile**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/10_persistence_jdbc compile`
+Run: `mvn -pl tiko-examples/10_persistence_jdbc compile`
 Expected: `BUILD SUCCESS`.
 
 - [ ] **Step 3: Commit**
@@ -1162,7 +1162,7 @@ public final class HttpEntry {
 
 - [ ] **Step 2: Verify compile + package**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/10_persistence_jdbc package -DskipTests`
+Run: `mvn -pl tiko-examples/10_persistence_jdbc package -DskipTests`
 Expected: `BUILD SUCCESS`. Shaded jar at `tiko-examples/10_persistence_jdbc/target/10_persistence_jdbc-0.1.0.jar`.
 
 - [ ] **Step 3: Commit**
@@ -1274,7 +1274,7 @@ class HttpEntryIT {
 
 - [ ] **Step 2: Run the test**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/10_persistence_jdbc test`
+Run: `mvn -pl tiko-examples/10_persistence_jdbc test`
 Expected: `Tests run: 7` (6 from earlier + 1 new). `BUILD SUCCESS`.
 
 - [ ] **Step 3: Commit**
@@ -1402,7 +1402,7 @@ In `OrderRepository.java`, replace the single `insert(Order)` method with these 
 
 - [ ] **Step 4: Run the tests**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/10_persistence_jdbc test`
+Run: `mvn -pl tiko-examples/10_persistence_jdbc test`
 Expected: `Tests run: 8`. The new test passes; existing tests (`OrderRepositoryTest`'s `insertedOrderIsVisibleViaFindById` and `insertedRowIsCommittedNotJustVisibleInSession`) continue to pass because `insert(Order)` still exists with the same signature.
 
 - [ ] **Step 5: Commit**
@@ -1463,7 +1463,7 @@ In `HttpEntryIT.java`, after `postFailingMidTransactionRollsBackEverything`, add
 
 - [ ] **Step 2: Run the tests**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/10_persistence_jdbc test`
+Run: `mvn -pl tiko-examples/10_persistence_jdbc test`
 Expected: `Tests run: 10`. All passing.
 
 - [ ] **Step 3: Commit**
@@ -1586,7 +1586,7 @@ public class BatchAuditLogger {
 
 - [ ] **Step 4: Verify compile**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/10_persistence_jdbc compile`
+Run: `mvn -pl tiko-examples/10_persistence_jdbc compile`
 Expected: `BUILD SUCCESS`. Processor reports a new SINGLETON, a new EVENT-scoped component, a new event handler, and emits a proxy class for `CurrentOrder` (the interface dispatch into the EVENT-scoped `CurrentOrderContext`).
 
 - [ ] **Step 5: Commit**
@@ -1680,7 +1680,7 @@ public final class BatchEntry {
 
 - [ ] **Step 2: Verify compile + package**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/10_persistence_jdbc package -DskipTests`
+Run: `mvn -pl tiko-examples/10_persistence_jdbc package -DskipTests`
 Expected: `BUILD SUCCESS`.
 
 - [ ] **Step 3: Commit**
@@ -1776,7 +1776,7 @@ class BatchEntryIT {
 
 - [ ] **Step 2: Run the tests**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/10_persistence_jdbc test`
+Run: `mvn -pl tiko-examples/10_persistence_jdbc test`
 Expected: `Tests run: 11`. All passing.
 
 - [ ] **Step 3: Commit**
@@ -1832,7 +1832,7 @@ In `BatchEntryIT.java`, after `batchCommitsAllOrdersAndAuditLoggerCapturedEach`,
 
 - [ ] **Step 2: Run the tests**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/10_persistence_jdbc test`
+Run: `mvn -pl tiko-examples/10_persistence_jdbc test`
 Expected: `Tests run: 12`. All passing.
 
 - [ ] **Step 3: Commit**
@@ -2160,7 +2160,7 @@ injected into SINGLETON repositories.
 
 - [ ] **Step 3: Verify Spotless gate still clean**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl "!tiko-bom" spotless:check`
+Run: `mvn -pl "!tiko-bom" spotless:check`
 Expected: `BUILD SUCCESS`.
 
 - [ ] **Step 4: Commit**
@@ -2187,7 +2187,7 @@ In `docs/roadmap.md`, in the `## What ships today` block, AFTER the existing ent
 
 - [ ] **Step 2: Run the full reactor build**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl "!tiko-bom" install`
+Run: `mvn -pl "!tiko-bom" install`
 Expected: `BUILD SUCCESS`. Reactor summary includes `10 - Persistence (raw JDBC + HikariCP)`.
 
 - [ ] **Step 3: Confirm working tree clean**

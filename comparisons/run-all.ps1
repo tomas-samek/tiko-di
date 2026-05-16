@@ -18,11 +18,8 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $resultsDir = Join-Path $root 'results'
 $null = New-Item -ItemType Directory -Force -Path $resultsDir
 
-$mvnPath = 'W:\tools\apache-maven\bin\mvn.cmd'
-if (-not (Test-Path $mvnPath)) {
-    $mvnPath = (Get-Command mvn -ErrorAction SilentlyContinue).Source
-    if (-not $mvnPath) { throw "mvn not found on PATH and not at W:\tools\apache-maven\bin\mvn.cmd" }
-}
+$mvnPath = (Get-Command mvn -ErrorAction SilentlyContinue).Source
+if (-not $mvnPath) { throw "mvn not found on PATH. Install Maven or add it to PATH before running this script." }
 
 function Get-RuntimeClasspath {
     param([string]$AppPomPath)

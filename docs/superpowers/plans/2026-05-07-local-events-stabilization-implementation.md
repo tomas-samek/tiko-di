@@ -12,8 +12,6 @@
 
 **Prerequisite:** #47 (`Container.shutdown()` idempotency) must merge to `main` before PR 1 starts. PR 1 tests for `ApplicationEndingEvent`-handler-exception tolerance depend on #47's hardening.
 
-**Maven invocation:** `mvn` lives at `W:\tools\apache-maven\bin\mvn.cmd` (not on PATH in spawned shells). Either prepend the full path or ensure PATH is set before running tasks. All `mvn` references below assume the binary is callable.
-
 ---
 
 ## Phase 1 — PR 1 (#44): Sync error isolation

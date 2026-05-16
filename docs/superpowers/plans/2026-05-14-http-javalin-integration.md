@@ -178,7 +178,7 @@ mkdir -p tiko-examples/09_http_javalin/src/test/java/io/tiko/examples/http
 
 - [ ] **Step 6: Verify the reactor still builds**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl "!tiko-bom" install -DskipTests`
+Run: `mvn -pl "!tiko-bom" install -DskipTests`
 Expected: `BUILD SUCCESS`. The new module compiles (no sources yet) and installs an empty jar. No annotation-processing output because there are no `@Component` classes yet.
 
 - [ ] **Step 7: Commit**
@@ -219,7 +219,7 @@ public record CreateTicketRequest(String title) {}
 
 - [ ] **Step 3: Verify it compiles**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/09_http_javalin compile`
+Run: `mvn -pl tiko-examples/09_http_javalin compile`
 Expected: `BUILD SUCCESS`.
 
 - [ ] **Step 4: Commit**
@@ -289,7 +289,7 @@ class TicketServiceTest {
 
 - [ ] **Step 2: Verify it fails to compile (TicketService not yet defined)**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/09_http_javalin test-compile`
+Run: `mvn -pl tiko-examples/09_http_javalin test-compile`
 Expected: `BUILD FAILURE`, error message mentions `TicketService` cannot be resolved.
 
 - [ ] **Step 3: Implement `TicketService.java`**
@@ -333,7 +333,7 @@ public class TicketService {
 
 - [ ] **Step 4: Run the tests**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/09_http_javalin test`
+Run: `mvn -pl tiko-examples/09_http_javalin test`
 Expected: 4 tests pass.
 
 - [ ] **Step 5: Commit**
@@ -413,7 +413,7 @@ public class RequestIdImpl implements RequestId {
 
 - [ ] **Step 4: Verify compile + annotation processing**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/09_http_javalin compile`
+Run: `mvn -pl tiko-examples/09_http_javalin compile`
 Expected: `BUILD SUCCESS`. Tiko's processor generates `RequestIdImplFactory` in `target/generated-sources/annotations/`.
 
 - [ ] **Step 5: Commit**
@@ -484,7 +484,7 @@ public class MetricsCounter {
 
 - [ ] **Step 3: Verify compile**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/09_http_javalin compile`
+Run: `mvn -pl tiko-examples/09_http_javalin compile`
 Expected: `BUILD SUCCESS`.
 
 - [ ] **Step 4: Commit**
@@ -549,7 +549,7 @@ public class NotificationSender {
 
 - [ ] **Step 2: Verify compile**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/09_http_javalin compile`
+Run: `mvn -pl tiko-examples/09_http_javalin compile`
 Expected: `BUILD SUCCESS`.
 
 - [ ] **Step 3: Commit**
@@ -623,7 +623,7 @@ public class RequestTimer {
 
 - [ ] **Step 2: Verify compile**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/09_http_javalin compile`
+Run: `mvn -pl tiko-examples/09_http_javalin compile`
 Expected: `BUILD SUCCESS`.
 
 - [ ] **Step 3: Commit**
@@ -689,7 +689,7 @@ public final class TikoJavalin {
 
 - [ ] **Step 2: Verify compile**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/09_http_javalin compile`
+Run: `mvn -pl tiko-examples/09_http_javalin compile`
 Expected: `BUILD SUCCESS`.
 
 - [ ] **Step 3: Commit**
@@ -766,7 +766,7 @@ public final class TicketHttpRoutes {
 
 - [ ] **Step 2: Verify compile**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/09_http_javalin compile`
+Run: `mvn -pl tiko-examples/09_http_javalin compile`
 Expected: `BUILD SUCCESS`. Component count unchanged (this file is not a `@Component`).
 
 - [ ] **Step 3: Commit**
@@ -833,12 +833,12 @@ public final class Main {
 
 - [ ] **Step 2: Verify compile**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/09_http_javalin compile`
+Run: `mvn -pl tiko-examples/09_http_javalin compile`
 Expected: `BUILD SUCCESS`. The Tiko processor generates `TikoContainerImpl_<hash>` covering the module's `@Component` classes (TicketHttpRoutes is constructed manually, so it is not a component).
 
 - [ ] **Step 3: Verify the shaded jar builds**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/09_http_javalin package -DskipTests`
+Run: `mvn -pl tiko-examples/09_http_javalin package -DskipTests`
 Expected: `BUILD SUCCESS`, a `target/09_http_javalin-0.1.0.jar` file exists.
 
 - [ ] **Step 4: Smoke test the jar manually (optional but recommended)**
@@ -951,7 +951,7 @@ class TicketHttpIntegrationTest {
 
 - [ ] **Step 2: Run the test**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/09_http_javalin test`
+Run: `mvn -pl tiko-examples/09_http_javalin test`
 Expected: 5 tests pass (4 from `TicketServiceTest` + 1 from `TicketHttpIntegrationTest`).
 
 - [ ] **Step 3: Commit**
@@ -1056,7 +1056,7 @@ Then in `TicketHttpIntegrationTest.java`, add this test method below `postCreate
 
 - [ ] **Step 2: Run the tests**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/09_http_javalin test`
+Run: `mvn -pl tiko-examples/09_http_javalin test`
 Expected: 6 tests pass.
 
 - [ ] **Step 3: Commit**
@@ -1101,7 +1101,7 @@ In `TicketHttpIntegrationTest.java`, after the previous test, add:
 
 - [ ] **Step 2: Run the tests**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/09_http_javalin test`
+Run: `mvn -pl tiko-examples/09_http_javalin test`
 Expected: 7 tests pass.
 
 - [ ] **Step 3: Commit**
@@ -1165,12 +1165,12 @@ In `TicketHttpIntegrationTest.java`, after the previous test, add:
 
 - [ ] **Step 2: Run the tests**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/09_http_javalin test`
+Run: `mvn -pl tiko-examples/09_http_javalin test`
 Expected: 8 tests pass.
 
 - [ ] **Step 3: Run the full reactor to confirm no regression**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl "!tiko-bom" install`
+Run: `mvn -pl "!tiko-bom" install`
 Expected: `BUILD SUCCESS`. All modules in the reactor still build; all existing tests still pass.
 
 - [ ] **Step 4: Commit**
@@ -1325,7 +1325,7 @@ In `docs/roadmap.md`, in the `## What ships today` block, after the existing ent
 
 - [ ] **Step 3: Verify Spotless gate still clean**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl "!tiko-bom" spotless:check`
+Run: `mvn -pl "!tiko-bom" spotless:check`
 Expected: `BUILD SUCCESS`.
 
 - [ ] **Step 4: Commit**
@@ -1344,7 +1344,7 @@ git commit -m "docs: cross-link the http+javalin integration example from main d
 
 - [ ] **Step 1: Run the full reactor build**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl "!tiko-bom" install`
+Run: `mvn -pl "!tiko-bom" install`
 Expected: `BUILD SUCCESS`. Reactor summary includes `09 - HTTP + Javalin Integration Example`.
 
 - [ ] **Step 2: Check `git status` is clean**

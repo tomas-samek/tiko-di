@@ -95,7 +95,7 @@ And add a one-sentence description in the prose between the existing categories:
 
 - [ ] **Step 3: Verify compile**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-api compile`
+Run: `mvn -pl tiko-api compile`
 Expected: BUILD SUCCESS.
 
 - [ ] **Step 4: Commit**
@@ -183,7 +183,7 @@ class UncheckedTest {
 
 - [ ] **Step 3: Run the tests**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-runtime test -Dtest=UncheckedTest`
+Run: `mvn -pl tiko-runtime test -Dtest=UncheckedTest`
 Expected: `Tests run: 2, Failures: 0, Errors: 0`. BUILD SUCCESS.
 
 - [ ] **Step 4: Commit**
@@ -269,7 +269,7 @@ class PostConstructCheckedExceptionPropagationTest {
 
 - [ ] **Step 2: Run the test to confirm it fails**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-processor test -Dtest=PostConstructCheckedExceptionPropagationTest`
+Run: `mvn -pl tiko-processor test -Dtest=PostConstructCheckedExceptionPropagationTest`
 Expected: FAIL with two distinct symptoms — (a) `CompilationSubject.assertThat(c).succeeded()` fails because javac can't compile `InitFactory` (the `instance.start()` call throws undeclared `SQLException`), or (b) if compilation somehow succeeds, the `catch (Throwable __t)` assertion fails because the generator emits `catch (RuntimeException | Error __t)`.
 
 - [ ] **Step 3: Modify `ComponentFactoryGenerator.java`**
@@ -311,12 +311,12 @@ for (ExecutableElement postConstruct : component.getPostConstructMethods()) {
 
 - [ ] **Step 4: Run the test to confirm it passes**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-processor test -Dtest=PostConstructCheckedExceptionPropagationTest`
+Run: `mvn -pl tiko-processor test -Dtest=PostConstructCheckedExceptionPropagationTest`
 Expected: `Tests run: 1, Failures: 0, Errors: 0`. BUILD SUCCESS.
 
 - [ ] **Step 5: Run the full processor suite to confirm no regression**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-processor test`
+Run: `mvn -pl tiko-processor test`
 Expected: BUILD SUCCESS. All existing tests (including `LifecycleErrorRoutingTest` analogues) still pass; only the new test added.
 
 If any existing test asserts the literal string `catch (RuntimeException | Error __t)` in generated output, update its assertion to `catch (Throwable __t)`. The semantic guarantee (PostConstructFailure routed, original throwable rethrown) is unchanged.
@@ -414,7 +414,7 @@ class ProducesCheckedExceptionPropagationTest {
 
 - [ ] **Step 2: Run the test to confirm it fails**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-processor test -Dtest=ProducesCheckedExceptionPropagationTest`
+Run: `mvn -pl tiko-processor test -Dtest=ProducesCheckedExceptionPropagationTest`
 Expected: FAIL — javac can't compile `TikoContainerImpl_*.java` because `getPoolFactory().dataSource()` throws undeclared `SQLException`.
 
 - [ ] **Step 3: Modify `ContainerGenerator.java` — change `buildFactoryCallExpression` to call the helper**
@@ -494,17 +494,17 @@ for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
 
 - [ ] **Step 6: Run the test to confirm it passes**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-processor test -Dtest=ProducesCheckedExceptionPropagationTest`
+Run: `mvn -pl tiko-processor test -Dtest=ProducesCheckedExceptionPropagationTest`
 Expected: `Tests run: 1, Failures: 0, Errors: 0`. BUILD SUCCESS.
 
 - [ ] **Step 7: Run the full processor suite**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-processor test`
+Run: `mvn -pl tiko-processor test`
 Expected: BUILD SUCCESS. The container shape changed (each factory now contributes an extra `private` method), so any test that counts generated methods or asserts the exact class structure may need its assertion updated. The semantic behaviour (factory output reachable via `produce_<id>()` and `container.get(...)`) is unchanged.
 
 - [ ] **Step 8: Run the full reactor to confirm downstream examples still build**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl '!tiko-bom' install`
+Run: `mvn -pl '!tiko-bom' install`
 Expected: BUILD SUCCESS. All examples (01–10) re-generate their containers with the new helper-per-factory shape and still pass their own tests.
 
 - [ ] **Step 9: Commit**
@@ -626,7 +626,7 @@ Note: `TikoOptions` and `Tiko.create(TikoOptions)` are imported from `tiko-runti
 
 - [ ] **Step 2: Run the test**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-runtime test -Dtest=CheckedExceptionPropagationIT`
+Run: `mvn -pl tiko-runtime test -Dtest=CheckedExceptionPropagationIT`
 Expected: `Tests run: 2, Failures: 0, Errors: 0`. BUILD SUCCESS.
 
 - [ ] **Step 3: Commit**
@@ -746,7 +746,7 @@ And delete the callout paragraph entirely.
 
 - [ ] **Step 4: Run the cookbook tests**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl tiko-examples/10_persistence_jdbc test`
+Run: `mvn -pl tiko-examples/10_persistence_jdbc test`
 Expected: `Tests run: 12, Failures: 0, Errors: 0`. BUILD SUCCESS.
 
 - [ ] **Step 5: Commit**
@@ -773,7 +773,7 @@ In `docs/roadmap.md`, in the `## What ships today` block, AFTER the existing ent
 
 - [ ] **Step 2: Run the full reactor build**
 
-Run: `W:/tools/apache-maven/bin/mvn -pl "!tiko-bom" install`
+Run: `mvn -pl "!tiko-bom" install`
 Expected: BUILD SUCCESS. All modules build, all tests pass. Reactor summary includes every persistence-cookbook test (12) + new processor tests + new runtime tests.
 
 - [ ] **Step 3: Confirm working tree clean**
