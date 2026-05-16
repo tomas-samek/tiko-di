@@ -400,6 +400,7 @@ public final class ContainerGenerator {
         }
 
         for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
+            methods.add(createFactoryInvocationHelper(factory));
             methods.add(createFactoryMethodGetter(factory));
         }
 
@@ -434,10 +435,22 @@ public final class ContainerGenerator {
     }
 
     /**
-     * Builds the expression that invokes the factory method, including dependency resolution.
-     * Instance methods are called on the declaring @Component singleton; static methods are called directly.
+     * Builds the expression the scoped getter ({@link #createFactoryMethodGetter}) uses
+     * to obtain a fresh factory output. Routes every factory call through the
+     * per-factory {@code invokeFactory_<id>()} helper emitted by
+     * {@link #createFactoryInvocationHelper} so the try/catch +
+     * {@link io.tiko.ProduceFailure} routing + sneaky-throw lives in exactly one place.
      */
     private String buildFactoryCallExpression(FactoryMethodModel factory) {
+        return "invokeFactory_" + factory.getFactoryIdentifier() + "()";
+    }
+
+    /**
+     * Builds the raw user-method invocation expression: instance methods are called on
+     * the declaring {@code @Component} singleton; static methods are called directly.
+     * Used inside {@link #createFactoryInvocationHelper} only.
+     */
+    private String buildRawUserMethodCall(FactoryMethodModel factory) {
         List<String> args = new ArrayList<>();
         for (DependencyModel dep : factory.getDependencies()) {
             args.add(generateContainerGetCall(dep));
@@ -450,6 +463,39 @@ public final class ContainerGenerator {
         } else {
             return String.format("get%s().%s(%s)", declaringClassName, factory.getMethodName(), argList);
         }
+    }
+
+    /**
+     * Creates the per-factory invocation helper. The helper resolves the factory's
+     * dependencies, invokes the user's {@code @Produces} method (instance or static),
+     * and wraps the call in a {@link Throwable} catch that publishes
+     * {@link io.tiko.ProduceFailure} and sneaky-throws the original cause via
+     * {@link io.tiko.runtime.Unchecked}. Each scoped accessor
+     * ({@link #createFactoryMethodGetter}) calls this helper from its single-expression
+     * lambda body so the lambda stays one line.
+     */
+    private MethodSpec createFactoryInvocationHelper(FactoryMethodModel factory) {
+        TypeName returnType = TypeName.get(factory.getReturnType());
+        String helperName = "invokeFactory_" + factory.getFactoryIdentifier();
+        String userCallExpr = buildRawUserMethodCall(factory);
+
+        return MethodSpec.methodBuilder(helperName)
+                .addModifiers(Modifier.PRIVATE)
+                .returns(returnType)
+                .beginControlFlow("try")
+                .addStatement("return $L", userCallExpr)
+                .nextControlFlow("catch ($T __t)", Throwable.class)
+                .addStatement(
+                        "getErrorHandler().onError(new $T($T.class, $S, __t))",
+                        ClassName.get("io.tiko", "ProduceFailure"),
+                        ClassName.get(factory.getDeclaringClass()),
+                        factory.getMethodName())
+                .addStatement(
+                        "throw $T.<$T>sneakyThrow(__t)",
+                        ClassName.get("io.tiko.runtime", "Unchecked"),
+                        RuntimeException.class)
+                .endControlFlow()
+                .build();
     }
 
     /**
