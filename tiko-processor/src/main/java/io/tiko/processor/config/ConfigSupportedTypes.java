@@ -35,8 +35,11 @@ public final class ConfigSupportedTypes {
 
         if (el.getKind() == javax.lang.model.element.ElementKind.ENUM) return true;
 
-        // Optional / List / Map are accepted; the generator inspects the type argument.
-        if (fqn.equals("java.util.Optional") || fqn.equals("java.util.List") || fqn.equals("java.util.Map")) {
+        // Optional / List / Set / Map are accepted; the generator inspects the type argument.
+        if (fqn.equals("java.util.Optional")
+                || fqn.equals("java.util.List")
+                || fqn.equals("java.util.Set")
+                || fqn.equals("java.util.Map")) {
             return true; // element-type validation happens in ConfigurationValidator
         }
 
@@ -89,6 +92,7 @@ public final class ConfigSupportedTypes {
                 "Charset",
                 "enums",
                 "List<X>",
+                "Set<X>",
                 "Map<String,X>",
                 "nested records",
                 "Optional<X>");
