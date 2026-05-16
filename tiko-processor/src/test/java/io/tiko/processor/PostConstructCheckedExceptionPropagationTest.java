@@ -48,11 +48,13 @@ class PostConstructCheckedExceptionPropagationTest {
 
         String body = new String(factorySource.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
 
-        // The catch is widened to Throwable, ErrorHandler is still routed, and
-        // the original throwable propagates via sneakyThrow.
-        assertThat(body).contains("catch (Throwable __t)");
+        // The catch is widened to Exception (covers checked + RuntimeException; Errors
+        // propagate without routing), ErrorHandler is still routed, and the original
+        // throwable propagates via sneakyThrow.
+        assertThat(body).contains("catch (Exception __t)");
         assertThat(body).contains("container.getErrorHandler().onError(new PostConstructFailure(");
         assertThat(body).contains("Unchecked.<RuntimeException>sneakyThrow(__t)");
         assertThat(body).doesNotContain("catch (RuntimeException | Error __t)");
+        assertThat(body).doesNotContain("catch (Throwable __t)");
     }
 }

@@ -484,7 +484,7 @@ public final class ContainerGenerator {
                 .returns(returnType)
                 .beginControlFlow("try")
                 .addStatement("return $L", userCallExpr)
-                .nextControlFlow("catch ($T __t)", Throwable.class)
+                .nextControlFlow("catch ($T __t)", Exception.class)
                 .addStatement(
                         "getErrorHandler().onError(new $T($T.class, $S, __t))",
                         ClassName.get("io.tiko", "ProduceFailure"),
