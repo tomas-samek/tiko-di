@@ -1,0 +1,15 @@
+# Fixture for ConfigurationSetFieldTest. Exercises Set<X> dedupe + ordering
+# end-to-end through Tiko.create(...). The db/app sections provide the required
+# scalars for DbConfig and AppConfig (the example module's main @Configuration
+# records) so the container actually starts.
+
+db:
+  url: jdbc:h2:mem:test
+
+app:
+  name: set-test
+  server:
+    host: 0.0.0.0
+
+allow:
+  hosts: [alpha, beta, alpha, gamma, beta]
