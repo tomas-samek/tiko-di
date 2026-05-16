@@ -29,6 +29,7 @@ The framework is suitable for early-adopter experimentation. **Production use sh
 - ✅ Cross-module configuration aggregation example — multiple `@Configuration` records distributed across sibling modules, aggregated by `AggregatingContainer` ([#18](https://github.com/tomas-samek/tiko-di/issues/18)).
 - ✅ HTTP + Javalin integration example — `tiko-examples/09_http_javalin/`: a runnable demo showing how Tiko lives behind any HTTP server (`TikoJavalin.scoped` middleware opens a request scope around each route, sync request→response path is independent of the event bus, three subscribers demonstrate sync/async side effects).
 - ✅ Persistence cookbook + example — `docs/cookbooks/persistence.md` paired with `tiko-examples/10_persistence_jdbc/`. REQUEST-scoped JDBC transactions across HTTP and batch flows; first cookbook in the cookbook track for friction points Tiko deliberately doesn't ship.
+- ✅ `@Produces` and `@PostConstruct` may declare checked exceptions — the processor catches `Throwable`, publishes `ProduceFailure` / `PostConstructFailure` ErrorContext, and propagates the user's original throwable via sneaky-throw so identity and stack trace are preserved at `container.get(...)`. Persistence cookbook drops its `IllegalStateException` wraps in `JdbcConnectionProvider` / `SchemaInitializer`. (Closes #97.)
 
 ## Planned
 
