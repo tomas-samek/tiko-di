@@ -89,12 +89,16 @@ public final class Tiko {
                 moduleCount++;
             }
 
+            java.time.Duration effectiveShutdownTimeout = resolveShutdownTimeout(options, classLoader);
+
             Container container;
             if (moduleCount > 1) {
-                container = new AggregatingContainer(eventBus, errorHandler, options.eventExecutor());
+                container = new AggregatingContainer(
+                        eventBus, errorHandler, options.eventExecutor(), effectiveShutdownTimeout);
             } else {
                 // Single module: Direct instantiation (does NOT call start yet)
-                container = createSingleModuleContainer(eventBus, errorHandler, options.eventExecutor());
+                container = createSingleModuleContainer(
+                        eventBus, errorHandler, options.eventExecutor(), effectiveShutdownTimeout);
             }
 
             // 4. Inject config singletons before start(), so @PostConstruct can use them.
@@ -320,7 +324,11 @@ public final class Tiko {
      * after injectConfigs() runs.
      */
     private static Container createSingleModuleContainer(
-            EventBus eventBus, ErrorHandler errorHandler, ExecutorService userEventExecutor) throws Exception {
+            EventBus eventBus,
+            ErrorHandler errorHandler,
+            ExecutorService userEventExecutor,
+            java.time.Duration shutdownTimeout)
+            throws Exception {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
         if (classLoader == null) classLoader = Tiko.class.getClassLoader();
 
@@ -340,8 +348,14 @@ public final class Tiko {
         // Single-module: publishLifecycleEvents=true so the per-module container publishes
         // its own ApplicationStartedEvent / ApplicationEndingEvent (no aggregator above it).
         Container container = (Container) implClass
-                .getDeclaredConstructor(EventBus.class, ErrorHandler.class, ExecutorService.class, boolean.class)
-                .newInstance(eventBus, errorHandler, userEventExecutor, /* publishLifecycleEvents */ true);
+                .getDeclaredConstructor(
+                        EventBus.class,
+                        ErrorHandler.class,
+                        ExecutorService.class,
+                        boolean.class,
+                        java.time.Duration.class)
+                .newInstance(
+                        eventBus, errorHandler, userEventExecutor, /* publishLifecycleEvents */ true, shutdownTimeout);
 
         registerEventHandlers(eventBus, container, implClass);
 
