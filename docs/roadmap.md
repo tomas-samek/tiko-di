@@ -30,6 +30,7 @@ The framework is suitable for early-adopter experimentation. **Production use sh
 - ✅ HTTP + Javalin integration example — `tiko-examples/09_http_javalin/`: a runnable demo showing how Tiko lives behind any HTTP server (`TikoJavalin.scoped` middleware opens a request scope around each route, sync request→response path is independent of the event bus, three subscribers demonstrate sync/async side effects).
 - ✅ Persistence cookbook + example — `docs/cookbooks/persistence.md` paired with `tiko-examples/10_persistence_jdbc/`. REQUEST-scoped JDBC transactions across HTTP and batch flows; first cookbook in the cookbook track for friction points Tiko deliberately doesn't ship.
 - ✅ `@Produces` and `@PostConstruct` may declare checked exceptions — the processor catches `Throwable`, publishes `ProduceFailure` / `PostConstructFailure` ErrorContext, and propagates the user's original throwable via sneaky-throw so identity and stack trace are preserved at `container.get(...)`. Persistence cookbook drops its `IllegalStateException` wraps in `JdbcConnectionProvider` / `SchemaInitializer`. (Closes #97.)
+- ✅ `@Configuration` validation errors anchored to YAML — binding errors now display `config.yaml:line:column` prefixes pointing at the offending value (or the enclosing section, for missing required keys). New `io.tiko.SourceLocation` record + additive `ConfigSource.locations()` default expose locations to custom error handlers. (Closes #19.)
 
 ## Planned
 
@@ -37,7 +38,7 @@ The framework is suitable for early-adopter experimentation. **Production use sh
 
 Open work, tracked by the [Phase 2 milestone](https://github.com/tomas-samek/tiko-di/milestone/2):
 
-- **Configuration:** YAML `file:line:col` error anchoring ([#19](https://github.com/tomas-samek/tiko-di/issues/19)); `Set<X>` in `@Configuration` records ([#63](https://github.com/tomas-samek/tiko-di/issues/63)).
+- **Configuration:** `Set<X>` in `@Configuration` records ([#63](https://github.com/tomas-samek/tiko-di/issues/63)).
 - **Event system:** configurable executor shutdown timeout ([#48](https://github.com/tomas-samek/tiko-di/issues/48)); `ErrorContext` permits for lifecycle/config/scope errors ([#52](https://github.com/tomas-samek/tiko-di/issues/52)).
 - **Multi-module:** eager-init opt-in ([#46](https://github.com/tomas-samek/tiko-di/issues/46)).
 - **Framework internals:** switch logging to `java.lang.System.Logger` ([#74](https://github.com/tomas-samek/tiko-di/issues/74)).

@@ -4,6 +4,7 @@ import io.tiko.ConfigIssueCode;
 import io.tiko.ConfigSource;
 import io.tiko.ConfigurationFailure;
 import io.tiko.ErrorHandler;
+import io.tiko.SourceLocation;
 import io.tiko.config.BindContext;
 import io.tiko.config.ConfigBinder;
 import io.tiko.config.ConfigValidationException;
@@ -43,10 +44,10 @@ public final class ConfigBootstrap {
      */
     public static Map<Class<?>, Object> bind(
             String sourceLabel, ConfigSource source, List<ConfigBinder<?>> binders, ErrorHandler errorHandler) {
-        BindContext ctx = new BindContext(sourceLabel);
-
         // 1. Load
         Map<String, Object> raw = source.load();
+        Map<String, SourceLocation> locations = source.locations();
+        BindContext ctx = new BindContext(sourceLabel, locations);
 
         // 2. Interpolate
         @SuppressWarnings("unchecked")
@@ -71,24 +72,24 @@ public final class ConfigBootstrap {
             }
         }
 
-        // 4. Top-level prefix check
+        // 5. Top-level prefix check
         Set<String> claimed = new LinkedHashSet<>(prefixToTypes.keySet());
         for (String k : interpolated.keySet()) {
             if (!claimed.contains(k)) {
                 String suggestion = nearest(k, claimed);
                 String hint = suggestion != null ? " Did you mean '" + suggestion + "'?" : "";
-                ctx.report(ConfigIssueCode.UNKNOWN_SECTION, "unknown top-level section '" + k + "'." + hint);
+                ctx.reportAtPath(ConfigIssueCode.UNKNOWN_SECTION, k, "unknown top-level section '" + k + "'." + hint);
             }
         }
 
-        // 4. Bind each record
+        // 6. Bind each record
         Map<Class<?>, Object> bound = new LinkedHashMap<>();
         for (ConfigBinder<?> b : binders) {
             Object instance = b.bind(interpolated, ctx);
             bound.put(b.type(), instance);
         }
 
-        // 5. Throw if anything accumulated, after routing the bundled failure through
+        // 7. Throw if anything accumulated, after routing the bundled failure through
         // the user's ErrorHandler so observability code sees it before the exception
         // surfaces from Tiko.create(...).
         if (ctx.hasErrors()) {
