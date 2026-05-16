@@ -69,7 +69,11 @@ public final class YamlLoader {
             String fullPath = pathPrefix.isEmpty() ? key : pathPrefix + "." + key;
             Node valueNode = t.getValueNode();
 
-            outLocations.put(fullPath, locationOf(valueNode, sourceLabel));
+            // Anchor on the key node — section headers point to "section:" (the header line),
+            // and leaf scalars typically share a line with their key, so "db.url" still resolves
+            // to the "url:" line. Using the value node would push section anchors down to the
+            // first nested key's line.
+            outLocations.put(fullPath, locationOf(keyNode, sourceLabel));
 
             if (valueNode instanceof MappingNode nestedMapping) {
                 Map<String, Object> nested = new LinkedHashMap<>();
