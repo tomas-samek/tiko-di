@@ -57,6 +57,10 @@ public final class Main {
             int port = portFromEnv();
             app.start(port);
 
+            // Arm the slow audit handler so this one event takes the 2s sleep path —
+            // gives container.close() something to drain. Other handlers are unaffected.
+            container.get(SlowAuditService.class).expectOne();
+
             // Trigger a real ticket-creation request. SlowAuditService receives the
             // resulting event asynchronously and sleeps ~2s.
             fireCreateTicketRequest(port);

@@ -32,6 +32,12 @@ public class SlowAuditService {
 
     @EventHandler(async = true)
     public void onTicketCreated(TicketCreated event) {
+        // Slow path is opt-in via expectOne(). Tests/main that don't arm the latch
+        // see this handler return immediately, avoiding a per-event 2s tax.
+        CountDownLatch current = latch.get();
+        if (current.getCount() == 0) {
+            return;
+        }
         System.out.println("[async] slow audit work starting for ticket " + event.id());
         try {
             Thread.sleep(WORK_DURATION.toMillis());
@@ -40,6 +46,6 @@ public class SlowAuditService {
             return;
         }
         System.out.println("[async] slow audit work complete for ticket " + event.id());
-        latch.get().countDown();
+        current.countDown();
     }
 }
