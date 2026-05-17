@@ -99,7 +99,7 @@ class TikoLogTest {
         @Override
         public void log(Level level, ResourceBundle bundle, String format, Object... params) {
             // Our helper always calls the pre-formatted overload — this should never fire.
-            throw new AssertionError("TikoLog should call the no-params overload, not this one");
+            throw new AssertionError("TikoLog should call the pre-formatted (Throwable) overload, not the varargs one");
         }
     }
 }
