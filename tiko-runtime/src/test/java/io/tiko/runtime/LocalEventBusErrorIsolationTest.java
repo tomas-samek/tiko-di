@@ -4,27 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
 import io.tiko.EventBus;
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class LocalEventBusErrorIsolationTest {
 
-    private final ByteArrayOutputStream errCapture = new ByteArrayOutputStream();
-    private PrintStream originalErr;
-
     @BeforeEach
-    void redirectStderr() {
-        originalErr = System.err;
-        System.setErr(new PrintStream(errCapture, true));
-    }
-
-    @AfterEach
-    void restoreStderr() {
-        System.setErr(originalErr);
+    void clearCapturedRecords() {
+        CapturingLoggerFinder.clear();
     }
 
     @Test
@@ -55,16 +43,22 @@ class LocalEventBusErrorIsolationTest {
     @Test
     void throwing_programmatic_subscriber_logs_warn_with_event_type() {
         EventBus bus = new LocalEventBus();
+        IllegalStateException cause = new IllegalStateException("logged");
         bus.subscribe(String.class, e -> {
-            throw new IllegalStateException("logged");
+            throw cause;
         });
 
         bus.publish("hello");
 
-        String output = errCapture.toString();
-        assertThat(output).contains("WARN");
-        assertThat(output).contains("Programmatic event callback threw");
-        assertThat(output).contains("java.lang.String");
-        assertThat(output).contains("logged");
+        assertThat(CapturingLoggerFinder.RECORDS)
+                .filteredOn(r -> LocalEventBus.class.getName().equals(r.loggerName()))
+                .singleElement()
+                .satisfies(record -> {
+                    assertThat(record.level()).isEqualTo(System.Logger.Level.WARNING);
+                    assertThat(record.thrown()).isSameAs(cause);
+                    assertThat(record.message()).contains("Programmatic event callback threw");
+                    assertThat(record.message()).contains("java.lang.String");
+                    assertThat(record.message()).contains("logged");
+                });
     }
 }
