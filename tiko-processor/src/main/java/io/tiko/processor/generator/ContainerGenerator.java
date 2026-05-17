@@ -869,8 +869,7 @@ public final class ContainerGenerator {
         }
         if (withHooks.isEmpty() && !hasFactoryAutoCloseable) return;
 
-        ClassName logger = ClassName.get("java.util.logging", "Logger");
-        ClassName level = ClassName.get("java.util.logging", "Level");
+        ClassName loggerLevel = ClassName.get("java.lang", "System", "Logger", "Level");
 
         method.addStatement(
                 "$T<$T> __toDestroy = new $T<>($L.values())",
@@ -906,9 +905,9 @@ public final class ContainerGenerator {
             String hookLabel = isAutoCloseOnly ? "AutoCloseable.close()" : "@PreDestroy";
             method.addStatement(
                     "$T.getLogger($S).log($T.WARNING, $S, __t)",
-                    logger,
+                    ClassName.get("java.lang", "System"),
                     "io.tiko.events",
-                    level,
+                    loggerLevel,
                     hookLabel + " threw on " + c.getClassName());
             // Route the failure through ErrorHandler — AutoCloseable.close() and @PreDestroy
             // emit distinct permits so observability code can discriminate without parsing.
@@ -933,9 +932,9 @@ public final class ContainerGenerator {
             method.nextControlFlow("catch ($T __t)", Throwable.class);
             method.addStatement(
                     "$T.getLogger($S).log($T.WARNING, $S, __t)",
-                    logger,
+                    ClassName.get("java.lang", "System"),
                     "io.tiko.events",
-                    level,
+                    loggerLevel,
                     "AutoCloseable.close() threw on factory-produced bean");
             method.addStatement(
                     "errorHandler.onError(new $T(__ac.getClass(), __t))", ClassName.get("io.tiko", "AutoCloseFailure"));
@@ -997,8 +996,7 @@ public final class ContainerGenerator {
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class);
 
-        ClassName logger = ClassName.get("java.util.logging", "Logger");
-        ClassName level = ClassName.get("java.util.logging", "Level");
+        ClassName loggerLevel = ClassName.get("java.lang", "System", "Logger", "Level");
         ClassName timeUnit = ClassName.get("java.util.concurrent", "TimeUnit");
 
         method.addComment("Phase 1: idempotency CAS (#47)");
@@ -1023,9 +1021,9 @@ public final class ContainerGenerator {
         method.addComment("Bus-impl defect; @PreDestroy must still run (handler exceptions are isolated by #44)");
         method.addStatement(
                 "$T.getLogger($S).log($T.WARNING, $S, __t)",
-                logger,
+                ClassName.get("java.lang", "System"),
                 "io.tiko.events",
-                level,
+                loggerLevel,
                 "ApplicationEndingEvent publish threw");
         method.endControlFlow();
         method.endControlFlow();
@@ -1039,9 +1037,9 @@ public final class ContainerGenerator {
         method.beginControlFlow("if (inFlightGets.get() > 0)");
         method.addStatement(
                 "$T.getLogger($S).log($T.WARNING, $S + inFlightGets.get())",
-                logger,
+                ClassName.get("java.lang", "System"),
                 "io.tiko.events",
-                level,
+                loggerLevel,
                 "Container shutdown drain timed out with in-flight get() calls: ");
         method.endControlFlow();
 
@@ -1085,9 +1083,9 @@ public final class ContainerGenerator {
             String hookLabel = isAutoCloseOnly ? "AutoCloseable.close()" : "@PreDestroy";
             method.addStatement(
                     "$T.getLogger($S).log($T.WARNING, $S, __t)",
-                    logger,
+                    ClassName.get("java.lang", "System"),
                     "io.tiko.events",
-                    level,
+                    loggerLevel,
                     hookLabel + " threw on " + component.getClassName());
             ClassName failureType = isAutoCloseOnly
                     ? ClassName.get("io.tiko", "AutoCloseFailure")
@@ -1123,9 +1121,9 @@ public final class ContainerGenerator {
             method.nextControlFlow("catch ($T __t)", Throwable.class);
             method.addStatement(
                     "$T.getLogger($S).log($T.WARNING, $S, __t)",
-                    logger,
+                    ClassName.get("java.lang", "System"),
                     "io.tiko.events",
-                    level,
+                    loggerLevel,
                     "AutoCloseable.close() threw on " + factory.getFactoryIdentifier());
             method.addStatement(
                     "errorHandler.onError(new $T($L.getClass(), __t))",

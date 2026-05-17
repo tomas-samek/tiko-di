@@ -16,8 +16,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * Aggregating container that delegates to multiple module-specific containers.
@@ -361,7 +359,8 @@ public final class AggregatingContainer implements Container {
         } catch (Throwable t) {
             // Bus-impl defect; user-facing flow must continue. Handler exceptions are
             // already isolated by #44, so this catch fires only for genuine bus bugs.
-            Logger.getLogger("io.tiko.events").log(Level.WARNING, "ApplicationStartedEvent publish threw", t);
+            System.getLogger("io.tiko.events")
+                    .log(System.Logger.Level.WARNING, "ApplicationStartedEvent publish threw", t);
         }
     }
 
@@ -381,7 +380,8 @@ public final class AggregatingContainer implements Container {
             sharedEventBus.publish(new ApplicationEndingEvent(endTimestamp, uptime));
         } catch (Throwable t) {
             // Bus-impl defect; per-module @PreDestroy must still run.
-            Logger.getLogger("io.tiko.events").log(Level.WARNING, "ApplicationEndingEvent publish threw", t);
+            System.getLogger("io.tiko.events")
+                    .log(System.Logger.Level.WARNING, "ApplicationEndingEvent publish threw", t);
         }
         // Shutdown in reverse order. Per-module containers no longer shut down the executor
         // themselves (#51): they were constructed with the shared executor, so their internal
@@ -391,7 +391,8 @@ public final class AggregatingContainer implements Container {
                 moduleContainers.get(i).shutdown();
             } catch (Exception e) {
                 // Log but continue shutting down other containers
-                Logger.getLogger("io.tiko.events").log(Level.WARNING, "Error shutting down module container", e);
+                System.getLogger("io.tiko.events")
+                        .log(System.Logger.Level.WARNING, "Error shutting down module container", e);
             }
         }
         // Shut down framework-owned event executor (#51). User-supplied executors are not

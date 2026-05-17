@@ -9,17 +9,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.logging.Logger;
 
 /** Coercers for {@code List<X>}, {@code Set<X>}, {@code Map<String,X>}, {@code Optional<X>}. */
 public final class CompositeCoercers {
 
     private CompositeCoercers() {}
 
-    // Lazy holder — defers java.util.logging.LogManager init until the first
+    // Lazy holder — defers System.LoggerFinder resolution until the first
     // duplicate actually fires. Matches the pattern used by DefaultErrorHandler.
     private static final class LoggerHolder {
-        static final Logger LOG = Logger.getLogger("io.tiko.config");
+        static final System.Logger LOG = System.getLogger("io.tiko.config");
     }
 
     public static <X> TypeCoercer<List<X>> list(TypeCoercer<X> elementCoercer) {
@@ -44,7 +43,9 @@ public final class CompositeCoercers {
             for (Object e : raw) {
                 X coerced = elementCoercer.coerce(e);
                 if (!out.add(coerced)) {
-                    LoggerHolder.LOG.warning("@Configuration Set<X> field: duplicate value '" + coerced + "' deduped");
+                    LoggerHolder.LOG.log(
+                            System.Logger.Level.WARNING,
+                            () -> "@Configuration Set<X> field: duplicate value '" + coerced + "' deduped");
                 }
             }
             // Collections.unmodifiableSet preserves the LinkedHashSet iteration order;

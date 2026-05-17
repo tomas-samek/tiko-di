@@ -8,7 +8,6 @@ import io.tiko.events.EventEndingEvent;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.logging.Logger;
 
 /**
  * Sync subscriber to {@link EventEndingEvent} that records the EVENT-scoped
@@ -25,7 +24,7 @@ import java.util.logging.Logger;
 @Component(scope = Scope.SINGLETON)
 public class BatchAuditLogger {
 
-    private static final Logger LOG = Logger.getLogger("io.tiko.examples.persistence.batch");
+    private static final System.Logger LOG = System.getLogger("io.tiko.examples.persistence.batch");
 
     private final CurrentOrder current; // auto-proxied to the current EVENT scope's CurrentOrderContext
     private final List<UUID> seen = new CopyOnWriteArrayList<>();
@@ -40,7 +39,7 @@ public class BatchAuditLogger {
         UUID id = current.orderId();
         if (id != null) {
             seen.add(id);
-            LOG.info(() -> "[batch-audit] processing order " + id);
+            LOG.log(System.Logger.Level.INFO, () -> "[batch-audit] processing order " + id);
         }
     }
 

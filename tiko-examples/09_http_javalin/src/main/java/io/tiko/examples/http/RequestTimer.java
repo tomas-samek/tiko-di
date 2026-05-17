@@ -6,7 +6,6 @@ import io.tiko.annotations.EventHandler;
 import io.tiko.events.RequestEndingEvent;
 import io.tiko.events.RequestStartedEvent;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.logging.Logger;
 
 /**
  * Subscribes to Tiko's framework lifecycle events to demonstrate that every
@@ -23,7 +22,7 @@ import java.util.logging.Logger;
 @Component(scope = Scope.SINGLETON)
 public class RequestTimer {
 
-    private static final Logger LOG = Logger.getLogger("io.tiko.examples.http.timer");
+    private static final System.Logger LOG = System.getLogger("io.tiko.examples.http.timer");
 
     private final AtomicInteger startedCount = new AtomicInteger();
     private final AtomicInteger endedCount = new AtomicInteger();
@@ -31,13 +30,13 @@ public class RequestTimer {
     @EventHandler
     public void onRequestStarted(RequestStartedEvent event) {
         startedCount.incrementAndGet();
-        LOG.info(() -> "[REQ " + event.requestId() + "] started at " + event.timestamp());
+        LOG.log(System.Logger.Level.INFO, () -> "[REQ " + event.requestId() + "] started at " + event.timestamp());
     }
 
     @EventHandler
     public void onRequestEnding(RequestEndingEvent event) {
         endedCount.incrementAndGet();
-        LOG.info(() -> "[REQ " + event.requestId() + "] completed in " + event.duration());
+        LOG.log(System.Logger.Level.INFO, () -> "[REQ " + event.requestId() + "] completed in " + event.duration());
     }
 
     public int startedCount() {

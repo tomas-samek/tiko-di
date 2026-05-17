@@ -58,9 +58,9 @@ These are explicit, not accidents of implementation. A handler that depends on d
 
 ## Error handling
 
-If an `@EventHandler` method throws, the exception is routed to the configured `ErrorHandler` (default: logs at `WARNING` via `java.util.logging`). It does not propagate to the publisher and does not prevent other handlers from running.
+If an `@EventHandler` method throws, the exception is routed to the configured `ErrorHandler` (default: logs at `WARNING` via `java.lang.System.Logger`). It does not propagate to the publisher and does not prevent other handlers from running.
 
-The framework itself has zero logging-binding dependencies — JUL is in the JDK, so `Tiko.create()` works without adding any logging artifact to your classpath.
+The framework itself has zero logging-binding dependencies — `System.Logger` is in the JDK, so `Tiko.create()` works without adding any logging artifact to your classpath. Its default routing is JUL; route through slf4j or log4j2 by adding their `LoggerFinder` bridge to your classpath. See the [Logging section](../README.md#logging) in the main README.
 
 Override the default to wire metrics, alerts, or custom logging:
 

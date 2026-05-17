@@ -153,6 +153,7 @@ Seven worked examples ship under [`tiko-examples/`](./tiko-examples/README.md), 
 | 05 | [`05_multi_module`](./tiko-examples/05_multi_module)                | Multi-module aggregation via `AggregatingContainer`                                                     |
 | 06 | [`06_config_multi_module`](./tiko-examples/06_config_multi_module)  | Module-baked `META-INF/tiko/defaults.yaml` discovery + user override                                    |
 | 08 | [`08_kafka_order_warehouse`](./tiko-examples/08_kafka_order_warehouse) | Cross-JVM Kafka demo — `@KafkaSource` / `@KafkaSink`, shared event class, Testcontainers e2e         |
+| 11 | [`11_custom_logger`](./tiko-examples/11_custom_logger)                | Routing framework logs through slf4j + logback via `System.LoggerFinder`                                |
 
 ## Measured cold-start
 
@@ -184,6 +185,27 @@ The honest reading: the dominant axis is **lazy vs eager init**, not "compile-ti
 | `tiko-config`   | YAML-backed configuration injection. The only module that depends on SnakeYAML. Required when your project uses `@Configuration`; not pulled otherwise. |
 
 Event abstractions (`EventBus`, `EventCallback`, `Subscription`, `@EventHandler`, `@EventTrigger`, `Event<T>`) live in `tiko-api`; the in-memory implementation lives in `tiko-runtime`. A future Kafka-backed bus would arrive as its own module.
+
+## Logging
+
+Tiko logs through `java.lang.System.Logger` — the JDK-standard SPI introduced in
+Java 9. There is no tiko-side configuration knob, no SPI to implement, no
+adapter module.
+
+**Default:** routes through `java.util.logging`. Nothing to configure for "just works."
+
+**Routing to slf4j:** add `slf4j-jdk-platform-logging` + your slf4j backend
+(logback, log4j-slf4j2-impl, slf4j-simple, etc.). See
+[`tiko-examples/11_custom_logger`](./tiko-examples/11_custom_logger) for a
+runnable example.
+
+**Routing to log4j2:** add `log4j-jpl` + the log4j2 core. Same mechanism, different bridge.
+
+**Routing to JBoss Logging:** JBoss Logging uses `JulLogManager` rather than a
+`LoggerFinder` — set `-Djava.util.logging.manager=org.jboss.logmanager.LogManager`.
+
+The single tiko-side knob remains `TikoOptions.errorHandler(...)` for handler-exception
+policy — a different layer than framework logging.
 
 ## Documentation
 

@@ -10,8 +10,6 @@ import java.util.Collection;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * Tracks the currently-executing event wrapper across a thread of event delivery, so that
@@ -37,12 +35,12 @@ public final class EventChainContext {
      * Last-resort logging when an {@code ErrorHandler.onError} implementation itself throws.
      * Called exclusively from generated {@code EventRegistry} code. Kept here so the
      * generated source never directly imports a logging framework — generated source
-     * stays free of {@code java.util.logging} (and historically slf4j) imports.
+     * stays free of any logging framework imports.
      *
      * @param inner the exception thrown by the user's ErrorHandler implementation
      */
     public static void logErrorHandlerFailure(Throwable inner) {
-        Logger.getLogger("io.tiko.events").log(Level.SEVERE, "ErrorHandler.onError threw", inner);
+        System.getLogger("io.tiko.events").log(System.Logger.Level.ERROR, "ErrorHandler.onError threw", inner);
     }
 
     /**

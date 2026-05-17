@@ -8,8 +8,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * Simple in-memory event bus implementation.
@@ -23,15 +21,15 @@ import java.util.logging.Logger;
  * {@code ErrorHandler} with a rich {@code EventHandlerError}. Subscribers registered
  * programmatically (via {@link #subscribe(Class, EventCallback)} from user code) are
  * not associated with any compile-time identity, so the bus logs their exceptions at
- * WARNING via {@link java.util.logging} as a defense-in-depth net.
+ * WARNING via {@link java.lang.System.Logger} as a defense-in-depth net.
  */
 public final class LocalEventBus implements EventBus {
 
-    // Lazy holder: defers java.util.logging.LogManager init until the first
+    // Lazy holder: defers System.LoggerFinder resolution until the first
     // programmatic-callback exception fires. Most apps never hit this path during
     // startup, so the bus's <clinit> stays free of logging-init cost.
     private static final class LoggerHolder {
-        static final Logger LOG = Logger.getLogger(LocalEventBus.class.getName());
+        static final System.Logger LOG = System.getLogger(LocalEventBus.class.getName());
     }
 
     private final Map<Class<?>, List<EventCallback<?>>> handlers = new ConcurrentHashMap<>();
@@ -61,9 +59,12 @@ public final class LocalEventBus implements EventBus {
                 // @EventHandler, no compile-time identity). Log at WARNING — Errors (OOM,
                 // StackOverflow) are deliberately not caught here; those mean the JVM
                 // is sick and surfacing them is the right move.
-                LoggerHolder.LOG.log(
-                        Level.WARNING,
-                        String.format("Programmatic event callback threw on event %s: %s", eventType.getName(), e),
+                TikoLog.log(
+                        LoggerHolder.LOG,
+                        System.Logger.Level.WARNING,
+                        e,
+                        "Programmatic event callback threw on event {0}: {1}",
+                        eventType.getName(),
                         e);
             }
         }
