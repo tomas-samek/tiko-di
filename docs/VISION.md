@@ -262,13 +262,16 @@ Kafka transport behind a universal `TransportBootstrap` SPI, `System.Logger`
 for internal logging.
 
 - **Active work:** Phase 3 (onboarding & tooling — AI-aware archetype,
-  machine-readable topology, MCP server), Phase 4 (runtime hardening —
-  structured `RuntimeException` subtypes, framework-managed JVM shutdown
-  hook). Phase 5 publishes to Maven Central.
-- **Next:** Phase 6 (first-party resiliency layer — timeouts, retries,
-  backpressure, executor pool knobs, DLQ; supersedes the prior plan to cover
-  this via a cookbook), Phase 7 (RabbitMQ + JMS transports through the same
-  SPI, plus a pluggable serializer SPI extracted from `tiko-kafka`).
+  `tiko-test` JUnit 5 module, machine-readable topology + MCP server),
+  Phase 4 (runtime hardening — structured `RuntimeException` subtypes,
+  framework-managed JVM shutdown hook).
+- **Next:** Phase 5 (first-party resiliency layer — timeouts, retries,
+  backpressure, executor pool knobs, DLQ; supersedes the prior plan to
+  cover this via a cookbook), Phase 6 (RabbitMQ + JMS transports through
+  the same SPI, plus a pluggable serializer SPI extracted from
+  `tiko-kafka`), Phase 7 (publish to Maven Central — deliberately last so
+  the `TikoOptions` surface and the `TransportBootstrap` SPI can settle
+  before downstream users pin a version).
 - **Considered, not promised:** NATS or other transports beyond
   RabbitMQ/JMS, runtime plugin loading with classloader isolation,
   observability hooks (metrics, tracing), GraalVM native-image support, AOP
