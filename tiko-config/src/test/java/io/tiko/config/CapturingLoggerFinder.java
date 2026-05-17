@@ -7,8 +7,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Test-scoped {@link System.LoggerFinder} for tiko-config tests. Same shape as the
- * tiko-runtime equivalent — package-private duplication is acceptable for v1 (no shared
- * test-support module).
+ * tiko-runtime equivalent — per-module duplication is acceptable for v1 (no shared
+ * test-support module). Class must be {@code public} so ServiceLoader can reflectively
+ * instantiate it.
  */
 public final class CapturingLoggerFinder extends System.LoggerFinder {
 
