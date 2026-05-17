@@ -7,7 +7,7 @@
 [![Maven](https://img.shields.io/badge/Maven-3.8+-red.svg)](https://maven.apache.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**Status: Alpha — Phase 2 in progress.** Suitable for early-adopter experimentation. See [docs/roadmap.md](./docs/roadmap.md) for what ships today and what's next.
+**Status: Alpha — Phase 1 & 2 complete, Phase 3/4 in progress.** Suitable for early-adopter experimentation. See [docs/roadmap.md](./docs/roadmap.md) for what ships today and what's next.
 
 ## Why Tiko?
 
@@ -142,7 +142,7 @@ Scopes: `SINGLETON` > `REQUEST` > `EVENT` > `PROTOTYPE` (longest to shortest lif
 
 ## Runnable examples
 
-Seven worked examples ship under [`tiko-examples/`](./tiko-examples/README.md), each a self-contained Maven project:
+Eleven worked examples ship under [`tiko-examples/`](./tiko-examples/README.md), each a self-contained Maven project:
 
 | #  | Module                                                              | Demonstrates                                                                                            |
 |----|---------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------|
@@ -152,8 +152,11 @@ Seven worked examples ship under [`tiko-examples/`](./tiko-examples/README.md), 
 | 04 | [`04_api_impl`](./tiko-examples/04_api_impl)                        | API/impl split — app compiles against an interface jar, impl supplied at runtime                        |
 | 05 | [`05_multi_module`](./tiko-examples/05_multi_module)                | Multi-module aggregation via `AggregatingContainer`                                                     |
 | 06 | [`06_config_multi_module`](./tiko-examples/06_config_multi_module)  | Module-baked `META-INF/tiko/defaults.yaml` discovery + user override                                    |
+| 07 | [`07_async_start`](./tiko-examples/07_async_start)                  | `@EventHandler(async = true)` on `ApplicationStartedEvent` — keep slow warmup off the critical path     |
 | 08 | [`08_kafka_order_warehouse`](./tiko-examples/08_kafka_order_warehouse) | Cross-JVM Kafka demo — `@KafkaSource` / `@KafkaSink`, shared event class, Testcontainers e2e         |
-| 11 | [`11_custom_logger`](./tiko-examples/11_custom_logger)                | Routing framework logs through slf4j + logback via `System.LoggerFinder`                                |
+| 09 | [`09_http_javalin`](./tiko-examples/09_http_javalin)                | `TikoJavalin.scoped` middleware opens a REQUEST scope per route; sync request→response independent of the bus |
+| 10 | [`10_persistence_jdbc`](./tiko-examples/10_persistence_jdbc)        | Persistence cookbook — REQUEST-scoped JDBC transactions across HTTP and batch flows ([docs](./docs/cookbooks/persistence.md)) |
+| 11 | [`11_custom_logger`](./tiko-examples/11_custom_logger)              | Routing framework logs through slf4j + logback via `System.LoggerFinder`                                |
 
 ## Measured cold-start
 
@@ -177,14 +180,17 @@ The honest reading: the dominant axis is **lazy vs eager init**, not "compile-ti
 
 ## Modules
 
-| Module          | Purpose                                                                                                                                            |
-|-----------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
-| `tiko-api`      | Core annotations and interfaces. The only compile-time dependency your code needs.                                                                 |
-| `tiko-processor`| Annotation processor — runs at compile-time to validate dependencies and generate wiring code.                                                     |
-| `tiko-runtime`  | Minimal runtime container. Zero dependencies beyond `tiko-api`. Ships the in-memory `LocalEventBus`.                                               |
-| `tiko-config`   | YAML-backed configuration injection. The only module that depends on SnakeYAML. Required when your project uses `@Configuration`; not pulled otherwise. |
+| Module                  | Purpose                                                                                                                                            |
+|-------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
+| `tiko-api`              | Core annotations and interfaces. The only compile-time dependency your code needs.                                                                 |
+| `tiko-processor`        | Annotation processor — runs at compile-time to validate dependencies and generate wiring code.                                                     |
+| `tiko-runtime`          | Minimal runtime container. Zero dependencies beyond `tiko-api`. Ships the in-memory `LocalEventBus`.                                               |
+| `tiko-config`           | YAML-backed configuration injection. The only module that depends on SnakeYAML. Required when your project uses `@Configuration`; not pulled otherwise. |
+| `tiko-kafka` + `tiko-kafka-processor` | Kafka transport via the universal `TransportBootstrap` SPI — `@KafkaSource` / `@KafkaSink`, JSON serializer, per-record commit + seek-back. Opt-in. |
+| `tiko-archetype`        | Maven archetype that scaffolds a runnable single-module Tiko project in seconds.                                                                   |
+| `tiko-bom`              | Bill-of-materials for version-aligned dependency management.                                                                                       |
 
-Event abstractions (`EventBus`, `EventCallback`, `Subscription`, `@EventHandler`, `@EventTrigger`, `Event<T>`) live in `tiko-api`; the in-memory implementation lives in `tiko-runtime`. A future Kafka-backed bus would arrive as its own module.
+Event abstractions (`EventBus`, `EventCallback`, `Subscription`, `@EventHandler`, `@EventTrigger`, `Event<T>`) live in `tiko-api`; the in-memory implementation lives in `tiko-runtime`. Kafka ships as a separate, opt-in module pair (`tiko-kafka` + `tiko-kafka-processor`); further transports (RabbitMQ, JMS) are planned under Phase 7.
 
 ## Logging
 
@@ -223,10 +229,13 @@ policy — a different layer than framework logging.
 
 ## Roadmap (summary)
 
-- **Phase 2 (current)** — Kafka event bus, configuration follow-ups, conditional beans, profile isolation.
-- **Phase 3 (next)** — Onboarding & tooling: Maven archetype variants, machine-readable topology, MCP server for AI agents.
-- **Phase 4 (future)** — Runtime hardening: AOP/interceptors, metrics hooks, GraalVM native image.
-- **Phase 5 (future)** — Publish to Maven Central.
+- **Phase 1 — Alpha completion.** ✅ Closed. Core DI, scopes, lifecycle events, `@EventTrigger` chains, multi-module aggregation.
+- **Phase 2 — Configuration & distributed events.** ✅ Closed. `@Configuration` v1 + nested records + `Set<X>` + YAML source anchors, Kafka transport, `ErrorContext` hook, async event executor + shutdown timeout, `System.Logger` migration.
+- **Phase 3 — Onboarding & tooling.** AI-assistant-aware archetype, machine-readable topology + MCP server.
+- **Phase 4 — Runtime hardening (in progress).** Structured `RuntimeException` subtypes, checked-exception propagation through `@Produces` / `@PostConstruct` (✅), framework-managed JVM shutdown hook. AOP / metrics / GraalVM dropped from scope until a concrete driver appears.
+- **Phase 5 — Publish to Maven Central.**
+- **Phase 6 — Resiliency layer.** Timeouts, retries, bounded-queue backpressure, executor pool knobs, DLQ for failed/timed-out events.
+- **Phase 7 — Distributed transports.** RabbitMQ + JMS adapters, `TransportBootstrap` SPI audit, pluggable serializer SPI.
 
 Full detail in [docs/roadmap.md](./docs/roadmap.md).
 

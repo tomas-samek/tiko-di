@@ -51,6 +51,42 @@ mvn -pl tiko-examples/05_multi_module/app -am exec:java \
     -Dexec.mainClass=io.tiko.examples.multimodule.app.Main
 ```
 
+## 06 — Multi-module configuration &nbsp;<sub>[`06_config_multi_module/`](./06_config_multi_module)</sub>
+
+Sibling modules each ship their own `@Configuration` record plus a baked-in `META-INF/tiko/defaults.yaml`. The `AggregatingContainer` discovers all of them and layers a user-supplied YAML on top.
+
+```
+mvn -pl tiko-examples/06_config_multi_module/app -am exec:java \
+    -Dexec.mainClass=io.tiko.examples.configmm.app.Main
+```
+
+## 07 — Async startup &nbsp;<sub>[`07_async_start/`](./07_async_start)</sub>
+
+`@EventHandler(async = true)` on `ApplicationStartedEvent` keeps slow warmup work (cache priming, schema migration, remote-config fetch) off the critical path — `Tiko.create()` returns while the handler runs on the framework's bounded executor.
+
+```
+mvn -pl tiko-examples/07_async_start -am exec:java \
+    -Dexec.mainClass=io.tiko.examples.asyncstart.Main
+```
+
+## 08 — Kafka order / warehouse &nbsp;<sub>[`08_kafka_order_warehouse/`](./08_kafka_order_warehouse)</sub>
+
+Cross-JVM demo. An order service publishes `OrderPlaced` over Kafka via `@KafkaSink`; a warehouse service in a separate process subscribes via `@KafkaSource`. The same `@EventHandler` shape works for both local and Kafka-sourced events. Testcontainers runs a real broker in CI.
+
+See the example's own README for the multi-process run sequence.
+
+## 09 — HTTP / Javalin integration &nbsp;<sub>[`09_http_javalin/`](./09_http_javalin)</sub>
+
+How Tiko lives behind an existing HTTP server. `TikoJavalin.scoped` middleware opens a REQUEST scope around each route so REQUEST-scoped beans (`HttpRequestContext`) are valid for the handler's lifetime. The sync request→response path is independent of the event bus; three subscribers demonstrate sync vs. async side effects.
+
+## 10 — Persistence (raw JDBC + HikariCP) &nbsp;<sub>[`10_persistence_jdbc/`](./10_persistence_jdbc)</sub>
+
+Persistence cookbook in code form. REQUEST-scoped JDBC transactions wrap both an HTTP entry point and a batch flow; the same `OrderRepository` is reused across both. Demonstrates the auto-proxy mechanism on a JDK interface (`java.sql.Connection`) and the practical REQUEST-vs-EVENT scope distinction. See [docs/cookbooks/persistence.md](../docs/cookbooks/persistence.md).
+
+## 11 — Custom logger &nbsp;<sub>[`11_custom_logger/`](./11_custom_logger)</sub>
+
+Routes Tiko's internal logging through slf4j + logback by adding `slf4j-jdk-platform-logging` to the classpath. Zero Tiko-side configuration; the JDK's `System.Logger` SPI does the dispatch.
+
 ---
 
 ## Running the integration tests

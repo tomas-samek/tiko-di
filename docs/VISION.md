@@ -254,14 +254,31 @@ can mentally project Tiko's approach into their own work.
 
 ## Roadmap notes (not commitments)
 
-- **v1.0 scope:** core DI + event pipeline (local + Kafka transport) +
-  service lifecycle + plugin descriptors + topology generation.
-- **Considered, not promised:** additional transports (RabbitMQ, NATS),
-  runtime plugin loading with classloader isolation, observability hooks
-  (metrics, tracing), GraalVM native-image support.
+Today (alpha, Phase 1 + Phase 2 closed): core DI, four-scope lifecycle,
+multi-module aggregation, `@Configuration` records with typed YAML binding +
+source anchors, in-memory event bus with handler isolation + bounded async
+executor + graceful drain, `@EventTrigger` chains with origin tracking,
+Kafka transport behind a universal `TransportBootstrap` SPI, `System.Logger`
+for internal logging.
+
+- **Active work:** Phase 3 (onboarding & tooling — AI-aware archetype,
+  machine-readable topology, MCP server), Phase 4 (runtime hardening —
+  structured `RuntimeException` subtypes, framework-managed JVM shutdown
+  hook). Phase 5 publishes to Maven Central.
+- **Next:** Phase 6 (first-party resiliency layer — timeouts, retries,
+  backpressure, executor pool knobs, DLQ; supersedes the prior plan to cover
+  this via a cookbook), Phase 7 (RabbitMQ + JMS transports through the same
+  SPI, plus a pluggable serializer SPI extracted from `tiko-kafka`).
+- **Considered, not promised:** NATS or other transports beyond
+  RabbitMQ/JMS, runtime plugin loading with classloader isolation,
+  observability hooks (metrics, tracing), GraalVM native-image support, AOP
+  / interceptors. None of these have a concrete driver yet; they will earn a
+  milestone if and when one appears.
 - **Explicitly out of scope:** distributed orchestration across processes
   (use a service mesh), web framework / HTTP layer (use Javalin, Helidon,
-  whatever), persistence layer (use JDBC, jOOQ, whatever).
+  whatever — see `tiko-examples/09_http_javalin`), persistence layer (use
+  JDBC, jOOQ, whatever — see `tiko-examples/10_persistence_jdbc` +
+  `docs/cookbooks/persistence.md`).
 
 ---
 
