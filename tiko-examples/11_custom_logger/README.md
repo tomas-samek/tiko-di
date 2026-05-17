@@ -33,13 +33,24 @@ That's it. Every framework log goes through slf4j → logback.
 ## Expected output when you run `Main`
 
 ```
+WARN  [io.tiko.events] @PreDestroy threw on FailingComponent
+java.lang.IllegalStateException: simulated teardown failure
+    at io.tiko.examples.logger.FailingComponent.cleanup(FailingComponent.java:17)
+    ... (stacktrace)
 WARN  [io.tiko.events] @PreDestroy on io.tiko.examples.logger.FailingComponent threw: java.lang.IllegalStateException: simulated teardown failure
+    at io.tiko.examples.logger.FailingComponent.cleanup(FailingComponent.java:17)
+    ... (stacktrace)
 [main] container closed cleanly
 ```
 
 The `WARN [io.tiko.events]` prefix matches logback's configured pattern — JUL's
 default format is recognizably different (`Aug 17, 2026 ... WARNING:`), so seeing this
 shape proves the routing works.
+
+Two WARN lines appear per `@PreDestroy` failure: the framework currently logs once at
+the generated catch site and again via `DefaultErrorHandler`. This is pre-existing
+duplicate-log behavior unrelated to the slf4j routing demo — both lines flow through
+the same logback pipeline, which is what this recipe is showing.
 
 ## Other backends
 
