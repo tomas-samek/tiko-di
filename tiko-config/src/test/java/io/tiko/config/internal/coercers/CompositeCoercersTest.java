@@ -4,18 +4,20 @@ package io.tiko.config.internal.coercers;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.tiko.config.CapturingLoggerFinder;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.logging.Handler;
-import java.util.logging.Level;
-import java.util.logging.LogRecord;
-import java.util.logging.Logger;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class CompositeCoercersTest {
+
+    @BeforeEach
+    void clearCapturedLogs() {
+        CapturingLoggerFinder.clear();
+    }
 
     @Test
     void list_coercer_delegates_to_element_coercer() {
@@ -68,34 +70,16 @@ class CompositeCoercersTest {
     }
 
     @Test
-    void set_coercer_emits_jul_warning_per_duplicate() {
-        Logger logger = Logger.getLogger("io.tiko.config");
-        var records = new CopyOnWriteArrayList<LogRecord>();
-        Handler handler = new Handler() {
-            @Override
-            public void publish(LogRecord r) {
-                records.add(r);
-            }
+    void set_coercer_emits_warning_per_duplicate() {
+        TypeCoercer<Set<String>> c = CompositeCoercers.set(Coercers.stringCoercer());
+        c.coerce(List.of("a", "b", "a", "c", "b"));
 
-            @Override
-            public void flush() {}
-
-            @Override
-            public void close() {}
-        };
-        logger.addHandler(handler);
-        try {
-            TypeCoercer<Set<String>> c = CompositeCoercers.set(Coercers.stringCoercer());
-            c.coerce(List.of("a", "b", "a", "c", "b"));
-
-            assertThat(records)
-                    .filteredOn(r -> r.getLevel() == Level.WARNING)
-                    .extracting(LogRecord::getMessage)
-                    .containsExactly(
-                            "@Configuration Set<X> field: duplicate value 'a' deduped",
-                            "@Configuration Set<X> field: duplicate value 'b' deduped");
-        } finally {
-            logger.removeHandler(handler);
-        }
+        assertThat(CapturingLoggerFinder.RECORDS)
+                .filteredOn(r -> r.level() == System.Logger.Level.WARNING)
+                .filteredOn(r -> "io.tiko.config".equals(r.loggerName()))
+                .extracting(CapturingLoggerFinder.LogEntry::message)
+                .containsExactly(
+                        "@Configuration Set<X> field: duplicate value 'a' deduped",
+                        "@Configuration Set<X> field: duplicate value 'b' deduped");
     }
 }
