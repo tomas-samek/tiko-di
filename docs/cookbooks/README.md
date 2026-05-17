@@ -12,9 +12,10 @@ example proves it compiles, runs, and stays green under CI.
 ## Planned
 
 - **Security** — auth/authz at the HTTP boundary. Likely leverages whatever HTTP server you've picked (Javalin in `09_http_javalin`).
-- **Resilience** — Resilience4j integration (retry, circuit breaker, bulkhead) around `@Component` boundaries.
 - **Kafka surfacing** — cross-references to `08_kafka_order_warehouse` and a "when to reach for distributed events" narrative.
 - **Non-goals + recommended integrations** — single top-level page naming the boundary of what Tiko owns and the recommended pairing for each non-goal.
+
+Resilience was previously slated as a cookbook (Resilience4j around `@Component` boundaries) but has since been promoted to a first-party milestone — see Phase 6 in [docs/roadmap.md](../roadmap.md). The framework owns the async event bus, so handler timeouts / retries / backpressure / DLQ ship in Tiko rather than as a pairing recipe.
 
 The cookbook track exists because reviewers consistently read silence on
 persistence/security/resilience as "framework is incomplete" rather than
