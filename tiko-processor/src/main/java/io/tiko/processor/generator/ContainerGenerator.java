@@ -56,6 +56,7 @@ public final class ContainerGenerator {
         containerBuilder.addField(createErrorHandlerField());
         containerBuilder.addField(createEventExecutorField());
         containerBuilder.addField(createOwnsEventExecutorField());
+        containerBuilder.addField(createShutdownTimeoutField());
         containerBuilder.addField(createStartedAtField());
         containerBuilder.addField(createConfigSingletonsField());
         containerBuilder.addField(createShutdownInvokedField());
@@ -66,8 +67,9 @@ public final class ContainerGenerator {
         containerBuilder.addField(createPublishLifecycleEventsField());
         containerBuilder.addFields(createFactoryFields());
 
-        // Add constructor
+        // Add constructors: canonical 5-arg + 4-arg delegating shim (#48).
         containerBuilder.addMethod(createConstructor());
+        containerBuilder.addMethod(createLegacyConstructor());
 
         // Add component getter methods
         containerBuilder.addMethods(createComponentGetters());
@@ -193,6 +195,15 @@ public final class ContainerGenerator {
      */
     private FieldSpec createOwnsEventExecutorField() {
         return FieldSpec.builder(TypeName.BOOLEAN, "ownsEventExecutor", Modifier.PRIVATE, Modifier.FINAL)
+                .build();
+    }
+
+    /**
+     * Creates the {@code Duration shutdownTimeout} field — the graceful-wait window
+     * used by {@link #createShutdownMethod()} when the container owns the executor (#48).
+     */
+    private FieldSpec createShutdownTimeoutField() {
+        return FieldSpec.builder(Duration.class, "shutdownTimeout", Modifier.PRIVATE, Modifier.FINAL)
                 .build();
     }
 
@@ -342,12 +353,16 @@ public final class ContainerGenerator {
     }
 
     /**
-     * Creates the constructor that initializes factories, event bus, and error handler.
+     * Creates the canonical 5-arg constructor that initializes factories, event bus,
+     * error handler, and the shutdown timeout (#48).
      * <p>The {@code publishLifecycleEvents} flag (#45) controls whether this container
      * publishes its own {@code ApplicationStartedEvent} / {@code ApplicationEndingEvent}.
      * Single-module setups pass {@code true}; per-module containers run under an
      * {@code AggregatingContainer} pass {@code false} so the aggregator can publish
      * exactly once on the shared bus.
+     * <p>The {@code shutdownTimeout} controls how long {@link #createShutdownMethod()}
+     * waits for the framework-owned event executor to drain before forcing
+     * {@code shutdownNow()} (#48).
      */
     private MethodSpec createConstructor() {
         MethodSpec.Builder constructor = MethodSpec.constructorBuilder()
@@ -356,12 +371,14 @@ public final class ContainerGenerator {
                 .addParameter(ClassName.get("io.tiko", "ErrorHandler"), "errorHandler")
                 .addParameter(ClassName.get("java.util.concurrent", "ExecutorService"), "userEventExecutor")
                 .addParameter(TypeName.BOOLEAN, "publishLifecycleEvents")
+                .addParameter(Duration.class, "shutdownTimeout")
                 .addStatement("this.eventBus = eventBus")
                 .addStatement("this.errorHandler = errorHandler")
                 .addStatement("this.eventExecutor = userEventExecutor != null ? userEventExecutor : "
                         + "io.tiko.runtime.DefaultEventExecutorFactory.create()")
                 .addStatement("this.ownsEventExecutor = (userEventExecutor == null)")
-                .addStatement("this.publishLifecycleEvents = publishLifecycleEvents");
+                .addStatement("this.publishLifecycleEvents = publishLifecycleEvents")
+                .addStatement("this.shutdownTimeout = shutdownTimeout");
 
         // Initialize factory fields
         for (ComponentModel component : context.getActiveComponents()) {
@@ -382,6 +399,25 @@ public final class ContainerGenerator {
         }
 
         return constructor.build();
+    }
+
+    /**
+     * Creates the legacy 4-arg constructor as a delegating shim. Kept temporarily so
+     * existing reflective callers in {@code AggregatingContainer} and {@code Tiko}
+     * keep compiling while #48 migrates them to the 5-arg protocol; defaults the
+     * shutdown timeout to {@code Duration.ofSeconds(10)} — the previous hardcoded value.
+     */
+    private MethodSpec createLegacyConstructor() {
+        return MethodSpec.constructorBuilder()
+                .addModifiers(Modifier.PUBLIC)
+                .addParameter(EventBus.class, "eventBus")
+                .addParameter(ClassName.get("io.tiko", "ErrorHandler"), "errorHandler")
+                .addParameter(ClassName.get("java.util.concurrent", "ExecutorService"), "userEventExecutor")
+                .addParameter(TypeName.BOOLEAN, "publishLifecycleEvents")
+                .addStatement(
+                        "this(eventBus, errorHandler, userEventExecutor, publishLifecycleEvents, $T.ofSeconds(10))",
+                        Duration.class)
+                .build();
     }
 
     /**
@@ -1108,7 +1144,8 @@ public final class ContainerGenerator {
         method.beginControlFlow("if (this.ownsEventExecutor)");
         method.addStatement("this.eventExecutor.shutdown()");
         method.beginControlFlow("try");
-        method.beginControlFlow("if (!this.eventExecutor.awaitTermination(10, $T.SECONDS))", timeUnit);
+        method.beginControlFlow(
+                "if (!this.eventExecutor.awaitTermination(this.shutdownTimeout.toNanos(), $T.NANOSECONDS))", timeUnit);
         method.addStatement("this.eventExecutor.shutdownNow()");
         method.endControlFlow();
         method.nextControlFlow("catch ($T __ie)", InterruptedException.class);

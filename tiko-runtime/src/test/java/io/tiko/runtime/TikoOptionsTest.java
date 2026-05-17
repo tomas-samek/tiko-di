@@ -1,9 +1,11 @@
 package io.tiko.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
 import io.tiko.ErrorHandler;
+import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
 class TikoOptionsTest {
@@ -59,5 +61,36 @@ class TikoOptionsTest {
     void builder_event_executor_default_null() {
         TikoOptions options = TikoOptions.builder().build();
         assertThat(options.eventExecutor()).isNull();
+    }
+
+    @Test
+    void builder_round_trips_shutdown_timeout() {
+        TikoOptions options =
+                TikoOptions.builder().shutdownTimeout(Duration.ofSeconds(2)).build();
+
+        assertThat(options.shutdownTimeout()).isEqualTo(Duration.ofSeconds(2));
+    }
+
+    @Test
+    void builder_shutdown_timeout_default_is_null() {
+        TikoOptions options = TikoOptions.builder().build();
+
+        // null means "not explicitly set" — matches the pattern for configSource/errorHandler/eventExecutor.
+        // The 10s framework default is applied by Tiko.resolveShutdownTimeout, not by this field.
+        assertThat(options.shutdownTimeout()).isNull();
+    }
+
+    @Test
+    void builder_rejects_negative_shutdown_timeout() {
+        TikoOptions.Builder b = TikoOptions.builder();
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> b.shutdownTimeout(Duration.ofSeconds(-1)))
+                .withMessageContaining("shutdownTimeout");
+    }
+
+    @Test
+    void builder_rejects_null_shutdown_timeout() {
+        TikoOptions.Builder b = TikoOptions.builder();
+        assertThatNullPointerException().isThrownBy(() -> b.shutdownTimeout(null));
     }
 }

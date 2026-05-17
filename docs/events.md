@@ -123,6 +123,56 @@ try (Container container = Tiko.create(opts)) { ... }
 
 When you supply your own executor, **you own its lifecycle** — `Container.shutdown()` does not stop it. Async handler exceptions still route to the configured `ErrorHandler` regardless of which executor is in use.
 
+## Graceful shutdown drain
+
+When `Container.shutdown()` runs, in-flight async event handlers are allowed to
+finish within a configurable budget before the framework-owned executor is
+forced via `shutdownNow()`. This means a server shutdown signal does not
+abruptly cancel async side-effects already queued on the executor — they drain
+cleanly within the configured window.
+
+Two equivalent ways to configure the budget:
+
+**Programmatically:**
+
+```java
+TikoOptions opts = TikoOptions.builder()
+        .shutdownTimeout(Duration.ofSeconds(30))   // long-running batch handlers
+        .build();
+```
+
+**Via YAML** (any source loaded by your `ConfigSource`):
+
+```yaml
+tiko:
+  shutdownTimeout: PT30S    # ISO-8601 duration; PT5S = 5 seconds, PT5M = 5 minutes
+```
+
+The `tiko:` top-level section is reserved for framework-level config; see
+[configuration.md](./configuration.md) for the namespace policy.
+
+**Precedence:** programmatic > YAML > default 10 seconds.
+
+`Duration.ZERO` skips the graceful wait and calls `shutdownNow()` immediately —
+useful for test harnesses where you don't want to wait on a wedged handler. The
+knob has no effect when you supply your own executor via `TikoOptions.eventExecutor(...)`
+(you own that executor's lifecycle).
+
+See [`tiko-examples/09_http_javalin`](../tiko-examples/09_http_javalin) for a
+runnable demo that sources the timeout from `config.yaml`.
+
+**Caveat:** a JVM `Error` (`OutOfMemoryError`, `StackOverflowError`) bypasses
+this graceful drain — the JVM may tear down threads abruptly when in an
+unrecoverable state. For everything short of a JVM-level fatal, `shutdownTimeout`
+is the bound.
+
+**v1 limitations:**
+
+- Duration values use ISO-8601 syntax (`PT5S`, `PT30S`, `PT5M`). Friendly-syntax
+  durations (`5s`, `30s`) are a planned enhancement.
+- `${VAR}` interpolation on `tiko.shutdownTimeout` is not supported. Use the
+  programmatic API if you need env-var resolution.
+
 ## Lifecycle events
 
 The container automatically publishes lifecycle events that you can subscribe to for metrics, logging, tracing, and cleanup. They keep observability concerns out of your business logic.

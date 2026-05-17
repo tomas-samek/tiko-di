@@ -1,0 +1,5 @@
+# Framework-level knobs live under the reserved `tiko:` top-level section (#48).
+# Currently only shutdownTimeout is defined; Phase 6 (Resiliency) will add more.
+# Note: durations use ISO-8601 syntax (PT5S = 5 seconds; PT30S = 30 seconds; PT5M = 5 minutes).
+tiko:
+  shutdownTimeout: PT5S
