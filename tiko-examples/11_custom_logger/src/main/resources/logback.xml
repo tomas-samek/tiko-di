@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <!-- Distinctive format so the example's expected output is unambiguous: framework
+                 logs that flow through this stack will look like:
+                 WARN  [io.tiko.events] @PreDestroy on io.tiko.examples.logger.FailingComponent threw -->
+            <pattern>%-5level [%logger{30}] %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="STDOUT" />
+    </root>
+</configuration>

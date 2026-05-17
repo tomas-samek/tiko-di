@@ -28,6 +28,7 @@
         <module>08_kafka_order_warehouse</module>
         <module>09_http_javalin</module>
         <module>10_persistence_jdbc</module>
+        <module>11_custom_logger</module>
     </modules>
 
     <!--
