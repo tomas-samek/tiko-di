@@ -5,7 +5,6 @@ import io.tiko.annotations.Component;
 import io.tiko.annotations.EventHandler;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.logging.Logger;
 
 /**
  * Async notification handler — runs on Tiko's framework executor, NOT on the
@@ -16,7 +15,7 @@ import java.util.logging.Logger;
 @Component(scope = Scope.SINGLETON)
 public class NotificationSender {
 
-    private static final Logger LOG = Logger.getLogger("io.tiko.examples.http.notify");
+    private static final System.Logger LOG = System.getLogger("io.tiko.examples.http.notify");
 
     /**
      * Test hook. The integration test calls {@link #expectNotifications(int)}
@@ -35,7 +34,9 @@ public class NotificationSender {
 
     @EventHandler(async = true)
     public void onTicketCreated(TicketCreated event) {
-        LOG.info(() -> "[NOTIFY req=" + event.requestId() + "] would email about ticket " + event.id());
+        LOG.log(
+                System.Logger.Level.INFO,
+                () -> "[NOTIFY req=" + event.requestId() + "] would email about ticket " + event.id());
         latch.get().countDown();
     }
 }
