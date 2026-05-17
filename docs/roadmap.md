@@ -60,9 +60,10 @@ Deferred designs (discussed, no tracker issue yet, not bound to a phase):
 
 ### Phase 3 — onboarding & tooling
 
-[Phase 3 milestone](https://github.com/tomas-samek/tiko-di/milestone/3) — 0/2 closed.
+[Phase 3 milestone](https://github.com/tomas-samek/tiko-di/milestone/3) — 0/3 closed.
 
 - AI-assistant-aware Maven archetype variant ([#21](https://github.com/tomas-samek/tiko-di/issues/21)). The plain quickstart archetype already ships (see above).
+- `tiko-test` JUnit 5 extension + module — `@TikoTest` to boot a container per test class, `@TestComponent` for compile-time-validated overrides, `TikoOptions.override(...)` for late-binding mocks, `RecordingEventBus` test double for event-publish assertions ([#122](https://github.com/tomas-samek/tiko-di/issues/122)).
 - Machine-readable topology + config schema, plus an MCP server so AI agents can introspect the wiring ([#22](https://github.com/tomas-samek/tiko-di/issues/22)).
 
 ### Phase 4 — runtime hardening (in progress)
@@ -82,17 +83,9 @@ Open:
 - Framework-managed JVM shutdown hook — let users subscribe to `ApplicationEndingEvent` instead of wiring their own hook ([#92](https://github.com/tomas-samek/tiko-di/issues/92)).
 - Flaky 1ms absolute-time assertion in `PostShutdownGetTest` ([#85](https://github.com/tomas-samek/tiko-di/issues/85)).
 
-### Phase 5 — publish to Maven Central
+### Phase 5 — resiliency layer
 
-[Phase 5 milestone](https://github.com/tomas-samek/tiko-di/milestone/5).
-
-- Sonatype Central Portal namespace verification for `io.tiko`.
-- GPG signing, `central-publishing-maven-plugin`, POM metadata polish.
-- Javadoc + sources jars, BOM publication, GitHub Actions release workflow gated on tag pushes.
-
-### Phase 6 — resiliency layer
-
-[Phase 6 milestone](https://github.com/tomas-samek/tiko-di/milestone/7) — 0/7 closed. First-party resiliency for the framework-owned async event bus and lifecycle hooks. Supersedes the prior plan to cover resilience via a cookbook; the surface is small enough and load-bearing enough that Tiko ships it directly.
+[Phase 5 milestone](https://github.com/tomas-samek/tiko-di/milestone/7) — 0/7 closed. First-party resiliency for the framework-owned async event bus and lifecycle hooks. Supersedes the prior plan to cover resilience via a cookbook; the surface is small enough and load-bearing enough that Tiko ships it directly.
 
 - Per-component shutdown timeouts on `@PreDestroy` + `AutoCloseable.close()` ([#106](https://github.com/tomas-samek/tiko-di/issues/106)).
 - Event handler execution timeouts ([#107](https://github.com/tomas-samek/tiko-di/issues/107)).
@@ -102,14 +95,22 @@ Open:
 - Dead-letter handling for failed / timed-out events ([#111](https://github.com/tomas-samek/tiko-di/issues/111)).
 - Framework double-logs `@PreDestroy` and `AutoCloseable.close()` failures ([#116](https://github.com/tomas-samek/tiko-di/issues/116) — bug, gates the timeout work).
 
-### Phase 7 — distributed transports
+### Phase 6 — distributed transports
 
-[Phase 7 milestone](https://github.com/tomas-samek/tiko-di/milestone/8) — 0/4 closed. Second (and beyond) first-party transport implementations behind the `TransportBootstrap` SPI. Composes with the Phase 6 resiliency knobs.
+[Phase 6 milestone](https://github.com/tomas-samek/tiko-di/milestone/8) — 0/4 closed. Second (and beyond) first-party transport implementations behind the `TransportBootstrap` SPI. Composes with the Phase 5 resiliency knobs.
 
 - RabbitMQ transport adapter — `tiko-rabbitmq` + `tiko-rabbitmq-processor` ([#117](https://github.com/tomas-samek/tiko-di/issues/117)).
 - JMS transport adapter — covers ActiveMQ Artemis, IBM MQ, others ([#120](https://github.com/tomas-samek/tiko-di/issues/120)).
 - `TransportBootstrap` SPI audit — surface and fix Kafka-shaped assumptions exposed by a second implementor ([#118](https://github.com/tomas-samek/tiko-di/issues/118)).
 - Pluggable serializer SPI extracted from `tiko-kafka` ([#119](https://github.com/tomas-samek/tiko-di/issues/119)).
+
+### Phase 7 — publish to Maven Central
+
+[Phase 7 milestone](https://github.com/tomas-samek/tiko-di/milestone/5). Deliberately positioned after Phase 5/6 so the `TikoOptions` surface (resiliency knobs, executor configuration) and the `TransportBootstrap` SPI can stabilise before downstream users pin a version.
+
+- Sonatype Central Portal namespace verification for `io.tiko`.
+- GPG signing, `central-publishing-maven-plugin`, POM metadata polish.
+- Javadoc + sources jars, BOM publication, GitHub Actions release workflow gated on tag pushes.
 
 ### Kafka follow-ups (unscheduled)
 
