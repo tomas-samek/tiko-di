@@ -23,7 +23,7 @@ import org.junit.jupiter.api.Test;
 class ContainerGeneratorShutdownTimeoutTest {
 
     @Test
-    void generated_container_exposes_5_arg_ctor_and_uses_shutdown_timeout_field() throws IOException {
+    void generatedContainerExposesFiveArgCtorAndUsesShutdownTimeoutField() throws IOException {
         JavaFileObject src = JavaFileObjects.forSourceLines(
                 "io.example.Foo",
                 "package io.example;",

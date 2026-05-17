@@ -27,7 +27,7 @@ class AggregatingContainerShutdownTimeoutTest {
     private static final ErrorHandler NOOP_ERROR_HANDLER = ctx -> {};
 
     @Test
-    void shutdown_forces_executor_when_timeout_exceeded() throws Exception {
+    void shutdownForcesExecutorWhenTimeoutExceeded() throws Exception {
         EventBus bus = new LocalEventBus();
         AggregatingContainer container = new AggregatingContainer(
                 bus, NOOP_ERROR_HANDLER, /* userEventExecutor= */ null, /* shutdownTimeout= */ Duration.ofMillis(50));
@@ -55,7 +55,7 @@ class AggregatingContainerShutdownTimeoutTest {
     }
 
     @Test
-    void shutdown_returns_promptly_when_executor_drains_well_within_default() throws Exception {
+    void shutdownReturnsPromptlyWhenExecutorDrainsWellWithinDefault() throws Exception {
         EventBus bus = new LocalEventBus();
         AggregatingContainer container = new AggregatingContainer(
                 bus, NOOP_ERROR_HANDLER, /* userEventExecutor= */ null, /* shutdownTimeout= */ Duration.ofSeconds(10));
