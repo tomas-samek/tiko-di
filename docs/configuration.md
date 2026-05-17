@@ -62,6 +62,20 @@ app/src/main/resources/application.yaml                       # user override (o
 
 Two modules cannot independently claim the same `@Configuration(prefix="...")` — the runtime fails fast with a clear collision error. See `tiko-examples/06_config_multi_module/` for an end-to-end sample.
 
+## The `tiko:` reserved namespace
+
+Top-level `tiko:` in your YAML is reserved for framework-level configuration knobs
+that Tiko itself consumes (not your `@Configuration` records). v1 defines one key:
+
+```yaml
+tiko:
+  shutdownTimeout: PT5S    # event-executor graceful drain window; see events.md
+```
+
+Duration values use ISO-8601 syntax (`PT5S`, `PT30S`, `PT5M`). Phase 6 (Resiliency)
+will add sibling keys (executor sizing, queue capacity, etc.). Do not declare your
+own `@Configuration(prefix = "tiko")` — that prefix is the framework's.
+
 ## Nested records
 
 A `@Configuration` record can contain plain records as field types — directly, or inside `Optional<X>`, `List<X>`, `Set<X>`, `Map<String,X>`. The codegen emits a per-record nested coercer and composes via the existing collection coercers. The nested record itself is **not** annotated `@Configuration`; it's bound by recursion under its parent's prefix.
