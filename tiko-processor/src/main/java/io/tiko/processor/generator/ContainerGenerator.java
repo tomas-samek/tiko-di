@@ -308,8 +308,10 @@ public final class ContainerGenerator {
     /**
      * Field: TikoOptions options — held so getter methods can consult
      * {@link io.tiko.runtime.TikoOptions#getOverride} before constructing the canonical
-     * production bean. Forthcoming tasks (T6-T8) populate the override path inside
-     * {@code computeIfAbsent}; this task only plumbs the reference in.
+     * production bean. The SINGLETON getter consults this inside its
+     * {@code computeIfAbsent} lambda so the override {@code Supplier} is called at most
+     * once per container; REQUEST/EVENT and named-qualified getters wire the same
+     * consultation through their respective scope paths.
      */
     private FieldSpec createOptionsField() {
         return FieldSpec.builder(
@@ -629,16 +631,23 @@ public final class ContainerGenerator {
 
         switch (component.getScope()) {
             case SINGLETON -> {
-                // Return from singleton cache, create if not exists
+                // Return from singleton cache, create if not exists. The override consultation
+                // lives inside computeIfAbsent's lambda so the Supplier is invoked at most once
+                // per container — the result is cached in `singletons` like any production bean,
+                // matching SINGLETON's "instance per container" semantics. Falls back to the
+                // canonical factory when no override is registered for the component's user type.
                 if (component.requiresProxy()) {
                     // Proxies are created eagerly in constructor, just return the field
                     String proxyFieldName = getProxyFieldName(component.getClassName());
                     method.addStatement("return $L", proxyFieldName);
                 } else {
+                    TypeName componentType = ClassName.get(component.getTypeElement());
                     method.addStatement(
-                            "return ($T) singletons.computeIfAbsent($S, k -> $L.create())",
+                            "return ($T) singletons.computeIfAbsent($S, k -> options.hasOverride($T.class) ? options.getOverride($T.class).get() : $L.create())",
                             returnType,
                             storageKey,
+                            componentType,
+                            componentType,
                             factoryFieldName);
                 }
             }
