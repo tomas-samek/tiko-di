@@ -1351,18 +1351,24 @@ public final class ContainerGenerator {
             List<TypeName> keys = effectiveRoutableTypes(component);
             if (keys.isEmpty()) continue;
 
-            String predicate = "$S.equals(name) && (" + renderTypeOrPredicate("type", keys) + ")";
-            Object[] args = new Object[keys.size() + 1];
-            args[0] = componentName;
-            for (int i = 0; i < keys.size(); i++) args[i + 1] = keys.get(i);
-
-            if (first) {
-                method.beginControlFlow("if (" + predicate + ")", args);
-                first = false;
-            } else {
-                method.nextControlFlow("else if (" + predicate + ")", args);
+            // Emit one arm per routable type so the override key the generator bakes in
+            // (e.g. DataSource.class vs PrimaryDs.class) matches the literal class the
+            // user passed at the call site. The override Supplier wins when registered
+            // for that exact (type, name) pair; otherwise the canonical named getter
+            // runs and the component's own scope logic (which itself consults the
+            // unqualified override via T6/T7) takes over.
+            for (TypeName key : keys) {
+                if (first) {
+                    method.beginControlFlow("if ($S.equals(name) && type == $T.class)", componentName, key);
+                    first = false;
+                } else {
+                    method.nextControlFlow("else if ($S.equals(name) && type == $T.class)", componentName, key);
+                }
+                method.beginControlFlow("if (options.hasOverride($T.class, $S))", key, componentName);
+                method.addStatement("return (T) options.getOverride($T.class, $S).get()", key, componentName);
+                method.endControlFlow();
+                method.addStatement("return (T) $L()", getterName);
             }
-            method.addStatement("return (T) $L()", getterName);
         }
 
         // Named factory-produced components
