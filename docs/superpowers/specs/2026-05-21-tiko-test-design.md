@@ -218,7 +218,7 @@ the raw `LocalEventBus` instead of the spy.
 `TikoOptions.Builder` gains one new method:
 
 ```java
-public Builder eventBusDecorator(Function<EventBus, EventBus> wrap);
+public Builder eventBusDecorator(UnaryOperator<EventBus> wrap);
 ```
 
 `Tiko.createInternal()` constructs `LocalEventBus`, then — if a decorator
