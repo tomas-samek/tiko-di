@@ -3,7 +3,6 @@ package io.tiko.runtime;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.tiko.ErrorHandler;
 import io.tiko.EventBus;
@@ -112,8 +111,8 @@ class TikoOptionsTest {
 
     @Test
     void eventBusDecoratorRejectsNull() {
-        assertThatThrownBy(() -> TikoOptions.builder().eventBusDecorator(null))
-                .isInstanceOf(NullPointerException.class)
-                .hasMessageContaining("eventBusDecorator");
+        assertThatNullPointerException()
+                .isThrownBy(() -> TikoOptions.builder().eventBusDecorator(null))
+                .withMessageContaining("eventBusDecorator");
     }
 }

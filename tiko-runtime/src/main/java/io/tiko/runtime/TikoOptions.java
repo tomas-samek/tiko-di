@@ -2,6 +2,7 @@ package io.tiko.runtime;
 
 import io.tiko.ConfigSource;
 import io.tiko.ErrorHandler;
+import io.tiko.EventBus;
 import java.time.Duration;
 import java.util.Objects;
 
@@ -29,7 +30,7 @@ public final class TikoOptions {
     private final ErrorHandler errorHandler;
     private final java.util.concurrent.ExecutorService eventExecutor;
     private final Duration shutdownTimeout;
-    private final java.util.function.UnaryOperator<io.tiko.EventBus> eventBusDecorator;
+    private final java.util.function.UnaryOperator<EventBus> eventBusDecorator;
 
     private TikoOptions(Builder b) {
         this.configSource = b.configSource;
@@ -78,7 +79,7 @@ public final class TikoOptions {
      *         Applied by {@link Tiko#create(TikoOptions)} after constructing the bus but before passing it
      *         to the generated container, so subscribers register against the decorated bus.
      */
-    public java.util.function.UnaryOperator<io.tiko.EventBus> eventBusDecorator() {
+    public java.util.function.UnaryOperator<EventBus> eventBusDecorator() {
         return eventBusDecorator;
     }
 
@@ -92,7 +93,7 @@ public final class TikoOptions {
         private ErrorHandler errorHandler;
         private java.util.concurrent.ExecutorService eventExecutor;
         private Duration shutdownTimeout;
-        private java.util.function.UnaryOperator<io.tiko.EventBus> eventBusDecorator;
+        private java.util.function.UnaryOperator<EventBus> eventBusDecorator;
 
         private Builder() {}
 
@@ -145,9 +146,9 @@ public final class TikoOptions {
 
         /**
          * Wraps the framework's {@link io.tiko.EventBus} before it is handed to the generated container.
-         * Intended for the {@code tiko-test} {@code RecordingEventBus} spy; production code should leave this null.
+         * Typical uses are observability spies and test-time recording wrappers; production code should leave this null.
          */
-        public Builder eventBusDecorator(java.util.function.UnaryOperator<io.tiko.EventBus> wrap) {
+        public Builder eventBusDecorator(java.util.function.UnaryOperator<EventBus> wrap) {
             this.eventBusDecorator = Objects.requireNonNull(wrap, "eventBusDecorator");
             return this;
         }
