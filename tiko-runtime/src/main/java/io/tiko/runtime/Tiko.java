@@ -75,8 +75,12 @@ public final class Tiko {
                 errorHandler = new DefaultErrorHandler();
             }
 
-            // 2. Create EventBus instance (still no-arg; the bus does not take ErrorHandler).
+            // 2. Create EventBus instance, then apply the optional decorator (used by tiko-test
+            //    to install RecordingEventBus before subscribers register).
             EventBus eventBus = new LocalEventBus();
+            if (options.eventBusDecorator() != null) {
+                eventBus = options.eventBusDecorator().apply(eventBus);
+            }
 
             // 3. Detect single vs multi-module scenario
             ClassLoader classLoader = Thread.currentThread().getContextClassLoader();

@@ -17,9 +17,16 @@ import java.util.function.Supplier;
  */
 public final class StubContainer implements Container {
 
+    // Stored so getEventBus() returns whatever Tiko.createInternal handed in (decorated or not).
+    // EventBusDecoratorTest depends on this round-trip: the test wraps the raw LocalEventBus
+    // via TikoOptions.eventBusDecorator and asserts the container exposes the wrapper.
+    private final EventBus eventBus;
+
     // Tiko.createSingleModuleContainer reflectively calls this constructor.
     public StubContainer(
-            EventBus eventBus, ErrorHandler errorHandler, ExecutorService executor, boolean publishLifecycle) {}
+            EventBus eventBus, ErrorHandler errorHandler, ExecutorService executor, boolean publishLifecycle) {
+        this.eventBus = eventBus;
+    }
 
     // Tiko.createSingleModuleContainer + AggregatingContainer.processContainerResource
     // both reflectively look up the 5-arg constructor after #48.
@@ -28,7 +35,9 @@ public final class StubContainer implements Container {
             ErrorHandler errorHandler,
             ExecutorService executor,
             boolean publishLifecycle,
-            java.time.Duration shutdownTimeout) {}
+            java.time.Duration shutdownTimeout) {
+        this.eventBus = eventBus;
+    }
 
     @Override
     public <T> T get(Class<T> type) {
@@ -83,7 +92,7 @@ public final class StubContainer implements Container {
 
     @Override
     public EventBus getEventBus() {
-        return new LocalEventBus();
+        return eventBus;
     }
 
     @Override
