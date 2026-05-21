@@ -15,10 +15,13 @@ import org.junit.jupiter.api.Test;
  * Verifies the generated single-module container honours TikoOptions.shutdownTimeout (#48):
  *
  * <ul>
- *   <li>A new 5-arg constructor accepts {@code Duration shutdownTimeout}.</li>
- *   <li>The existing 4-arg constructor still exists and delegates with the 10s default.</li>
+ *   <li>The canonical constructor accepts {@code Duration shutdownTimeout}.</li>
  *   <li>The generated {@code shutdown()} reads from the field, not the hardcoded {@code 10, SECONDS}.</li>
  * </ul>
+ *
+ * <p>The legacy 4-arg shim was removed in tiko-test/T5 (the constructor took on a sixth
+ * {@code TikoOptions} parameter and {@code Tiko.createInternal} + {@code AggregatingContainer}
+ * always pass the full canonical set now), so this test no longer asserts on the shim.
  */
 class ContainerGeneratorShutdownTimeoutTest {
 
@@ -43,13 +46,10 @@ class ContainerGeneratorShutdownTimeoutTest {
 
         String body = new String(container.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
 
-        // 5-arg constructor with Duration parameter exists (JavaPoet imports java.time.Duration).
+        // Canonical constructor with Duration parameter exists (JavaPoet imports java.time.Duration).
         assertThat(body).contains("import java.time.Duration;");
         assertThat(body).contains("Duration shutdownTimeout");
         assertThat(body).contains("private final Duration shutdownTimeout");
-
-        // Existing 4-arg constructor still exists and delegates with the 10s default.
-        assertThat(body).contains("Duration.ofSeconds(10)");
 
         // Shutdown reads from the field, not the hardcoded 10 seconds.
         assertThat(body).contains("this.shutdownTimeout.toNanos()");

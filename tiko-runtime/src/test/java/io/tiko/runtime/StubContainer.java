@@ -22,20 +22,16 @@ public final class StubContainer implements Container {
     // via TikoOptions.eventBusDecorator and asserts the container exposes the wrapper.
     private final EventBus eventBus;
 
-    // Tiko.createSingleModuleContainer reflectively calls this constructor.
-    public StubContainer(
-            EventBus eventBus, ErrorHandler errorHandler, ExecutorService executor, boolean publishLifecycle) {
-        this.eventBus = eventBus;
-    }
-
     // Tiko.createSingleModuleContainer + AggregatingContainer.processContainerResource
-    // both reflectively look up the 5-arg constructor after #48.
+    // both reflectively look up the canonical 6-arg constructor (T5: TikoOptions is the
+    // sixth param so generated getters can consult overrides).
     public StubContainer(
             EventBus eventBus,
             ErrorHandler errorHandler,
             ExecutorService executor,
             boolean publishLifecycle,
-            java.time.Duration shutdownTimeout) {
+            java.time.Duration shutdownTimeout,
+            TikoOptions options) {
         this.eventBus = eventBus;
     }
 

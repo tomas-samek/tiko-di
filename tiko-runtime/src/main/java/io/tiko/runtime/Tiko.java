@@ -98,11 +98,11 @@ public final class Tiko {
             Container container;
             if (moduleCount > 1) {
                 container = new AggregatingContainer(
-                        eventBus, errorHandler, options.eventExecutor(), effectiveShutdownTimeout);
+                        eventBus, errorHandler, options.eventExecutor(), effectiveShutdownTimeout, options);
             } else {
                 // Single module: Direct instantiation (does NOT call start yet)
                 container = createSingleModuleContainer(
-                        eventBus, errorHandler, options.eventExecutor(), effectiveShutdownTimeout);
+                        eventBus, errorHandler, options.eventExecutor(), effectiveShutdownTimeout, options);
             }
 
             // 4. Inject config singletons before start(), so @PostConstruct can use them.
@@ -331,7 +331,8 @@ public final class Tiko {
             EventBus eventBus,
             ErrorHandler errorHandler,
             ExecutorService userEventExecutor,
-            java.time.Duration shutdownTimeout)
+            java.time.Duration shutdownTimeout,
+            TikoOptions options)
             throws Exception {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
         if (classLoader == null) classLoader = Tiko.class.getClassLoader();
@@ -351,15 +352,23 @@ public final class Tiko {
 
         // Single-module: publishLifecycleEvents=true so the per-module container publishes
         // its own ApplicationStartedEvent / ApplicationEndingEvent (no aggregator above it).
+        // The 6th arg (TikoOptions) is held by the container so override-aware getters can
+        // consult it during component lookup (tiko-test).
         Container container = (Container) implClass
                 .getDeclaredConstructor(
                         EventBus.class,
                         ErrorHandler.class,
                         ExecutorService.class,
                         boolean.class,
-                        java.time.Duration.class)
+                        java.time.Duration.class,
+                        TikoOptions.class)
                 .newInstance(
-                        eventBus, errorHandler, userEventExecutor, /* publishLifecycleEvents */ true, shutdownTimeout);
+                        eventBus,
+                        errorHandler,
+                        userEventExecutor,
+                        /* publishLifecycleEvents */ true,
+                        shutdownTimeout,
+                        options);
 
         registerEventHandlers(eventBus, container, implClass);
 

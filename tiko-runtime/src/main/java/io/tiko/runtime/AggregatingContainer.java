@@ -33,6 +33,7 @@ public final class AggregatingContainer implements Container {
     private final java.util.concurrent.ExecutorService eventExecutor;
     private final boolean ownsEventExecutor;
     private final Duration shutdownTimeout;
+    private final TikoOptions options;
     private final List<Container> moduleContainers;
     private final Map<Class<?>, Container> componentToContainerMap;
     private final Map<Class<?>, Container> configToContainer = new ConcurrentHashMap<>();
@@ -47,7 +48,12 @@ public final class AggregatingContainer implements Container {
      * @throws IllegalStateException if container discovery or initialization fails
      */
     public AggregatingContainer(EventBus eventBus) {
-        this(eventBus, ctx -> {}, null, Duration.ofSeconds(10));
+        this(
+                eventBus,
+                ctx -> {},
+                null,
+                Duration.ofSeconds(10),
+                TikoOptions.builder().build());
     }
 
     /**
@@ -58,7 +64,12 @@ public final class AggregatingContainer implements Container {
      * @throws IllegalStateException if container discovery or initialization fails
      */
     public AggregatingContainer(EventBus eventBus, ErrorHandler errorHandler) {
-        this(eventBus, errorHandler, null, Duration.ofSeconds(10));
+        this(
+                eventBus,
+                errorHandler,
+                null,
+                Duration.ofSeconds(10),
+                TikoOptions.builder().build());
     }
 
     /**
@@ -79,7 +90,12 @@ public final class AggregatingContainer implements Container {
      */
     public AggregatingContainer(
             EventBus eventBus, ErrorHandler errorHandler, java.util.concurrent.ExecutorService userEventExecutor) {
-        this(eventBus, errorHandler, userEventExecutor, Duration.ofSeconds(10));
+        this(
+                eventBus,
+                errorHandler,
+                userEventExecutor,
+                Duration.ofSeconds(10),
+                TikoOptions.builder().build());
     }
 
     /**
@@ -98,11 +114,39 @@ public final class AggregatingContainer implements Container {
             ErrorHandler errorHandler,
             java.util.concurrent.ExecutorService userEventExecutor,
             Duration shutdownTimeout) {
+        this(
+                eventBus,
+                errorHandler,
+                userEventExecutor,
+                shutdownTimeout,
+                TikoOptions.builder().build());
+    }
+
+    /**
+     * Canonical constructor — accepts the user's {@link TikoOptions} so per-module
+     * containers can consult overrides from generated getter methods (tiko-test). The
+     * {@code shutdownTimeout} caps how long {@link #shutdown()} waits for the
+     * framework-owned executor to drain gracefully before calling {@code shutdownNow()}.
+     * Has no effect when {@code userEventExecutor} is non-null (user owns its lifecycle).
+     *
+     * @param eventBus            shared event bus
+     * @param errorHandler        error handler for event handler exceptions
+     * @param userEventExecutor   optional user-supplied executor; null means framework-owned
+     * @param shutdownTimeout     graceful drain window; non-negative
+     * @param options             framework options; forwarded to every per-module container
+     */
+    public AggregatingContainer(
+            EventBus eventBus,
+            ErrorHandler errorHandler,
+            java.util.concurrent.ExecutorService userEventExecutor,
+            Duration shutdownTimeout,
+            TikoOptions options) {
         this.sharedEventBus = eventBus;
         this.errorHandler = errorHandler;
         this.eventExecutor = userEventExecutor != null ? userEventExecutor : DefaultEventExecutorFactory.create();
         this.ownsEventExecutor = (userEventExecutor == null);
         this.shutdownTimeout = shutdownTimeout;
+        this.options = options;
         this.moduleContainers = new ArrayList<>();
         this.componentToContainerMap = new ConcurrentHashMap<>();
 
@@ -151,21 +195,29 @@ public final class AggregatingContainer implements Container {
             throw new IllegalStateException("Missing 'impl' property in " + resourceUrl);
         }
 
-        // Load and instantiate the container with 5-arg constructor (#48):
-        // (EventBus, ErrorHandler, ExecutorService, boolean publishLifecycleEvents, Duration shutdownTimeout).
+        // Load and instantiate the container with the canonical 6-arg constructor
+        // (#48 + tiko-test): (EventBus, ErrorHandler, ExecutorService, boolean
+        // publishLifecycleEvents, Duration shutdownTimeout, TikoOptions options).
         // Per-module containers see a non-null executor so their internal ownsEventExecutor
         // becomes false — only the aggregator shuts the executor down. The shutdownTimeout
         // is forwarded so per-module containers built outside this aggregator path still
-        // honour the configured drain window.
+        // honour the configured drain window. The TikoOptions reference lets generated
+        // getters consult overrides.
         Class<?> containerClass = Class.forName(implClassName, true, classLoader);
         Constructor<?> constructor = containerClass.getDeclaredConstructor(
                 EventBus.class,
                 ErrorHandler.class,
                 java.util.concurrent.ExecutorService.class,
                 boolean.class,
-                Duration.class);
+                Duration.class,
+                TikoOptions.class);
         Container moduleContainer = (Container) constructor.newInstance(
-                sharedEventBus, errorHandler, eventExecutor, /* publishLifecycleEvents */ false, shutdownTimeout);
+                sharedEventBus,
+                errorHandler,
+                eventExecutor,
+                /* publishLifecycleEvents */ false,
+                shutdownTimeout,
+                options);
 
         moduleContainers.add(moduleContainer);
 

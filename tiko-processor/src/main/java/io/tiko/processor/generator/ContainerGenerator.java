@@ -65,11 +65,13 @@ public final class ContainerGenerator {
         containerBuilder.addField(createInShutdownThreadField());
         containerBuilder.addField(createStartInvokedField());
         containerBuilder.addField(createPublishLifecycleEventsField());
+        containerBuilder.addField(createOptionsField());
         containerBuilder.addFields(createFactoryFields());
 
-        // Add constructors: canonical 5-arg + 4-arg delegating shim (#48).
+        // Canonical 6-arg constructor (#48 + tiko-test): (EventBus, ErrorHandler,
+        // ExecutorService, boolean, Duration, TikoOptions). The legacy 4-arg shim is gone —
+        // Tiko.createInternal and AggregatingContainer now always pass the full 6-arg set.
         containerBuilder.addMethod(createConstructor());
-        containerBuilder.addMethod(createLegacyConstructor());
 
         // Add component getter methods
         containerBuilder.addMethods(createComponentGetters());
@@ -304,6 +306,18 @@ public final class ContainerGenerator {
     }
 
     /**
+     * Field: TikoOptions options — held so getter methods can consult
+     * {@link io.tiko.runtime.TikoOptions#getOverride} before constructing the canonical
+     * production bean. Forthcoming tasks (T6-T8) populate the override path inside
+     * {@code computeIfAbsent}; this task only plumbs the reference in.
+     */
+    private FieldSpec createOptionsField() {
+        return FieldSpec.builder(
+                        ClassName.get("io.tiko.runtime", "TikoOptions"), "options", Modifier.PRIVATE, Modifier.FINAL)
+                .build();
+    }
+
+    /**
      * public void injectConfigs(Map&lt;Class&lt;?&gt;, Object&gt; configs) — populates the configSingletons map.
      */
     private MethodSpec createInjectConfigsMethod() {
@@ -353,8 +367,9 @@ public final class ContainerGenerator {
     }
 
     /**
-     * Creates the canonical 5-arg constructor that initializes factories, event bus,
-     * error handler, and the shutdown timeout (#48).
+     * Creates the canonical 6-arg constructor that initializes factories, event bus,
+     * error handler, the shutdown timeout (#48), and the {@link io.tiko.runtime.TikoOptions}
+     * reference used by override-aware getters (tiko-test).
      * <p>The {@code publishLifecycleEvents} flag (#45) controls whether this container
      * publishes its own {@code ApplicationStartedEvent} / {@code ApplicationEndingEvent}.
      * Single-module setups pass {@code true}; per-module containers run under an
@@ -363,6 +378,8 @@ public final class ContainerGenerator {
      * <p>The {@code shutdownTimeout} controls how long {@link #createShutdownMethod()}
      * waits for the framework-owned event executor to drain before forcing
      * {@code shutdownNow()} (#48).
+     * <p>{@code options} is held for override lookups inside scoped getter methods;
+     * production callers can pass {@code TikoOptions.builder().build()}.
      */
     private MethodSpec createConstructor() {
         MethodSpec.Builder constructor = MethodSpec.constructorBuilder()
@@ -372,13 +389,15 @@ public final class ContainerGenerator {
                 .addParameter(ClassName.get("java.util.concurrent", "ExecutorService"), "userEventExecutor")
                 .addParameter(TypeName.BOOLEAN, "publishLifecycleEvents")
                 .addParameter(Duration.class, "shutdownTimeout")
+                .addParameter(ClassName.get("io.tiko.runtime", "TikoOptions"), "options")
                 .addStatement("this.eventBus = eventBus")
                 .addStatement("this.errorHandler = errorHandler")
                 .addStatement("this.eventExecutor = userEventExecutor != null ? userEventExecutor : "
                         + "io.tiko.runtime.DefaultEventExecutorFactory.create()")
                 .addStatement("this.ownsEventExecutor = (userEventExecutor == null)")
                 .addStatement("this.publishLifecycleEvents = publishLifecycleEvents")
-                .addStatement("this.shutdownTimeout = shutdownTimeout");
+                .addStatement("this.shutdownTimeout = shutdownTimeout")
+                .addStatement("this.options = options");
 
         // Initialize factory fields
         for (ComponentModel component : context.getActiveComponents()) {
@@ -399,25 +418,6 @@ public final class ContainerGenerator {
         }
 
         return constructor.build();
-    }
-
-    /**
-     * Creates the legacy 4-arg constructor as a delegating shim. Kept temporarily so
-     * existing reflective callers in {@code AggregatingContainer} and {@code Tiko}
-     * keep compiling while #48 migrates them to the 5-arg protocol; defaults the
-     * shutdown timeout to {@code Duration.ofSeconds(10)} — the previous hardcoded value.
-     */
-    private MethodSpec createLegacyConstructor() {
-        return MethodSpec.constructorBuilder()
-                .addModifiers(Modifier.PUBLIC)
-                .addParameter(EventBus.class, "eventBus")
-                .addParameter(ClassName.get("io.tiko", "ErrorHandler"), "errorHandler")
-                .addParameter(ClassName.get("java.util.concurrent", "ExecutorService"), "userEventExecutor")
-                .addParameter(TypeName.BOOLEAN, "publishLifecycleEvents")
-                .addStatement(
-                        "this(eventBus, errorHandler, userEventExecutor, publishLifecycleEvents, $T.ofSeconds(10))",
-                        Duration.class)
-                .build();
     }
 
     /**
