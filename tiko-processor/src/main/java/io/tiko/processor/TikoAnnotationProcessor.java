@@ -46,13 +46,22 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         this.typeUtil = new TypeUtil(processingEnv.getElementUtils(), processingEnv.getTypeUtils());
     }
 
+    /**
+     * FQN of the test-classpath shadow annotation. Referenced as a string to keep
+     * tiko-processor free of any compile-time dependency on the optional test
+     * support module that defines it; the annotation is detected reflectively at
+     * processing time and silently ignored when absent.
+     */
+    private static final String TEST_COMPONENT_FQN = "io.tiko.test.TestComponent";
+
     @Override
     public Set<String> getSupportedAnnotationTypes() {
         return Set.of(
                 Component.class.getCanonicalName(),
                 Produces.class.getCanonicalName(),
                 EventHandler.class.getCanonicalName(),
-                Configuration.class.getCanonicalName());
+                Configuration.class.getCanonicalName(),
+                TEST_COMPONENT_FQN);
     }
 
     @Override
@@ -150,7 +159,8 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
     }
 
     /**
-     * Collects all @Component annotated classes.
+     * Collects all @Component annotated classes, plus any @TestComponent classes when
+     * the optional test-classpath annotation is present on the processor's classpath.
      */
     private void collectComponents(RoundEnvironment roundEnv) {
         for (Element element : roundEnv.getElementsAnnotatedWith(Component.class)) {
@@ -164,6 +174,23 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
                 context.registerComponent(component);
             }
         }
+
+        // Test-classpath shadow annotation. Resolved by FQN so the processor stays
+        // dependency-free of the optional support module and tolerates its absence in
+        // production builds (lookup returns null → loop is skipped silently).
+        TypeElement testComponentType = processingEnv.getElementUtils().getTypeElement(TEST_COMPONENT_FQN);
+        if (testComponentType != null) {
+            for (Element element : roundEnv.getElementsAnnotatedWith(testComponentType)) {
+                if (!(element instanceof TypeElement typeElement)) {
+                    context.getErrorReporter().error(element, "@TestComponent can only be applied to classes");
+                    continue;
+                }
+                ComponentModel component = buildTestComponentModel(typeElement);
+                if (component != null) {
+                    context.registerComponent(component);
+                }
+            }
+        }
     }
 
     /**
@@ -172,10 +199,66 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
     private ComponentModel buildComponentModel(TypeElement typeElement) {
         Component annotation = typeElement.getAnnotation(Component.class);
 
+        // Read @Component(expose = {...}) — uses the MirroredTypesException dance because
+        // Class<?>[] annotation values are not directly accessible at processor time.
+        List<TypeMirror> exposeTypes;
+        try {
+            annotation.expose();
+            exposeTypes = List.of();
+        } catch (MirroredTypesException mte) {
+            exposeTypes = List.copyOf(mte.getTypeMirrors());
+        }
+
+        return buildComponentModel(
+                typeElement,
+                annotation.scope(),
+                annotation.name(),
+                Arrays.asList(annotation.profiles()),
+                exposeTypes,
+                annotation.exposeSelf(),
+                false,
+                "@Component");
+    }
+
+    /**
+     * Builds a ComponentModel from a class carrying the test-classpath shadow annotation.
+     * Reads {@code scope} and {@code name} via {@link AnnotationMirror} traversal (string
+     * FQN match) so the processor avoids a compile-time dependency on the support module
+     * that declares the annotation. The remaining ComponentModel fields use the shadow
+     * annotation's documented defaults (no profile gating, permissive exposure).
+     */
+    private ComponentModel buildTestComponentModel(TypeElement typeElement) {
+        AnnotationMirror mirror = findAnnotationMirror(typeElement, TEST_COMPONENT_FQN);
+        if (mirror == null) {
+            // Element claimed by roundEnv but mirror missing — defensive guard, should not happen.
+            return null;
+        }
+
+        Scope scope = readEnumAttribute(mirror, "scope", Scope.class).orElse(Scope.SINGLETON);
+        String name = readStringAttribute(mirror, "name").orElse("");
+
+        return buildComponentModel(typeElement, scope, name, List.of(), List.of(), true, true, "@TestComponent");
+    }
+
+    /**
+     * Shared model assembly for both {@code @Component} and the test-classpath shadow
+     * annotation. Caller supplies annotation-derived attributes; this method handles
+     * constructor / static-factory selection, lifecycle method discovery, proxy
+     * decision, and builder population.
+     */
+    private ComponentModel buildComponentModel(
+            TypeElement typeElement,
+            Scope scope,
+            String name,
+            List<String> profiles,
+            List<TypeMirror> exposeTypes,
+            boolean exposeSelf,
+            boolean isTestComponent,
+            String annotationLabel) {
         // Detect a self-@Produces method: a static @Produces method on this class
         // returning this class with the same qualifier name. When present, it acts
         // as the bean's instantiation strategy (replaces the constructor call).
-        ExecutableElement staticFactoryMethod = findSelfStaticFactory(typeElement, annotation.name());
+        ExecutableElement staticFactoryMethod = findSelfStaticFactory(typeElement, name);
 
         ExecutableElement constructor;
         List<DependencyModel> dependencies;
@@ -190,7 +273,8 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
                 context.getErrorReporter()
                         .error(
                                 typeElement,
-                                "@Component must have an @Inject-annotated constructor or a single public constructor",
+                                annotationLabel
+                                        + " must have an @Inject-annotated constructor or a single public constructor",
                                 "Add @Inject annotation to a constructor",
                                 "Ensure only one public constructor exists if not using @Inject",
                                 "If instantiation goes through a static @Produces factory, no usable constructor is required");
@@ -212,30 +296,21 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         // Check if component implements an interface (for proxy generation)
         Optional<TypeMirror> implementedInterface = typeUtil.getFirstInterface(typeElement);
 
-        // Read @Component(expose = {...}) — uses the MirroredTypesException dance because
-        // Class<?>[] annotation values are not directly accessible at processor time.
-        List<TypeMirror> exposeTypes;
-        try {
-            annotation.expose();
-            exposeTypes = List.of();
-        } catch (MirroredTypesException mte) {
-            exposeTypes = List.copyOf(mte.getTypeMirrors());
-        }
-
         ComponentModel.Builder builder = ComponentModel.builder()
                 .typeElement(typeElement)
                 .packageName(typeUtil.getPackageName(typeElement))
                 .className(typeElement.getSimpleName().toString())
                 .qualifiedName(typeElement.getQualifiedName().toString())
-                .scope(annotation.scope())
-                .name(annotation.name())
-                .profiles(Arrays.asList(annotation.profiles()))
+                .scope(scope)
+                .name(name)
+                .profiles(profiles)
                 .dependencies(dependencies)
                 .postConstructMethods(postConstructMethods)
                 .preDestroyMethods(preDestroyMethods)
                 .autoCloseable(autoCloseable)
                 .exposeTypes(exposeTypes)
-                .exposeSelf(annotation.exposeSelf());
+                .exposeSelf(exposeSelf)
+                .testComponent(isTestComponent);
 
         if (constructor != null) {
             builder.constructor(constructor);
@@ -247,11 +322,70 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         implementedInterface.ifPresent(builder::implementedInterface);
 
         // Determine if proxy is needed (REQUEST/EVENT scope with interface)
-        boolean needsProxy = (annotation.scope() == Scope.REQUEST || annotation.scope() == Scope.EVENT)
-                && implementedInterface.isPresent();
+        boolean needsProxy = (scope == Scope.REQUEST || scope == Scope.EVENT) && implementedInterface.isPresent();
         builder.requiresProxy(needsProxy);
 
         return builder.build();
+    }
+
+    /**
+     * Returns the {@link AnnotationMirror} on {@code element} whose annotation type has
+     * the given canonical name, or {@code null} when none. Used for annotations the
+     * processor must read without a compile-time dependency on the declaring module.
+     */
+    private AnnotationMirror findAnnotationMirror(Element element, String annotationFqn) {
+        for (AnnotationMirror mirror : element.getAnnotationMirrors()) {
+            Element declaring = mirror.getAnnotationType().asElement();
+            if (declaring instanceof TypeElement typeElement
+                    && typeElement.getQualifiedName().contentEquals(annotationFqn)) {
+                return mirror;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Reads a string-valued annotation attribute by name. Returns empty when the
+     * attribute is not present (defaults are not surfaced by
+     * {@link Elements#getElementValuesWithDefaults(AnnotationMirror)} call sites
+     * here — callers supply their own default).
+     */
+    private Optional<String> readStringAttribute(AnnotationMirror mirror, String attributeName) {
+        Map<? extends ExecutableElement, ? extends AnnotationValue> values =
+                processingEnv.getElementUtils().getElementValuesWithDefaults(mirror);
+        for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> entry : values.entrySet()) {
+            if (entry.getKey().getSimpleName().contentEquals(attributeName)) {
+                Object v = entry.getValue().getValue();
+                return v instanceof String s ? Optional.of(s) : Optional.empty();
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Reads an enum-valued annotation attribute by name and resolves it to the matching
+     * enum constant on {@code enumType}. Returns empty when the attribute is absent or
+     * does not name a known constant.
+     */
+    private <E extends Enum<E>> Optional<E> readEnumAttribute(
+            AnnotationMirror mirror, String attributeName, Class<E> enumType) {
+        Map<? extends ExecutableElement, ? extends AnnotationValue> values =
+                processingEnv.getElementUtils().getElementValuesWithDefaults(mirror);
+        for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> entry : values.entrySet()) {
+            if (entry.getKey().getSimpleName().contentEquals(attributeName)) {
+                Object v = entry.getValue().getValue();
+                if (v instanceof VariableElement constant) {
+                    try {
+                        return Optional.of(
+                                Enum.valueOf(enumType, constant.getSimpleName().toString()));
+                    } catch (IllegalArgumentException ignored) {
+                        return Optional.empty();
+                    }
+                }
+                return Optional.empty();
+            }
+        }
+        return Optional.empty();
     }
 
     /**

@@ -31,6 +31,7 @@ public final class ComponentModel {
     private final boolean autoCloseable;
     private final List<TypeMirror> exposeTypes; // @Component(expose = {...}); empty = permissive default
     private final boolean exposeSelf; // @Component(exposeSelf = ...); defaults to true
+    private final boolean testComponent; // True when source annotation was @TestComponent (test-classpath only)
 
     private ComponentModel(Builder builder) {
         this.typeElement = builder.typeElement;
@@ -50,6 +51,7 @@ public final class ComponentModel {
         this.autoCloseable = builder.autoCloseable;
         this.exposeTypes = List.copyOf(builder.exposeTypes);
         this.exposeSelf = builder.exposeSelf;
+        this.testComponent = builder.testComponent;
     }
 
     public static Builder builder() {
@@ -163,6 +165,16 @@ public final class ComponentModel {
         return exposeSelf;
     }
 
+    /**
+     * True when this component was discovered via the test-classpath shadow annotation
+     * rather than the production {@code @Component} annotation. Test components are
+     * permitted to collide with a same-typed production component (ambiguity carve-out)
+     * and are emitted into the separate test container.
+     */
+    public boolean isTestComponent() {
+        return testComponent;
+    }
+
     public static final class Builder {
         private TypeElement typeElement;
         private String packageName;
@@ -181,6 +193,7 @@ public final class ComponentModel {
         private boolean autoCloseable = false;
         private List<TypeMirror> exposeTypes = new ArrayList<>();
         private boolean exposeSelf = true;
+        private boolean testComponent = false;
 
         private Builder() {}
 
@@ -281,6 +294,11 @@ public final class ComponentModel {
 
         public Builder exposeSelf(boolean exposeSelf) {
             this.exposeSelf = exposeSelf;
+            return this;
+        }
+
+        public Builder testComponent(boolean testComponent) {
+            this.testComponent = testComponent;
             return this;
         }
 
