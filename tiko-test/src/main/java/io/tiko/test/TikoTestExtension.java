@@ -5,6 +5,7 @@ import io.tiko.EventBus;
 import io.tiko.annotations.Named;
 import io.tiko.runtime.Tiko;
 import io.tiko.runtime.TikoOptions;
+import java.lang.reflect.Method;
 import org.junit.jupiter.api.extension.AfterAllCallback;
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeAllCallback;
@@ -12,8 +13,10 @@ import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.ExtensionContext.Namespace;
 import org.junit.jupiter.api.extension.ExtensionContext.Store;
+import org.junit.jupiter.api.extension.InvocationInterceptor;
 import org.junit.jupiter.api.extension.ParameterContext;
 import org.junit.jupiter.api.extension.ParameterResolver;
+import org.junit.jupiter.api.extension.ReflectiveInvocationContext;
 
 /**
  * JUnit 5 extension wired up by {@link TikoTest}.
@@ -30,7 +33,12 @@ import org.junit.jupiter.api.extension.ParameterResolver;
  * </ul>
  */
 public final class TikoTestExtension
-        implements BeforeEachCallback, AfterEachCallback, BeforeAllCallback, AfterAllCallback, ParameterResolver {
+        implements BeforeEachCallback,
+                AfterEachCallback,
+                BeforeAllCallback,
+                AfterAllCallback,
+                ParameterResolver,
+                InvocationInterceptor {
 
     private static final Namespace NS = Namespace.create(TikoTestExtension.class);
     private static final String KEY_CONTAINER = "container";
@@ -87,6 +95,44 @@ public final class TikoTestExtension
             return container.get(type, named.value());
         }
         return container.get(type);
+    }
+
+    @Override
+    public void interceptTestMethod(
+            Invocation<Void> invocation, ReflectiveInvocationContext<Method> invocationContext, ExtensionContext eCtx)
+            throws Throwable {
+        Container container = store(eCtx).get(KEY_CONTAINER, Container.class);
+        Method method = invocationContext.getExecutable();
+        boolean req = method.isAnnotationPresent(RequestScopeTest.class);
+        boolean evt = method.isAnnotationPresent(EventScopeTest.class);
+
+        if (!req && !evt) {
+            invocation.proceed();
+            return;
+        }
+
+        // Capture the proceed() call so we can rethrow its Throwable unchanged after
+        // unwinding the Runnable-based scope helpers (which can't propagate checked exceptions).
+        Throwable[] thrown = new Throwable[1];
+        Runnable body = () -> {
+            try {
+                invocation.proceed();
+            } catch (Throwable t) {
+                thrown[0] = t;
+            }
+        };
+
+        if (req && evt) {
+            container.runInRequestScope(() -> container.runInEventScope(body));
+        } else if (req) {
+            container.runInRequestScope(body);
+        } else {
+            container.runInEventScope(body);
+        }
+
+        if (thrown[0] != null) {
+            throw thrown[0];
+        }
     }
 
     private void bootContainer(ExtensionContext ctx) {
