@@ -34,7 +34,13 @@ public final class AmbiguityValidator {
         for (ComponentModel component : context.getActiveComponents()) {
             if (component.getName().isPresent()) continue;
 
-            ProviderInfo info = new ProviderInfo(component.getTypeElement(), component.getClassName(), "@Component");
+            String kindLabel = component.isTestComponent() ? "@TestComponent" : "@Component";
+            ProviderInfo info = new ProviderInfo(
+                    component.getTypeElement(),
+                    component.getClassName(),
+                    kindLabel,
+                    component.isTestComponent(),
+                    component.getComponentKey());
 
             // Register the component under every type it is actually routable as — so two
             // unnamed beans listing the same interface in @Component(expose = {…}), or
@@ -54,18 +60,37 @@ public final class AmbiguityValidator {
             String name = factory.getName();
             if (name != null && !name.isEmpty()) continue;
 
-            ProviderInfo info =
-                    new ProviderInfo(factory.getMethodElement(), factory.getFactoryIdentifier(), "@Produces");
+            ProviderInfo info = new ProviderInfo(
+                    factory.getMethodElement(), factory.getFactoryIdentifier(), "@Produces", false, null);
             register(providersByType, factory.getReturnTypeName(), info);
         }
 
         boolean valid = true;
         for (Map.Entry<String, List<ProviderInfo>> entry : providersByType.entrySet()) {
             List<ProviderInfo> providers = entry.getValue();
-            if (providers.size() > 1 && hasUnqualifiedConsumer(entry.getKey())) {
-                reportAmbiguity(entry.getKey(), providers);
-                valid = false;
+            if (providers.size() <= 1) continue;
+            if (!hasUnqualifiedConsumer(entry.getKey())) continue;
+
+            // Carve-out: a single @TestComponent shadowing one or more main providers is
+            // an intentional test-side override, not an ambiguity. The main providers stay
+            // wired for the production container; the test container substitutes the test
+            // factory wherever a shadowed main provider would have been resolved.
+            List<ProviderInfo> testProviders =
+                    providers.stream().filter(p -> p.isTestComponent).toList();
+            List<ProviderInfo> mainProviders =
+                    providers.stream().filter(p -> !p.isTestComponent).toList();
+
+            if (testProviders.size() == 1 && !mainProviders.isEmpty()) {
+                for (ProviderInfo main : mainProviders) {
+                    if (main.componentKey != null) {
+                        context.markShadowedByTestOverride(main.componentKey);
+                    }
+                }
+                continue;
             }
+
+            reportAmbiguity(entry.getKey(), providers);
+            valid = false;
         }
         return valid;
     }
@@ -126,5 +151,13 @@ public final class AmbiguityValidator {
         return lastDot >= 0 ? qualifiedName.substring(lastDot + 1) : qualifiedName;
     }
 
-    private record ProviderInfo(Element element, String label, String kind) {}
+    /**
+     * One discovered provider for a given routable type. {@code isTestComponent}
+     * distinguishes {@code @TestComponent} (shadow-allowed) from {@code @Component} /
+     * {@code @Produces}. {@code componentKey} is the main-component identity used by
+     * the test-container generator when applying a shadow override; null for factory
+     * methods (factories cannot be shadowed in T11's scope).
+     */
+    private record ProviderInfo(
+            Element element, String label, String kind, boolean isTestComponent, String componentKey) {}
 }

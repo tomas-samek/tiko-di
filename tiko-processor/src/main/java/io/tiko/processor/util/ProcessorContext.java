@@ -6,9 +6,11 @@ import io.tiko.processor.model.EventHandlerModel;
 import io.tiko.processor.model.FactoryMethodModel;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
@@ -33,6 +35,11 @@ public final class ProcessorContext {
     private final Map<String, FactoryMethodModel> factoryMethods = new HashMap<>();
     private final List<EventHandlerModel> eventHandlers = new ArrayList<>();
     private final List<ConfigurationModel> configurations = new ArrayList<>();
+
+    // Component keys of main @Component beans shadowed by a same-typed @TestComponent.
+    // Populated by AmbiguityValidator; consumed by test-container code generation, which
+    // wires the test factory in place of the main factory for shadowed entries.
+    private final Set<String> shadowedByTestOverride = new LinkedHashSet<>();
 
     // Active profiles (for filtering components during generation)
     private final List<String> activeProfiles;
@@ -259,5 +266,25 @@ public final class ProcessorContext {
      */
     public void setContainerClassName(String containerClassName) {
         this.containerClassName = containerClassName;
+    }
+
+    /**
+     * Marks a main {@code @Component} as shadowed by a same-typed {@code @TestComponent}.
+     * The validator calls this when it detects a one-to-many shadow pair so the main
+     * container's wiring stays unchanged, while the test container can substitute the
+     * test factory wherever the marked component would have been resolved.
+     */
+    public void markShadowedByTestOverride(String componentKey) {
+        shadowedByTestOverride.add(componentKey);
+    }
+
+    /** True when the given component key has been marked as shadowed by a {@code @TestComponent}. */
+    public boolean isShadowedByTestOverride(String componentKey) {
+        return shadowedByTestOverride.contains(componentKey);
+    }
+
+    /** Snapshot of the shadowed-component-key set. Order is registration order. */
+    public Set<String> getShadowedByTestOverrideKeys() {
+        return Set.copyOf(shadowedByTestOverride);
     }
 }
