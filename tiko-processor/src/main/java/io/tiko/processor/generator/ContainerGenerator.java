@@ -377,19 +377,24 @@ public final class ContainerGenerator {
                         "return ($1T) singletons.computeIfAbsent($2S, k -> options.hasOverride($3T.class) ? options.getOverride($3T.class).get() : $4L.create())",
                         returnType,
                         storageKey,
-                        testType,
+                        returnType,
                         factoryFieldName);
             case REQUEST ->
                 emitScopedGetOrCreate(
                         method,
                         returnType,
-                        testType,
+                        returnType,
                         "requestScoped.get()",
                         storageKey,
                         factoryFieldName + ".create()");
             case EVENT ->
                 emitScopedGetOrCreate(
-                        method, returnType, testType, "eventScoped.get()", storageKey, factoryFieldName + ".create()");
+                        method,
+                        returnType,
+                        returnType,
+                        "eventScoped.get()",
+                        storageKey,
+                        factoryFieldName + ".create()");
             case PROTOTYPE -> method.addStatement("return $L.create()", factoryFieldName);
         }
         return method.build();

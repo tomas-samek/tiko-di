@@ -417,14 +417,36 @@ public final class Tiko {
 
     /**
      * Registers event handlers if EventRegistry is present.
+     *
+     * <p>The generated {@code EventRegistry.registerHandlers} declares its second
+     * parameter as the main {@code TikoContainerImpl_<hash>}. When the test container
+     * subclass ({@code TestTikoContainerImpl_<hash>}) is loaded instead, an exact
+     * {@link Class#getMethod} lookup misses (param type mismatch), so we walk the
+     * container's superclass chain to find the registration method.
      */
     private static void registerEventHandlers(EventBus eventBus, Container container, Class<?> containerClass) {
+        Class<?> registryClass;
         try {
-            Class<?> registryClass = Class.forName("io.tiko.generated.EventRegistry");
-            var registerMethod = registryClass.getMethod("registerHandlers", EventBus.class, containerClass);
-            registerMethod.invoke(null, eventBus, container);
+            registryClass = Class.forName("io.tiko.generated.EventRegistry");
         } catch (ClassNotFoundException e) {
             // No event handlers registered - this is OK
+            return;
+        }
+        try {
+            Class<?> probe = containerClass;
+            java.lang.reflect.Method registerMethod = null;
+            while (probe != null && registerMethod == null) {
+                try {
+                    registerMethod = registryClass.getMethod("registerHandlers", EventBus.class, probe);
+                } catch (NoSuchMethodException nsme) {
+                    probe = probe.getSuperclass();
+                }
+            }
+            if (registerMethod == null) {
+                throw new NoSuchMethodException(
+                        "EventRegistry.registerHandlers not found for " + containerClass.getName());
+            }
+            registerMethod.invoke(null, eventBus, container);
         } catch (Exception e) {
             // Ignore - event registration is optional
         }
