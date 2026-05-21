@@ -232,7 +232,7 @@ policy — a different layer than framework logging.
 - **Phase 1 — Alpha completion.** ✅ Closed. Core DI, scopes, lifecycle events, `@EventTrigger` chains, multi-module aggregation.
 - **Phase 2 — Configuration & distributed events.** ✅ Closed. `@Configuration` v1 + nested records + `Set<X>` + YAML source anchors, Kafka transport, `ErrorContext` hook, async event executor + shutdown timeout, `System.Logger` migration.
 - **Phase 3 — Onboarding & tooling.** AI-assistant-aware archetype, `tiko-test` JUnit 5 module, machine-readable topology + MCP server.
-- **Phase 4 — Runtime hardening (in progress).** Structured `RuntimeException` subtypes, checked-exception propagation through `@Produces` / `@PostConstruct` (✅), framework-managed JVM shutdown hook. AOP / metrics / GraalVM dropped from scope until a concrete driver appears.
+- **Phase 4 — Runtime hardening (in progress).** Structured `RuntimeException` subtypes, checked-exception propagation through `@Produces` / `@PostConstruct` (✅), framework-managed JVM shutdown hook, JaCoCo coverage + SonarCloud static analysis. AOP / metrics / GraalVM dropped from scope until a concrete driver appears.
 - **Phase 5 — Resiliency layer.** Timeouts, retries, bounded-queue backpressure, executor pool knobs, DLQ for failed/timed-out events.
 - **Phase 6 — Distributed transports.** RabbitMQ + JMS adapters, `TransportBootstrap` SPI audit, pluggable serializer SPI.
 - **Phase 7 — Publish to Maven Central.** Deliberately last so `TikoOptions` shape can settle through Phase 5/6 before downstream users pin a version.

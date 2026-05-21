@@ -68,9 +68,9 @@ Deferred designs (discussed, no tracker issue yet, not bound to a phase):
 
 ### Phase 4 — runtime hardening (in progress)
 
-[Phase 4 milestone](https://github.com/tomas-samek/tiko-di/milestone/4) — 2/5 closed.
+[Phase 4 milestone](https://github.com/tomas-samek/tiko-di/milestone/4) — 2/7 closed.
 
-Tighten Tiko's behaviour under production conditions: structured error types (no more string-matching on `IllegalStateException` messages), checked-exception propagation that preserves the user's stack trace, and framework-managed lifecycle plumbing so adopters don't reinvent JVM shutdown ordering. The previous AOP / metrics / GraalVM theme was speculative and has been dropped — those will get their own milestones if and when they become concrete.
+Tighten Tiko's behaviour under production conditions: structured error types (no more string-matching on `IllegalStateException` messages), checked-exception propagation that preserves the user's stack trace, framework-managed lifecycle plumbing so adopters don't reinvent JVM shutdown ordering, plus the build-quality infrastructure (coverage + static analysis) that supports the rest of the phase. The previous AOP / metrics / GraalVM theme was speculative and has been dropped — those will get their own milestones if and when they become concrete.
 
 Shipped:
 
@@ -81,6 +81,8 @@ Open:
 
 - Typed `RuntimeException` subtypes for framework-originated failures ([#98](https://github.com/tomas-samek/tiko-di/issues/98)).
 - Framework-managed JVM shutdown hook — let users subscribe to `ApplicationEndingEvent` instead of wiring their own hook ([#92](https://github.com/tomas-samek/tiko-di/issues/92)).
+- JaCoCo coverage: per-module reports + multi-module aggregation, generated sources excluded ([#124](https://github.com/tomas-samek/tiko-di/issues/124)).
+- SonarCloud integration: static analysis, coverage view (consumes #124), PR decoration; quality gate = "Sonar Way" ([#125](https://github.com/tomas-samek/tiko-di/issues/125)).
 - Flaky 1ms absolute-time assertion in `PostShutdownGetTest` ([#85](https://github.com/tomas-samek/tiko-di/issues/85)).
 
 ### Phase 5 — resiliency layer
