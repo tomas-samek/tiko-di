@@ -42,37 +42,6 @@ public final class AggregatingContainer implements Container {
     private volatile Instant startedAt;
 
     /**
-     * Creates an aggregating container by discovering all module containers on the classpath.
-     *
-     * @param eventBus shared event bus instance passed to all module containers
-     * @throws IllegalStateException if container discovery or initialization fails
-     */
-    public AggregatingContainer(EventBus eventBus) {
-        this(
-                eventBus,
-                ctx -> {},
-                null,
-                Duration.ofSeconds(10),
-                TikoOptions.builder().build());
-    }
-
-    /**
-     * Creates an aggregating container with a custom error handler.
-     *
-     * @param eventBus     shared event bus instance passed to all module containers
-     * @param errorHandler error handler for event handler exceptions
-     * @throws IllegalStateException if container discovery or initialization fails
-     */
-    public AggregatingContainer(EventBus eventBus, ErrorHandler errorHandler) {
-        this(
-                eventBus,
-                errorHandler,
-                null,
-                Duration.ofSeconds(10),
-                TikoOptions.builder().build());
-    }
-
-    /**
      * Creates an aggregating container with a custom error handler and event executor.
      *
      * <p>The supplied {@code userEventExecutor} (or a framework default if {@code null})
@@ -124,7 +93,7 @@ public final class AggregatingContainer implements Container {
 
     /**
      * Canonical constructor — accepts the user's {@link TikoOptions} so per-module
-     * containers can consult overrides from generated getter methods (tiko-test). The
+     * containers can consult overrides from generated getter methods. The
      * {@code shutdownTimeout} caps how long {@link #shutdown()} waits for the
      * framework-owned executor to drain gracefully before calling {@code shutdownNow()}.
      * Has no effect when {@code userEventExecutor} is non-null (user owns its lifecycle).
@@ -195,22 +164,16 @@ public final class AggregatingContainer implements Container {
             throw new IllegalStateException("Missing 'impl' property in " + resourceUrl);
         }
 
-        // Load and instantiate the container with the canonical 6-arg constructor
-        // (#48 + tiko-test): (EventBus, ErrorHandler, ExecutorService, boolean
+        // Load and instantiate the container with the canonical constructor
+        // (#48): (EventBus, ErrorHandler, ExecutorService, boolean
         // publishLifecycleEvents, Duration shutdownTimeout, TikoOptions options).
         // Per-module containers see a non-null executor so their internal ownsEventExecutor
         // becomes false — only the aggregator shuts the executor down. The shutdownTimeout
         // is forwarded so per-module containers built outside this aggregator path still
         // honour the configured drain window. The TikoOptions reference lets generated
-        // getters consult overrides.
+        // getters consult test/runtime overrides via this field.
         Class<?> containerClass = Class.forName(implClassName, true, classLoader);
-        Constructor<?> constructor = containerClass.getDeclaredConstructor(
-                EventBus.class,
-                ErrorHandler.class,
-                java.util.concurrent.ExecutorService.class,
-                boolean.class,
-                Duration.class,
-                TikoOptions.class);
+        Constructor<?> constructor = containerClass.getDeclaredConstructor(Tiko.CONTAINER_CTOR_PARAM_TYPES);
         Container moduleContainer = (Container) constructor.newInstance(
                 sharedEventBus,
                 errorHandler,

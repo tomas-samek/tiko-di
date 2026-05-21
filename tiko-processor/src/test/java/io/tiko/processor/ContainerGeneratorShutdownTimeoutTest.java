@@ -19,9 +19,9 @@ import org.junit.jupiter.api.Test;
  *   <li>The generated {@code shutdown()} reads from the field, not the hardcoded {@code 10, SECONDS}.</li>
  * </ul>
  *
- * <p>The legacy 4-arg shim was removed in tiko-test/T5 (the constructor took on a sixth
+ * <p>The legacy 4-arg shim was removed when the constructor took on a sixth
  * {@code TikoOptions} parameter and {@code Tiko.createInternal} + {@code AggregatingContainer}
- * always pass the full canonical set now), so this test no longer asserts on the shim.
+ * always pass the full canonical set now, so this test no longer asserts on the shim.
  */
 class ContainerGeneratorShutdownTimeoutTest {
 

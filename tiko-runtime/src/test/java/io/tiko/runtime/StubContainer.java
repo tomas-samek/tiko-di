@@ -23,8 +23,8 @@ public final class StubContainer implements Container {
     private final EventBus eventBus;
 
     // Tiko.createSingleModuleContainer + AggregatingContainer.processContainerResource
-    // both reflectively look up the canonical 6-arg constructor (T5: TikoOptions is the
-    // sixth param so generated getters can consult overrides).
+    // both reflectively look up the canonical 6-arg constructor (TikoOptions is the
+    // sixth param so generated getters can consult test/runtime overrides via this field).
     public StubContainer(
             EventBus eventBus,
             ErrorHandler errorHandler,

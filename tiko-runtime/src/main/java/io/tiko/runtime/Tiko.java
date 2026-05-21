@@ -30,6 +30,23 @@ import java.util.concurrent.ExecutorService;
  */
 public final class Tiko {
 
+    /**
+     * Canonical parameter signature of the generated container constructor. The annotation
+     * processor emits exactly this signature on {@code TikoContainerImpl}, and both
+     * {@link #createSingleModuleContainer} and {@link AggregatingContainer#processContainerResource}
+     * look it up reflectively. Keep this list in sync with
+     * {@code ContainerGenerator.createConstructor()} — adding a parameter touches both
+     * generator output and this constant, nothing else.
+     */
+    static final Class<?>[] CONTAINER_CTOR_PARAM_TYPES = {
+        EventBus.class,
+        ErrorHandler.class,
+        ExecutorService.class,
+        boolean.class,
+        java.time.Duration.class,
+        TikoOptions.class,
+    };
+
     private Tiko() {}
 
     /**
@@ -353,15 +370,9 @@ public final class Tiko {
         // Single-module: publishLifecycleEvents=true so the per-module container publishes
         // its own ApplicationStartedEvent / ApplicationEndingEvent (no aggregator above it).
         // The 6th arg (TikoOptions) is held by the container so override-aware getters can
-        // consult it during component lookup (tiko-test).
+        // consult it during component lookup (test/runtime override support).
         Container container = (Container) implClass
-                .getDeclaredConstructor(
-                        EventBus.class,
-                        ErrorHandler.class,
-                        ExecutorService.class,
-                        boolean.class,
-                        java.time.Duration.class,
-                        TikoOptions.class)
+                .getDeclaredConstructor(CONTAINER_CTOR_PARAM_TYPES)
                 .newInstance(
                         eventBus,
                         errorHandler,

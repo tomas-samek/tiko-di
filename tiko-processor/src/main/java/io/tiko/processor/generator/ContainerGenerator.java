@@ -68,7 +68,7 @@ public final class ContainerGenerator {
         containerBuilder.addField(createOptionsField());
         containerBuilder.addFields(createFactoryFields());
 
-        // Canonical 6-arg constructor (#48 + tiko-test): (EventBus, ErrorHandler,
+        // Canonical 6-arg constructor (#48): (EventBus, ErrorHandler,
         // ExecutorService, boolean, Duration, TikoOptions). The legacy 4-arg shim is gone —
         // Tiko.createInternal and AggregatingContainer now always pass the full 6-arg set.
         containerBuilder.addMethod(createConstructor());
@@ -369,7 +369,7 @@ public final class ContainerGenerator {
     /**
      * Creates the canonical 6-arg constructor that initializes factories, event bus,
      * error handler, the shutdown timeout (#48), and the {@link io.tiko.runtime.TikoOptions}
-     * reference used by override-aware getters (tiko-test).
+     * reference used by override-aware getters.
      * <p>The {@code publishLifecycleEvents} flag (#45) controls whether this container
      * publishes its own {@code ApplicationStartedEvent} / {@code ApplicationEndingEvent}.
      * Single-module setups pass {@code true}; per-module containers run under an
