@@ -14,24 +14,25 @@ class EventBusDecoratorTest {
     @Test
     void decoratorReceivesRawBusAndItsResultIsExposedByTheContainer() {
         AtomicReference<EventBus> seenRaw = new AtomicReference<>();
-        EventBus[] decorated = new EventBus[1];
+        AtomicReference<EventBus> decorated = new AtomicReference<>();
 
         TikoOptions opts = TikoOptions.builder()
                 .eventBusDecorator(raw -> {
                     seenRaw.set(raw);
-                    decorated[0] = new ForwardingBus(raw);
-                    return decorated[0];
+                    EventBus wrapper = new ForwardingBus(raw);
+                    decorated.set(wrapper);
+                    return wrapper;
                 })
                 .build();
 
         try (Container c = Tiko.create(opts)) {
             assertThat(seenRaw.get()).isInstanceOf(LocalEventBus.class);
-            assertThat(c.getEventBus()).isSameAs(decorated[0]);
+            assertThat(c.getEventBus()).isSameAs(decorated.get());
         }
     }
 
     private static final class ForwardingBus implements EventBus {
-        final EventBus delegate;
+        private final EventBus delegate;
 
         ForwardingBus(EventBus d) {
             this.delegate = d;

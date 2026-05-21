@@ -75,8 +75,8 @@ public final class Tiko {
                 errorHandler = new DefaultErrorHandler();
             }
 
-            // 2. Create EventBus instance, then apply the optional decorator (used by tiko-test
-            //    to install RecordingEventBus before subscribers register).
+            // 2. Create EventBus instance, then apply the optional decorator. Runs before the
+            //    container is constructed so subscribers register against the wrapper.
             EventBus eventBus = new LocalEventBus();
             if (options.eventBusDecorator() != null) {
                 eventBus = options.eventBusDecorator().apply(eventBus);
