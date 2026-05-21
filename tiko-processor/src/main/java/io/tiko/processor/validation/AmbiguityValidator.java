@@ -40,7 +40,8 @@ public final class AmbiguityValidator {
                     component.getClassName(),
                     kindLabel,
                     component.isTestComponent(),
-                    component.getComponentKey());
+                    component.getComponentKey(),
+                    component);
 
             // Register the component under every type it is actually routable as — so two
             // unnamed beans listing the same interface in @Component(expose = {…}), or
@@ -61,7 +62,7 @@ public final class AmbiguityValidator {
             if (name != null && !name.isEmpty()) continue;
 
             ProviderInfo info = new ProviderInfo(
-                    factory.getMethodElement(), factory.getFactoryIdentifier(), "@Produces", false, null);
+                    factory.getMethodElement(), factory.getFactoryIdentifier(), "@Produces", false, null, null);
             register(providersByType, factory.getReturnTypeName(), info);
         }
 
@@ -81,9 +82,10 @@ public final class AmbiguityValidator {
                     providers.stream().filter(p -> !p.isTestComponent).toList();
 
             if (testProviders.size() == 1 && !mainProviders.isEmpty()) {
+                ComponentModel testModel = testProviders.get(0).componentModel;
                 for (ProviderInfo main : mainProviders) {
                     if (main.componentKey != null) {
-                        context.markShadowedByTestOverride(main.componentKey);
+                        context.markShadowedByTestOverride(main.componentKey, testModel);
                     }
                 }
                 continue;
@@ -156,8 +158,16 @@ public final class AmbiguityValidator {
      * distinguishes {@code @TestComponent} (shadow-allowed) from {@code @Component} /
      * {@code @Produces}. {@code componentKey} is the main-component identity used by
      * the test-container generator when applying a shadow override; null for factory
-     * methods (factories cannot be shadowed in T11's scope).
+     * methods (factories cannot be shadowed in T11's scope). {@code componentModel}
+     * is the full model — captured for {@code @TestComponent} providers so the shadow
+     * marker can record which test model overrides each main key, and null for
+     * {@code @Produces} factory methods.
      */
     private record ProviderInfo(
-            Element element, String label, String kind, boolean isTestComponent, String componentKey) {}
+            Element element,
+            String label,
+            String kind,
+            boolean isTestComponent,
+            String componentKey,
+            ComponentModel componentModel) {}
 }

@@ -5,10 +5,13 @@ import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.EventHandlerModel;
 import io.tiko.processor.model.FactoryMethodModel;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import javax.annotation.processing.Filer;
@@ -36,10 +39,11 @@ public final class ProcessorContext {
     private final List<EventHandlerModel> eventHandlers = new ArrayList<>();
     private final List<ConfigurationModel> configurations = new ArrayList<>();
 
-    // Component keys of main @Component beans shadowed by a same-typed @TestComponent.
-    // Populated by AmbiguityValidator; consumed by test-container code generation, which
-    // wires the test factory in place of the main factory for shadowed entries.
-    private final Set<String> shadowedByTestOverride = new LinkedHashSet<>();
+    // Main-component keys shadowed by a same-typed @TestComponent, mapped to the
+    // shadowing test ComponentModel. Populated by AmbiguityValidator; consumed by
+    // test-container code generation, which wires the test factory in place of the
+    // main factory for shadowed entries. LinkedHashMap preserves registration order.
+    private final Map<String, ComponentModel> shadowedByTestOverride = new LinkedHashMap<>();
 
     // Active profiles (for filtering components during generation)
     private final List<String> activeProfiles;
@@ -273,18 +277,31 @@ public final class ProcessorContext {
      * The validator calls this when it detects a one-to-many shadow pair so the main
      * container's wiring stays unchanged, while the test container can substitute the
      * test factory wherever the marked component would have been resolved.
+     *
+     * @param mainComponentKey the main component key being shadowed
+     * @param testComponent the {@code @TestComponent} model providing the override
      */
-    public void markShadowedByTestOverride(String componentKey) {
-        shadowedByTestOverride.add(componentKey);
+    public void markShadowedByTestOverride(String mainComponentKey, ComponentModel testComponent) {
+        Objects.requireNonNull(mainComponentKey, "mainComponentKey");
+        Objects.requireNonNull(testComponent, "testComponent");
+        shadowedByTestOverride.put(mainComponentKey, testComponent);
     }
 
     /** True when the given component key has been marked as shadowed by a {@code @TestComponent}. */
-    public boolean isShadowedByTestOverride(String componentKey) {
-        return shadowedByTestOverride.contains(componentKey);
+    public boolean isShadowedByTestOverride(String mainComponentKey) {
+        return shadowedByTestOverride.containsKey(mainComponentKey);
     }
 
-    /** Snapshot of the shadowed-component-key set. Order is registration order. */
-    public Set<String> getShadowedByTestOverrideKeys() {
-        return Set.copyOf(shadowedByTestOverride);
+    /**
+     * Returns the {@code @TestComponent} model shadowing the given main component key,
+     * or {@code null} if the key is not shadowed.
+     */
+    public ComponentModel getTestComponentShadowing(String mainComponentKey) {
+        return shadowedByTestOverride.get(mainComponentKey);
+    }
+
+    /** Snapshot of the shadowed main-component keys. Iteration order is registration order. */
+    public Set<String> getShadowedMainKeys() {
+        return Collections.unmodifiableSet(new LinkedHashSet<>(shadowedByTestOverride.keySet()));
     }
 }
