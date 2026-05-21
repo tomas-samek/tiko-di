@@ -53,7 +53,7 @@
             <dependency>
                 <groupId>io.tiko</groupId>
                 <artifactId>tiko-test</artifactId>
-                <version>${project.version}</version>
+                <version>${tiko.version}</version>
             </dependency>
 
             <!-- Annotation Processing -->
