@@ -3,9 +3,12 @@ package io.tiko.runtime;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.tiko.ErrorHandler;
+import io.tiko.EventBus;
 import java.time.Duration;
+import java.util.function.UnaryOperator;
 import org.junit.jupiter.api.Test;
 
 class TikoOptionsTest {
@@ -92,5 +95,25 @@ class TikoOptionsTest {
     void builder_rejects_null_shutdown_timeout() {
         TikoOptions.Builder b = TikoOptions.builder();
         assertThatNullPointerException().isThrownBy(() -> b.shutdownTimeout(null));
+    }
+
+    @Test
+    void eventBusDecoratorDefaultsToNull() {
+        TikoOptions opts = TikoOptions.builder().build();
+        assertThat(opts.eventBusDecorator()).isNull();
+    }
+
+    @Test
+    void eventBusDecoratorStoresTheSuppliedFunction() {
+        UnaryOperator<EventBus> deco = bus -> bus;
+        TikoOptions opts = TikoOptions.builder().eventBusDecorator(deco).build();
+        assertThat(opts.eventBusDecorator()).isSameAs(deco);
+    }
+
+    @Test
+    void eventBusDecoratorRejectsNull() {
+        assertThatThrownBy(() -> TikoOptions.builder().eventBusDecorator(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessageContaining("eventBusDecorator");
     }
 }
