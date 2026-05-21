@@ -28,6 +28,16 @@
             <artifactId>junit-jupiter-api</artifactId>
             <scope>provided</scope>
         </dependency>
+        <!--
+          Test-only: process the @Component-bearing fixtures under src/test/java so
+          @TikoTest can boot a real container. tiko-processor is scope=test because the
+          shipped artifact must not require it transitively.
+        -->
+        <dependency>
+            <groupId>io.tiko</groupId>
+            <artifactId>tiko-processor</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-engine</artifactId>
