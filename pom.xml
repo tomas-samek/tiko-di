@@ -18,6 +18,7 @@
         <module>tiko-processor</module>
         <module>tiko-runtime</module>
         <module>tiko-config</module>
+        <module>tiko-test</module>
         <module>tiko-kafka</module>
         <module>tiko-kafka-processor</module>
         <module>tiko-kafka-it</module>
