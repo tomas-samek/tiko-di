@@ -31,6 +31,7 @@ public final class TikoOptions {
     private final java.util.concurrent.ExecutorService eventExecutor;
     private final Duration shutdownTimeout;
     private final java.util.function.UnaryOperator<EventBus> eventBusDecorator;
+    private final java.util.Map<OverrideKey, java.util.function.Supplier<?>> overrides;
 
     private TikoOptions(Builder b) {
         this.configSource = b.configSource;
@@ -38,6 +39,7 @@ public final class TikoOptions {
         this.eventExecutor = b.eventExecutor;
         this.shutdownTimeout = b.shutdownTimeout;
         this.eventBusDecorator = b.eventBusDecorator;
+        this.overrides = b.overrides == null ? java.util.Collections.emptyMap() : java.util.Map.copyOf(b.overrides);
     }
 
     /**
@@ -83,6 +85,24 @@ public final class TikoOptions {
         return eventBusDecorator;
     }
 
+    public boolean hasOverride(Class<?> type) {
+        return overrides.containsKey(new OverrideKey(type, ""));
+    }
+
+    public boolean hasOverride(Class<?> type, String name) {
+        Objects.requireNonNull(name, "name");
+        return overrides.containsKey(new OverrideKey(type, name));
+    }
+
+    public java.util.function.Supplier<?> getOverride(Class<?> type) {
+        return overrides.get(new OverrideKey(type, ""));
+    }
+
+    public java.util.function.Supplier<?> getOverride(Class<?> type, String name) {
+        Objects.requireNonNull(name, "name");
+        return overrides.get(new OverrideKey(type, name));
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -94,6 +114,7 @@ public final class TikoOptions {
         private java.util.concurrent.ExecutorService eventExecutor;
         private Duration shutdownTimeout;
         private java.util.function.UnaryOperator<EventBus> eventBusDecorator;
+        private java.util.Map<OverrideKey, java.util.function.Supplier<?>> overrides;
 
         private Builder() {}
 
@@ -153,8 +174,31 @@ public final class TikoOptions {
             return this;
         }
 
+        public <T> Builder override(Class<T> type, java.util.function.Supplier<? extends T> supplier) {
+            return overrideKey(new OverrideKey(type, ""), supplier);
+        }
+
+        public <T> Builder override(Class<T> type, String name, java.util.function.Supplier<? extends T> supplier) {
+            Objects.requireNonNull(name, "name");
+            return overrideKey(new OverrideKey(type, name), supplier);
+        }
+
+        private Builder overrideKey(OverrideKey key, java.util.function.Supplier<?> supplier) {
+            Objects.requireNonNull(supplier, "supplier");
+            if (overrides == null) overrides = new java.util.LinkedHashMap<>();
+            overrides.put(key, supplier);
+            return this;
+        }
+
         public TikoOptions build() {
             return new TikoOptions(this);
+        }
+    }
+
+    /** Internal key used to address overrides by type + optional qualifier. */
+    record OverrideKey(Class<?> type, String name) {
+        OverrideKey {
+            Objects.requireNonNull(type, "type");
         }
     }
 }

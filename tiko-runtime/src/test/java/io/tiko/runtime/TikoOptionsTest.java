@@ -115,4 +115,37 @@ class TikoOptionsTest {
                 .isThrownBy(() -> TikoOptions.builder().eventBusDecorator(null))
                 .withMessageContaining("eventBusDecorator");
     }
+
+    @Test
+    void overrideStoresTypeKeyedSupplier() {
+        java.util.function.Supplier<String> sup = () -> "test";
+        TikoOptions opts = TikoOptions.builder().override(String.class, sup).build();
+        assertThat(opts.hasOverride(String.class)).isTrue();
+        assertThat(opts.getOverride(String.class).get()).isEqualTo("test");
+    }
+
+    @Test
+    void overrideStoresNamedKeyedSupplier() {
+        java.util.function.Supplier<String> sup = () -> "primary-impl";
+        TikoOptions opts =
+                TikoOptions.builder().override(String.class, "primary", sup).build();
+        assertThat(opts.hasOverride(String.class, "primary")).isTrue();
+        assertThat(opts.hasOverride(String.class)).isFalse(); // unnamed and named are distinct keys
+        assertThat(opts.getOverride(String.class, "primary").get()).isEqualTo("primary-impl");
+    }
+
+    @Test
+    void overrideRejectsNulls() {
+        assertThatNullPointerException().isThrownBy(() -> TikoOptions.builder().override(null, () -> "x"));
+        assertThatNullPointerException()
+                .isThrownBy(
+                        () -> TikoOptions.builder().override(String.class, (java.util.function.Supplier<String>) null));
+    }
+
+    @Test
+    void noOverridesByDefault() {
+        TikoOptions opts = TikoOptions.builder().build();
+        assertThat(opts.hasOverride(String.class)).isFalse();
+        assertThat(opts.hasOverride(String.class, "any")).isFalse();
+    }
 }
