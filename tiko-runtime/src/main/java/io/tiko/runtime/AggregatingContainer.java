@@ -28,12 +28,16 @@ import java.util.function.Supplier;
  */
 public final class AggregatingContainer implements Container {
 
+    /** Default descriptor name used when callers don't override (production / multi-module). */
+    static final String DEFAULT_DESCRIPTOR = "META-INF/tiko/container.properties";
+
     private final EventBus sharedEventBus;
     private final ErrorHandler errorHandler;
     private final java.util.concurrent.ExecutorService eventExecutor;
     private final boolean ownsEventExecutor;
     private final Duration shutdownTimeout;
     private final TikoOptions options;
+    private final String descriptorName;
     private final List<Container> moduleContainers;
     private final Map<Class<?>, Container> componentToContainerMap;
     private final Map<Class<?>, Container> configToContainer = new ConcurrentHashMap<>();
@@ -64,7 +68,8 @@ public final class AggregatingContainer implements Container {
                 errorHandler,
                 userEventExecutor,
                 Duration.ofSeconds(10),
-                TikoOptions.builder().build());
+                TikoOptions.builder().build(),
+                DEFAULT_DESCRIPTOR);
     }
 
     /**
@@ -88,7 +93,8 @@ public final class AggregatingContainer implements Container {
                 errorHandler,
                 userEventExecutor,
                 shutdownTimeout,
-                TikoOptions.builder().build());
+                TikoOptions.builder().build(),
+                DEFAULT_DESCRIPTOR);
     }
 
     /**
@@ -110,12 +116,29 @@ public final class AggregatingContainer implements Container {
             java.util.concurrent.ExecutorService userEventExecutor,
             Duration shutdownTimeout,
             TikoOptions options) {
+        this(eventBus, errorHandler, userEventExecutor, shutdownTimeout, options, DEFAULT_DESCRIPTOR);
+    }
+
+    /**
+     * Variant accepting an explicit descriptor resource name. Used by
+     * {@link Tiko#createInternal} to pass {@code META-INF/tiko/test-container.properties}
+     * when test-side wiring is on the classpath; production-path callers go through the
+     * five-arg overload which keeps the historical {@code container.properties} default.
+     */
+    public AggregatingContainer(
+            EventBus eventBus,
+            ErrorHandler errorHandler,
+            java.util.concurrent.ExecutorService userEventExecutor,
+            Duration shutdownTimeout,
+            TikoOptions options,
+            String descriptorName) {
         this.sharedEventBus = eventBus;
         this.errorHandler = errorHandler;
         this.eventExecutor = userEventExecutor != null ? userEventExecutor : DefaultEventExecutorFactory.create();
         this.ownsEventExecutor = (userEventExecutor == null);
         this.shutdownTimeout = shutdownTimeout;
         this.options = options;
+        this.descriptorName = descriptorName;
         this.moduleContainers = new ArrayList<>();
         this.componentToContainerMap = new ConcurrentHashMap<>();
 
@@ -127,7 +150,9 @@ public final class AggregatingContainer implements Container {
     }
 
     /**
-     * Discovers all module containers by scanning META-INF/tiko/container.properties.
+     * Discovers all module containers by scanning the configured descriptor resource
+     * (defaults to {@value #DEFAULT_DESCRIPTOR}; {@link Tiko#createInternal} passes
+     * {@code META-INF/tiko/test-container.properties} when test wiring is present).
      */
     private void discoverAndInitializeModuleContainers() throws Exception {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
@@ -135,8 +160,7 @@ public final class AggregatingContainer implements Container {
             classLoader = AggregatingContainer.class.getClassLoader();
         }
 
-        // Find all container.properties files
-        Enumeration<URL> resources = classLoader.getResources("META-INF/tiko/container.properties");
+        Enumeration<URL> resources = classLoader.getResources(descriptorName);
 
         while (resources.hasMoreElements()) {
             URL resourceUrl = resources.nextElement();
@@ -145,7 +169,7 @@ public final class AggregatingContainer implements Container {
 
         if (moduleContainers.isEmpty()) {
             throw new IllegalStateException(
-                    "No Tiko containers found on classpath. Expected at least one META-INF/tiko/container.properties file.");
+                    "No Tiko containers found on classpath. Expected at least one " + descriptorName + " file.");
         }
     }
 
@@ -237,8 +261,13 @@ public final class AggregatingContainer implements Container {
         }
     }
 
-    private static URL siblingResource(URL base, String sibling) {
-        var siblingPath = base.getPath().replace("container.properties", sibling);
+    private URL siblingResource(URL base, String sibling) {
+        // The base URL ends with the descriptor file name (e.g. "container.properties" or
+        // "test-container.properties"); replace just that trailing segment so siblings
+        // (components.txt, configs.txt) resolve regardless of which descriptor is active.
+        String basePath = base.getPath();
+        int lastSlash = basePath.lastIndexOf('/');
+        String siblingPath = (lastSlash >= 0 ? basePath.substring(0, lastSlash + 1) : "") + sibling;
         try {
             return new URL(base.getProtocol(), base.getHost(), base.getPort(), siblingPath);
         } catch (java.net.MalformedURLException e) {

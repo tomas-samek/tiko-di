@@ -99,15 +99,22 @@ public final class Tiko {
                 eventBus = options.eventBusDecorator().apply(eventBus);
             }
 
-            // 3. Detect single vs multi-module scenario
+            // 3. Detect single vs multi-module scenario. Prefer the test descriptor
+            //    when present on the classpath: a {@code @TestComponent}-bearing build
+            //    emits {@code META-INF/tiko/test-container.properties} (pointing at
+            //    {@code TestTikoContainerImpl_<hash>}, a subclass of the main container)
+            //    so test runs pick up the test-side wiring while production binaries —
+            //    which never see {@code @TestComponent}s — fall back to the main descriptor.
             ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
             if (classLoader == null) classLoader = Tiko.class.getClassLoader();
 
-            var resources = classLoader.getResources("META-INF/tiko/container.properties");
-            int moduleCount = 0;
-            while (resources.hasMoreElements()) {
-                resources.nextElement();
-                moduleCount++;
+            String descriptorName = "META-INF/tiko/test-container.properties";
+            var resources = classLoader.getResources(descriptorName);
+            int moduleCount = countResources(resources);
+            if (moduleCount == 0) {
+                descriptorName = "META-INF/tiko/container.properties";
+                resources = classLoader.getResources(descriptorName);
+                moduleCount = countResources(resources);
             }
 
             java.time.Duration effectiveShutdownTimeout = resolveShutdownTimeout(options, classLoader);
@@ -115,11 +122,21 @@ public final class Tiko {
             Container container;
             if (moduleCount > 1) {
                 container = new AggregatingContainer(
-                        eventBus, errorHandler, options.eventExecutor(), effectiveShutdownTimeout, options);
+                        eventBus,
+                        errorHandler,
+                        options.eventExecutor(),
+                        effectiveShutdownTimeout,
+                        options,
+                        descriptorName);
             } else {
                 // Single module: Direct instantiation (does NOT call start yet)
                 container = createSingleModuleContainer(
-                        eventBus, errorHandler, options.eventExecutor(), effectiveShutdownTimeout, options);
+                        eventBus,
+                        errorHandler,
+                        options.eventExecutor(),
+                        effectiveShutdownTimeout,
+                        options,
+                        descriptorName);
             }
 
             // 4. Inject config singletons before start(), so @PostConstruct can use them.
@@ -340,6 +357,16 @@ public final class Tiko {
         }
     }
 
+    /** Counts how many {@link java.net.URL}s an enumeration yields, draining it. */
+    private static int countResources(java.util.Enumeration<java.net.URL> resources) {
+        int count = 0;
+        while (resources.hasMoreElements()) {
+            resources.nextElement();
+            count++;
+        }
+        return count;
+    }
+
     /**
      * Creates a single-module container. Does NOT call start() — that is done in createInternal
      * after injectConfigs() runs.
@@ -349,12 +376,13 @@ public final class Tiko {
             ErrorHandler errorHandler,
             ExecutorService userEventExecutor,
             java.time.Duration shutdownTimeout,
-            TikoOptions options)
+            TikoOptions options,
+            String descriptorName)
             throws Exception {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
         if (classLoader == null) classLoader = Tiko.class.getClassLoader();
 
-        var resources = classLoader.getResources("META-INF/tiko/container.properties");
+        var resources = classLoader.getResources(descriptorName);
         Class<?> implClass;
         if (resources.hasMoreElements()) {
             Properties props = new Properties();

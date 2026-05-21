@@ -30,23 +30,98 @@ import javax.lang.model.element.Modifier;
 public final class ContainerGenerator {
 
     private static final String GENERATED_PACKAGE = "io.tiko.generated";
+    private static final String MAIN_DESCRIPTOR = "META-INF/tiko/container.properties";
+    private static final String TEST_DESCRIPTOR = "META-INF/tiko/test-container.properties";
 
     private final ProcessorContext context;
+
+    /**
+     * The components participating in the container currently being emitted. Set by
+     * {@link #generateOne} before any sub-generator helper runs, so the helpers can
+     * consult this field instead of the full {@link ProcessorContext#getActiveComponents()}
+     * view — that view mixes {@code @Component} and {@code @TestComponent} entries which
+     * must be separated when emitting the main vs. test container.
+     */
+    private List<ComponentModel> currentComponents = List.of();
+
+    /**
+     * True while the main container is being emitted in a round that also produces a
+     * test subclass. The flag drops {@code Modifier.FINAL} from the main container class
+     * and {@code Modifier.PRIVATE} from a handful of fields ({@code singletons},
+     * {@code requestScoped}, {@code eventScoped}, {@code options}) so the
+     * {@code TestTikoContainerImpl_<hash>} subclass — emitted in the same
+     * {@code io.tiko.generated} package — can extend it and access those fields when
+     * overriding shadowed-component getters. When no {@code @TestComponent} is present
+     * in the round, the main container is emitted with its original {@code final}
+     * modifier and {@code private} fields, so production builds are byte-identical.
+     */
+    private boolean extensibleMainContainer = false;
 
     public ContainerGenerator(ProcessorContext context) {
         this.context = context;
     }
 
     /**
-     * Generates the TikoContainerImpl class.
+     * Generates the {@code TikoContainerImpl_<hash>} class plus
+     * {@code META-INF/tiko/container.properties}. When any {@code @TestComponent} is
+     * present in the round, ALSO generates a parallel
+     * {@code TestTikoContainerImpl_<hash>} plus
+     * {@code META-INF/tiko/test-container.properties} — both end up on the test
+     * classpath, where {@code Tiko.createInternal} prefers the test descriptor.
+     *
+     * <p>The main container's wiring is uncontaminated by {@code @TestComponent} entries
+     * (see {@link ProcessorContext#getActiveMainComponents()}), so production builds
+     * that never see test sources are unaffected by this dual emission.
      */
     public void generate() throws IOException {
-        String containerClassName = context.getContainerClassName();
+        boolean dualEmission = context.hasTestComponents();
+        this.extensibleMainContainer = dualEmission;
+
+        String mainContainerClassName = context.getContainerClassName();
+        var mainComponents = context.getActiveMainComponents();
+        generateOne(mainContainerClassName, mainComponents, MAIN_DESCRIPTOR);
+        generateComponentsListFile();
+
+        if (dualEmission) {
+            // Test container is a subclass of the main container — so factories generated
+            // against the main container type (e.g. {@code FakeClockFactory(TikoContainerImpl_<hash> c)})
+            // still accept a {@code TestTikoContainerImpl_<hash>} instance, and dispatch
+            // through inherited getters works naturally. The test container only emits the
+            // diffs: new fields/getters for test-only components, plus overrides for any
+            // main component shadowed by a same-typed {@code @TestComponent}.
+            //
+            // Test container's hash is recomputed from {main components + test components}
+            // (via the test-active component list) so it is independent of the main hash.
+            // The distinct "TestTikoContainerImpl_" prefix means even a hash collision
+            // could not put the two on a classpath collision course.
+            var testComponents = context.getActiveTestContainerComponents();
+            String testContainerClassName = "TestTikoContainerImpl_" + computeHash(testComponents);
+            generateTestSubclass(mainContainerClassName, testContainerClassName, mainComponents, testComponents);
+            writeContainerDescriptor(TEST_DESCRIPTOR, testContainerClassName);
+        }
+    }
+
+    /**
+     * Emits one container class + its descriptor file from the given active-component view.
+     * Stashes the view on {@link #currentComponents} so the sub-generator helpers — which
+     * are private to this class and walk components implicitly — see exactly the slice
+     * passed in.
+     */
+    private void generateOne(String containerClassName, List<ComponentModel> activeComponents, String descriptorPath)
+            throws IOException {
+        this.currentComponents = activeComponents;
 
         TypeSpec.Builder containerBuilder = TypeSpec.classBuilder(containerClassName)
-                .addAnnotation(GeneratorAnnotations.generatedBy(ContainerGenerator.class))
-                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                .addSuperinterface(Container.class);
+                .addAnnotation(GeneratorAnnotations.generatedBy(ContainerGenerator.class));
+        if (extensibleMainContainer) {
+            // Non-final so the test subclass can extend; stays in io.tiko.generated so
+            // production user code still cannot reach it (and there is no public
+            // io.tiko-side hook to instantiate it directly).
+            containerBuilder.addModifiers(Modifier.PUBLIC);
+        } else {
+            containerBuilder.addModifiers(Modifier.PUBLIC, Modifier.FINAL);
+        }
+        containerBuilder.addSuperinterface(Container.class);
 
         // Add fields
         containerBuilder.addField(createSingletonStorageField());
@@ -113,21 +188,365 @@ public final class ContainerGenerator {
 
         javaFile.writeTo(context.getFiler());
 
-        // Generate metadata files for multi-module support
-        generateContainerPropertiesFile();
-        generateComponentsListFile();
+        // Descriptor pointing at this container — main and test paths use the same shape
+        // (just a different filename) so the runtime preference logic in Tiko.createInternal
+        // is a one-line resource-name swap.
+        writeContainerDescriptor(descriptorPath, containerClassName);
     }
 
     /**
-     * Creates the singleton storage field: Map<String, Object>
+     * Emits the {@code TestTikoContainerImpl_<hash>} subclass of the main container.
+     * Carries only the diffs: factory fields and getters for test-only components,
+     * overrides for shadowed main-component getters, plus minimal {@code start()} /
+     * {@code get(Class)} / {@code getAll(Class)} overrides so the test-only additions
+     * are reachable from the {@link Container} interface.
+     *
+     * <p>The factory and proxy classes themselves are not re-emitted — they were
+     * generated once against the main container's class name and the test container
+     * is-a main container, so {@code new XxxFactory(this)} from this subclass's
+     * constructor passes type-check naturally.
+     */
+    private void generateTestSubclass(
+            String mainContainerClassName,
+            String testContainerClassName,
+            List<ComponentModel> mainComponents,
+            List<ComponentModel> testComponents)
+            throws IOException {
+        ClassName mainContainerType = ClassName.get(GENERATED_PACKAGE, mainContainerClassName);
+
+        // Stash the test-component view so any helper that walks "active components" while
+        // emitting the subclass sees the test set. Currently only {@code emitScopedTeardown}
+        // would consult it transitively, but the subclass does not emit scope teardown, so
+        // this is a defensive set rather than a hot path.
+        this.currentComponents = testComponents;
+
+        // Index main components by key so we can quickly classify each test entry as
+        // (additions) vs (shadow override) vs (passthrough). Shadow keys come from T11's
+        // shadowedByTestOverride map — every entry there is exactly the test-override of
+        // a same-keyed main component. Additions are test-active components whose key is
+        // NEITHER a main key NOR the key of any shadowing test model (test-only fixtures).
+        Map<String, ComponentModel> mainByKey = new LinkedHashMap<>();
+        for (ComponentModel m : mainComponents) {
+            mainByKey.put(m.getComponentKey(), m);
+        }
+        var shadowedKeys = context.getShadowedMainKeys();
+        List<ShadowOverride> shadowOverrides = new ArrayList<>();
+        Set<String> shadowingTestKeys = new java.util.HashSet<>();
+        for (String mainKey : shadowedKeys) {
+            ComponentModel mainModel = mainByKey.get(mainKey);
+            ComponentModel testModel = context.getTestComponentShadowing(mainKey);
+            if (mainModel != null && testModel != null) {
+                shadowOverrides.add(new ShadowOverride(mainModel, testModel));
+                shadowingTestKeys.add(testModel.getComponentKey());
+            }
+        }
+
+        List<ComponentModel> additions = new ArrayList<>();
+        for (ComponentModel t : testComponents) {
+            String key = t.getComponentKey();
+            if (mainByKey.containsKey(key)) {
+                // Passthrough — main model already lives on the superclass.
+                continue;
+            }
+            if (shadowingTestKeys.contains(key)) {
+                // Already handled as a shadow override below; field + getter come from
+                // that path so we must not double-emit them here.
+                continue;
+            }
+            additions.add(t);
+        }
+
+        TypeSpec.Builder subclass = TypeSpec.classBuilder(testContainerClassName)
+                .addAnnotation(GeneratorAnnotations.generatedBy(ContainerGenerator.class))
+                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                .superclass(mainContainerType);
+
+        // Factory fields for additions and for shadowing test components.
+        for (ComponentModel c : additions) {
+            subclass.addField(createSubclassFactoryField(c));
+        }
+        for (ShadowOverride so : shadowOverrides) {
+            subclass.addField(createSubclassFactoryField(so.test));
+        }
+
+        // Constructor: forward to super(...) and init only the extra factory fields.
+        subclass.addMethod(createTestSubclassConstructor(mainContainerType, additions, shadowOverrides));
+
+        // Getter for each addition. Mirrors the main container's getter shape — same
+        // singleton/request/event/prototype dispatch and override consultation.
+        for (ComponentModel c : additions) {
+            subclass.addMethod(createSubclassAdditionGetter(c));
+        }
+
+        // Override the shadowed main getter so dependents that call container.getXxx()
+        // — directly or via {@code get(Class)} / dispatch from this subclass — receive
+        // the test instance. Storage key stays the main key so the singleton cache
+        // semantics match super's view of the world.
+        for (ShadowOverride so : shadowOverrides) {
+            subclass.addMethod(createSubclassShadowGetter(so));
+        }
+
+        // Override start() to eagerly init test-only SINGLETONs. super.start() handles
+        // the CAS guard, main-component eager init, and lifecycle event publishing.
+        if (!additions.isEmpty() || !shadowOverrides.isEmpty()) {
+            subclass.addMethod(createSubclassStartMethod(additions));
+        }
+
+        // Override get(Class) and getAll(Class) so additions are dispatchable through the
+        // {@link Container} interface. get(Class, String) is overridden only when at
+        // least one addition or shadow override has a name qualifier.
+        if (!additions.isEmpty()) {
+            subclass.addMethod(createSubclassGetMethod(additions));
+            subclass.addMethod(createSubclassGetAllMethod(additions));
+        }
+
+        JavaFile javaFile =
+                JavaFile.builder(GENERATED_PACKAGE, subclass.build()).build();
+        javaFile.writeTo(context.getFiler());
+    }
+
+    /** Field for a test-only or shadowing factory, stored on the subclass. */
+    private FieldSpec createSubclassFactoryField(ComponentModel component) {
+        String factoryClassName = component.getClassName() + "Factory";
+        String fieldName = getFactoryFieldName(component.getClassName());
+        return FieldSpec.builder(
+                        ClassName.get(GENERATED_PACKAGE, factoryClassName), fieldName, Modifier.PRIVATE, Modifier.FINAL)
+                .build();
+    }
+
+    /** Subclass constructor: forwards to super and initialises test-only factory fields. */
+    private MethodSpec createTestSubclassConstructor(
+            ClassName mainContainerType, List<ComponentModel> additions, List<ShadowOverride> shadowOverrides) {
+        MethodSpec.Builder ctor = MethodSpec.constructorBuilder()
+                .addModifiers(Modifier.PUBLIC)
+                .addParameter(EventBus.class, "eventBus")
+                .addParameter(ClassName.get("io.tiko", "ErrorHandler"), "errorHandler")
+                .addParameter(ClassName.get("java.util.concurrent", "ExecutorService"), "userEventExecutor")
+                .addParameter(TypeName.BOOLEAN, "publishLifecycleEvents")
+                .addParameter(Duration.class, "shutdownTimeout")
+                .addParameter(ClassName.get("io.tiko.runtime", "TikoOptions"), "options")
+                .addStatement(
+                        "super(eventBus, errorHandler, userEventExecutor, publishLifecycleEvents, shutdownTimeout, options)");
+        for (ComponentModel c : additions) {
+            ctor.addStatement(
+                    "this.$L = new $L(this)", getFactoryFieldName(c.getClassName()), c.getClassName() + "Factory");
+        }
+        for (ShadowOverride so : shadowOverrides) {
+            ctor.addStatement(
+                    "this.$L = new $L(this)",
+                    getFactoryFieldName(so.test.getClassName()),
+                    so.test.getClassName() + "Factory");
+        }
+        return ctor.build();
+    }
+
+    /** Mirrors {@link #createComponentGetter} for a test-only addition. */
+    private MethodSpec createSubclassAdditionGetter(ComponentModel component) {
+        // Reuse the main getter emission directly: the only differences for a subclass-
+        // hosted addition are (a) the storage key still includes the test bean's own
+        // componentKey (which is what the main path does anyway) and (b) the factory
+        // field lives on this subclass (named identically by class name). The fields
+        // are accessible because singletons/options were emitted package-private in
+        // extensible mode.
+        return createComponentGetter(component);
+    }
+
+    /**
+     * Override of the main getter for a shadowed component. The signature matches the
+     * inherited method (same name, same return type — the test model must be assignable
+     * to the main type because shadowing is detected via shared routable types), but
+     * the body uses the test factory instead.
+     */
+    private MethodSpec createSubclassShadowGetter(ShadowOverride so) {
+        ComponentModel main = so.main;
+        ComponentModel test = so.test;
+        String methodName = "get" + main.getClassName();
+        TypeName returnType = ClassName.get(main.getTypeElement());
+        TypeName testType = ClassName.get(test.getTypeElement());
+        String storageKey = main.getComponentKey();
+        String factoryFieldName = getFactoryFieldName(test.getClassName());
+
+        MethodSpec.Builder method = MethodSpec.methodBuilder(methodName)
+                .addModifiers(Modifier.PUBLIC)
+                .addAnnotation(Override.class)
+                .returns(returnType);
+
+        switch (main.getScope()) {
+            case SINGLETON ->
+                method.addStatement(
+                        "return ($1T) singletons.computeIfAbsent($2S, k -> options.hasOverride($3T.class) ? options.getOverride($3T.class).get() : $4L.create())",
+                        returnType,
+                        storageKey,
+                        testType,
+                        factoryFieldName);
+            case REQUEST ->
+                emitScopedGetOrCreate(
+                        method,
+                        returnType,
+                        testType,
+                        "requestScoped.get()",
+                        storageKey,
+                        factoryFieldName + ".create()");
+            case EVENT ->
+                emitScopedGetOrCreate(
+                        method, returnType, testType, "eventScoped.get()", storageKey, factoryFieldName + ".create()");
+            case PROTOTYPE -> method.addStatement("return $L.create()", factoryFieldName);
+        }
+        return method.build();
+    }
+
+    /**
+     * Override of start() that delegates to super then eagerly inits subclass SINGLETONs.
+     * Shadowed main components are already covered by {@code super.start()}'s eager-init
+     * loop — its {@code getXxx()} call is dispatched dynamically and lands on the
+     * subclass override emitted by {@link #createSubclassShadowGetter}.
+     */
+    private MethodSpec createSubclassStartMethod(List<ComponentModel> additions) {
+        MethodSpec.Builder method = MethodSpec.methodBuilder("start")
+                .addModifiers(Modifier.PUBLIC)
+                .addAnnotation(Override.class)
+                .addStatement("super.start()");
+        // Note: super.start() returns no-op on a second invocation (CAS guard). Re-calling
+        // the getters below is harmless — each is itself singleton-cached.
+        for (ComponentModel c : additions) {
+            if (c.getScope() == Scope.SINGLETON && !c.requiresProxy()) {
+                method.addStatement("get$L()", c.getClassName());
+            }
+        }
+        return method.build();
+    }
+
+    /**
+     * Override of get(Class) that catches the not-found arm from super and dispatches
+     * to the test-only additions. The shutdown gate and in-flight counter are handled
+     * by super.get(); on the not-found path the counter is already decremented by its
+     * finally block, so the additional dispatch runs outside the gate — acceptable for
+     * a test-only container.
+     */
+    private MethodSpec createSubclassGetMethod(List<ComponentModel> additions) {
+        TypeVariableName typeVar = TypeVariableName.get("T");
+        ParameterizedTypeName classType = ParameterizedTypeName.get(ClassName.get(Class.class), typeVar);
+
+        MethodSpec.Builder method = MethodSpec.methodBuilder("get")
+                .addModifiers(Modifier.PUBLIC)
+                .addAnnotation(Override.class)
+                .addAnnotation(AnnotationSpec.builder(SuppressWarnings.class)
+                        .addMember("value", "$S", "unchecked")
+                        .build())
+                .addTypeVariable(typeVar)
+                .addParameter(classType, "type")
+                .returns(typeVar);
+
+        // Try the test-only arms first so additions take precedence over any same-typed
+        // main hits (defensive — additions by definition are NOT in main, but a future
+        // expose-list overlap should still resolve to the test bean under this container).
+        boolean first = true;
+        for (ComponentModel c : additions) {
+            List<TypeName> keys = effectiveRoutableTypes(c);
+            if (c.getName().isPresent()) {
+                keys = c.isExposeSelf() ? List.of(ClassName.get(c.getTypeElement())) : List.of();
+            }
+            if (keys.isEmpty()) continue;
+            String predicate = renderTypeOrPredicate("type", keys);
+            Object[] args = keys.toArray();
+            if (first) {
+                method.beginControlFlow("if (" + predicate + ")", args);
+                first = false;
+            } else {
+                method.nextControlFlow("else if (" + predicate + ")", args);
+            }
+            method.addStatement("return (T) get$L()", c.getClassName());
+        }
+        if (!first) {
+            method.endControlFlow();
+        }
+
+        // Delegate to the inherited dispatch for everything else.
+        method.addStatement("return super.get(type)");
+        return method.build();
+    }
+
+    /**
+     * Override of getAll(Class) that appends test-only additions to the inherited list.
+     */
+    private MethodSpec createSubclassGetAllMethod(List<ComponentModel> additions) {
+        TypeVariableName typeVar = TypeVariableName.get("T");
+        ParameterizedTypeName classType = ParameterizedTypeName.get(ClassName.get(Class.class), typeVar);
+        ParameterizedTypeName listType = ParameterizedTypeName.get(ClassName.get(List.class), typeVar);
+
+        MethodSpec.Builder method = MethodSpec.methodBuilder("getAll")
+                .addModifiers(Modifier.PUBLIC)
+                .addAnnotation(Override.class)
+                .addTypeVariable(typeVar)
+                .addParameter(classType, "type")
+                .returns(listType);
+
+        method.addStatement("$T<T> __result = new $T<>(super.getAll(type))", List.class, ArrayList.class);
+        for (ComponentModel c : additions) {
+            List<TypeName> keys = effectiveRoutableTypes(c);
+            if (keys.isEmpty()) continue;
+            String predicate = renderTypeOrPredicate("type", keys);
+            Object[] args = keys.toArray();
+            method.beginControlFlow("if (" + predicate + ")", args);
+            method.addStatement("__result.add(type.cast(get$L()))", c.getClassName());
+            method.endControlFlow();
+        }
+        method.addStatement("return $T.unmodifiableList(__result)", java.util.Collections.class);
+        return method.build();
+    }
+
+    /** Pair of (main, test) {@link ComponentModel}s for a shadowed-key entry. */
+    private record ShadowOverride(ComponentModel main, ComponentModel test) {}
+
+    /**
+     * Deterministic hash suffix for a {@link ComponentModel} list. Mirrors
+     * {@code TikoAnnotationProcessor#computeContainerClassName} — kept private here so
+     * the test container's hash is computed from its own component slice rather than the
+     * main one, guaranteeing the two container class names cannot collide.
+     */
+    private static String computeHash(List<ComponentModel> components) {
+        var keys = components.stream()
+                .map(ComponentModel::getComponentKey)
+                .sorted()
+                .toList();
+        int hash = Objects.hash(keys.toArray());
+        return Integer.toHexString(hash & 0x7FFFFFFF);
+    }
+
+    /**
+     * Returns the component view for the container currently being emitted. Helpers
+     * call this instead of {@code context.getActiveComponents()} so dual emission
+     * (main + test) picks up the correct slice on each pass.
+     */
+    private List<ComponentModel> activeComponents() {
+        return currentComponents;
+    }
+
+    /**
+     * Creates the singleton storage field: Map<String, Object>.
+     * Drops {@code Modifier.PRIVATE} when the container is being emitted extensibly
+     * (test subclass present in this round) so the subclass can call
+     * {@code singletons.computeIfAbsent(...)} from its overridden / additional getters.
      */
     private FieldSpec createSingletonStorageField() {
         ParameterizedTypeName mapType = ParameterizedTypeName.get(
                 ClassName.get(Map.class), ClassName.get(String.class), ClassName.get(Object.class));
 
-        return FieldSpec.builder(mapType, "singletons", Modifier.PRIVATE, Modifier.FINAL)
+        return FieldSpec.builder(mapType, "singletons", scopeStorageModifiers())
                 .initializer("new $T<>()", ConcurrentHashMap.class)
                 .build();
+    }
+
+    /**
+     * Field-modifier set for the per-container scope-storage and override-source fields
+     * that the test subclass needs to access. Package-private (no PRIVATE) when emitting
+     * extensibly so the subclass — in the same {@code io.tiko.generated} package — can
+     * read/mutate them; fully private otherwise.
+     */
+    private Modifier[] scopeStorageModifiers() {
+        return extensibleMainContainer
+                ? new Modifier[] {Modifier.FINAL}
+                : new Modifier[] {Modifier.PRIVATE, Modifier.FINAL};
     }
 
     /**
@@ -143,7 +562,7 @@ public final class ContainerGenerator {
 
         ParameterizedTypeName threadLocalType = ParameterizedTypeName.get(ClassName.get(ThreadLocal.class), mapType);
 
-        return FieldSpec.builder(threadLocalType, "requestScoped", Modifier.PRIVATE, Modifier.FINAL)
+        return FieldSpec.builder(threadLocalType, "requestScoped", scopeStorageModifiers())
                 .initializer("$T.withInitial($T::new)", ThreadLocal.class, LinkedHashMap.class)
                 .build();
     }
@@ -158,7 +577,7 @@ public final class ContainerGenerator {
 
         ParameterizedTypeName threadLocalType = ParameterizedTypeName.get(ClassName.get(ThreadLocal.class), mapType);
 
-        return FieldSpec.builder(threadLocalType, "eventScoped", Modifier.PRIVATE, Modifier.FINAL)
+        return FieldSpec.builder(threadLocalType, "eventScoped", scopeStorageModifiers())
                 .initializer("$T.withInitial($T::new)", ThreadLocal.class, LinkedHashMap.class)
                 .build();
     }
@@ -316,8 +735,7 @@ public final class ContainerGenerator {
      * through their respective name-dispatch paths.
      */
     private FieldSpec createOptionsField() {
-        return FieldSpec.builder(
-                        ClassName.get("io.tiko.runtime", "TikoOptions"), "options", Modifier.PRIVATE, Modifier.FINAL)
+        return FieldSpec.builder(ClassName.get("io.tiko.runtime", "TikoOptions"), "options", scopeStorageModifiers())
                 .build();
     }
 
@@ -342,7 +760,7 @@ public final class ContainerGenerator {
     private List<FieldSpec> createFactoryFields() {
         List<FieldSpec> fields = new ArrayList<>();
 
-        for (ComponentModel component : context.getActiveComponents()) {
+        for (ComponentModel component : activeComponents()) {
             String factoryClassName = component.getClassName() + "Factory";
             String fieldName = getFactoryFieldName(component.getClassName());
 
@@ -404,7 +822,7 @@ public final class ContainerGenerator {
                 .addStatement("this.options = options");
 
         // Initialize factory fields
-        for (ComponentModel component : context.getActiveComponents()) {
+        for (ComponentModel component : activeComponents()) {
             String factoryClassName = component.getClassName() + "Factory";
             String fieldName = getFactoryFieldName(component.getClassName());
 
@@ -412,7 +830,7 @@ public final class ContainerGenerator {
         }
 
         // Initialize proxy fields
-        for (ComponentModel component : context.getActiveComponents()) {
+        for (ComponentModel component : activeComponents()) {
             if (component.requiresProxy()) {
                 String proxyFieldName = getProxyFieldName(component.getClassName());
                 String proxyClassName = component.getClassName() + "Proxy";
@@ -430,7 +848,7 @@ public final class ContainerGenerator {
     private List<MethodSpec> createComponentGetters() {
         List<MethodSpec> methods = new ArrayList<>();
 
-        for (ComponentModel component : context.getActiveComponents()) {
+        for (ComponentModel component : activeComponents()) {
             methods.add(createComponentGetter(component));
 
             // If REQUEST or EVENT scoped, also create getCurrentXxx method for proxies
@@ -926,7 +1344,7 @@ public final class ContainerGenerator {
      */
     private void emitScopedTeardown(MethodSpec.Builder method, Scope scope, String scopeMapExpr) {
         List<ComponentModel> withHooks = new ArrayList<>();
-        for (ComponentModel c : context.getActiveComponents()) {
+        for (ComponentModel c : activeComponents()) {
             if (c.getScope() == scope && c.hasDestroyHook()) {
                 withHooks.add(c);
             }
@@ -1033,7 +1451,7 @@ public final class ContainerGenerator {
 
         method.addComment("Initialize all SINGLETON components");
 
-        for (ComponentModel component : context.getActiveComponents()) {
+        for (ComponentModel component : activeComponents()) {
             if (component.getScope() == Scope.SINGLETON && !component.requiresProxy()) {
                 String getterName = "get" + component.getClassName();
                 method.addStatement("$L()", getterName);
@@ -1123,7 +1541,7 @@ public final class ContainerGenerator {
         // Snapshot SINGLETON components with destroy hooks in registration order, then walk in reverse.
         // start() initialises eagerly in registration order, so reverse iteration approximates LIFO.
         List<ComponentModel> singletonHooks = new ArrayList<>();
-        for (ComponentModel component : context.getActiveComponents()) {
+        for (ComponentModel component : activeComponents()) {
             if (component.getScope() == Scope.SINGLETON && component.hasDestroyHook() && !component.requiresProxy()) {
                 singletonHooks.add(component);
             }
@@ -1263,7 +1681,7 @@ public final class ContainerGenerator {
         // is true. Named components only match by the concrete-class entry of that set
         // (their interface entries are reachable via get(Class, String) instead).
         boolean first = true;
-        for (ComponentModel component : context.getActiveComponents()) {
+        for (ComponentModel component : activeComponents()) {
             TypeName componentType = ClassName.get(component.getTypeElement());
             String getterName = "get" + component.getClassName();
             List<TypeName> keys;
@@ -1340,9 +1758,8 @@ public final class ContainerGenerator {
         method.addStatement("inFlightGets.incrementAndGet()");
         method.beginControlFlow("try");
 
-        List<ComponentModel> named = context.getActiveComponents().stream()
-                .filter(c -> c.getName().isPresent())
-                .toList();
+        List<ComponentModel> named =
+                activeComponents().stream().filter(c -> c.getName().isPresent()).toList();
 
         boolean first = true;
         for (ComponentModel component : named) {
@@ -1439,7 +1856,7 @@ public final class ContainerGenerator {
         // — a component listed under expose=[Foo] is collected by getAll(Foo) but NOT by
         // getAll(OtherInterfaceItImplements). For permissive default beans this matches
         // every directly-implemented interface plus the class itself.
-        for (ComponentModel component : context.getActiveComponents()) {
+        for (ComponentModel component : activeComponents()) {
             String getterName = "get" + component.getClassName();
             List<TypeName> keys = effectiveRoutableTypes(component);
             if (keys.isEmpty()) continue;
@@ -1611,14 +2028,17 @@ public final class ContainerGenerator {
     }
 
     /**
-     * Generates META-INF/tiko/container.properties file.
-     * Contains the fully qualified class name of the generated container.
+     * Writes a container descriptor file pointing at the just-generated container class.
+     * Used for both the main {@code container.properties} and the test
+     * {@code test-container.properties} — Maven routes {@code CLASS_OUTPUT} into
+     * {@code target/test-classes/} during the test-compile phase, so the test descriptor
+     * naturally lands on the test classpath only.
      */
-    private void generateContainerPropertiesFile() throws IOException {
-        String fullClassName = GENERATED_PACKAGE + "." + context.getContainerClassName();
+    private void writeContainerDescriptor(String resourcePath, String containerClassName) throws IOException {
+        String fullClassName = GENERATED_PACKAGE + "." + containerClassName;
 
         try (var writer = context.getFiler()
-                .createResource(javax.tools.StandardLocation.CLASS_OUTPUT, "", "META-INF/tiko/container.properties")
+                .createResource(javax.tools.StandardLocation.CLASS_OUTPUT, "", resourcePath)
                 .openWriter()) {
 
             writer.write("# Tiko DI Container Metadata\n");
@@ -1628,14 +2048,18 @@ public final class ContainerGenerator {
 
     /**
      * Generates META-INF/tiko/components.txt file.
-     * Contains newline-separated list of all component class names.
+     * Contains newline-separated list of all component class names — main-only, mirroring
+     * the main container's component list. The {@code AggregatingContainer} loads this
+     * file to map types to per-module containers; tests do not need a parallel listing
+     * because the test container is loaded directly via {@code test-container.properties},
+     * not aggregated.
      */
     private void generateComponentsListFile() throws IOException {
         try (var writer = context.getFiler()
                 .createResource(javax.tools.StandardLocation.CLASS_OUTPUT, "", "META-INF/tiko/components.txt")
                 .openWriter()) {
 
-            for (ComponentModel component : context.getActiveComponents()) {
+            for (ComponentModel component : context.getActiveMainComponents()) {
                 // Use binary name (with '$' for nested classes) so Class.forName() works at runtime
                 writer.write(context.getElementUtils()
                         .getBinaryName(component.getTypeElement())

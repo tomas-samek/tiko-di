@@ -241,7 +241,10 @@ public final class ProcessorContext {
     }
 
     /**
-     * Returns all components that should be active based on current profiles.
+     * Returns all components that should be active based on current profiles. Includes
+     * both {@code @Component} and {@code @TestComponent} entries — callers that need to
+     * separate the two should use {@link #getActiveMainComponents()} or
+     * {@link #getActiveTestContainerComponents()} instead.
      */
     public List<ComponentModel> getActiveComponents() {
         return components.values().stream()
@@ -256,6 +259,56 @@ public final class ProcessorContext {
         return factoryMethods.values().stream()
                 .filter(f -> isProfileActive(f.getProfiles()))
                 .toList();
+    }
+
+    /**
+     * Returns the active components for the production-classpath {@code TikoContainerImpl}.
+     * Test components are filtered out so the main container's wiring is uncontaminated
+     * by test-only beans even when a test-compile round happens to see them.
+     */
+    public List<ComponentModel> getActiveMainComponents() {
+        return components.values().stream()
+                .filter(c -> isProfileActive(c.getProfiles()))
+                .filter(c -> !c.isTestComponent())
+                .toList();
+    }
+
+    /**
+     * Returns the active components for the test-classpath {@code TestTikoContainerImpl}:
+     * main components with any shadowed entries swapped for their shadowing
+     * {@code @TestComponent}, plus all test components that are not shadowing anything
+     * (test-only fixtures with no main counterpart).
+     *
+     * <p>The swap preserves the iteration order of the original main-component list — a
+     * shadowed main slot is replaced in-place by the test model — so downstream
+     * generation (factory init order, eager SINGLETON walk order, etc.) stays stable.
+     */
+    public List<ComponentModel> getActiveTestContainerComponents() {
+        var mains = getActiveMainComponents();
+        var result = new ArrayList<ComponentModel>(mains.size() + shadowedByTestOverride.size());
+        var consumedTestKeys = new java.util.HashSet<String>();
+        for (ComponentModel main : mains) {
+            ComponentModel shadow = shadowedByTestOverride.get(main.getComponentKey());
+            if (shadow != null) {
+                result.add(shadow);
+                consumedTestKeys.add(shadow.getComponentKey());
+            } else {
+                result.add(main);
+            }
+        }
+        // Append any @TestComponents not consumed above (test-only fixtures with no main).
+        for (ComponentModel c : components.values()) {
+            if (!c.isTestComponent()) continue;
+            if (!isProfileActive(c.getProfiles())) continue;
+            if (consumedTestKeys.contains(c.getComponentKey())) continue;
+            result.add(c);
+        }
+        return List.copyOf(result);
+    }
+
+    /** True when at least one {@code @TestComponent} was discovered in this round. */
+    public boolean hasTestComponents() {
+        return components.values().stream().anyMatch(ComponentModel::isTestComponent);
     }
 
     /**
