@@ -31,6 +31,15 @@ public final class AggregatingContainer implements Container {
     /** Default descriptor name used when callers don't override (production / multi-module). */
     static final String DEFAULT_DESCRIPTOR = "META-INF/tiko/container.properties";
 
+    /**
+     * Lazy holder: defers System.LoggerFinder resolution until first use. Most aggregator
+     * paths log only on bus-impl defects or shadow-config issues, so the class's {@code <clinit>}
+     * stays free of logging-init cost.
+     */
+    private static final class LoggerHolder {
+        static final System.Logger LOG = System.getLogger("io.tiko.events");
+    }
+
     private final EventBus sharedEventBus;
     private final ErrorHandler errorHandler;
     private final java.util.concurrent.ExecutorService eventExecutor;
@@ -153,6 +162,19 @@ public final class AggregatingContainer implements Container {
      * Discovers all module containers by scanning the configured descriptor resource
      * (defaults to {@value #DEFAULT_DESCRIPTOR}; {@link Tiko#createInternal} passes
      * {@code META-INF/tiko/test-container.properties} when test wiring is present).
+     *
+     * <p>Two-phase scan (#129):
+     * <ol>
+     *   <li>Phase 1 — scan classpath for {@code META-INF/tiko/test-shadows.properties}
+     *       and register each declared {@code key → impl} pair as an {@code IfAbsent}
+     *       runtime override on the shared {@link TikoOptions}. The Supplier closes
+     *       over a map populated in Phase 2; user-supplied overrides win because of
+     *       {@code IfAbsent} semantics.</li>
+     *   <li>Phase 2 — instantiate per-module containers from the descriptor resource;
+     *       each instance is registered in {@code containersByImplName} so the
+     *       Phase 1 Suppliers can resolve their shadow targets lazily on first
+     *       {@code get(...)}.</li>
+     * </ol>
      */
     private void discoverAndInitializeModuleContainers() throws Exception {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
@@ -160,11 +182,49 @@ public final class AggregatingContainer implements Container {
             classLoader = AggregatingContainer.class.getClassLoader();
         }
 
+        // Shared map populated in Phase 2 — shadow-override Suppliers (registered in Phase 1)
+        // close over it and resolve their target container lazily on first invocation.
+        Map<String, Container> containersByImplName = new HashMap<>();
+
+        // Phase 1: scan classpath for test-shadows.properties and register shadow overrides.
+        Enumeration<URL> shadowResources = classLoader.getResources("META-INF/tiko/test-shadows.properties");
+        Map<String, String> seenShadowDeclarations = new HashMap<>();
+        while (shadowResources.hasMoreElements()) {
+            URL url = shadowResources.nextElement();
+            Properties shadowProps = new Properties();
+            try (var in = url.openStream()) {
+                shadowProps.load(in);
+            }
+            for (var entry : shadowProps.entrySet()) {
+                String routableKey = entry.getKey().toString();
+                String shadowFqn = entry.getValue().toString();
+                if (seenShadowDeclarations.containsKey(routableKey)) {
+                    LoggerHolder.LOG.log(
+                            System.Logger.Level.WARNING,
+                            "Multiple shadow declarations for " + routableKey
+                                    + " (first: " + seenShadowDeclarations.get(routableKey)
+                                    + ", ignored: " + shadowFqn + ")");
+                    continue;
+                }
+                seenShadowDeclarations.put(routableKey, shadowFqn);
+                Class<?> keyClass;
+                try {
+                    keyClass = Class.forName(routableKey, false, classLoader);
+                } catch (ClassNotFoundException cnfe) {
+                    LoggerHolder.LOG.log(
+                            System.Logger.Level.WARNING, "Shadow declaration references unknown type: " + routableKey);
+                    continue;
+                }
+                registerShadowOverride(keyClass, shadowFqn, containersByImplName);
+            }
+        }
+
+        // Phase 2: instantiate per-module containers from descriptor resources.
         Enumeration<URL> resources = classLoader.getResources(descriptorName);
 
         while (resources.hasMoreElements()) {
             URL resourceUrl = resources.nextElement();
-            processContainerResource(resourceUrl, classLoader);
+            processContainerResource(resourceUrl, classLoader, containersByImplName);
         }
 
         if (moduleContainers.isEmpty()) {
@@ -174,9 +234,31 @@ public final class AggregatingContainer implements Container {
     }
 
     /**
-     * Processes a single container.properties resource.
+     * Registers a single shadow declaration as an {@code IfAbsent} override on the shared
+     * {@link TikoOptions}. The Supplier is lazy: it resolves the target container on first
+     * {@code get(...)} via {@code containersByImplName}, which is populated during Phase 2
+     * of {@link #discoverAndInitializeModuleContainers()}.
      */
-    private void processContainerResource(URL resourceUrl, ClassLoader classLoader) throws Exception {
+    private <T> void registerShadowOverride(
+            Class<T> keyClass, String shadowFqn, Map<String, Container> containersByImplName) {
+        java.util.function.Supplier<T> supplier = () -> {
+            Container shadowContainer = containersByImplName.get(shadowFqn);
+            if (shadowContainer == null) {
+                throw new IllegalStateException("Shadow declaration target not instantiated: " + shadowFqn);
+            }
+            return shadowContainer.get(keyClass);
+        };
+        options.internalAddOverrideIfAbsent(keyClass, supplier);
+    }
+
+    /**
+     * Processes a single container.properties resource. The instantiated container is
+     * registered in {@code containersByImplName} so shadow-override Suppliers registered
+     * in Phase 1 of {@link #discoverAndInitializeModuleContainers()} can resolve their
+     * target lazily.
+     */
+    private void processContainerResource(
+            URL resourceUrl, ClassLoader classLoader, Map<String, Container> containersByImplName) throws Exception {
         // Read container.properties to get impl class name
         Properties props = new Properties();
         try (var input = resourceUrl.openStream()) {
@@ -207,6 +289,7 @@ public final class AggregatingContainer implements Container {
                 options);
 
         moduleContainers.add(moduleContainer);
+        containersByImplName.put(implClassName, moduleContainer);
 
         loadComponentsMapping(resourceUrl, classLoader, moduleContainer);
         loadConfigsMapping(resourceUrl, classLoader, moduleContainer);
