@@ -60,18 +60,18 @@ Deferred designs (discussed, no tracker issue yet, not bound to a phase):
 
 ### Phase 3 — onboarding & tooling
 
-[Phase 3 milestone](https://github.com/tomas-samek/tiko-di/milestone/3) — 2/6 closed.
+[Phase 3 milestone](https://github.com/tomas-samek/tiko-di/milestone/3) — 3/6 closed.
 
 Shipped:
 
 - ✅ `tiko-test` JUnit 5 extension + module ([#122](https://github.com/tomas-samek/tiko-di/issues/122)) — `@TikoTest` boots a container per test method or per class, `ParameterResolver` injects `Container` / `EventBus` / `RecordingEventBus` / any container-managed type, `@TestComponent` registers compile-time overrides into a separate `TestTikoContainerImpl_<hash>`, `TikoOptions.override(Class, [name,] Supplier)` registers runtime overrides, `RecordingEventBus` spies on publishes with fluent assertions and `awaitAsyncDispatch(Duration)`, and `@RequestScopeTest` / `@EventScopeTest` wrap the test body in container scopes. Three known limitations tracked below.
 - ✅ tiko-test: `@TestComponent` shadow detection — implicit superclass walk + explicit `value()` attribute; scope-mismatch is a compile error ([#127](https://github.com/tomas-samek/tiko-di/issues/127)).
+- ✅ tiko-test: `TikoOptions.override(Class, Supplier)` applies at injection sites keyed by the parameter's declared type — interface mocks work naturally, no `mockito-inline` required ([#128](https://github.com/tomas-samek/tiko-di/issues/128)).
 
 Open:
 
 - AI-assistant-aware Maven archetype variant ([#21](https://github.com/tomas-samek/tiko-di/issues/21)). The plain quickstart archetype already ships (see above).
 - Machine-readable topology + config schema, plus an MCP server so AI agents can introspect the wiring ([#22](https://github.com/tomas-samek/tiko-di/issues/22)).
-- `tiko-test`: `TikoOptions.override` should match every routable type (interfaces, super-types), not just the concrete `@Component` class ([#128](https://github.com/tomas-samek/tiko-di/issues/128)).
 - `tiko-test`: `test-compile` annotation-processor round must include the main-classpath `@Component` set in the generated test container, so `@Component`s can live under `src/main/java/` rather than being forced into `src/test/java/` ([#129](https://github.com/tomas-samek/tiko-di/issues/129)).
 
 ### Phase 4 — runtime hardening (in progress)
