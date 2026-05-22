@@ -141,4 +141,29 @@ public final class ErrorReporter {
                 "Add @Named(\"...\") to each and use container.get(" + simpleTypeName + ".class, \"name\")",
                 "Keep one provider unnamed as the default and give the others @Component(name = \"...\") or @Produces(name = \"...\")");
     }
+
+    public void testComponentValueNotAssignable(Element element, String testClassFqn, String valueTypeFqn) {
+        error(
+                element,
+                "@TestComponent class " + testClassFqn + " is not assignable to declared value type " + valueTypeFqn
+                        + ". The annotated class must extend or implement the value type to shadow it.",
+                "Make " + testClassFqn + " extend or implement " + valueTypeFqn,
+                "Remove the value attribute and let the implicit superclass walk pick the shadowed component",
+                "Point value() at a type that " + testClassFqn + " actually implements");
+    }
+
+    public void testComponentScopeMismatch(
+            javax.lang.model.element.Element element,
+            String testFqn,
+            io.tiko.Scope testScope,
+            String mainFqn,
+            io.tiko.Scope mainScope) {
+        error(
+                element,
+                String.format(
+                        "Scope mismatch: @TestComponent %s declares scope %s but shadows @Component %s "
+                                + "declared with scope %s. Either match the scope or use TikoOptions.override(...) "
+                                + "for different lifecycle.",
+                        testFqn, testScope, mainFqn, mainScope));
+    }
 }

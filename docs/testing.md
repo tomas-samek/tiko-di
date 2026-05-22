@@ -146,7 +146,44 @@ public class FixedClock implements Clock {
 }
 ```
 
-The intent is that the test container resolves `Clock` to `FixedClock` instead of the production `SystemClock`. See [Known limitations](#known-limitations) for the caveats today.
+The test container resolves `Clock` to `FixedClock` instead of the production `SystemClock`.
+
+## Shadow detection
+
+`@TestComponent` discovers its shadow target two ways:
+
+**Implicit (default)** — the processor walks the test class's superclass chain
+looking for a `@Component`-annotated ancestor. If found, the test class shadows
+that ancestor:
+
+```java
+@Component(scope = Scope.SINGLETON)
+public class Clock { /* prod impl */ }
+
+@TestComponent
+public class FixedClock extends Clock { /* test impl */ }
+// FixedClock shadows Clock in the test container.
+```
+
+**Explicit** — when the test class doesn't extend the production class (e.g.
+faking an interface), name the shadow target via `value`:
+
+```java
+@TestComponent(value = PaymentGateway.class)
+public class StubPaymentGateway implements PaymentGateway { /* ... */ }
+```
+
+The annotated class must be assignable to `value` — the processor enforces this
+at compile time. Explicit `value` always wins over the implicit walk.
+
+**Scope match required.** The `@TestComponent.scope` must match the shadowed
+`@Component.scope`, or the build fails with a clear diagnostic. Use
+`TikoOptions.override(...)` if you need different lifecycle semantics.
+
+**Named shadow is not currently supported.** A `@TestComponent(name = "primary")`
+does not shadow a `@Component(name = "primary")` — the validator's shadow path
+processes unnamed components only. For named test doubles, use the runtime
+`TikoOptions.override(Class, "name", Supplier)` hook instead.
 
 ## `TikoOptions.override(...)` — runtime overrides
 
@@ -166,11 +203,7 @@ The override is consulted before the generated factory, at every scope (`SINGLET
 
 ## Known limitations
 
-Three real gaps surfaced during the first end-to-end example. They are tracked as Phase 3 follow-ups; the `@TikoTest` extension, parameter resolution, `RecordingEventBus`, and the scope helpers are unaffected.
-
-### `@TestComponent` shadow detection currently requires a shared interface
-
-A test-classpath `@TestComponent` is recognised as shadowing a main `@Component` only when both register under a shared routable type — a common interface, or an explicit `expose = {...}` entry. A test subclass that `extends` a main concrete `@Component` is *not* picked up as a shadow today; the test container exposes it as a brand-new addition alongside the production bean instead of replacing it. Track via [#127](https://github.com/tomas-samek/tiko-di/issues/127).
+Two real gaps surfaced during the first end-to-end example. They are tracked as Phase 3 follow-ups; the `@TikoTest` extension, parameter resolution, `RecordingEventBus`, and the scope helpers are unaffected.
 
 ### `TikoOptions.override` key must match the `@Component`'s concrete class
 

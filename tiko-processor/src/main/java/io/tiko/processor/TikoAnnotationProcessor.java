@@ -217,7 +217,8 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
                 exposeTypes,
                 annotation.exposeSelf(),
                 false,
-                "@Component");
+                "@Component",
+                java.util.Set.of());
     }
 
     /**
@@ -236,8 +237,51 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
 
         Scope scope = readEnumAttribute(mirror, "scope", Scope.class).orElse(Scope.SINGLETON);
         String name = readStringAttribute(mirror, "name").orElse("");
+        java.util.Set<String> extraKeys = computeTestExtraKeys(typeElement, mirror);
 
-        return buildComponentModel(typeElement, scope, name, List.of(), List.of(), true, true, "@TestComponent");
+        return buildComponentModel(
+                typeElement, scope, name, List.of(), List.of(), true, true, "@TestComponent", extraKeys);
+    }
+
+    private java.util.Set<String> computeTestExtraKeys(TypeElement testClass, AnnotationMirror mirror) {
+        java.util.Optional<TypeMirror> valueAttr = readClassAttribute(mirror, "value");
+        if (valueAttr.isPresent() && !isVoid(valueAttr.get())) {
+            // Explicit value() wins over implicit walk. Verify the annotated class is
+            // actually assignable to the declared value type, otherwise shadowing is
+            // structurally impossible.
+            TypeMirror valueType = valueAttr.get();
+            if (!processingEnv.getTypeUtils().isAssignable(testClass.asType(), valueType)) {
+                context.getErrorReporter()
+                        .testComponentValueNotAssignable(
+                                testClass, testClass.getQualifiedName().toString(), valueType.toString());
+                return java.util.Set.of();
+            }
+            return java.util.Set.of(valueType.toString());
+        }
+
+        // Implicit walk: walk the superclass chain, returning routable types of the first
+        // @Component-annotated ancestor we find.
+        TypeMirror superMirror = testClass.getSuperclass();
+        while (superMirror instanceof javax.lang.model.type.DeclaredType dt) {
+            Element superElement = dt.asElement();
+            if (!(superElement instanceof TypeElement superType)) break;
+            if (superType.getQualifiedName().contentEquals("java.lang.Object")) break;
+
+            if (superType.getAnnotation(io.tiko.annotations.Component.class) != null) {
+                java.util.Set<String> keys = new java.util.LinkedHashSet<>();
+                keys.add(superType.getQualifiedName().toString());
+                for (TypeMirror iface : superType.getInterfaces()) {
+                    keys.add(iface.toString());
+                }
+                return keys;
+            }
+            superMirror = superType.getSuperclass();
+        }
+        return java.util.Set.of();
+    }
+
+    private static boolean isVoid(TypeMirror tm) {
+        return tm.toString().equals("java.lang.Void");
     }
 
     /**
@@ -254,7 +298,8 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
             List<TypeMirror> exposeTypes,
             boolean exposeSelf,
             boolean isTestComponent,
-            String annotationLabel) {
+            String annotationLabel,
+            java.util.Set<String> testExtraKeys) {
         // Detect a self-@Produces method: a static @Produces method on this class
         // returning this class with the same qualifier name. When present, it acts
         // as the bean's instantiation strategy (replaces the constructor call).
@@ -310,7 +355,8 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
                 .autoCloseable(autoCloseable)
                 .exposeTypes(exposeTypes)
                 .exposeSelf(exposeSelf)
-                .testComponent(isTestComponent);
+                .testComponent(isTestComponent)
+                .testExtraKeys(testExtraKeys);
 
         if (constructor != null) {
             builder.constructor(constructor);
@@ -381,6 +427,29 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
                     } catch (IllegalArgumentException ignored) {
                         return Optional.empty();
                     }
+                }
+                return Optional.empty();
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Reads a {@code Class<?>} annotation attribute as a {@link TypeMirror}. Annotation
+     * {@code Class<?>} values are mirrored at processor time — direct {@code Class.getName()}
+     * access throws {@link MirroredTypeException}, so the value must be extracted via the
+     * AnnotationValue API.
+     *
+     * @return the attribute's TypeMirror, or empty when the attribute is absent.
+     */
+    private Optional<TypeMirror> readClassAttribute(AnnotationMirror mirror, String attributeName) {
+        Map<? extends ExecutableElement, ? extends AnnotationValue> values =
+                processingEnv.getElementUtils().getElementValuesWithDefaults(mirror);
+        for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> entry : values.entrySet()) {
+            if (entry.getKey().getSimpleName().contentEquals(attributeName)) {
+                Object v = entry.getValue().getValue();
+                if (v instanceof TypeMirror tm) {
+                    return Optional.of(tm);
                 }
                 return Optional.empty();
             }
