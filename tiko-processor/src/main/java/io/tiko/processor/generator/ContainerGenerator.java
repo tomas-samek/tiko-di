@@ -1666,6 +1666,13 @@ public final class ContainerGenerator {
                 .addParameter(classType, "type")
                 .returns(typeVar);
 
+        // Runtime override consulted first on the lookup type (#128) — applies to any
+        // routable key (interface or concrete class), so override(Interface.class, mock)
+        // wins regardless of whether the caller asks for the interface or the impl.
+        method.beginControlFlow("if (options.hasOverride(type))");
+        method.addStatement("return (T) options.getOverride(type).get()");
+        method.endControlFlow();
+
         // Post-shutdown gate (#47). PreDestroy methods on the shutdown thread bypass via the thread-local.
         method.beginControlFlow("if (stopped.get() && !inShutdownThread.get())");
         method.addStatement("throw new $T($S)", IllegalStateException.class, "Container has been shut down");
