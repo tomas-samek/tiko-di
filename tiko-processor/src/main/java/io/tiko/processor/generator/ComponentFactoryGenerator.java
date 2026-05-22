@@ -120,12 +120,28 @@ public final class ComponentFactoryGenerator {
                         ClassName.get("io.tiko.runtime", "ContainerPicker"),
                         baseType);
             } else {
-                // Direct dependency resolution
-                methodBuilder.addStatement(
-                        "$T $L = $L",
-                        TypeName.get(dependency.getType()),
-                        paramName,
-                        generateContainerGetCall(dependency, component));
+                // Direct dependency resolution. Wrap with an override-aware lookup so a
+                // TikoOptions.override(DeclaredType.class, ...) registered by tests applies
+                // at the injection site, regardless of which concrete @Component provides
+                // the type. The override key is the parameter's declared type — interface
+                // when the consumer injects by interface, concrete class otherwise (#128).
+                TypeName declaredType = TypeName.get(dependency.getType());
+                String existing = generateContainerGetCall(dependency, component);
+                if (dependency.getQualifier().isPresent() && !dependency.isPicked()) {
+                    String qualifier = dependency.getQualifier().get();
+                    methodBuilder.addStatement(
+                            "$1T $2L = container.options().hasOverride($1T.class, $3S) ? ($1T) container.options().getOverride($1T.class, $3S).get() : $4L",
+                            declaredType,
+                            paramName,
+                            qualifier,
+                            existing);
+                } else {
+                    methodBuilder.addStatement(
+                            "$1T $2L = container.options().hasOverride($1T.class) ? ($1T) container.options().getOverride($1T.class).get() : $3L",
+                            declaredType,
+                            paramName,
+                            existing);
+                }
             }
         }
 

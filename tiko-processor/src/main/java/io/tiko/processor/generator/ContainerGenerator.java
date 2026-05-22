@@ -182,6 +182,13 @@ public final class ContainerGenerator {
         // Add EventExecutor getter
         containerBuilder.addMethod(createGetEventExecutorMethod());
 
+        // Add package-private options() accessor so generated factories in the same
+        // io.tiko.generated package can consult per-call-site overrides without a
+        // Container-interface change. Used by ComponentFactoryGenerator to wrap each
+        // direct dependency resolution with an override-aware ternary keyed on the
+        // parameter's declared type (#128).
+        containerBuilder.addMethod(createOptionsAccessor());
+
         TypeSpec containerClass = containerBuilder.build();
 
         JavaFile javaFile = JavaFile.builder(GENERATED_PACKAGE, containerClass).build();
@@ -1956,6 +1963,20 @@ public final class ContainerGenerator {
                 .addAnnotation(Override.class)
                 .returns(EventBus.class)
                 .addStatement("return eventBus")
+                .build();
+    }
+
+    /**
+     * Creates the package-private {@code options()} accessor that returns the stored
+     * {@link io.tiko.runtime.TikoOptions}. Used by generated factories in the same
+     * {@code io.tiko.generated} package to consult per-call-site overrides at injection
+     * sites (#128). Not exposed on the {@link io.tiko.Container} interface — overrides
+     * are an internal wiring concern.
+     */
+    private MethodSpec createOptionsAccessor() {
+        return MethodSpec.methodBuilder("options")
+                .returns(ClassName.get("io.tiko.runtime", "TikoOptions"))
+                .addStatement("return this.options")
                 .build();
     }
 
