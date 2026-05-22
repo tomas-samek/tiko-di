@@ -103,12 +103,29 @@ public final class ComponentFactoryGenerator {
             parameterNames.add(paramName);
 
             if (dependency.isProvider()) {
-                // For Provider<T>, create a lambda that calls container
-                methodBuilder.addStatement(
-                        "$T $L = () -> $L",
-                        TypeName.get(dependency.getType()),
-                        paramName,
-                        generateContainerGetCall(dependency, component));
+                // Provider<T>'s lambda consults the override at call time so overrides
+                // registered after Provider construction still take effect, and so the
+                // resolution key is the inner type T (not Provider<T>).
+                TypeName providerType = TypeName.get(dependency.getType());
+                TypeName innerType = TypeName.get(dependency.getUnwrappedType().orElseThrow());
+                String existing = generateContainerGetCall(dependency, component);
+                if (dependency.getQualifier().isPresent() && !dependency.isPicked()) {
+                    String qualifier = dependency.getQualifier().get();
+                    methodBuilder.addStatement(
+                            "$1T $2L = () -> container.options().hasOverride($3T.class, $4S) ? ($3T) container.options().getOverride($3T.class, $4S).get() : $5L",
+                            providerType,
+                            paramName,
+                            innerType,
+                            qualifier,
+                            existing);
+                } else {
+                    methodBuilder.addStatement(
+                            "$1T $2L = () -> container.options().hasOverride($3T.class) ? ($3T) container.options().getOverride($3T.class).get() : $4L",
+                            providerType,
+                            paramName,
+                            innerType,
+                            existing);
+                }
             } else if (dependency.isPicker()) {
                 // Picker<T> is constructed inline via the generic ContainerPicker<T> impl —
                 // one runtime class services every Picker injection point regardless of T.
