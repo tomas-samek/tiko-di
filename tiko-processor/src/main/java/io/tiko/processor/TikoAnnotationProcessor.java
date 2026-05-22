@@ -389,6 +389,29 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
     }
 
     /**
+     * Reads a {@code Class<?>} annotation attribute as a {@link TypeMirror}. Annotation
+     * {@code Class<?>} values are mirrored at processor time — direct {@code Class.getName()}
+     * access throws {@link MirroredTypeException}, so the value must be extracted via the
+     * AnnotationValue API.
+     *
+     * @return the attribute's TypeMirror, or empty when the attribute is absent.
+     */
+    private Optional<TypeMirror> readClassAttribute(AnnotationMirror mirror, String attributeName) {
+        Map<? extends ExecutableElement, ? extends AnnotationValue> values =
+                processingEnv.getElementUtils().getElementValuesWithDefaults(mirror);
+        for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> entry : values.entrySet()) {
+            if (entry.getKey().getSimpleName().contentEquals(attributeName)) {
+                Object v = entry.getValue().getValue();
+                if (v instanceof TypeMirror tm) {
+                    return Optional.of(tm);
+                }
+                return Optional.empty();
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
      * Finds the constructor to use for injection. Selection rule:
      *   1. an @Inject-annotated constructor (any visibility) wins; or
      *   2. the sole public constructor when no @Inject is present.
