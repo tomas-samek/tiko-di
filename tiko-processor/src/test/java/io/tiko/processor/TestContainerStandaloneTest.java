@@ -8,7 +8,7 @@ import java.nio.charset.StandardCharsets;
 import javax.tools.JavaFileObject;
 import org.junit.jupiter.api.Test;
 
-class TestComponentImplicitWalkTest {
+class TestContainerStandaloneTest {
 
     private static final JavaFileObject TEST_COMPONENT_ANNO = JavaFileObjects.forSourceLines(
             "io.tiko.test.TestComponent",
@@ -24,26 +24,20 @@ class TestComponentImplicitWalkTest {
             "}");
 
     @Test
-    void fakeExtendsProductionClassShadowsViaSuperclassWalk() throws Exception {
-        var clockClass = JavaFileObjects.forSourceLines(
+    void testContainerIsStandaloneNotExtendingMain() throws Exception {
+        var prod = JavaFileObjects.forSourceLines(
                 "demo.Clock",
                 "package demo;",
                 "import io.tiko.Scope;",
                 "import io.tiko.annotations.Component;",
-                "import java.time.Instant;",
                 "@Component(scope = Scope.SINGLETON)",
-                "public class Clock {",
-                "    public Instant now() { return Instant.now(); }",
-                "}");
+                "public class Clock {}");
         var fake = JavaFileObjects.forSourceLines(
                 "demo.FakeClock",
                 "package demo;",
                 "import io.tiko.test.TestComponent;",
-                "import java.time.Instant;",
                 "@TestComponent",
-                "public class FakeClock extends Clock {",
-                "    @Override public Instant now() { return Instant.EPOCH; }",
-                "}");
+                "public class FakeClock extends Clock {}");
         var consumer = JavaFileObjects.forSourceLines(
                 "demo.UsesClock",
                 "package demo;",
@@ -57,7 +51,7 @@ class TestComponentImplicitWalkTest {
 
         var c = Compiler.javac()
                 .withProcessors(new TikoAnnotationProcessor())
-                .compile(TEST_COMPONENT_ANNO, clockClass, fake, consumer);
+                .compile(TEST_COMPONENT_ANNO, prod, fake, consumer);
         assertThat(c).succeeded();
 
         var testContainer = c.generatedSourceFiles().stream()
@@ -67,48 +61,79 @@ class TestComponentImplicitWalkTest {
                 .orElseThrow();
         var content = new String(testContainer.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
 
-        // FakeClock shadows Clock via the superclass walk (no explicit value()); the
-        // standalone test container hosts a FakeClock getter so the shadow declaration in
-        // test-shadows.properties can route to it.
-        org.assertj.core.api.Assertions.assertThat(content).contains("getFakeClock");
+        org.assertj.core.api.Assertions.assertThat(content).doesNotContain("extends TikoContainerImpl");
+        org.assertj.core.api.Assertions.assertThat(content).contains("implements Container");
     }
 
     @Test
-    void firstComponentAncestorWinsForMultiLevelHierarchy() throws Exception {
-        var aClass = JavaFileObjects.forSourceLines(
-                "demo.A",
+    void testShadowsPropertiesEmittedWithShadowedKeys() throws Exception {
+        var prod = JavaFileObjects.forSourceLines(
+                "demo.Clock",
                 "package demo;",
                 "import io.tiko.Scope;",
                 "import io.tiko.annotations.Component;",
                 "@Component(scope = Scope.SINGLETON)",
-                "public class A {}");
-        var bClass = JavaFileObjects.forSourceLines(
-                "demo.B",
-                "package demo;",
-                "import io.tiko.Scope;",
-                "import io.tiko.annotations.Component;",
-                "@Component(scope = Scope.SINGLETON)",
-                "public class B extends A {}");
+                "public class Clock {}");
         var fake = JavaFileObjects.forSourceLines(
-                "demo.FakeB",
+                "demo.FakeClock",
                 "package demo;",
                 "import io.tiko.test.TestComponent;",
                 "@TestComponent",
-                "public class FakeB extends B {}");
+                "public class FakeClock extends Clock {}");
         var consumer = JavaFileObjects.forSourceLines(
-                "demo.UsesB",
+                "demo.UsesClock",
                 "package demo;",
                 "import io.tiko.Scope;",
                 "import io.tiko.annotations.Component;",
                 "import io.tiko.annotations.Inject;",
                 "@Component(scope = Scope.SINGLETON)",
-                "public class UsesB {",
-                "    @Inject public UsesB(B b) {}",
+                "public class UsesClock {",
+                "    @Inject public UsesClock(Clock c) {}",
                 "}");
 
         var c = Compiler.javac()
                 .withProcessors(new TikoAnnotationProcessor())
-                .compile(TEST_COMPONENT_ANNO, aClass, bClass, fake, consumer);
+                .compile(TEST_COMPONENT_ANNO, prod, fake, consumer);
+        assertThat(c).succeeded();
+
+        var shadowsFile = c.generatedFiles().stream()
+                .filter(f -> f.getName().endsWith("META-INF/tiko/test-shadows.properties"))
+                .findFirst()
+                .orElseThrow();
+        var content = new String(shadowsFile.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
+
+        org.assertj.core.api.Assertions.assertThat(content).contains("demo.Clock=io.tiko.generated.");
+    }
+
+    @Test
+    void testContainerHasFactoryForTestSideComponent() throws Exception {
+        var prod = JavaFileObjects.forSourceLines(
+                "demo.Clock",
+                "package demo;",
+                "import io.tiko.Scope;",
+                "import io.tiko.annotations.Component;",
+                "@Component(scope = Scope.SINGLETON)",
+                "public class Clock {}");
+        var fake = JavaFileObjects.forSourceLines(
+                "demo.FakeClock",
+                "package demo;",
+                "import io.tiko.test.TestComponent;",
+                "@TestComponent",
+                "public class FakeClock extends Clock {}");
+        var consumer = JavaFileObjects.forSourceLines(
+                "demo.UsesClock",
+                "package demo;",
+                "import io.tiko.Scope;",
+                "import io.tiko.annotations.Component;",
+                "import io.tiko.annotations.Inject;",
+                "@Component(scope = Scope.SINGLETON)",
+                "public class UsesClock {",
+                "    @Inject public UsesClock(Clock c) {}",
+                "}");
+
+        var c = Compiler.javac()
+                .withProcessors(new TikoAnnotationProcessor())
+                .compile(TEST_COMPONENT_ANNO, prod, fake, consumer);
         assertThat(c).succeeded();
 
         var testContainer = c.generatedSourceFiles().stream()
@@ -118,21 +143,6 @@ class TestComponentImplicitWalkTest {
                 .orElseThrow();
         var content = new String(testContainer.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
 
-        // FakeB should shadow B (the nearer @Component ancestor): the test container
-        // hosts a FakeB getter wired to construct FakeB.
-        org.assertj.core.api.Assertions.assertThat(content).contains("getFakeB").contains("FakeB");
-    }
-
-    @Test
-    void noComponentAncestorMeansPureAddition() throws Exception {
-        var fake = JavaFileObjects.forSourceLines(
-                "demo.StandaloneFake",
-                "package demo;",
-                "import io.tiko.test.TestComponent;",
-                "@TestComponent",
-                "public class StandaloneFake {}");
-
-        var c = Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(TEST_COMPONENT_ANNO, fake);
-        assertThat(c).succeeded();
+        org.assertj.core.api.Assertions.assertThat(content).contains("FakeClock");
     }
 }
