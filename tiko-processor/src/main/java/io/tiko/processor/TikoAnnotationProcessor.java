@@ -272,9 +272,28 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
     private java.util.Set<String> computeTestExtraKeys(TypeElement testClass, AnnotationMirror mirror) {
         java.util.Optional<TypeMirror> valueAttr = readClassAttribute(mirror, "value");
         if (valueAttr.isPresent() && !isVoid(valueAttr.get())) {
+            // Explicit value() wins over implicit walk.
             return java.util.Set.of(valueAttr.get().toString());
         }
-        // Implicit walk lands in Task 6.
+
+        // Implicit walk: walk the superclass chain, returning routable types of the first
+        // @Component-annotated ancestor we find.
+        TypeMirror superMirror = testClass.getSuperclass();
+        while (superMirror instanceof javax.lang.model.type.DeclaredType dt) {
+            Element superElement = dt.asElement();
+            if (!(superElement instanceof TypeElement superType)) break;
+            if (superType.getQualifiedName().contentEquals("java.lang.Object")) break;
+
+            if (superType.getAnnotation(io.tiko.annotations.Component.class) != null) {
+                java.util.Set<String> keys = new java.util.LinkedHashSet<>();
+                keys.add(superType.getQualifiedName().toString());
+                for (TypeMirror iface : superType.getInterfaces()) {
+                    keys.add(iface.toString());
+                }
+                return keys;
+            }
+            superMirror = superType.getSuperclass();
+        }
         return java.util.Set.of();
     }
 
