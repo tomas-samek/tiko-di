@@ -2005,6 +2005,30 @@ public final class ContainerGenerator {
     }
 
     /**
+     * Probes the compile classpath for an existing {@code META-INF/tiko/container.properties}.
+     * Returns the main container's FQN if found, or empty if the test-compile round is the
+     * first emission of any Tiko container (no main container yet exists).
+     *
+     * <p>Used to decide whether to regenerate a fresh main container during the
+     * {@code test-compile} phase: if one already exists on the classpath, the test
+     * container generated here is standalone and peers with the existing main via
+     * {@code AggregatingContainer} at runtime.
+     */
+    private Optional<String> mainDescriptorFqnOnClasspath() {
+        try {
+            var resource = context.getFiler().getResource(javax.tools.StandardLocation.CLASS_PATH, "", MAIN_DESCRIPTOR);
+            try (var reader = resource.openReader(true)) {
+                var props = new Properties();
+                props.load(reader);
+                String fqn = props.getProperty("impl");
+                return fqn == null || fqn.isBlank() ? Optional.empty() : Optional.of(fqn);
+            }
+        } catch (IOException e) {
+            return Optional.empty();
+        }
+    }
+
+    /**
      * Generates META-INF/tiko/components.txt file.
      * Contains newline-separated list of all component class names — main-only, mirroring
      * the main container's component list. The {@code AggregatingContainer} loads this
