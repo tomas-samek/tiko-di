@@ -141,4 +141,14 @@ public final class ErrorReporter {
                 "Add @Named(\"...\") to each and use container.get(" + simpleTypeName + ".class, \"name\")",
                 "Keep one provider unnamed as the default and give the others @Component(name = \"...\") or @Produces(name = \"...\")");
     }
+
+    public void testComponentValueNotAssignable(Element element, String testClassFqn, String valueTypeFqn) {
+        error(
+                element,
+                "@TestComponent class " + testClassFqn + " is not assignable to declared value type " + valueTypeFqn
+                        + ". The annotated class must extend or implement the value type to shadow it.",
+                "Make " + testClassFqn + " extend or implement " + valueTypeFqn,
+                "Remove the value attribute and let the implicit superclass walk pick the shadowed component",
+                "Point value() at a type that " + testClassFqn + " actually implements");
+    }
 }

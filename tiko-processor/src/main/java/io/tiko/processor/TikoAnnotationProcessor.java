@@ -272,8 +272,17 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
     private java.util.Set<String> computeTestExtraKeys(TypeElement testClass, AnnotationMirror mirror) {
         java.util.Optional<TypeMirror> valueAttr = readClassAttribute(mirror, "value");
         if (valueAttr.isPresent() && !isVoid(valueAttr.get())) {
-            // Explicit value() wins over implicit walk.
-            return java.util.Set.of(valueAttr.get().toString());
+            // Explicit value() wins over implicit walk. Verify the annotated class is
+            // actually assignable to the declared value type, otherwise shadowing is
+            // structurally impossible.
+            TypeMirror valueType = valueAttr.get();
+            if (!processingEnv.getTypeUtils().isAssignable(testClass.asType(), valueType)) {
+                context.getErrorReporter()
+                        .testComponentValueNotAssignable(
+                                testClass, testClass.getQualifiedName().toString(), valueType.toString());
+                return java.util.Set.of();
+            }
+            return java.util.Set.of(valueType.toString());
         }
 
         // Implicit walk: walk the superclass chain, returning routable types of the first

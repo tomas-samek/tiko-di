@@ -66,4 +66,21 @@ class TestComponentExplicitValueTest {
                 .contains("@Override")
                 .contains("getHttpPaymentGateway");
     }
+
+    @Test
+    void valueMustBeAssignableFromAnnotatedClass() {
+        var iface = JavaFileObjects.forSourceLines(
+                "demo.PaymentGateway", "package demo;", "public interface PaymentGateway {}");
+        var bogusTest = JavaFileObjects.forSourceLines(
+                "demo.UnrelatedFake",
+                "package demo;",
+                "import io.tiko.test.TestComponent;",
+                "@TestComponent(value = PaymentGateway.class)",
+                "public class UnrelatedFake {}"); // does NOT implement PaymentGateway
+
+        var c = Compiler.javac()
+                .withProcessors(new TikoAnnotationProcessor())
+                .compile(TEST_COMPONENT_ANNO, iface, bogusTest);
+        assertThat(c).hadErrorContaining("not assignable to");
+    }
 }
