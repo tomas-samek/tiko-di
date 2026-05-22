@@ -39,7 +39,9 @@ public final class TikoOptions {
         this.eventExecutor = b.eventExecutor;
         this.shutdownTimeout = b.shutdownTimeout;
         this.eventBusDecorator = b.eventBusDecorator;
-        this.overrides = b.overrides == null ? java.util.Collections.emptyMap() : java.util.Map.copyOf(b.overrides);
+        this.overrides = b.overrides == null
+                ? new java.util.concurrent.ConcurrentHashMap<>()
+                : new java.util.concurrent.ConcurrentHashMap<>(b.overrides);
     }
 
     /**
@@ -101,6 +103,36 @@ public final class TikoOptions {
     public java.util.function.Supplier<?> getOverride(Class<?> type, String name) {
         Objects.requireNonNull(name, "name");
         return overrides.get(new OverrideKey(type, name));
+    }
+
+    /**
+     * Package-private entry point used by {@link AggregatingContainer} to register
+     * shadow-declared overrides AFTER {@link Builder#build()} has been called.
+     * User code cannot reach this method; it is the only mutation surface on
+     * {@link TikoOptions} outside the {@link Builder}. Always overwrites.
+     *
+     * @see #internalAddOverrideIfAbsent(Class, java.util.function.Supplier)
+     */
+    <T> void internalAddOverride(Class<T> type, java.util.function.Supplier<? extends T> supplier) {
+        overrides.put(new OverrideKey(type, ""), supplier);
+    }
+
+    /**
+     * Same as {@link #internalAddOverride(Class, java.util.function.Supplier)} but
+     * a no-op when the key already has an override. Used to give user-provided
+     * overrides precedence over shadow-declared ones.
+     */
+    <T> void internalAddOverrideIfAbsent(Class<T> type, java.util.function.Supplier<? extends T> supplier) {
+        overrides.putIfAbsent(new OverrideKey(type, ""), supplier);
+    }
+
+    /**
+     * Named-key variant of {@link #internalAddOverrideIfAbsent(Class, java.util.function.Supplier)}.
+     */
+    <T> void internalAddOverrideIfAbsent(
+            Class<T> type, String name, java.util.function.Supplier<? extends T> supplier) {
+        Objects.requireNonNull(name, "name");
+        overrides.putIfAbsent(new OverrideKey(type, name), supplier);
     }
 
     public static Builder builder() {

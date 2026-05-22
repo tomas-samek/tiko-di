@@ -148,4 +148,37 @@ class TikoOptionsTest {
         assertThat(opts.hasOverride(String.class)).isFalse();
         assertThat(opts.hasOverride(String.class, "any")).isFalse();
     }
+
+    @Test
+    void internalAddOverrideAddsToImmutableOptions() {
+        TikoOptions opts = TikoOptions.builder().build();
+        java.util.function.Supplier<String> sup = () -> "shadowed";
+
+        opts.internalAddOverride(String.class, sup);
+
+        assertThat(opts.hasOverride(String.class)).isTrue();
+        assertThat(opts.getOverride(String.class).get()).isEqualTo("shadowed");
+    }
+
+    @Test
+    void internalAddOverrideIfAbsentRespectsExistingUserOverride() {
+        java.util.function.Supplier<String> userSup = () -> "user-wins";
+        java.util.function.Supplier<String> shadowSup = () -> "shadow-loses";
+        TikoOptions opts = TikoOptions.builder().override(String.class, userSup).build();
+
+        opts.internalAddOverrideIfAbsent(String.class, shadowSup);
+
+        assertThat(opts.getOverride(String.class).get()).isEqualTo("user-wins");
+    }
+
+    @Test
+    void internalAddOverrideIfAbsentRegistersWhenKeyMissing() {
+        TikoOptions opts = TikoOptions.builder().build();
+        java.util.function.Supplier<String> shadowSup = () -> "shadow";
+
+        opts.internalAddOverrideIfAbsent(String.class, shadowSup);
+
+        assertThat(opts.hasOverride(String.class)).isTrue();
+        assertThat(opts.getOverride(String.class).get()).isEqualTo("shadow");
+    }
 }
