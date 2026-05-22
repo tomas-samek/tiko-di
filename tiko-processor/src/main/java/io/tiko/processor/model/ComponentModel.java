@@ -32,6 +32,8 @@ public final class ComponentModel {
     private final List<TypeMirror> exposeTypes; // @Component(expose = {...}); empty = permissive default
     private final boolean exposeSelf; // @Component(exposeSelf = ...); defaults to true
     private final boolean testComponent; // True when source annotation was @TestComponent (test-classpath only)
+    private final java.util.Set<String>
+            testExtraKeys; // Extra routable type keys for shadow detection (test-component only)
 
     private ComponentModel(Builder builder) {
         this.typeElement = builder.typeElement;
@@ -52,6 +54,7 @@ public final class ComponentModel {
         this.exposeTypes = List.copyOf(builder.exposeTypes);
         this.exposeSelf = builder.exposeSelf;
         this.testComponent = builder.testComponent;
+        this.testExtraKeys = java.util.Set.copyOf(builder.testExtraKeys);
     }
 
     public static Builder builder() {
@@ -175,6 +178,16 @@ public final class ComponentModel {
         return testComponent;
     }
 
+    /**
+     * Extra routable type FQN keys this test component registers under for shadow detection.
+     * Populated from either {@code @TestComponent.value()} (explicit) or the superclass-chain
+     * walk (implicit). Empty for production {@code @Component}s and for {@code @TestComponent}s
+     * with no shadow target.
+     */
+    public java.util.Set<String> getTestExtraKeys() {
+        return testExtraKeys;
+    }
+
     public static final class Builder {
         private TypeElement typeElement;
         private String packageName;
@@ -194,6 +207,7 @@ public final class ComponentModel {
         private List<TypeMirror> exposeTypes = new ArrayList<>();
         private boolean exposeSelf = true;
         private boolean testComponent = false;
+        private java.util.Set<String> testExtraKeys = java.util.Set.of();
 
         private Builder() {}
 
@@ -299,6 +313,11 @@ public final class ComponentModel {
 
         public Builder testComponent(boolean testComponent) {
             this.testComponent = testComponent;
+            return this;
+        }
+
+        public Builder testExtraKeys(java.util.Set<String> keys) {
+            this.testExtraKeys = keys == null ? java.util.Set.of() : java.util.Set.copyOf(keys);
             return this;
         }
 
