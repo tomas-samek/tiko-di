@@ -89,6 +89,24 @@ public final class AmbiguityValidator {
 
             if (testProviders.size() == 1 && !mainProviders.isEmpty()) {
                 ComponentModel testModel = testProviders.get(0).componentModel;
+                boolean scopeMismatch = false;
+                for (ProviderInfo main : mainProviders) {
+                    if (main.componentModel == null) continue; // factory method — not relevant here
+                    if (main.componentModel.getScope() != testModel.getScope()) {
+                        context.getErrorReporter()
+                                .testComponentScopeMismatch(
+                                        testModel.getTypeElement(),
+                                        testModel.getQualifiedName(),
+                                        testModel.getScope(),
+                                        main.componentModel.getQualifiedName(),
+                                        main.componentModel.getScope());
+                        scopeMismatch = true;
+                    }
+                }
+                if (scopeMismatch) {
+                    valid = false;
+                    continue; // do not record the shadow when scopes mismatch
+                }
                 for (ProviderInfo main : mainProviders) {
                     if (main.componentKey != null) {
                         context.markShadowedByTestOverride(main.componentKey, testModel);

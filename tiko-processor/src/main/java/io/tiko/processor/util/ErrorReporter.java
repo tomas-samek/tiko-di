@@ -151,4 +151,19 @@ public final class ErrorReporter {
                 "Remove the value attribute and let the implicit superclass walk pick the shadowed component",
                 "Point value() at a type that " + testClassFqn + " actually implements");
     }
+
+    public void testComponentScopeMismatch(
+            javax.lang.model.element.Element element,
+            String testFqn,
+            io.tiko.Scope testScope,
+            String mainFqn,
+            io.tiko.Scope mainScope) {
+        error(
+                element,
+                String.format(
+                        "Scope mismatch: @TestComponent %s declares scope %s but shadows @Component %s "
+                                + "declared with scope %s. Either match the scope or use TikoOptions.override(...) "
+                                + "for different lifecycle.",
+                        testFqn, testScope, mainFqn, mainScope));
+    }
 }
