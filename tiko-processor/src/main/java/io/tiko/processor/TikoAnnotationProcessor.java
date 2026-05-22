@@ -217,7 +217,8 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
                 exposeTypes,
                 annotation.exposeSelf(),
                 false,
-                "@Component");
+                "@Component",
+                java.util.Set.of());
     }
 
     /**
@@ -236,37 +237,10 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
 
         Scope scope = readEnumAttribute(mirror, "scope", Scope.class).orElse(Scope.SINGLETON);
         String name = readStringAttribute(mirror, "name").orElse("");
-
         java.util.Set<String> extraKeys = computeTestExtraKeys(typeElement, mirror);
 
-        ComponentModel model =
-                buildComponentModel(typeElement, scope, name, List.of(), List.of(), true, true, "@TestComponent");
-        if (model == null) {
-            return null;
-        }
-        // Defensive rebuild to carry testExtraKeys. Task 9 cleans this up by threading
-        // extraKeys through the shared buildComponentModel helper.
-        return ComponentModel.builder()
-                .typeElement(model.getTypeElement())
-                .packageName(model.getPackageName())
-                .className(model.getClassName())
-                .qualifiedName(model.getQualifiedName())
-                .scope(model.getScope())
-                .name(model.getName().orElse(""))
-                .profiles(model.getProfiles())
-                .dependencies(model.getDependencies())
-                .constructor(model.getConstructor())
-                .postConstructMethods(model.getPostConstructMethods())
-                .preDestroyMethods(model.getPreDestroyMethods())
-                .implementedInterface(model.getImplementedInterface().orElse(null))
-                .requiresProxy(model.requiresProxy())
-                .staticFactoryMethod(model.getStaticFactoryMethod().orElse(null))
-                .autoCloseable(model.isAutoCloseable())
-                .exposeTypes(model.getExposeTypes())
-                .exposeSelf(model.isExposeSelf())
-                .testComponent(true)
-                .testExtraKeys(extraKeys)
-                .build();
+        return buildComponentModel(
+                typeElement, scope, name, List.of(), List.of(), true, true, "@TestComponent", extraKeys);
     }
 
     private java.util.Set<String> computeTestExtraKeys(TypeElement testClass, AnnotationMirror mirror) {
@@ -324,7 +298,8 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
             List<TypeMirror> exposeTypes,
             boolean exposeSelf,
             boolean isTestComponent,
-            String annotationLabel) {
+            String annotationLabel,
+            java.util.Set<String> testExtraKeys) {
         // Detect a self-@Produces method: a static @Produces method on this class
         // returning this class with the same qualifier name. When present, it acts
         // as the bean's instantiation strategy (replaces the constructor call).
@@ -380,7 +355,8 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
                 .autoCloseable(autoCloseable)
                 .exposeTypes(exposeTypes)
                 .exposeSelf(exposeSelf)
-                .testComponent(isTestComponent);
+                .testComponent(isTestComponent)
+                .testExtraKeys(testExtraKeys);
 
         if (constructor != null) {
             builder.constructor(constructor);
