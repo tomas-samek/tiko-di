@@ -55,6 +55,12 @@ public final class AmbiguityValidator {
             for (var iface : declared) {
                 register(providersByType, iface.toString(), info);
             }
+
+            // Additional shadow-target keys carried by @TestComponent (explicit value() or implicit walk).
+            // Empty for production @Component, so this loop is a no-op for non-test components.
+            for (String extraKey : component.getTestExtraKeys()) {
+                register(providersByType, extraKey, info);
+            }
         }
 
         for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
@@ -134,7 +140,14 @@ public final class AmbiguityValidator {
     }
 
     private void register(Map<String, List<ProviderInfo>> map, String key, ProviderInfo provider) {
-        map.computeIfAbsent(key, k -> new ArrayList<>()).add(provider);
+        // A single provider can reach the same key by more than one route — e.g. a
+        // @TestComponent that implements interface X and also declares value = X.class.
+        // Dedupe by element identity so it counts as one provider for ambiguity purposes.
+        List<ProviderInfo> bucket = map.computeIfAbsent(key, k -> new ArrayList<>());
+        for (ProviderInfo existing : bucket) {
+            if (existing.element == provider.element) return;
+        }
+        bucket.add(provider);
     }
 
     private void reportAmbiguity(String typeKey, List<ProviderInfo> providers) {

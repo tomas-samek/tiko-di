@@ -206,7 +206,11 @@ public final class ProcessorContext {
         // Extract qualifier
         String qualifier = key.contains("#") ? key.substring(key.indexOf("#") + 1) : "";
 
-        // Look for a component that implements this interface
+        // Look for a component that implements this interface. Prefer non-test components
+        // so that main-container wiring never resolves a dependency to a @TestComponent;
+        // the test container performs its own shadow swap downstream via the carve-out in
+        // AmbiguityValidator + getActiveTestContainerComponents().
+        ComponentModel testFallback = null;
         for (ComponentModel component : components.values()) {
             // Check if component implements the requested interface
             if (component.getImplementedInterface().isPresent()) {
@@ -215,10 +219,16 @@ public final class ProcessorContext {
                     // Check qualifier matches if present
                     if (qualifier.isEmpty()
                             || qualifier.equals(component.getName().orElse(""))) {
-                        return Optional.of(component);
+                        if (!component.isTestComponent()) {
+                            return Optional.of(component);
+                        }
+                        if (testFallback == null) testFallback = component;
                     }
                 }
             }
+        }
+        if (testFallback != null) {
+            return Optional.of(testFallback);
         }
 
         return Optional.empty();
