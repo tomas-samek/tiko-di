@@ -30,6 +30,8 @@ class DispatcherGetOverrideTest {
         var content = new String(container.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
 
         org.assertj.core.api.Assertions.assertThat(content)
-                .containsPattern("public <T> T get\\(Class<T> type\\)[^}]*options\\.hasOverride\\(type\\)");
+                .contains("public <T> T get(Class<T> type)")
+                .contains("options.hasOverride(type)")
+                .contains("options.getOverride(type).get()");
     }
 }
