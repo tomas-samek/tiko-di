@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.tiko.examples</groupId>
+        <artifactId>tiko-examples</artifactId>
+        <version>0.1.0</version>
+    </parent>
+
+    <artifactId>12_testing</artifactId>
+    <packaging>jar</packaging>
+    <name>12 - Testing Example</name>
+    <description>Runnable demo of every tiko-test capability — @TestComponent shadowing,
+        runtime override, RecordingEventBus, scope helpers, async drain, lifecycle.</description>
+
+    <dependencies>
+
+        <dependency>
+            <groupId>io.tiko</groupId>
+            <artifactId>tiko-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!--
+          tiko-processor is on the compile classpath as `provided` (not propagated to
+          consumers). It runs at both compile and test-compile, so the
+          @TestComponent-annotated fixtures under src/test/java also get processed —
+          which is exactly what FixedClockTest depends on.
+        -->
+        <dependency>
+            <groupId>io.tiko</groupId>
+            <artifactId>tiko-processor</artifactId>
+            <version>${project.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>io.tiko</groupId>
+            <artifactId>tiko-runtime</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>io.tiko</groupId>
+            <artifactId>tiko-test</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+</project>
