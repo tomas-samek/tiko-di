@@ -30,6 +30,23 @@ import java.util.concurrent.ExecutorService;
  */
 public final class Tiko {
 
+    /**
+     * Canonical parameter signature of the generated container constructor. The annotation
+     * processor emits exactly this signature on {@code TikoContainerImpl}, and both
+     * {@link #createSingleModuleContainer} and {@link AggregatingContainer#processContainerResource}
+     * look it up reflectively. Keep this list in sync with
+     * {@code ContainerGenerator.createConstructor()} — adding a parameter touches both
+     * generator output and this constant, nothing else.
+     */
+    static final Class<?>[] CONTAINER_CTOR_PARAM_TYPES = {
+        EventBus.class,
+        ErrorHandler.class,
+        ExecutorService.class,
+        boolean.class,
+        java.time.Duration.class,
+        TikoOptions.class,
+    };
+
     private Tiko() {}
 
     /**
@@ -75,18 +92,29 @@ public final class Tiko {
                 errorHandler = new DefaultErrorHandler();
             }
 
-            // 2. Create EventBus instance (still no-arg; the bus does not take ErrorHandler).
+            // 2. Create EventBus instance, then apply the optional decorator. Runs before the
+            //    container is constructed so subscribers register against the wrapper.
             EventBus eventBus = new LocalEventBus();
+            if (options.eventBusDecorator() != null) {
+                eventBus = options.eventBusDecorator().apply(eventBus);
+            }
 
-            // 3. Detect single vs multi-module scenario
+            // 3. Detect single vs multi-module scenario. Prefer the test descriptor
+            //    when present on the classpath: a {@code @TestComponent}-bearing build
+            //    emits {@code META-INF/tiko/test-container.properties} (pointing at
+            //    {@code TestTikoContainerImpl_<hash>}, a subclass of the main container)
+            //    so test runs pick up the test-side wiring while production binaries —
+            //    which never see {@code @TestComponent}s — fall back to the main descriptor.
             ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
             if (classLoader == null) classLoader = Tiko.class.getClassLoader();
 
-            var resources = classLoader.getResources("META-INF/tiko/container.properties");
-            int moduleCount = 0;
-            while (resources.hasMoreElements()) {
-                resources.nextElement();
-                moduleCount++;
+            String descriptorName = "META-INF/tiko/test-container.properties";
+            var resources = classLoader.getResources(descriptorName);
+            int moduleCount = countResources(resources);
+            if (moduleCount == 0) {
+                descriptorName = "META-INF/tiko/container.properties";
+                resources = classLoader.getResources(descriptorName);
+                moduleCount = countResources(resources);
             }
 
             java.time.Duration effectiveShutdownTimeout = resolveShutdownTimeout(options, classLoader);
@@ -94,11 +122,21 @@ public final class Tiko {
             Container container;
             if (moduleCount > 1) {
                 container = new AggregatingContainer(
-                        eventBus, errorHandler, options.eventExecutor(), effectiveShutdownTimeout);
+                        eventBus,
+                        errorHandler,
+                        options.eventExecutor(),
+                        effectiveShutdownTimeout,
+                        options,
+                        descriptorName);
             } else {
                 // Single module: Direct instantiation (does NOT call start yet)
                 container = createSingleModuleContainer(
-                        eventBus, errorHandler, options.eventExecutor(), effectiveShutdownTimeout);
+                        eventBus,
+                        errorHandler,
+                        options.eventExecutor(),
+                        effectiveShutdownTimeout,
+                        options,
+                        descriptorName);
             }
 
             // 4. Inject config singletons before start(), so @PostConstruct can use them.
@@ -319,6 +357,16 @@ public final class Tiko {
         }
     }
 
+    /** Counts how many {@link java.net.URL}s an enumeration yields, draining it. */
+    private static int countResources(java.util.Enumeration<java.net.URL> resources) {
+        int count = 0;
+        while (resources.hasMoreElements()) {
+            resources.nextElement();
+            count++;
+        }
+        return count;
+    }
+
     /**
      * Creates a single-module container. Does NOT call start() — that is done in createInternal
      * after injectConfigs() runs.
@@ -327,12 +375,14 @@ public final class Tiko {
             EventBus eventBus,
             ErrorHandler errorHandler,
             ExecutorService userEventExecutor,
-            java.time.Duration shutdownTimeout)
+            java.time.Duration shutdownTimeout,
+            TikoOptions options,
+            String descriptorName)
             throws Exception {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
         if (classLoader == null) classLoader = Tiko.class.getClassLoader();
 
-        var resources = classLoader.getResources("META-INF/tiko/container.properties");
+        var resources = classLoader.getResources(descriptorName);
         Class<?> implClass;
         if (resources.hasMoreElements()) {
             Properties props = new Properties();
@@ -347,15 +397,17 @@ public final class Tiko {
 
         // Single-module: publishLifecycleEvents=true so the per-module container publishes
         // its own ApplicationStartedEvent / ApplicationEndingEvent (no aggregator above it).
+        // The 6th arg (TikoOptions) is held by the container so override-aware getters can
+        // consult it during component lookup (test/runtime override support).
         Container container = (Container) implClass
-                .getDeclaredConstructor(
-                        EventBus.class,
-                        ErrorHandler.class,
-                        ExecutorService.class,
-                        boolean.class,
-                        java.time.Duration.class)
+                .getDeclaredConstructor(CONTAINER_CTOR_PARAM_TYPES)
                 .newInstance(
-                        eventBus, errorHandler, userEventExecutor, /* publishLifecycleEvents */ true, shutdownTimeout);
+                        eventBus,
+                        errorHandler,
+                        userEventExecutor,
+                        /* publishLifecycleEvents */ true,
+                        shutdownTimeout,
+                        options);
 
         registerEventHandlers(eventBus, container, implClass);
 
@@ -365,14 +417,36 @@ public final class Tiko {
 
     /**
      * Registers event handlers if EventRegistry is present.
+     *
+     * <p>The generated {@code EventRegistry.registerHandlers} declares its second
+     * parameter as the main {@code TikoContainerImpl_<hash>}. When the test container
+     * subclass ({@code TestTikoContainerImpl_<hash>}) is loaded instead, an exact
+     * {@link Class#getMethod} lookup misses (param type mismatch), so we walk the
+     * container's superclass chain to find the registration method.
      */
     private static void registerEventHandlers(EventBus eventBus, Container container, Class<?> containerClass) {
+        Class<?> registryClass;
         try {
-            Class<?> registryClass = Class.forName("io.tiko.generated.EventRegistry");
-            var registerMethod = registryClass.getMethod("registerHandlers", EventBus.class, containerClass);
-            registerMethod.invoke(null, eventBus, container);
+            registryClass = Class.forName("io.tiko.generated.EventRegistry");
         } catch (ClassNotFoundException e) {
             // No event handlers registered - this is OK
+            return;
+        }
+        try {
+            Class<?> probe = containerClass;
+            java.lang.reflect.Method registerMethod = null;
+            while (probe != null && registerMethod == null) {
+                try {
+                    registerMethod = registryClass.getMethod("registerHandlers", EventBus.class, probe);
+                } catch (NoSuchMethodException nsme) {
+                    probe = probe.getSuperclass();
+                }
+            }
+            if (registerMethod == null) {
+                throw new NoSuchMethodException(
+                        "EventRegistry.registerHandlers not found for " + containerClass.getName());
+            }
+            registerMethod.invoke(null, eventBus, container);
         } catch (Exception e) {
             // Ignore - event registration is optional
         }

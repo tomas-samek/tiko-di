@@ -5,10 +5,15 @@ import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.EventHandlerModel;
 import io.tiko.processor.model.FactoryMethodModel;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
@@ -33,6 +38,12 @@ public final class ProcessorContext {
     private final Map<String, FactoryMethodModel> factoryMethods = new HashMap<>();
     private final List<EventHandlerModel> eventHandlers = new ArrayList<>();
     private final List<ConfigurationModel> configurations = new ArrayList<>();
+
+    // Main-component keys shadowed by a same-typed @TestComponent, mapped to the
+    // shadowing test ComponentModel. Populated by AmbiguityValidator; consumed by
+    // test-container code generation, which wires the test factory in place of the
+    // main factory for shadowed entries. LinkedHashMap preserves registration order.
+    private final Map<String, ComponentModel> shadowedByTestOverride = new LinkedHashMap<>();
 
     // Active profiles (for filtering components during generation)
     private final List<String> activeProfiles;
@@ -230,7 +241,10 @@ public final class ProcessorContext {
     }
 
     /**
-     * Returns all components that should be active based on current profiles.
+     * Returns all components that should be active based on current profiles. Includes
+     * both {@code @Component} and {@code @TestComponent} entries — callers that need to
+     * separate the two should use {@link #getActiveMainComponents()} or
+     * {@link #getActiveTestContainerComponents()} instead.
      */
     public List<ComponentModel> getActiveComponents() {
         return components.values().stream()
@@ -248,6 +262,56 @@ public final class ProcessorContext {
     }
 
     /**
+     * Returns the active components for the production-classpath {@code TikoContainerImpl}.
+     * Test components are filtered out so the main container's wiring is uncontaminated
+     * by test-only beans even when a test-compile round happens to see them.
+     */
+    public List<ComponentModel> getActiveMainComponents() {
+        return components.values().stream()
+                .filter(c -> isProfileActive(c.getProfiles()))
+                .filter(c -> !c.isTestComponent())
+                .toList();
+    }
+
+    /**
+     * Returns the active components for the test-classpath {@code TestTikoContainerImpl}:
+     * main components with any shadowed entries swapped for their shadowing
+     * {@code @TestComponent}, plus all test components that are not shadowing anything
+     * (test-only fixtures with no main counterpart).
+     *
+     * <p>The swap preserves the iteration order of the original main-component list — a
+     * shadowed main slot is replaced in-place by the test model — so downstream
+     * generation (factory init order, eager SINGLETON walk order, etc.) stays stable.
+     */
+    public List<ComponentModel> getActiveTestContainerComponents() {
+        var mains = getActiveMainComponents();
+        var result = new ArrayList<ComponentModel>(mains.size() + shadowedByTestOverride.size());
+        var consumedTestKeys = new java.util.HashSet<String>();
+        for (ComponentModel main : mains) {
+            ComponentModel shadow = shadowedByTestOverride.get(main.getComponentKey());
+            if (shadow != null) {
+                result.add(shadow);
+                consumedTestKeys.add(shadow.getComponentKey());
+            } else {
+                result.add(main);
+            }
+        }
+        // Append any @TestComponents not consumed above (test-only fixtures with no main).
+        for (ComponentModel c : components.values()) {
+            if (!c.isTestComponent()) continue;
+            if (!isProfileActive(c.getProfiles())) continue;
+            if (consumedTestKeys.contains(c.getComponentKey())) continue;
+            result.add(c);
+        }
+        return List.copyOf(result);
+    }
+
+    /** True when at least one {@code @TestComponent} was discovered in this round. */
+    public boolean hasTestComponents() {
+        return components.values().stream().anyMatch(ComponentModel::isTestComponent);
+    }
+
+    /**
      * Returns the generated container class name.
      */
     public String getContainerClassName() {
@@ -259,5 +323,38 @@ public final class ProcessorContext {
      */
     public void setContainerClassName(String containerClassName) {
         this.containerClassName = containerClassName;
+    }
+
+    /**
+     * Marks a main {@code @Component} as shadowed by a same-typed {@code @TestComponent}.
+     * The validator calls this when it detects a one-to-many shadow pair so the main
+     * container's wiring stays unchanged, while the test container can substitute the
+     * test factory wherever the marked component would have been resolved.
+     *
+     * @param mainComponentKey the main component key being shadowed
+     * @param testComponent the {@code @TestComponent} model providing the override
+     */
+    public void markShadowedByTestOverride(String mainComponentKey, ComponentModel testComponent) {
+        Objects.requireNonNull(mainComponentKey, "mainComponentKey");
+        Objects.requireNonNull(testComponent, "testComponent");
+        shadowedByTestOverride.put(mainComponentKey, testComponent);
+    }
+
+    /** True when the given component key has been marked as shadowed by a {@code @TestComponent}. */
+    public boolean isShadowedByTestOverride(String mainComponentKey) {
+        return shadowedByTestOverride.containsKey(mainComponentKey);
+    }
+
+    /**
+     * Returns the {@code @TestComponent} model shadowing the given main component key,
+     * or {@code null} if the key is not shadowed.
+     */
+    public ComponentModel getTestComponentShadowing(String mainComponentKey) {
+        return shadowedByTestOverride.get(mainComponentKey);
+    }
+
+    /** Snapshot of the shadowed main-component keys. Iteration order is registration order. */
+    public Set<String> getShadowedMainKeys() {
+        return Collections.unmodifiableSet(new LinkedHashSet<>(shadowedByTestOverride.keySet()));
     }
 }

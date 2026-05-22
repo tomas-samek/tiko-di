@@ -60,11 +60,19 @@ Deferred designs (discussed, no tracker issue yet, not bound to a phase):
 
 ### Phase 3 — onboarding & tooling
 
-[Phase 3 milestone](https://github.com/tomas-samek/tiko-di/milestone/3) — 0/3 closed.
+[Phase 3 milestone](https://github.com/tomas-samek/tiko-di/milestone/3) — 1/6 closed.
+
+Shipped:
+
+- ✅ `tiko-test` JUnit 5 extension + module ([#122](https://github.com/tomas-samek/tiko-di/issues/122)) — `@TikoTest` boots a container per test method or per class, `ParameterResolver` injects `Container` / `EventBus` / `RecordingEventBus` / any container-managed type, `@TestComponent` registers compile-time overrides into a separate `TestTikoContainerImpl_<hash>`, `TikoOptions.override(Class, [name,] Supplier)` registers runtime overrides, `RecordingEventBus` spies on publishes with fluent assertions and `awaitAsyncDispatch(Duration)`, and `@RequestScopeTest` / `@EventScopeTest` wrap the test body in container scopes. Three known limitations tracked below.
+
+Open:
 
 - AI-assistant-aware Maven archetype variant ([#21](https://github.com/tomas-samek/tiko-di/issues/21)). The plain quickstart archetype already ships (see above).
-- `tiko-test` JUnit 5 extension + module — `@TikoTest` to boot a container per test class, `@TestComponent` for compile-time-validated overrides, `TikoOptions.override(...)` for late-binding mocks, `RecordingEventBus` test double for event-publish assertions ([#122](https://github.com/tomas-samek/tiko-di/issues/122)).
 - Machine-readable topology + config schema, plus an MCP server so AI agents can introspect the wiring ([#22](https://github.com/tomas-samek/tiko-di/issues/22)).
+- `tiko-test`: extend `@TestComponent` shadow detection beyond interface-based routing to also catch test subclasses that `extends` a main concrete `@Component` ([#127](https://github.com/tomas-samek/tiko-di/issues/127)).
+- `tiko-test`: `TikoOptions.override` should match every routable type (interfaces, super-types), not just the concrete `@Component` class ([#128](https://github.com/tomas-samek/tiko-di/issues/128)).
+- `tiko-test`: `test-compile` annotation-processor round must include the main-classpath `@Component` set in the generated test container, so `@Component`s can live under `src/main/java/` rather than being forced into `src/test/java/` ([#129](https://github.com/tomas-samek/tiko-di/issues/129)).
 
 ### Phase 4 — runtime hardening (in progress)
 

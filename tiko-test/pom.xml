@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.tiko</groupId>
+        <artifactId>tiko-parent</artifactId>
+        <version>0.1.0</version>
+    </parent>
+
+    <artifactId>tiko-test</artifactId>
+    <name>Tiko :: Test</name>
+    <description>JUnit 5 extension and compile-time-safe override helpers for testing Tiko applications.</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.tiko</groupId>
+            <artifactId>tiko-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.tiko</groupId>
+            <artifactId>tiko-runtime</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <!--
+          Test-only: process the @Component-bearing fixtures under src/test/java so
+          @TikoTest can boot a real container. tiko-processor is scope=test because the
+          shipped artifact must not require it transitively.
+        -->
+        <dependency>
+            <groupId>io.tiko</groupId>
+            <artifactId>tiko-processor</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>
