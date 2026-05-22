@@ -119,8 +119,14 @@ public final class Tiko {
 
             java.time.Duration effectiveShutdownTimeout = resolveShutdownTimeout(options, classLoader);
 
+            // When the test descriptor is on the classpath, always route through the aggregator —
+            // even with a single module — so AggregatingContainer's shadow-registration phase
+            // (test-shadows.properties → TikoOptions overrides) runs. The single-module fast path
+            // bypasses shadow registration entirely.
+            boolean testMode = "META-INF/tiko/test-container.properties".equals(descriptorName);
+
             Container container;
-            if (moduleCount > 1) {
+            if (moduleCount > 1 || testMode) {
                 container = new AggregatingContainer(
                         eventBus,
                         errorHandler,
