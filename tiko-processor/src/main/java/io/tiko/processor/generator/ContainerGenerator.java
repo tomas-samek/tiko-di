@@ -44,19 +44,6 @@ public final class ContainerGenerator {
      */
     private List<ComponentModel> currentComponents = List.of();
 
-    /**
-     * True while the main container is being emitted in a round that also produces a
-     * test subclass. The flag drops {@code Modifier.FINAL} from the main container class
-     * and {@code Modifier.PRIVATE} from a handful of fields ({@code singletons},
-     * {@code requestScoped}, {@code eventScoped}, {@code options}) so the
-     * {@code TestTikoContainerImpl_<hash>} subclass — emitted in the same
-     * {@code io.tiko.generated} package — can extend it and access those fields when
-     * overriding shadowed-component getters. When no {@code @TestComponent} is present
-     * in the round, the main container is emitted with its original {@code final}
-     * modifier and {@code private} fields, so production builds are byte-identical.
-     */
-    private boolean extensibleMainContainer = false;
-
     public ContainerGenerator(ProcessorContext context) {
         this.context = context;
     }
@@ -74,31 +61,17 @@ public final class ContainerGenerator {
      * that never see test sources are unaffected by this dual emission.
      */
     public void generate() throws IOException {
-        boolean dualEmission = context.hasTestComponents();
-        this.extensibleMainContainer = dualEmission;
-
+        // TODO #129 Task 7: the test-subclass emission below is the next thing to go — once
+        // private fields land here (this task), the subclass can no longer compile against
+        // the main container. T7 will replace it with a standalone TestTikoContainerImpl
+        // that does not extend the main container at all, plus a test-shadows.properties
+        // descriptor consumed by AggregatingContainer. Until that lands, dual emission is
+        // disabled so the production main container build stays green in test rounds; the
+        // separate aggregator path (T2/T3) keeps test-shadow registration working.
         String mainContainerClassName = context.getContainerClassName();
         var mainComponents = context.getActiveMainComponents();
         generateOne(mainContainerClassName, mainComponents, MAIN_DESCRIPTOR);
         generateComponentsListFile();
-
-        if (dualEmission) {
-            // Test container is a subclass of the main container — so factories generated
-            // against the main container type (e.g. {@code FakeClockFactory(TikoContainerImpl_<hash> c)})
-            // still accept a {@code TestTikoContainerImpl_<hash>} instance, and dispatch
-            // through inherited getters works naturally. The test container only emits the
-            // diffs: new fields/getters for test-only components, plus overrides for any
-            // main component shadowed by a same-typed {@code @TestComponent}.
-            //
-            // Test container's hash is recomputed from {main components + test components}
-            // (via the test-active component list) so it is independent of the main hash.
-            // The distinct "TestTikoContainerImpl_" prefix means even a hash collision
-            // could not put the two on a classpath collision course.
-            var testComponents = context.getActiveTestContainerComponents();
-            String testContainerClassName = "TestTikoContainerImpl_" + computeHash(testComponents);
-            generateTestSubclass(mainContainerClassName, testContainerClassName, mainComponents, testComponents);
-            writeContainerDescriptor(TEST_DESCRIPTOR, testContainerClassName);
-        }
     }
 
     /**
@@ -113,14 +86,7 @@ public final class ContainerGenerator {
 
         TypeSpec.Builder containerBuilder = TypeSpec.classBuilder(containerClassName)
                 .addAnnotation(GeneratorAnnotations.generatedBy(ContainerGenerator.class));
-        if (extensibleMainContainer) {
-            // Non-final so the test subclass can extend; stays in io.tiko.generated so
-            // production user code still cannot reach it (and there is no public
-            // io.tiko-side hook to instantiate it directly).
-            containerBuilder.addModifiers(Modifier.PUBLIC);
-        } else {
-            containerBuilder.addModifiers(Modifier.PUBLIC, Modifier.FINAL);
-        }
+        containerBuilder.addModifiers(Modifier.PUBLIC, Modifier.FINAL);
         containerBuilder.addSuperinterface(Container.class);
 
         // Add fields
@@ -526,9 +492,6 @@ public final class ContainerGenerator {
 
     /**
      * Creates the singleton storage field: Map<String, Object>.
-     * Drops {@code Modifier.PRIVATE} when the container is being emitted extensibly
-     * (test subclass present in this round) so the subclass can call
-     * {@code singletons.computeIfAbsent(...)} from its overridden / additional getters.
      */
     private FieldSpec createSingletonStorageField() {
         ParameterizedTypeName mapType = ParameterizedTypeName.get(
@@ -540,15 +503,13 @@ public final class ContainerGenerator {
     }
 
     /**
-     * Field-modifier set for the per-container scope-storage and override-source fields
-     * that the test subclass needs to access. Package-private (no PRIVATE) when emitting
-     * extensibly so the subclass — in the same {@code io.tiko.generated} package — can
-     * read/mutate them; fully private otherwise.
+     * Field-modifier set for the per-container scope-storage and override-source fields.
+     * Always {@code private final} — the standalone test container emitted alongside the
+     * main container in test rounds does not extend it, so the main container's scope
+     * storage stays fully encapsulated.
      */
     private Modifier[] scopeStorageModifiers() {
-        return extensibleMainContainer
-                ? new Modifier[] {Modifier.FINAL}
-                : new Modifier[] {Modifier.PRIVATE, Modifier.FINAL};
+        return new Modifier[] {Modifier.PRIVATE, Modifier.FINAL};
     }
 
     /**
