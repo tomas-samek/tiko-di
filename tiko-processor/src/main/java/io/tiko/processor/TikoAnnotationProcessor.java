@@ -237,7 +237,49 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         Scope scope = readEnumAttribute(mirror, "scope", Scope.class).orElse(Scope.SINGLETON);
         String name = readStringAttribute(mirror, "name").orElse("");
 
-        return buildComponentModel(typeElement, scope, name, List.of(), List.of(), true, true, "@TestComponent");
+        java.util.Set<String> extraKeys = computeTestExtraKeys(typeElement, mirror);
+
+        ComponentModel model =
+                buildComponentModel(typeElement, scope, name, List.of(), List.of(), true, true, "@TestComponent");
+        if (model == null) {
+            return null;
+        }
+        // Defensive rebuild to carry testExtraKeys. Task 9 cleans this up by threading
+        // extraKeys through the shared buildComponentModel helper.
+        return ComponentModel.builder()
+                .typeElement(model.getTypeElement())
+                .packageName(model.getPackageName())
+                .className(model.getClassName())
+                .qualifiedName(model.getQualifiedName())
+                .scope(model.getScope())
+                .name(model.getName().orElse(""))
+                .profiles(model.getProfiles())
+                .dependencies(model.getDependencies())
+                .constructor(model.getConstructor())
+                .postConstructMethods(model.getPostConstructMethods())
+                .preDestroyMethods(model.getPreDestroyMethods())
+                .implementedInterface(model.getImplementedInterface().orElse(null))
+                .requiresProxy(model.requiresProxy())
+                .staticFactoryMethod(model.getStaticFactoryMethod().orElse(null))
+                .autoCloseable(model.isAutoCloseable())
+                .exposeTypes(model.getExposeTypes())
+                .exposeSelf(model.isExposeSelf())
+                .testComponent(true)
+                .testExtraKeys(extraKeys)
+                .build();
+    }
+
+    private java.util.Set<String> computeTestExtraKeys(TypeElement testClass, AnnotationMirror mirror) {
+        java.util.Optional<TypeMirror> valueAttr = readClassAttribute(mirror, "value");
+        if (valueAttr.isPresent() && !isVoid(valueAttr.get())) {
+            return java.util.Set.of(valueAttr.get().toString());
+        }
+        // Implicit walk lands in Task 6.
+        return java.util.Set.of();
+    }
+
+    private static boolean isVoid(TypeMirror tm) {
+        return tm.toString().equals("java.lang.Void");
     }
 
     /**
