@@ -182,6 +182,13 @@ public final class ContainerGenerator {
         // Add EventExecutor getter
         containerBuilder.addMethod(createGetEventExecutorMethod());
 
+        // Add package-private options() accessor so generated factories in the same
+        // io.tiko.generated package can consult per-call-site overrides without a
+        // Container-interface change. Used by ComponentFactoryGenerator to wrap each
+        // direct dependency resolution with an override-aware ternary keyed on the
+        // parameter's declared type (#128).
+        containerBuilder.addMethod(createOptionsAccessor());
+
         TypeSpec containerClass = containerBuilder.build();
 
         JavaFile javaFile = JavaFile.builder(GENERATED_PACKAGE, containerClass).build();
@@ -381,20 +388,10 @@ public final class ContainerGenerator {
                         factoryFieldName);
             case REQUEST ->
                 emitScopedGetOrCreate(
-                        method,
-                        returnType,
-                        returnType,
-                        "requestScoped.get()",
-                        storageKey,
-                        factoryFieldName + ".create()");
+                        method, returnType, "requestScoped.get()", storageKey, factoryFieldName + ".create()");
             case EVENT ->
                 emitScopedGetOrCreate(
-                        method,
-                        returnType,
-                        returnType,
-                        "eventScoped.get()",
-                        storageKey,
-                        factoryFieldName + ".create()");
+                        method, returnType, "eventScoped.get()", storageKey, factoryFieldName + ".create()");
             case PROTOTYPE -> method.addStatement("return $L.create()", factoryFieldName);
         }
         return method.build();
@@ -730,14 +727,11 @@ public final class ContainerGenerator {
     }
 
     /**
-     * Field: TikoOptions options — held so getter methods can consult
-     * {@link io.tiko.runtime.TikoOptions#getOverride} before constructing the canonical
-     * production bean. The SINGLETON getter consults this inside its
-     * {@code computeIfAbsent} lambda so the override {@code Supplier} is called at most
-     * once per container; REQUEST and EVENT getters consult it inside
-     * {@link #emitScopedGetOrCreate} so the override {@code Supplier} is called at most
-     * once per scope instance. Named-qualified getters wire the same consultation
-     * through their respective name-dispatch paths.
+     * Field: TikoOptions options — held so the dispatcher heads ({@code get(Class)},
+     * {@code get(Class, String)}) and factory call sites can consult
+     * {@link io.tiko.runtime.TikoOptions#getOverride} when resolving by the declared/
+     * requested type. After #128 the per-component getters are pure factory caches;
+     * override consultation no longer happens inside them.
      */
     private FieldSpec createOptionsField() {
         return FieldSpec.builder(ClassName.get("io.tiko.runtime", "TikoOptions"), "options", scopeStorageModifiers())
@@ -1058,63 +1052,47 @@ public final class ContainerGenerator {
 
         switch (component.getScope()) {
             case SINGLETON -> {
-                // Return from singleton cache, create if not exists. The override consultation
-                // lives inside computeIfAbsent's lambda so the Supplier is invoked at most once
-                // per container — the result is cached in `singletons` like any production bean,
-                // matching SINGLETON's "instance per container" semantics. Falls back to the
-                // canonical factory when no override is registered for the component's user type.
+                // Return from singleton cache, create if not exists. Per-component getters are
+                // pure factory caches — override consultation happens at the dispatcher entry
+                // points (get(Class) / get(Class, String)) and at factory call sites where the
+                // declared parameter type is known. Consulting overrides here would force the
+                // cast to the concrete class, defeating interface-keyed override lookup.
                 if (component.requiresProxy()) {
                     // Proxies are created eagerly in constructor, just return the field
                     String proxyFieldName = getProxyFieldName(component.getClassName());
                     method.addStatement("return $L", proxyFieldName);
                 } else {
-                    TypeName componentType = ClassName.get(component.getTypeElement());
                     method.addStatement(
-                            "return ($1T) singletons.computeIfAbsent($2S, k -> options.hasOverride($3T.class) ? options.getOverride($3T.class).get() : $4L.create())",
+                            "return ($1T) singletons.computeIfAbsent($2S, k -> $3L.create())",
                             returnType,
                             storageKey,
-                            componentType,
                             factoryFieldName);
                 }
             }
             case REQUEST -> {
-                // Return from REQUEST scope storage. The override consultation lives inside
-                // emitScopedGetOrCreate's get-then-put block so the override Supplier is
-                // invoked at most once per REQUEST scope instance — the result is then
-                // cached in the per-thread requestScoped map like any production bean.
+                // Return from REQUEST scope storage. Per-component getters are pure factory
+                // caches after #128: override consultation happens upstream at dispatcher
+                // heads (get(Class), get(Class, String)) and at factory call sites.
                 if (component.requiresProxy()) {
                     // Proxies are created eagerly in constructor, just return the field
                     String proxyFieldName = getProxyFieldName(component.getClassName());
                     method.addStatement("return $L", proxyFieldName);
                 } else {
-                    TypeName componentType = ClassName.get(component.getTypeElement());
                     emitScopedGetOrCreate(
-                            method,
-                            returnType,
-                            componentType,
-                            "requestScoped.get()",
-                            storageKey,
-                            factoryFieldName + ".create()");
+                            method, returnType, "requestScoped.get()", storageKey, factoryFieldName + ".create()");
                 }
             }
             case EVENT -> {
-                // Return from EVENT scope storage. The override consultation lives inside
-                // emitScopedGetOrCreate's get-then-put block so the override Supplier is
-                // invoked at most once per EVENT scope instance — the result is then
-                // cached in the per-thread eventScoped map like any production bean.
+                // Return from EVENT scope storage. Per-component getters are pure factory
+                // caches after #128: override consultation happens upstream at dispatcher
+                // heads (get(Class), get(Class, String)) and at factory call sites.
                 if (component.requiresProxy()) {
                     // Proxies are created eagerly in constructor, just return the field
                     String proxyFieldName = getProxyFieldName(component.getClassName());
                     method.addStatement("return $L", proxyFieldName);
                 } else {
-                    TypeName componentType = ClassName.get(component.getTypeElement());
                     emitScopedGetOrCreate(
-                            method,
-                            returnType,
-                            componentType,
-                            "eventScoped.get()",
-                            storageKey,
-                            factoryFieldName + ".create()");
+                            method, returnType, "eventScoped.get()", storageKey, factoryFieldName + ".create()");
                 }
             }
             case PROTOTYPE -> // Always create new instance
@@ -1130,7 +1108,6 @@ public final class ContainerGenerator {
     private MethodSpec createCurrentScopedGetter(ComponentModel component) {
         String methodName = "getCurrent" + component.getClassName();
         TypeName returnType = ClassName.get(component.getTypeElement());
-        TypeName componentType = ClassName.get(component.getTypeElement());
         String storageKey = component.getComponentKey();
         String factoryFieldName = getFactoryFieldName(component.getClassName());
 
@@ -1140,15 +1117,9 @@ public final class ContainerGenerator {
 
         if (component.getScope() == Scope.REQUEST) {
             emitScopedGetOrCreate(
-                    method,
-                    returnType,
-                    componentType,
-                    "requestScoped.get()",
-                    storageKey,
-                    factoryFieldName + ".create()");
+                    method, returnType, "requestScoped.get()", storageKey, factoryFieldName + ".create()");
         } else { // EVENT
-            emitScopedGetOrCreate(
-                    method, returnType, componentType, "eventScoped.get()", storageKey, factoryFieldName + ".create()");
+            emitScopedGetOrCreate(method, returnType, "eventScoped.get()", storageKey, factoryFieldName + ".create()");
         }
 
         return method.build();
@@ -1174,27 +1145,17 @@ public final class ContainerGenerator {
      * {@code computeIfAbsent} TO MATCH SINGLETON WILL BREAK any REQUEST/EVENT
      * dependency chain — see closed issue #100 for the analysis.
      *
-     * <p>Before invoking the canonical factory, this consults
-     * {@link io.tiko.runtime.TikoOptions#hasOverride(Class)} on the user-facing
-     * component type; if present, the override {@code Supplier} produces the
-     * bean instead. The result is then stored in the scope map like any
-     * production bean, so subsequent lookups within the same scope reuse it —
-     * matching SINGLETON's T6 contract at the scope-instance granularity.
+     * <p>Per-component getters are pure factory caches: the override consultation
+     * happens upstream at the dispatcher heads ({@code get(Class)},
+     * {@code get(Class, String)}) and at factory call sites for direct dependencies
+     * and {@code Provider} lambdas. By the time this helper runs, the caller has
+     * already decided to invoke the production factory — see issue #128.
      */
     private void emitScopedGetOrCreate(
-            MethodSpec.Builder method,
-            TypeName returnType,
-            TypeName componentType,
-            String mapExpr,
-            String storageKey,
-            String createExpr) {
+            MethodSpec.Builder method, TypeName returnType, String mapExpr, String storageKey, String createExpr) {
         method.addStatement("$T __existing = ($T) $L.get($S)", returnType, returnType, mapExpr, storageKey);
         method.beginControlFlow("if (__existing == null)");
-        method.addStatement(
-                "__existing = options.hasOverride($1T.class) ? ($2T) options.getOverride($1T.class).get() : $3L",
-                componentType,
-                returnType,
-                createExpr);
+        method.addStatement("__existing = $L", createExpr);
         method.addStatement("$L.put($S, __existing)", mapExpr, storageKey);
         method.endControlFlow();
         method.addStatement("return __existing");
@@ -1202,11 +1163,9 @@ public final class ContainerGenerator {
 
     /**
      * Variant of {@link #emitScopedGetOrCreate} used by {@code @Produces} factory-method
-     * getters, which deliberately do <em>not</em> consult {@link io.tiko.runtime.TikoOptions}
-     * overrides. Overrides are keyed on the user-facing {@code @Component} type, not on
-     * arbitrary {@code @Produces} return types — mirroring the SINGLETON factory-method
-     * arm above. If/when {@code @Produces} overrides are introduced, this helper folds
-     * back into {@link #emitScopedGetOrCreate}.
+     * getters. After #128, both helpers have identical bodies; this one stays as a
+     * distinct entry point so {@code @Produces} callers remain a separately greppable
+     * group should their emission ever need to diverge again.
      */
     private void emitScopedGetOrCreateNoOverride(
             MethodSpec.Builder method, TypeName returnType, String mapExpr, String storageKey, String createExpr) {
@@ -1675,6 +1634,15 @@ public final class ContainerGenerator {
         method.addStatement("inFlightGets.incrementAndGet()");
         method.beginControlFlow("try");
 
+        // Runtime override consulted first on the lookup type (#128) — applies to any
+        // routable key (interface or concrete class), so override(Interface.class, mock)
+        // wins regardless of whether the caller asks for the interface or the impl.
+        // Placed after the post-shutdown gate and in-flight counter so overrides are a
+        // wiring mechanism, not a lifecycle bypass — a closed container still refuses.
+        method.beginControlFlow("if (options.hasOverride(type))");
+        method.addStatement("return (T) options.getOverride(type).get()");
+        method.endControlFlow();
+
         // Check config singletons first — config records take precedence over DI components
         method.beginControlFlow("if (configSingletons.containsKey(type))");
         method.addStatement("return type.cast(configSingletons.get(type))");
@@ -1762,6 +1730,16 @@ public final class ContainerGenerator {
         method.endControlFlow();
         method.addStatement("inFlightGets.incrementAndGet()");
         method.beginControlFlow("try");
+
+        // Runtime override consulted first on the lookup (type, name) pair (#128) — the
+        // fast-path for the literal key the caller passed. Placed after the post-shutdown
+        // gate and in-flight counter so overrides are a wiring mechanism, not a lifecycle
+        // bypass — a closed container still refuses. The per-arm override checks below
+        // remain in place: they catch cases where the caller looks up Impl.class with
+        // name X but the override was registered under Interface.class with name X.
+        method.beginControlFlow("if (options.hasOverride(type, name))");
+        method.addStatement("return (T) options.getOverride(type, name).get()");
+        method.endControlFlow();
 
         List<ComponentModel> named =
                 activeComponents().stream().filter(c -> c.getName().isPresent()).toList();
@@ -1937,6 +1915,20 @@ public final class ContainerGenerator {
                 .addAnnotation(Override.class)
                 .returns(EventBus.class)
                 .addStatement("return eventBus")
+                .build();
+    }
+
+    /**
+     * Creates the package-private {@code options()} accessor that returns the stored
+     * {@link io.tiko.runtime.TikoOptions}. Used by generated factories in the same
+     * {@code io.tiko.generated} package to consult per-call-site overrides at injection
+     * sites (#128). Not exposed on the {@link io.tiko.Container} interface — overrides
+     * are an internal wiring concern.
+     */
+    private MethodSpec createOptionsAccessor() {
+        return MethodSpec.methodBuilder("options")
+                .returns(ClassName.get("io.tiko.runtime", "TikoOptions"))
+                .addStatement("return this.options")
                 .build();
     }
 
