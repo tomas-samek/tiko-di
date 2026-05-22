@@ -125,6 +125,8 @@ mvn exec:java   # prints: Hello, world!
 
 `-DarchetypeCatalog=local` is required until Tiko publishes to Maven Central. Build the parent project once with `mvn install` to populate your local catalog.
 
+The generated project ships with AI-context files for the major coding agents — `CLAUDE.md` (canonical), `AGENTS.md`, `.cursor/rules/tiko.md`, `.github/copilot-instructions.md`, `.junie/guidelines.md`, and `.ai-skills/SKILL.md`. Each tool-specific file points at `CLAUDE.md` as the source of truth, so edit one file when conventions change.
+
 ## Annotations at a glance
 
 | Annotation                          | Purpose                                                                  | Deep dive                              |
