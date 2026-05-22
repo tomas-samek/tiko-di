@@ -187,27 +187,33 @@ processes unnamed components only. For named test doubles, use the runtime
 
 ## `TikoOptions.override(...)` — runtime overrides
 
-For per-test substitutions without writing a new `@TestComponent`, hand a supplier to `TikoOptions.override`:
+For per-test substitutions without writing a new `@TestComponent`, hand a supplier to `TikoOptions.override`. Key the override by the type the consumer depends on — typically an interface:
 
 ```java
-TikoOptions opts = TikoOptions.builder()
-        .override(SystemClock.class, () -> new FixedClock(Instant.EPOCH))
-        .override(MetricsCollector.class, "primary", FakeMetricsCollector::new)
-        .build();
-try (Container container = Tiko.create(opts)) {
-    // every container.get(SystemClock.class) returns the FixedClock instance
+PaymentGateway mock = mock(PaymentGateway.class);
+try (Container container = Tiko.create(TikoOptions.builder()
+        .override(PaymentGateway.class, () -> mock)
+        .build())) {
+    // Any @Component that injects PaymentGateway gets `mock`,
+    // regardless of which concrete @Component implements it.
 }
 ```
 
-The override is consulted before the generated factory, at every scope (`SINGLETON`, `REQUEST`, `EVENT`) and for `@Named` lookups via the two-arg form. See [Known limitations](#known-limitations) for the caveat about which type the override key must match.
+The override applies at every injection site declared as `PaymentGateway`, at `container.get(PaymentGateway.class)`, and at `getProvider(PaymentGateway.class).get()`. It is consulted before the generated factory and at every scope (`SINGLETON`, `REQUEST`, `EVENT`).
+
+For qualified injection (`@Named("primary") PaymentGateway`), use the named form:
+
+```java
+TikoOptions opts = TikoOptions.builder()
+        .override(PaymentGateway.class, "primary", () -> mock)
+        .build();
+```
+
+Override keys are matched by the *declared* type at the lookup site, not the concrete `@Component` class. Code that wants to override should mock the same type consumers depend on — usually the interface.
 
 ## Known limitations
 
-Two real gaps surfaced during the first end-to-end example. They are tracked as Phase 3 follow-ups; the `@TikoTest` extension, parameter resolution, `RecordingEventBus`, and the scope helpers are unaffected.
-
-### `TikoOptions.override` key must match the `@Component`'s concrete class
-
-The override map is keyed by the concrete class the `@Component` was generated for. Injecting through an interface and calling `override(MyInterface.class, ...)` does not currently route, because the generated getter only consults the override map at the concrete-class entry point. The workaround is to override the concrete `@Component` class directly; the proper fix is to consult the override map at every routable type. Track via [#128](https://github.com/tomas-samek/tiko-di/issues/128).
+One real gap surfaced during the first end-to-end example. It is tracked as a Phase 3 follow-up; the `@TikoTest` extension, parameter resolution, `RecordingEventBus`, the scope helpers, and `TikoOptions.override(...)` are unaffected.
 
 ### Test-compile processor round only sees test sources
 
