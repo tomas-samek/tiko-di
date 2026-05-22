@@ -25,6 +25,18 @@
                 <include>**/*.md</include>
             </includes>
         </fileSet>
+        <fileSet filtered="true" encoding="UTF-8">
+            <directory>.github</directory>
+            <includes>
+                <include>**/*.md</include>
+            </includes>
+        </fileSet>
+        <fileSet filtered="true" encoding="UTF-8">
+            <directory>.junie</directory>
+            <includes>
+                <include>**/*.md</include>
+            </includes>
+        </fileSet>
 
         <!-- Top-level project files. `gitignore` is renamed to `.gitignore` by the
              post-generate Groovy script (META-INF/archetype-post-generate.groovy);
@@ -35,6 +47,7 @@
             <includes>
                 <include>gitignore</include>
                 <include>CLAUDE.md</include>
+                <include>AGENTS.md</include>
             </includes>
         </fileSet>
     </fileSets>
