@@ -1772,6 +1772,16 @@ public final class ContainerGenerator {
         method.addStatement("inFlightGets.incrementAndGet()");
         method.beginControlFlow("try");
 
+        // Runtime override consulted first on the lookup (type, name) pair (#128) — the
+        // fast-path for the literal key the caller passed. Placed after the post-shutdown
+        // gate and in-flight counter so overrides are a wiring mechanism, not a lifecycle
+        // bypass — a closed container still refuses. The per-arm override checks below
+        // remain in place: they catch cases where the caller looks up Impl.class with
+        // name X but the override was registered under Interface.class with name X.
+        method.beginControlFlow("if (options.hasOverride(type, name))");
+        method.addStatement("return (T) options.getOverride(type, name).get()");
+        method.endControlFlow();
+
         List<ComponentModel> named =
                 activeComponents().stream().filter(c -> c.getName().isPresent()).toList();
 
