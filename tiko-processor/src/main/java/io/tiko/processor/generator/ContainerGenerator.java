@@ -1065,22 +1065,20 @@ public final class ContainerGenerator {
 
         switch (component.getScope()) {
             case SINGLETON -> {
-                // Return from singleton cache, create if not exists. The override consultation
-                // lives inside computeIfAbsent's lambda so the Supplier is invoked at most once
-                // per container — the result is cached in `singletons` like any production bean,
-                // matching SINGLETON's "instance per container" semantics. Falls back to the
-                // canonical factory when no override is registered for the component's user type.
+                // Return from singleton cache, create if not exists. Per-component getters are
+                // pure factory caches — override consultation happens at the dispatcher entry
+                // points (get(Class) / get(Class, String)) and at factory call sites where the
+                // declared parameter type is known. Consulting overrides here would force the
+                // cast to the concrete class, defeating interface-keyed override lookup.
                 if (component.requiresProxy()) {
                     // Proxies are created eagerly in constructor, just return the field
                     String proxyFieldName = getProxyFieldName(component.getClassName());
                     method.addStatement("return $L", proxyFieldName);
                 } else {
-                    TypeName componentType = ClassName.get(component.getTypeElement());
                     method.addStatement(
-                            "return ($1T) singletons.computeIfAbsent($2S, k -> options.hasOverride($3T.class) ? options.getOverride($3T.class).get() : $4L.create())",
+                            "return ($1T) singletons.computeIfAbsent($2S, k -> $3L.create())",
                             returnType,
                             storageKey,
-                            componentType,
                             factoryFieldName);
                 }
             }
