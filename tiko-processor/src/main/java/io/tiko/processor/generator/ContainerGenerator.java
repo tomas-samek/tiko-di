@@ -69,62 +69,55 @@ public final class ContainerGenerator {
      * that never see test sources are unaffected by this dual emission.
      */
     public void generate() throws IOException {
-        Optional<String> existingMainFqn = mainDescriptorFqnOnClasspath();
+        String containerClassName = context.getContainerClassName();
 
-        if (existingMainFqn.isPresent() && context.hasTestComponents()) {
-            // Test-compile mode: main container already exists on the classpath; emit a
-            // standalone test container + shadow declarations only. Do NOT regenerate
-            // a fresh main. The test container peers with the existing main at runtime
-            // via AggregatingContainer reading test-shadows.properties.
+        // The container name carries the standalone-test-compile signal:
+        // TikoAnnotationProcessor.computeContainerClassName() picks the prefix based on
+        // whether an existing main descriptor was found on the classpath.
+        boolean standaloneTestMode = containerClassName.startsWith("TestContainerImpl_");
+
+        if (standaloneTestMode) {
+            // Test-compile mode: an existing main container lives on the classpath; emit a
+            // standalone test container + shadow declarations only. Factories, proxies, and
+            // the event registry have already been emitted (typed against this container
+            // name) by TikoAnnotationProcessor's upfront pass, so we just write the
+            // container itself, its descriptor, components list, and the shadows file.
             var testSideComponents = context.getAllActiveComponents();
-            String testContainerClassName = "TestContainerImpl_" + computeHash(testSideComponents);
-            generateStandaloneTestContainer(testContainerClassName, testSideComponents);
-            writeTestShadowsFile(testContainerClassName);
+            generateOne(containerClassName, testSideComponents, TEST_DESCRIPTOR, "");
+            generateComponentsListFile(testSideComponents);
+            writeTestShadowsFile(containerClassName);
             return;
         }
 
-        // Standard emission path: main container + (if test components present) standalone
-        // test container in the same round.
-        String mainContainerClassName = context.getContainerClassName();
+        // Standard emission path: main container, plus (if test components are visible in
+        // the same round, as in single-compile harness tests) a peer standalone test
+        // container with Test_-prefixed factories so the two factory sets do not collide.
+        // Real Maven projects with test sources go down the standalone branch above instead;
+        // this dual-emission path exists for the compile-testing harness, which presents
+        // prod and test together to a single processing round.
         var mainComponents = context.getActiveMainComponents();
-        generateOne(mainContainerClassName, mainComponents, MAIN_DESCRIPTOR, "");
-        generateComponentsListFile();
+        generateOne(containerClassName, mainComponents, MAIN_DESCRIPTOR, "");
+        generateComponentsListFile(mainComponents);
 
         if (context.hasTestComponents()) {
             var testSideComponents = context.getAllActiveComponents();
             String testContainerClassName = "TestContainerImpl_" + computeHash(testSideComponents);
-            generateStandaloneTestContainer(testContainerClassName, testSideComponents);
+            ComponentFactoryGenerator factoryGenerator = new ComponentFactoryGenerator(context);
+            for (ComponentModel component : testSideComponents) {
+                factoryGenerator.generate(component, testContainerClassName, "Test_");
+            }
+            generateOne(testContainerClassName, testSideComponents, TEST_DESCRIPTOR, "Test_");
             writeTestShadowsFile(testContainerClassName);
         }
     }
 
     /**
-     * Emits a standalone test container — a peer of the main container that implements
-     * {@link Container} directly rather than extending the main container class. Shadow
-     * routing is handled at runtime by {@code AggregatingContainer} reading
-     * {@code META-INF/tiko/test-shadows.properties}, so the test container does not need
-     * to know about the main container at compile time. Test-side factory classes use
-     * the {@code Test_} prefix so they don't collide with the main container's factory
-     * names; each test factory is typed to the test container (not the main).
-     */
-    private void generateStandaloneTestContainer(String testContainerClassName, List<ComponentModel> testSideComponents)
-            throws IOException {
-        // Emit a parallel factory set bound to the test container's class name so
-        // `new Test_XxxFactory(this)` from the test container's constructor type-checks.
-        // The main container keeps its own untyped XxxFactory set; the two never overlap
-        // because of the prefix.
-        ComponentFactoryGenerator factoryGenerator = new ComponentFactoryGenerator(context);
-        for (ComponentModel component : testSideComponents) {
-            factoryGenerator.generate(component, testContainerClassName, "Test_");
-        }
-        generateOne(testContainerClassName, testSideComponents, TEST_DESCRIPTOR, "Test_");
-    }
-
-    /**
      * Writes {@code META-INF/tiko/test-shadows.properties} declaring which routable keys
-     * the test container shadows. Each entry maps {@code shadowedKey=testContainerFqn},
-     * consumed by {@code AggregatingContainer} to install overrides on the main container
-     * at runtime so dependents resolve the test instance.
+     * the test container shadows. Each entry maps
+     * {@code shadowedKey=testContainerFqn|testComponentFqn}: the value is consumed by
+     * {@code AggregatingContainer} to install an override that calls
+     * {@code testContainer.get(testComponentClass)} — addressing the test component by its
+     * own class so the override on the shadowed key does not recurse into itself.
      */
     private void writeTestShadowsFile(String testContainerClassName) throws IOException {
         var shadows = context.getShadowedMainKeys();
@@ -136,10 +129,15 @@ public final class ContainerGenerator {
                 .createResource(javax.tools.StandardLocation.CLASS_OUTPUT, "", "META-INF/tiko/test-shadows.properties")
                 .openWriter()) {
             writer.write("# Generated by tiko-processor - test-component shadow declarations\n");
+            writer.write("# Format: shadowedKey=testContainerFqn|testComponentFqn\n");
             for (String shadowedKey : shadows) {
+                ComponentModel testComponent = context.getTestComponentShadowing(shadowedKey);
+                if (testComponent == null) continue;
                 writer.write(shadowedKey);
                 writer.write("=");
                 writer.write(testFqn);
+                writer.write("|");
+                writer.write(testComponent.getQualifiedName());
                 writer.write("\n");
             }
         }
@@ -1782,43 +1780,19 @@ public final class ContainerGenerator {
     }
 
     /**
-     * Probes the compile classpath for an existing {@code META-INF/tiko/container.properties}.
-     * Returns the main container's FQN if found, or empty if the test-compile round is the
-     * first emission of any Tiko container (no main container yet exists).
-     *
-     * <p>Used to decide whether to regenerate a fresh main container during the
-     * {@code test-compile} phase: if one already exists on the classpath, the test
-     * container generated here is standalone and peers with the existing main via
-     * {@code AggregatingContainer} at runtime.
-     */
-    private Optional<String> mainDescriptorFqnOnClasspath() {
-        try {
-            var resource = context.getFiler().getResource(javax.tools.StandardLocation.CLASS_PATH, "", MAIN_DESCRIPTOR);
-            try (var reader = resource.openReader(true)) {
-                var props = new Properties();
-                props.load(reader);
-                String fqn = props.getProperty("impl");
-                return fqn == null || fqn.isBlank() ? Optional.empty() : Optional.of(fqn);
-            }
-        } catch (IOException e) {
-            return Optional.empty();
-        }
-    }
-
-    /**
      * Generates META-INF/tiko/components.txt file.
-     * Contains newline-separated list of all component class names — main-only, mirroring
-     * the main container's component list. The {@code AggregatingContainer} loads this
-     * file to map types to per-module containers; tests do not need a parallel listing
-     * because the test container is loaded directly via {@code test-container.properties},
-     * not aggregated.
+     * Contains newline-separated list of all component class names. Used in both main and
+     * standalone-test-compile rounds: the {@code AggregatingContainer} reads this sibling
+     * of each {@code container.properties} / {@code test-container.properties} resource
+     * to map types to per-module containers. The two files live in {@code target/classes}
+     * and {@code target/test-classes} respectively, so they never collide.
      */
-    private void generateComponentsListFile() throws IOException {
+    private void generateComponentsListFile(List<ComponentModel> components) throws IOException {
         try (var writer = context.getFiler()
                 .createResource(javax.tools.StandardLocation.CLASS_OUTPUT, "", "META-INF/tiko/components.txt")
                 .openWriter()) {
 
-            for (ComponentModel component : context.getActiveMainComponents()) {
+            for (ComponentModel component : components) {
                 // Use binary name (with '$' for nested classes) so Class.forName() works at runtime
                 writer.write(context.getElementUtils()
                         .getBinaryName(component.getTypeElement())

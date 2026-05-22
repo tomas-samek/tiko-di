@@ -36,7 +36,6 @@ import javax.tools.Diagnostic;
 public final class EventRegistryGenerator {
 
     private static final String GENERATED_PACKAGE = "io.tiko.generated";
-    private static final String REGISTRY_CLASS = "EventRegistry";
 
     private static final ClassName CHAIN_CONTEXT = ClassName.get("io.tiko.runtime", "EventChainContext");
 
@@ -46,6 +45,19 @@ public final class EventRegistryGenerator {
         this.context = context;
     }
 
+    /**
+     * Container-scoped registry class name. Each generated container gets its own
+     * {@code EventRegistry_<hash>} so multi-module classpaths (main + standalone test
+     * container, two production modules, etc.) can each carry their handler set without
+     * colliding on a single {@code io.tiko.generated.EventRegistry} slot.
+     */
+    private String registryClassName() {
+        String containerName = context.getContainerClassName();
+        int underscore = containerName.lastIndexOf('_');
+        String suffix = underscore >= 0 ? containerName.substring(underscore) : "";
+        return "EventRegistry" + suffix;
+    }
+
     public void generate() throws IOException {
         List<EventHandlerModel> eventHandlers = context.getEventHandlers();
 
@@ -53,7 +65,7 @@ public final class EventRegistryGenerator {
             return;
         }
 
-        TypeSpec.Builder registry = TypeSpec.classBuilder(REGISTRY_CLASS)
+        TypeSpec.Builder registry = TypeSpec.classBuilder(registryClassName())
                 .addAnnotation(GeneratorAnnotations.generatedBy(EventRegistryGenerator.class))
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL);
 

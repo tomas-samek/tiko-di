@@ -197,25 +197,35 @@ public final class AggregatingContainer implements Container {
             }
             for (var entry : shadowProps.entrySet()) {
                 String routableKey = entry.getKey().toString();
-                String shadowFqn = entry.getValue().toString();
+                String rawValue = entry.getValue().toString();
                 if (seenShadowDeclarations.containsKey(routableKey)) {
                     LoggerHolder.LOG.log(
                             System.Logger.Level.WARNING,
                             "Multiple shadow declarations for " + routableKey
                                     + " (first: " + seenShadowDeclarations.get(routableKey)
-                                    + ", ignored: " + shadowFqn + ")");
+                                    + ", ignored: " + rawValue + ")");
                     continue;
                 }
-                seenShadowDeclarations.put(routableKey, shadowFqn);
+                // Format (since #129 T8): "testContainerFqn|testComponentFqn". The legacy
+                // single-FQN form is tolerated by treating the whole value as the container
+                // and falling back to keyClass dispatch — which can recurse if the test
+                // container's override is hit again — so the split form is preferred.
+                int pipe = rawValue.indexOf('|');
+                String shadowContainerFqn = pipe >= 0 ? rawValue.substring(0, pipe) : rawValue;
+                String shadowComponentFqn = pipe >= 0 ? rawValue.substring(pipe + 1) : routableKey;
+                seenShadowDeclarations.put(routableKey, rawValue);
                 Class<?> keyClass;
+                Class<?> componentClass;
                 try {
                     keyClass = Class.forName(routableKey, false, classLoader);
+                    componentClass = Class.forName(shadowComponentFqn, false, classLoader);
                 } catch (ClassNotFoundException cnfe) {
                     LoggerHolder.LOG.log(
-                            System.Logger.Level.WARNING, "Shadow declaration references unknown type: " + routableKey);
+                            System.Logger.Level.WARNING,
+                            "Shadow declaration references unknown type: " + cnfe.getMessage());
                     continue;
                 }
-                registerShadowOverride(keyClass, shadowFqn, containersByImplName);
+                registerShadowOverride(keyClass, componentClass, shadowContainerFqn, containersByImplName);
             }
         }
 
@@ -225,6 +235,19 @@ public final class AggregatingContainer implements Container {
         while (resources.hasMoreElements()) {
             URL resourceUrl = resources.nextElement();
             processContainerResource(resourceUrl, classLoader, containersByImplName);
+        }
+
+        // In test mode (descriptorName = test-container.properties), the test container only
+        // holds test-side components; main components live on the production container at
+        // META-INF/tiko/container.properties on the compile classpath. Process those too so
+        // routing covers both sides — shadow overrides registered in Phase 1 ensure the test
+        // container's components win for shadowed keys.
+        if (!DEFAULT_DESCRIPTOR.equals(descriptorName)) {
+            Enumeration<URL> mainResources = classLoader.getResources(DEFAULT_DESCRIPTOR);
+            while (mainResources.hasMoreElements()) {
+                URL resourceUrl = mainResources.nextElement();
+                processContainerResource(resourceUrl, classLoader, containersByImplName);
+            }
         }
 
         if (moduleContainers.isEmpty()) {
@@ -238,15 +261,24 @@ public final class AggregatingContainer implements Container {
      * {@link TikoOptions}. The Supplier is lazy: it resolves the target container on first
      * {@code get(...)} via {@code containersByImplName}, which is populated during Phase 2
      * of {@link #discoverAndInitializeModuleContainers()}.
+     *
+     * <p>The shadow resolves to {@code shadowContainer.get(componentClass)} — addressing
+     * the test component by its own class so the override on {@code keyClass} does not
+     * recurse when the test container's own {@code get(keyClass)} dispatcher consults the
+     * same override again.
      */
+    @SuppressWarnings("unchecked")
     private <T> void registerShadowOverride(
-            Class<T> keyClass, String shadowFqn, Map<String, Container> containersByImplName) {
+            Class<T> keyClass,
+            Class<?> componentClass,
+            String shadowContainerFqn,
+            Map<String, Container> containersByImplName) {
         java.util.function.Supplier<T> supplier = () -> {
-            Container shadowContainer = containersByImplName.get(shadowFqn);
+            Container shadowContainer = containersByImplName.get(shadowContainerFqn);
             if (shadowContainer == null) {
-                throw new IllegalStateException("Shadow declaration target not instantiated: " + shadowFqn);
+                throw new IllegalStateException("Shadow declaration target not instantiated: " + shadowContainerFqn);
             }
-            return shadowContainer.get(keyClass);
+            return (T) shadowContainer.get(componentClass);
         };
         options.internalAddOverrideIfAbsent(keyClass, supplier);
     }
@@ -290,6 +322,11 @@ public final class AggregatingContainer implements Container {
 
         moduleContainers.add(moduleContainer);
         containersByImplName.put(implClassName, moduleContainer);
+
+        // Each module container brings its own EventRegistry_<hash>; register handlers
+        // on the shared bus so cross-module @EventHandler subscriptions wire up regardless
+        // of which container hosts the producer or consumer.
+        Tiko.registerEventHandlers(sharedEventBus, moduleContainer, containerClass);
 
         loadComponentsMapping(resourceUrl, classLoader, moduleContainer);
         loadConfigsMapping(resourceUrl, classLoader, moduleContainer);
@@ -436,38 +473,59 @@ public final class AggregatingContainer implements Container {
 
     @Override
     public void runInRequestScope(Runnable task) {
-        // Execute in all module containers
-        for (Container container : moduleContainers) {
-            container.runInRequestScope(task);
-        }
+        // The task represents one request; it must run exactly once. Each module container
+        // still gets its own scope frame (so REQUEST-scoped beans isolate per module) — we
+        // achieve this by nesting the scope helpers and running the task in the innermost.
+        runNested(moduleContainers.iterator(), task, Container::runInRequestScope);
     }
 
     @Override
     public <T> T supplyInRequestScope(Supplier<T> supplier) {
-        // Execute in all module containers, return value from supplier
-        T result = null;
-        for (Container container : moduleContainers) {
-            result = container.supplyInRequestScope(supplier);
-        }
-        return result;
+        return supplyNested(moduleContainers.iterator(), supplier, Container::supplyInRequestScope);
     }
 
     @Override
     public void runInEventScope(Runnable task) {
-        // Execute in all module containers
-        for (Container container : moduleContainers) {
-            container.runInEventScope(task);
-        }
+        runNested(moduleContainers.iterator(), task, Container::runInEventScope);
     }
 
     @Override
     public <T> T supplyInEventScope(Supplier<T> supplier) {
-        // Execute in all module containers, return value from supplier
-        T result = null;
-        for (Container container : moduleContainers) {
-            result = container.supplyInEventScope(supplier);
+        return supplyNested(moduleContainers.iterator(), supplier, Container::supplyInEventScope);
+    }
+
+    /**
+     * Recursively nests {@code scopeHelper} calls across {@code containers}, ensuring
+     * {@code task} is invoked exactly once inside the innermost scope frame. Each container
+     * still sees the task running within its own scope, so REQUEST/EVENT-scoped beans
+     * remain isolated per module while cross-module side effects (event publishes, etc.)
+     * fire only once.
+     */
+    private static void runNested(
+            java.util.Iterator<Container> containers,
+            Runnable task,
+            java.util.function.BiConsumer<Container, Runnable> scopeHelper) {
+        if (!containers.hasNext()) {
+            task.run();
+            return;
         }
-        return result;
+        Container next = containers.next();
+        scopeHelper.accept(next, () -> runNested(containers, task, scopeHelper));
+    }
+
+    /**
+     * Supplier counterpart of {@link #runNested}: the inner supplier yields the result; outer
+     * scopes only set up / tear down their own frames.
+     */
+    private static <T> T supplyNested(
+            java.util.Iterator<Container> containers,
+            Supplier<T> supplier,
+            java.util.function.BiFunction<Container, Supplier<T>, T> scopeHelper) {
+        if (!containers.hasNext()) {
+            return supplier.get();
+        }
+        Container next = containers.next();
+        return scopeHelper.apply(next, () -> supplyNested(containers, supplier, scopeHelper));
     }
 
     @Override

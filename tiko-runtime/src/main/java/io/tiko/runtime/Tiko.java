@@ -101,10 +101,11 @@ public final class Tiko {
 
             // 3. Detect single vs multi-module scenario. Prefer the test descriptor
             //    when present on the classpath: a {@code @TestComponent}-bearing build
-            //    emits {@code META-INF/tiko/test-container.properties} (pointing at
-            //    {@code TestTikoContainerImpl_<hash>}, a subclass of the main container)
-            //    so test runs pick up the test-side wiring while production binaries —
-            //    which never see {@code @TestComponent}s — fall back to the main descriptor.
+            //    emits {@code META-INF/tiko/test-container.properties} (pointing at the
+            //    standalone {@code TestContainerImpl_<hash>}) plus a
+            //    {@code META-INF/tiko/test-shadows.properties} declaration. Test runs pick
+            //    up the test-side wiring while production binaries — which never see
+            //    {@code @TestComponent}s — fall back to the main descriptor.
             ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
             if (classLoader == null) classLoader = Tiko.class.getClassLoader();
 
@@ -422,36 +423,29 @@ public final class Tiko {
     }
 
     /**
-     * Registers event handlers if EventRegistry is present.
+     * Registers event handlers if {@code EventRegistry_<hash>} is present.
      *
-     * <p>The generated {@code EventRegistry.registerHandlers} declares its second
-     * parameter as the main {@code TikoContainerImpl_<hash>}. When the test container
-     * subclass ({@code TestTikoContainerImpl_<hash>}) is loaded instead, an exact
-     * {@link Class#getMethod} lookup misses (param type mismatch), so we walk the
-     * container's superclass chain to find the registration method.
+     * <p>The generated registry class is named after the container — {@code EventRegistry_}
+     * suffixed with the container's hash — so multi-module classpaths (and standalone test
+     * containers peering with a main container) can each carry their own handler set
+     * without colliding on a single {@code io.tiko.generated.EventRegistry} slot.
      */
-    private static void registerEventHandlers(EventBus eventBus, Container container, Class<?> containerClass) {
+    static void registerEventHandlers(EventBus eventBus, Container container, Class<?> containerClass) {
+        String containerName = containerClass.getSimpleName();
+        int underscore = containerName.lastIndexOf('_');
+        String suffix = underscore >= 0 ? containerName.substring(underscore) : "";
+        String registryFqn = "io.tiko.generated.EventRegistry" + suffix;
+
         Class<?> registryClass;
         try {
-            registryClass = Class.forName("io.tiko.generated.EventRegistry");
+            registryClass = Class.forName(registryFqn, true, containerClass.getClassLoader());
         } catch (ClassNotFoundException e) {
-            // No event handlers registered - this is OK
+            // No event handlers registered for this container - that's fine
             return;
         }
         try {
-            Class<?> probe = containerClass;
-            java.lang.reflect.Method registerMethod = null;
-            while (probe != null && registerMethod == null) {
-                try {
-                    registerMethod = registryClass.getMethod("registerHandlers", EventBus.class, probe);
-                } catch (NoSuchMethodException nsme) {
-                    probe = probe.getSuperclass();
-                }
-            }
-            if (registerMethod == null) {
-                throw new NoSuchMethodException(
-                        "EventRegistry.registerHandlers not found for " + containerClass.getName());
-            }
+            java.lang.reflect.Method registerMethod =
+                    registryClass.getMethod("registerHandlers", EventBus.class, containerClass);
             registerMethod.invoke(null, eventBus, container);
         } catch (Exception e) {
             // Ignore - event registration is optional
