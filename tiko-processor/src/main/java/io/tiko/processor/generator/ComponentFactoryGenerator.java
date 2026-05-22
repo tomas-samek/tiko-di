@@ -40,15 +40,38 @@ public final class ComponentFactoryGenerator {
 
     private final ProcessorContext context;
 
+    /**
+     * Container class name the factory currently being emitted is bound to. Set per
+     * {@link #generate(ComponentModel, String, String)} call so the main container and any
+     * standalone test container can each have their own factory set with a typed
+     * container parameter. Defaults to {@code context.getContainerClassName()} for the
+     * one-arg legacy overload.
+     */
+    private String currentContainerClassName;
+
     public ComponentFactoryGenerator(ProcessorContext context) {
         this.context = context;
     }
 
     /**
-     * Generates a factory class for the given component.
+     * Generates a factory class for the given component bound to the main container.
+     * Equivalent to {@link #generate(ComponentModel, String, String)} with
+     * {@code containerClassName = context.getContainerClassName()} and no factory prefix.
      */
     public void generate(ComponentModel component) throws IOException {
-        String factoryClassName = component.getClassName() + "Factory";
+        generate(component, context.getContainerClassName(), "");
+    }
+
+    /**
+     * Generates a factory class for the given component bound to {@code containerClassName}.
+     * When emitting a standalone test container, a non-empty {@code factoryClassPrefix}
+     * (e.g. {@code "Test_"}) avoids name collision with the main container's factory of
+     * the same component.
+     */
+    public void generate(ComponentModel component, String containerClassName, String factoryClassPrefix)
+            throws IOException {
+        this.currentContainerClassName = containerClassName;
+        String factoryClassName = factoryClassPrefix + component.getClassName() + "Factory";
 
         TypeSpec factoryClass = TypeSpec.classBuilder(factoryClassName)
                 .addAnnotation(GeneratorAnnotations.generatedBy(ComponentFactoryGenerator.class))
@@ -68,7 +91,7 @@ public final class ComponentFactoryGenerator {
      */
     private FieldSpec createContainerField() {
         return FieldSpec.builder(
-                        ClassName.get(GENERATED_PACKAGE, context.getContainerClassName()),
+                        ClassName.get(GENERATED_PACKAGE, currentContainerClassName),
                         "container",
                         Modifier.PRIVATE,
                         Modifier.FINAL)
@@ -81,7 +104,7 @@ public final class ComponentFactoryGenerator {
     private MethodSpec createConstructor() {
         return MethodSpec.constructorBuilder()
                 .addModifiers(Modifier.PUBLIC)
-                .addParameter(ClassName.get(GENERATED_PACKAGE, context.getContainerClassName()), "container")
+                .addParameter(ClassName.get(GENERATED_PACKAGE, currentContainerClassName), "container")
                 .addStatement("this.container = container")
                 .build();
     }

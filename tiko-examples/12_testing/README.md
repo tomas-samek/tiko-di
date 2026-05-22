@@ -19,8 +19,20 @@ mvn -pl tiko-examples/12_testing -am test
 
 ## Source layout
 
-Every `@Component` lives in `src/test/java/`. This matches the layout that `tiko-test` itself
-uses for its own fixtures and is the configuration the current annotation-processor design
-is exercised under end-to-end.
+This example follows the natural Maven convention:
+
+- **`src/main/java/`** — production components (`Clock`, `OrderService`, `PaymentGateway`,
+  `HttpPaymentGateway`, `AccountRepository`, plus the `CreateOrderCommand` and
+  `OrderCreatedEvent` records).
+- **`src/test/java/`** — `@TestComponent` fakes (e.g. `FixedClock`), test-only components
+  (e.g. `AsyncListener`), and the tests themselves.
+
+At test-compile the processor sees only the test sources but finds the existing
+`META-INF/tiko/container.properties` from `target/classes/` on the compile classpath. It
+emits a standalone `TestContainerImpl_<hash>` plus a `META-INF/tiko/test-shadows.properties`
+declaration instead of regenerating the main container. At runtime `AggregatingContainer`
+federates the two: each shadow declaration registers as a runtime override on the shared
+`TikoOptions`, so a `@TestComponent` like `FixedClock` (extending `Clock`) becomes the
+`Clock` injected into every consumer.
 
 See [docs/testing.md](../../docs/testing.md) for the full guide.

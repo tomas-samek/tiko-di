@@ -272,6 +272,18 @@ public final class ProcessorContext {
     }
 
     /**
+     * Returns ALL active components in this round, regardless of whether they are
+     * production {@code @Component}s or test-classpath {@code @TestComponent}s.
+     * Used by the standalone test container generation to discover every component
+     * visible in the test-compile round (where production sources are not presented).
+     */
+    public List<ComponentModel> getAllActiveComponents() {
+        return components.values().stream()
+                .filter(c -> isProfileActive(c.getProfiles()))
+                .toList();
+    }
+
+    /**
      * Returns the active components for the production-classpath {@code TikoContainerImpl}.
      * Test components are filtered out so the main container's wiring is uncontaminated
      * by test-only beans even when a test-compile round happens to see them.

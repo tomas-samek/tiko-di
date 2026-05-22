@@ -132,6 +132,14 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
             }
             processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "Tiko DI: Validation passed");
 
+            // In standalone test-compile, main @Component sources are absent from this round.
+            // AmbiguityValidator's shadow detection requires both sides present, so it does not
+            // fire when only the @TestComponent is visible. Bridge that gap by walking test
+            // components whose testExtraKeys point at classpath-main FQNs and marking them as
+            // shadows directly. Same-round detection still goes through AmbiguityValidator —
+            // this only adds cross-round (peer-compile) shadow registration.
+            markClasspathShadowedTestComponents();
+
             // Stage 3: Generate code
             processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "Tiko DI: Starting code generation...");
             generate();
@@ -260,14 +268,22 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         }
 
         // Implicit walk: walk the superclass chain, returning routable types of the first
-        // @Component-annotated ancestor we find.
+        // ancestor that is a main component. We check both (a) the @Component annotation
+        // (visible when the main is being compiled in the same round) and (b) the
+        // META-INF/tiko/components.txt manifest on the classpath (visible when the main
+        // already lives in target/classes and only the test sources are being compiled).
+        // The latter path is essential for the natural Maven layout where production
+        // components and tests build in separate rounds.
+        java.util.Set<String> mainComponentFqns = mainComponentFqnsOnClasspath();
         TypeMirror superMirror = testClass.getSuperclass();
         while (superMirror instanceof javax.lang.model.type.DeclaredType dt) {
             Element superElement = dt.asElement();
             if (!(superElement instanceof TypeElement superType)) break;
             if (superType.getQualifiedName().contentEquals("java.lang.Object")) break;
 
-            if (superType.getAnnotation(io.tiko.annotations.Component.class) != null) {
+            boolean isMainComponent = superType.getAnnotation(io.tiko.annotations.Component.class) != null
+                    || mainComponentFqns.contains(superType.getQualifiedName().toString());
+            if (isMainComponent) {
                 java.util.Set<String> keys = new java.util.LinkedHashSet<>();
                 keys.add(superType.getQualifiedName().toString());
                 for (TypeMirror iface : superType.getInterfaces()) {
@@ -278,6 +294,59 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
             superMirror = superType.getSuperclass();
         }
         return java.util.Set.of();
+    }
+
+    /**
+     * Marks any {@code @TestComponent} whose implicit-walk or explicit-value keys point at
+     * a main {@code @Component} FQN listed in the classpath
+     * {@code META-INF/tiko/components.txt} manifest. Bridges the gap left by
+     * {@code AmbiguityValidator} in standalone test-compile rounds — main sources are not
+     * present in the round, so the validator's shadow-pair detection (requires both sides
+     * visible) cannot fire. Single-round compiles still rely on the validator path; this
+     * helper only adds shadow entries the validator could not have seen.
+     */
+    private void markClasspathShadowedTestComponents() {
+        java.util.Set<String> mainFqns = mainComponentFqnsOnClasspath();
+        if (mainFqns.isEmpty()) {
+            return;
+        }
+        for (var component : context.getActiveComponents()) {
+            if (!component.isTestComponent()) continue;
+            for (String extraKey : component.getTestExtraKeys()) {
+                if (mainFqns.contains(extraKey)) {
+                    context.markShadowedByTestOverride(extraKey, component);
+                }
+            }
+        }
+    }
+
+    /**
+     * Reads {@code META-INF/tiko/components.txt} from the compile classpath and returns
+     * the set of main-component FQNs declared there. Empty when no such manifest exists
+     * (e.g. the round is a first-emit main-compile rather than a peer test-compile).
+     * Used by {@link #computeTestExtraKeys} so a {@code @TestComponent} can detect its
+     * shadow target even when the production {@code @Component} sources are absent from
+     * the round but already live on the classpath as compiled bytecode.
+     */
+    private java.util.Set<String> mainComponentFqnsOnClasspath() {
+        try {
+            var resource = processingEnv
+                    .getFiler()
+                    .getResource(javax.tools.StandardLocation.CLASS_PATH, "", "META-INF/tiko/components.txt");
+            java.util.Set<String> fqns = new java.util.LinkedHashSet<>();
+            try (var reader = new java.io.BufferedReader(resource.openReader(true))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    line = line.trim();
+                    if (!line.isEmpty() && !line.startsWith("#")) {
+                        fqns.add(line);
+                    }
+                }
+            }
+            return fqns;
+        } catch (java.io.IOException e) {
+            return java.util.Set.of();
+        }
     }
 
     private static boolean isVoid(TypeMirror tm) {
@@ -940,6 +1009,14 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
     /**
      * Computes a unique container class name based on component keys.
      * This ensures different modules generate different container class names.
+     *
+     * <p>When the round is a test-compile happening on top of an existing main
+     * container (detected via {@link #mainDescriptorFqnOnClasspath()}), the emitted
+     * container is a standalone test container that peers with the existing main
+     * via {@code AggregatingContainer} at runtime — so its class name carries the
+     * {@code TestContainerImpl_} prefix instead of {@code TikoContainerImpl_}. All
+     * factories, proxies, and the event registry are then typed against this test
+     * container, with no parallel main-container emission in the test-compile round.
      */
     private String computeContainerClassName() {
         // Create deterministic ID based on component names
@@ -952,7 +1029,32 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         // Convert to positive hex string
         String suffix = Integer.toHexString(hash & 0x7FFFFFFF);
 
-        return "TikoContainerImpl_" + suffix;
+        String prefix = (mainDescriptorFqnOnClasspath().isPresent() && context.hasTestComponents())
+                ? "TestContainerImpl_"
+                : "TikoContainerImpl_";
+        return prefix + suffix;
+    }
+
+    /**
+     * Probes the compile classpath for an existing {@code META-INF/tiko/container.properties}.
+     * Returns the main container's FQN if found, or empty if no main container is on the
+     * classpath. Used by {@link #computeContainerClassName()} to decide whether the round
+     * is a standalone test-compile (peer to an existing main) or a regular main-compile.
+     */
+    private Optional<String> mainDescriptorFqnOnClasspath() {
+        try {
+            var resource = processingEnv
+                    .getFiler()
+                    .getResource(javax.tools.StandardLocation.CLASS_PATH, "", "META-INF/tiko/container.properties");
+            try (var reader = resource.openReader(true)) {
+                var props = new java.util.Properties();
+                props.load(reader);
+                String fqn = props.getProperty("impl");
+                return fqn == null || fqn.isBlank() ? Optional.empty() : Optional.of(fqn);
+            }
+        } catch (java.io.IOException e) {
+            return Optional.empty();
+        }
     }
 
     private static String formatStackTrace(Throwable t) {

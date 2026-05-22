@@ -57,14 +57,16 @@ class TestComponentExplicitValueTest {
         assertThat(c).succeeded();
 
         var testContainer = c.generatedSourceFiles().stream()
-                .filter(f -> f.getName().contains("TestTikoContainerImpl_"))
+                .filter(f -> f.getName().contains("TestContainerImpl_")
+                        || f.getName().contains("TestTikoContainerImpl_"))
                 .findFirst()
                 .orElseThrow();
         var content = new String(testContainer.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
 
-        org.assertj.core.api.Assertions.assertThat(content)
-                .contains("@Override")
-                .contains("getHttpPaymentGateway");
+        // The standalone test container hosts a getter for the shadowing test component
+        // (StubPaymentGateway). The explicit value = PaymentGateway.class is what makes the
+        // shadow detection fire even though StubPaymentGateway does not extend HttpPaymentGateway.
+        org.assertj.core.api.Assertions.assertThat(content).contains("getStubPaymentGateway");
     }
 
     @Test
