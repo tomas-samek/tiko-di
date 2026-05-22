@@ -6,7 +6,7 @@ For a runnable example, see [`tiko-examples/12_testing`](../tiko-examples/12_tes
 
 ## Dependency
 
-`tiko-test` is a test-scope dependency. The processor runs at `test-compile` so a separate `TestTikoContainerImpl_<hash>` is emitted under `target/test-classes/`; the runtime picks it up automatically when `META-INF/tiko/test-container.properties` is on the classpath.
+`tiko-test` is a test-scope dependency. The processor runs at `test-compile` so a separate `TestContainerImpl_<hash>` is emitted under `target/test-classes/`; the runtime picks it up automatically when `META-INF/tiko/test-container.properties` is on the classpath.
 
 ```xml
 <dependency>
@@ -16,6 +16,17 @@ For a runnable example, see [`tiko-examples/12_testing`](../tiko-examples/12_tes
     <scope>test</scope>
 </dependency>
 ```
+
+## Classpath layout
+
+Tiko's processor runs in two Maven phases:
+
+- **`compile`** — sees `src/main/java/` sources; generates the main `TikoContainerImpl` + `META-INF/tiko/container.properties` in `target/classes/`.
+- **`test-compile`** — sees `src/test/java/` sources only (Maven's behaviour); generates a standalone `TestContainerImpl` + `META-INF/tiko/test-container.properties` + (if any `@TestComponent` shadows exist) `META-INF/tiko/test-shadows.properties` in `target/test-classes/`.
+
+At runtime, `Tiko.create(...)` detects the test descriptors and uses `AggregatingContainer` to federate both containers. Shadow declarations register as runtime overrides on the shared `TikoOptions` — `@TestComponent FakeClock extends Clock` causes every `Clock` injection across both containers to resolve to `FakeClock`.
+
+Production components live in `src/main/java/`, test fixtures (mocks, `@TestComponent`s, helpers) live in `src/test/java/` — the natural Maven layout.
 
 ## `@TikoTest` — boot a container around each test
 
@@ -137,7 +148,7 @@ Parameter resolution happens *before* the scope is entered. A REQUEST-scoped bea
 
 ## `@TestComponent` — compile-time overrides
 
-`@TestComponent` is a test-classpath marker. The annotation processor processes it during `test-compile` and emits a separate `TestTikoContainerImpl_<hash>` into `target/test-classes/`. At runtime, `Tiko.create(...)` prefers the test container when `META-INF/tiko/test-container.properties` is on the classpath.
+`@TestComponent` is a test-classpath marker. The annotation processor processes it during `test-compile` and emits a separate `TestContainerImpl_<hash>` into `target/test-classes/`. At runtime, `Tiko.create(...)` federates the main and test containers via `AggregatingContainer`; `@TestComponent` shadow declarations register as runtime overrides so production injections of the shadowed type resolve to the test class.
 
 ```java
 @TestComponent(scope = Scope.SINGLETON)
@@ -210,11 +221,3 @@ TikoOptions opts = TikoOptions.builder()
 ```
 
 Override keys are matched by the *declared* type at the lookup site, not the concrete `@Component` class. Code that wants to override should mock the same type consumers depend on — usually the interface.
-
-## Known limitations
-
-One real gap surfaced during the first end-to-end example. It is tracked as a Phase 3 follow-up; the `@TikoTest` extension, parameter resolution, `RecordingEventBus`, the scope helpers, and `TikoOptions.override(...)` are unaffected.
-
-### Test-compile processor round only sees test sources
-
-During `test-compile` the annotation processor receives the test sources only — it does not re-collect the main `@Component`s already processed in the earlier `compile` round. The generated test container therefore omits every production bean, and because the runtime prefers the test descriptor it cannot resolve them. The current workaround is to keep every `@Component` used by tests under `src/test/java/` (the layout the `tiko-examples/12_testing` example uses). A more conventional layout — production beans under `src/main/java/`, tests under `src/test/java/` — needs the processor to merge the two sets at `test-compile` time. Track via [#129](https://github.com/tomas-samek/tiko-di/issues/129).
