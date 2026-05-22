@@ -142,7 +142,7 @@ Scopes: `SINGLETON` > `REQUEST` > `EVENT` > `PROTOTYPE` (longest to shortest lif
 
 ## Runnable examples
 
-Eleven worked examples ship under [`tiko-examples/`](./tiko-examples/README.md), each a self-contained Maven project:
+Twelve worked examples ship under [`tiko-examples/`](./tiko-examples/README.md), each a self-contained Maven project:
 
 | #  | Module                                                              | Demonstrates                                                                                            |
 |----|---------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------|
@@ -157,6 +157,7 @@ Eleven worked examples ship under [`tiko-examples/`](./tiko-examples/README.md),
 | 09 | [`09_http_javalin`](./tiko-examples/09_http_javalin)                | `TikoJavalin.scoped` middleware opens a REQUEST scope per route; sync request→response independent of the bus |
 | 10 | [`10_persistence_jdbc`](./tiko-examples/10_persistence_jdbc)        | Persistence cookbook — REQUEST-scoped JDBC transactions across HTTP and batch flows ([docs](./docs/cookbooks/persistence.md)) |
 | 11 | [`11_custom_logger`](./tiko-examples/11_custom_logger)              | Routing framework logs through slf4j + logback via `System.LoggerFinder`                                |
+| 12 | [`12_testing`](./tiko-examples/12_testing)                          | `@TikoTest` JUnit 5 extension — parameter resolution, `RecordingEventBus` assertions, scope helpers, `awaitAsyncDispatch` |
 
 ## Measured cold-start
 
@@ -186,6 +187,7 @@ The honest reading: the dominant axis is **lazy vs eager init**, not "compile-ti
 | `tiko-processor`        | Annotation processor — runs at compile-time to validate dependencies and generate wiring code.                                                     |
 | `tiko-runtime`          | Minimal runtime container. Zero dependencies beyond `tiko-api`. Ships the in-memory `LocalEventBus`.                                               |
 | `tiko-config`           | YAML-backed configuration injection. The only module that depends on SnakeYAML. Required when your project uses `@Configuration`; not pulled otherwise. |
+| `tiko-test`             | JUnit 5 extension + compile-time `@TestComponent` overrides + runtime `TikoOptions.override(...)` + `RecordingEventBus` spy. Test-scope dependency only. |
 | `tiko-kafka` + `tiko-kafka-processor` | Kafka transport via the universal `TransportBootstrap` SPI — `@KafkaSource` / `@KafkaSink`, JSON serializer, per-record commit + seek-back. Opt-in. |
 | `tiko-archetype`        | Maven archetype that scaffolds a runnable single-module Tiko project in seconds.                                                                   |
 | `tiko-bom`              | Bill-of-materials for version-aligned dependency management.                                                                                       |
@@ -221,6 +223,7 @@ policy — a different layer than framework logging.
 | [docs/di-and-scopes.md](./docs/di-and-scopes.md)      | Full DI reference — scopes, cross-scope proxies, lifecycle hooks, qualifiers, `@Produces`.  |
 | [docs/configuration.md](./docs/configuration.md)      | `@Configuration` deep-dive — nested records, layered sources, module-baked defaults.        |
 | [docs/events.md](./docs/events.md)                    | Event bus, error handling, async executor, lifecycle events, `@EventTrigger` chains.        |
+| [docs/testing.md](./docs/testing.md)                  | `tiko-test` JUnit 5 extension — `@TikoTest`, parameter resolution, `RecordingEventBus`, scope helpers, known limitations. |
 | [docs/jdk-23-setup.md](./docs/jdk-23-setup.md)        | Annotation processing on JDK 23+ — Maven / Gradle / plain `javac`.                          |
 | [docs/roadmap.md](./docs/roadmap.md)                  | What ships today, what's planned per phase, known limitations.                              |
 | [docs/release-process.md](./docs/release-process.md)  | Release engineering notes (maintainers).                                                    |
