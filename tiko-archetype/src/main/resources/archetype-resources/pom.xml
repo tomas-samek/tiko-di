@@ -40,14 +40,41 @@
             <artifactId>tiko-runtime</artifactId>
         </dependency>
 
-        <!-- In-memory event bus. Reflectively loaded by Tiko.create(); runtime scope
-             is sufficient. -->
+        <!-- Optional modules. Uncomment any you need; the tiko-bom pins all versions. -->
 
-        <!-- Uncomment to enable typed YAML configuration injection via @Configuration. -->
+        <!-- Typed YAML configuration injection via @Configuration records. -->
         <!--
         <dependency>
             <groupId>io.tiko</groupId>
             <artifactId>tiko-config</artifactId>
+        </dependency>
+        -->
+
+        <!-- JUnit 5 testing: @TikoTest, @TestComponent, RecordingEventBus. -->
+        <!--
+        <dependency>
+            <groupId>io.tiko</groupId>
+            <artifactId>tiko-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        -->
+
+        <!-- Kafka transport: @KafkaSource / @KafkaSink, JSON serializer. Add
+             tiko-kafka-processor to <annotationProcessorPaths> below if enabled. -->
+        <!--
+        <dependency>
+            <groupId>io.tiko</groupId>
+            <artifactId>tiko-kafka</artifactId>
+        </dependency>
+        -->
+
+        <!-- Route Tiko's System.Logger output through slf4j (+ your slf4j backend
+             of choice — e.g. logback, log4j-slf4j2-impl). -->
+        <!--
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-jdk-platform-logging</artifactId>
+            <version>2.0.16</version>
         </dependency>
         -->
     </dependencies>
@@ -68,6 +95,14 @@
                             <artifactId>tiko-processor</artifactId>
                             <version>${tiko.version}</version>
                         </path>
+                        <!-- Required if tiko-kafka is enabled above. -->
+                        <!--
+                        <path>
+                            <groupId>io.tiko</groupId>
+                            <artifactId>tiko-kafka-processor</artifactId>
+                            <version>${tiko.version}</version>
+                        </path>
+                        -->
                     </annotationProcessorPaths>
                 </configuration>
             </plugin>
