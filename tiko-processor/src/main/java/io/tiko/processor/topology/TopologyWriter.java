@@ -140,6 +140,7 @@ public final class TopologyWriter {
                         .value(h.getDeclaringClass().getQualifiedName().toString());
                 jw.field("handlerMethod").value(h.getMethodName());
                 jw.field("eventName").value(t.getEventName());
+                jw.field("eventType").value(triggerReturnTypeFqn(h.getMethodElement()));
                 jw.field("async").value(t.isAsync());
                 jw.field("spread").value(t.isSpread());
                 jw.field("guards").array();
@@ -151,6 +152,20 @@ public final class TopologyWriter {
             }
         }
         jw.endArray();
+    }
+
+    /**
+     * Return-type FQN of an {@code @EventTrigger}-bearing handler — the type the runtime
+     * event bus actually dispatches by. {@code void} returns become {@code null} (no
+     * spread payload); {@code @EventTrigger(eventName = "...")} is just a user label
+     * and isn't a reliable join key on its own.
+     */
+    private static String triggerReturnTypeFqn(ExecutableElement method) {
+        var ret = method.getReturnType();
+        if (ret == null || ret.getKind() == javax.lang.model.type.TypeKind.VOID) {
+            return null;
+        }
+        return ret.toString();
     }
 
     private void writeConfigurations(JsonWriter jw) {

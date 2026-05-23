@@ -105,7 +105,8 @@ Every `@EventTrigger` annotation (including each entry of an
 | -------------- | -------- | ----- |
 | `handlerClass` | string   | FQN of the `@EventHandler` carrying the trigger |
 | `handlerMethod`| string   | |
-| `eventName`    | string   | `@EventTrigger(eventName = ...)` |
+| `eventName`    | string   | `@EventTrigger(eventName = ...)` — user-chosen label, not a stable join key |
+| `eventType`    | string \| null | Return-type FQN of the trigger method — the identity the event bus dispatches by. `null` if the method returns `void`. |
 | `async`        | boolean  | |
 | `spread`       | boolean  | |
 | `guards`       | string[] | FQNs of `EventTriggerGuard` classes; default `AlwaysAllow` is omitted |

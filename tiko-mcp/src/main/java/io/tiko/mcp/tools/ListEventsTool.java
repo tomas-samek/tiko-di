@@ -26,14 +26,18 @@ public final class ListEventsTool {
         String filter =
                 args.get("eventType") == null ? null : args.get("eventType").toString();
 
+        // Join handlers and triggers on the trigger-method return-type FQN — the actual
+        // event identity. `eventName` is a user-chosen label and may not match the FQN
+        // (e.g. `@EventTrigger(eventName = "OrderValidated")` on a method returning
+        // `example.events.OrderValidated`).
         var eventTypes = new LinkedHashSet<String>();
         for (var h : store.eventHandlers()) {
             String t = (String) h.get("eventType");
             if (t != null) eventTypes.add(t);
         }
         for (var t : store.eventTriggers()) {
-            String name = (String) t.get("eventName");
-            if (name != null) eventTypes.add(name);
+            String type = (String) t.get("eventType");
+            if (type != null) eventTypes.add(type);
         }
 
         var events = new ArrayList<Map<String, Object>>();
@@ -44,7 +48,7 @@ public final class ListEventsTool {
             entry.put(
                     "publishers",
                     store.eventTriggers().stream()
-                            .filter(t -> eventType.equals(t.get("eventName")))
+                            .filter(t -> eventType.equals(t.get("eventType")))
                             .map(t -> {
                                 var p = new LinkedHashMap<String, Object>();
                                 p.put("class", t.get("handlerClass"));

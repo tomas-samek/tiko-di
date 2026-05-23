@@ -26,7 +26,9 @@ class TopologyWriterTest {
                 "@Component(scope = Scope.SINGLETON)",
                 "public class OrderService implements Orders {",
                 "  @Inject public OrderService(OrderRepository repo) {}",
-                "  @EventHandler public void onPlaced(OrderPlaced e) {}",
+                "  @EventHandler",
+                "  @EventTrigger(eventName = \"OrderValidated\")",
+                "  public OrderValidated validate(OrderPlaced e) { return new OrderValidated(); }",
                 "  @PostConstruct public void init() {}",
                 "}");
         JavaFileObject ordersIface = JavaFileObjects.forSourceLines(
@@ -40,6 +42,8 @@ class TopologyWriterTest {
                 "public class OrderRepository { @Inject public OrderRepository() {} }");
         JavaFileObject event = JavaFileObjects.forSourceLines(
                 "io.example.OrderPlaced", "package io.example;", "public record OrderPlaced(String id) {}");
+        JavaFileObject validated = JavaFileObjects.forSourceLines(
+                "io.example.OrderValidated", "package io.example;", "public record OrderValidated() {}");
         JavaFileObject cfg = JavaFileObjects.forSourceLines(
                 "io.example.DbConfig",
                 "package io.example;",
@@ -49,7 +53,7 @@ class TopologyWriterTest {
 
         Compilation c = Compiler.javac()
                 .withProcessors(new TikoAnnotationProcessor())
-                .compile(service, ordersIface, repo, event, cfg);
+                .compile(service, ordersIface, repo, event, validated, cfg);
         assertThat(c).succeeded();
 
         var fileOpt = c.generatedFile(StandardLocation.CLASS_OUTPUT, "META-INF/tiko/topology.json");
@@ -85,6 +89,11 @@ class TopologyWriterTest {
         assertThat(json).contains("\"eventHandlers\":");
         assertThat(json).contains("\"eventType\": \"io.example.OrderPlaced\"");
         assertThat(json).contains("\"async\": false");
+
+        // Event triggers — eventName is the user label, eventType is the return-type FQN
+        assertThat(json).contains("\"eventTriggers\":");
+        assertThat(json).contains("\"eventName\": \"OrderValidated\"");
+        assertThat(json).contains("\"eventType\": \"io.example.OrderValidated\"");
 
         // Configurations
         assertThat(json).contains("\"configurations\":");
