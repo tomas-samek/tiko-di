@@ -7,7 +7,7 @@ Cursor, …) can introspect the app's wiring at compile time.
 
 | Class | Scope | Notes |
 |---|---|---|
-| `OrderService` | SINGLETON | publishes `OrderPlaced`, handles it with `@EventHandler` + `@EventTrigger` |
+| `OrderService` | SINGLETON | handles `OrderPlaced` with `@EventHandler` + `@EventTrigger` |
 | `OrderRepository` | REQUEST | proxy-injected into `OrderService` via `Orders` interface |
 | `DbConfig` | — | `@Configuration(prefix = "database")` record |
 
@@ -41,8 +41,7 @@ Response:
       "scope": "SINGLETON",
       "interfaces": [],
       "constructorDependencies": [
-        {"type": "example.OrderRepository", "qualifier": null},
-        {"type": "io.tiko.EventBus", "qualifier": null}
+        {"type": "example.Orders", "qualifier": null, "kind": "DIRECT", "pickedType": null}
       ]
     }
   ]
@@ -89,7 +88,6 @@ Response (depth-tagged tree):
 
 ```
 example.OrderService [SINGLETON, depth=0]
-  example.OrderRepository [REQUEST, depth=1]  ← proxy via Orders interface
+  example.Orders [REQUEST, depth=1]  ← proxy via Orders interface → example.OrderRepository
     example.DbConfig [depth=2]
-  io.tiko.EventBus [depth=1]
 ```
