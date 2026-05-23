@@ -87,7 +87,13 @@ Args: `{"componentFqn": "example.OrderService"}`
 Response (depth-tagged tree):
 
 ```
-example.OrderService [SINGLETON, depth=0]
-  example.Orders [REQUEST, depth=1]  ← proxy via Orders interface → example.OrderRepository
-    example.DbConfig [depth=2]
+example.OrderService [COMPONENT, SINGLETON, depth=0]
+  example.OrderRepository [COMPONENT, REQUEST, depth=1]  ← resolved via Orders interface; proxied
+    example.DbConfig [CONFIG, depth=2]                   ← @Configuration record, leaf
 ```
+
+Each tree entry carries a `kind` field: `COMPONENT` for regular `@Component`
+beans, `CONFIG` for `@Configuration` records (which are leaves — their fields
+live in `get_config_schema`). The `via` field on each non-root entry records
+the dependency edge that pulled it in, so interface-typed deps remain
+traceable to the declared parameter type.

@@ -117,6 +117,13 @@ public final class JsonWriter implements AutoCloseable {
         return this;
     }
 
+    public JsonWriter value(double v) {
+        writeSeparatorIfNeeded();
+        write(Double.toString(v));
+
+        return this;
+    }
+
     public JsonWriter nullValue() {
         writeSeparatorIfNeeded();
         write("null");

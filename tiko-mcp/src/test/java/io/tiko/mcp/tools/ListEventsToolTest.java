@@ -15,6 +15,9 @@ class ListEventsToolTest {
 
     @Test
     void groupsHandlersAndPublishersByEventType(@TempDir Path root) throws Exception {
+        // Trigger's eventName ("OrderValidated") is a user-chosen label that does NOT
+        // match the dispatched event identity (io.example.OrderPlaced). The tool must
+        // join on `eventType` (the trigger method's return-type FQN), not `eventName`.
         var store = storeWith(root, """
                 {"schemaVersion":1, "module":"m",
                  "components":[], "factoryMethods":[], "configurations":[],
@@ -23,7 +26,8 @@ class ListEventsToolTest {
                  ],
                  "eventTriggers":[
                    {"handlerClass":"io.example.OrderService","handlerMethod":"validate",
-                    "eventName":"io.example.OrderPlaced","async":false,"spread":false,"guards":[]}
+                    "eventName":"OrderValidated","eventType":"io.example.OrderPlaced",
+                    "async":false,"spread":false,"guards":[]}
                  ]}
                 """);
         var tool = new ListEventsTool(store);
@@ -36,6 +40,9 @@ class ListEventsToolTest {
         assertThat(e.get("eventType")).isEqualTo("io.example.OrderPlaced");
         assertThat((List<?>) e.get("publishers")).hasSize(1);
         assertThat((List<?>) e.get("handlers")).hasSize(1);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> publisher = ((List<Map<String, Object>>) e.get("publishers")).get(0);
+        assertThat(publisher.get("eventName")).isEqualTo("OrderValidated");
     }
 
     @Test
