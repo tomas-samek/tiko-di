@@ -14,6 +14,10 @@ import java.util.Deque;
  * <p>Usage: {@code try (var jw = new JsonWriter(writer)) { ... }}.
  * Methods return {@code this} for chaining. Compact by default; pass
  * {@code pretty = true} for two-space-indented output.
+ *
+ * <p>The caller owns the lifecycle of the supplied {@link Writer}. {@link #close()} flushes
+ * but does not close it — typically the writer is wrapped in an outer try-with-resources
+ * that handles its close.
  */
 public final class JsonWriter implements AutoCloseable {
 
@@ -21,7 +25,6 @@ public final class JsonWriter implements AutoCloseable {
     private final boolean pretty;
     private final Deque<Frame> stack = new ArrayDeque<>();
     private boolean expectingValue = false;
-    private String pendingFieldName = null;
 
     public JsonWriter(Writer out) {
         this(out, false);
@@ -46,7 +49,7 @@ public final class JsonWriter implements AutoCloseable {
             writeIndent();
         }
         write("}");
-        afterValueWritten();
+
         return this;
     }
 
@@ -64,7 +67,7 @@ public final class JsonWriter implements AutoCloseable {
             writeIndent();
         }
         write("]");
-        afterValueWritten();
+
         return this;
     }
 
@@ -79,7 +82,6 @@ public final class JsonWriter implements AutoCloseable {
             writeIndent();
         }
         f.first = false;
-        pendingFieldName = name;
         write("\"");
         writeEscaped(name);
         write("\"");
@@ -97,28 +99,28 @@ public final class JsonWriter implements AutoCloseable {
             writeEscaped(s);
             write("\"");
         }
-        afterValueWritten();
+
         return this;
     }
 
     public JsonWriter value(long v) {
         writeSeparatorIfNeeded();
         write(Long.toString(v));
-        afterValueWritten();
+
         return this;
     }
 
     public JsonWriter value(boolean v) {
         writeSeparatorIfNeeded();
         write(v ? "true" : "false");
-        afterValueWritten();
+
         return this;
     }
 
     public JsonWriter nullValue() {
         writeSeparatorIfNeeded();
         write("null");
-        afterValueWritten();
+
         return this;
     }
 
@@ -126,7 +128,7 @@ public final class JsonWriter implements AutoCloseable {
     public JsonWriter raw(String json) {
         writeSeparatorIfNeeded();
         write(json);
-        afterValueWritten();
+
         return this;
     }
 
@@ -160,10 +162,6 @@ public final class JsonWriter implements AutoCloseable {
             writeIndent();
         }
         f.first = false;
-    }
-
-    private void afterValueWritten() {
-        pendingFieldName = null;
     }
 
     private void writeIndent() {
