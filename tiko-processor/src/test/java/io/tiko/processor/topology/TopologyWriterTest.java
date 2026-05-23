@@ -102,7 +102,9 @@ class TopologyWriterTest {
         assertThat(json).contains("\"cardinality\": \"REQUIRED\"");
         assertThat(json).contains("\"name\": \"poolSize\"");
         assertThat(json).contains("\"cardinality\": \"DEFAULTED\"");
-        assertThat(json).contains("\"default\": \"10\"");
+        // Numeric/boolean defaults emit unquoted to match the record component's type —
+        // matches what get_config_schema does, so both build artifacts agree.
+        assertThat(json).contains("\"default\": 10");
     }
 
     @Test

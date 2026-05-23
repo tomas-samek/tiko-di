@@ -181,13 +181,72 @@ public final class TopologyWriter {
                 jw.field("yamlKey").value(f.yamlKey());
                 jw.field("type").value(f.type().toString());
                 jw.field("cardinality").value(f.cardinality().name());
-                jw.field("default").value(f.defaultValue());
+                writeDefaultValue(jw, f.type().toString(), f.defaultValue());
                 jw.endObject();
             }
             jw.endArray();
             jw.endObject();
         }
         jw.endArray();
+    }
+
+    /**
+     * Emits the {@code default} field with the value typed to match the record-component
+     * type, so {@code int poolSize} with {@code @Default("10")} writes {@code "default": 10}
+     * (not the string {@code "10"}). Mirrors the typing rules in
+     * {@link ConfigSchemaWriter#decorateWithDefault} so both build artifacts agree.
+     */
+    private static void writeDefaultValue(JsonWriter jw, String typeFqn, String raw) {
+        jw.field("default");
+        if (raw == null) {
+            jw.nullValue();
+            return;
+        }
+        var trimmed = raw.trim();
+        if (isIntegerType(typeFqn)) {
+            try {
+                jw.value(Long.parseLong(trimmed));
+                return;
+            } catch (NumberFormatException ignored) {
+                // fall through to string fallback
+            }
+        } else if (isNumberType(typeFqn)) {
+            try {
+                jw.value(Double.parseDouble(trimmed));
+                return;
+            } catch (NumberFormatException ignored) {
+                // fall through to string fallback
+            }
+        } else if (isBooleanType(typeFqn) && ("true".equals(trimmed) || "false".equals(trimmed))) {
+            jw.value(Boolean.parseBoolean(trimmed));
+            return;
+        }
+        jw.value(raw);
+    }
+
+    private static boolean isIntegerType(String fqn) {
+        return switch (fqn) {
+            case "int",
+                    "long",
+                    "short",
+                    "byte",
+                    "java.lang.Integer",
+                    "java.lang.Long",
+                    "java.lang.Short",
+                    "java.lang.Byte" -> true;
+            default -> false;
+        };
+    }
+
+    private static boolean isNumberType(String fqn) {
+        return switch (fqn) {
+            case "float", "double", "java.lang.Float", "java.lang.Double" -> true;
+            default -> false;
+        };
+    }
+
+    private static boolean isBooleanType(String fqn) {
+        return "boolean".equals(fqn) || "java.lang.Boolean".equals(fqn);
     }
 
     private void writeDependencies(JsonWriter jw, List<DependencyModel> deps) {
