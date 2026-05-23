@@ -84,10 +84,27 @@ public final class ConfigSchemaWriter {
             return fragment;
         }
         var inner = fragment.substring(1, fragment.length() - 1);
-        // Defaults for numeric types are passed through unquoted; everything else as a string.
-        // Conservative: emit as quoted string — JSON Schema's `default` keyword is just
-        // documentation, not validated, so callers reading it can convert.
-        var def = "\"default\":\"" + escapeJson(field.defaultValue()) + "\"";
+        var raw = field.defaultValue().trim();
+        String def;
+        if (fragment.contains("\"type\":\"integer\"")) {
+            try {
+                Long.parseLong(raw);
+                def = "\"default\":" + raw;
+            } catch (NumberFormatException e) {
+                def = "\"default\":\"" + escapeJson(field.defaultValue()) + "\"";
+            }
+        } else if (fragment.contains("\"type\":\"number\"")) {
+            try {
+                Double.parseDouble(raw);
+                def = "\"default\":" + raw;
+            } catch (NumberFormatException e) {
+                def = "\"default\":\"" + escapeJson(field.defaultValue()) + "\"";
+            }
+        } else if (fragment.contains("\"type\":\"boolean\"") && ("true".equals(raw) || "false".equals(raw))) {
+            def = "\"default\":" + raw;
+        } else {
+            def = "\"default\":\"" + escapeJson(field.defaultValue()) + "\"";
+        }
         return "{" + inner + (inner.isEmpty() ? "" : ",") + def + "}";
     }
 

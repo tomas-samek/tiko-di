@@ -59,8 +59,11 @@ class ConfigSchemaWriterTest {
         assertThat(json)
                 .contains("\"poolSize\":")
                 .contains("\"type\":\"integer\"")
-                .contains("\"default\":\"10\"");
-        assertThat(json).contains("\"connectTimeout\":").contains("\"format\":\"duration\"");
+                .contains("\"default\":10");
+        assertThat(json)
+                .contains("\"connectTimeout\":")
+                .contains("\"format\":\"duration\"")
+                .contains("\"default\":\"PT30S\"");
         assertThat(json).contains("\"hosts\":").contains("\"type\":\"array\"");
 
         // required[] lists url + username (REQUIRED), excludes ca (OPTIONAL) and defaulted fields
@@ -89,6 +92,33 @@ class ConfigSchemaWriterTest {
 
         assertThat(c.generatedFile(StandardLocation.CLASS_OUTPUT, "META-INF/tiko/config-schema.json"))
                 .isNotPresent();
+    }
+
+    @Test
+    void booleanAndNumericDefaultsAreEmittedUnquoted() throws Exception {
+        JavaFileObject cfg = JavaFileObjects.forSourceLines(
+                "io.example.X",
+                "package io.example;",
+                "import io.tiko.annotations.*;",
+                "@Configuration(prefix = \"x\")",
+                "public record X(@Default(\"true\") boolean active, @Default(\"3.14\") double rate) {}");
+
+        Compilation c =
+                Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(cfg);
+        assertThat(c).succeeded();
+
+        var file = c.generatedFile(StandardLocation.CLASS_OUTPUT, "META-INF/tiko/config-schema.json")
+                .orElseThrow();
+        String json;
+        try (var r = new InputStreamReader(file.openInputStream(), StandardCharsets.UTF_8)) {
+            json = new java.io.BufferedReader(r).lines().reduce("", (acc, line) -> acc + line + "\n");
+        }
+
+        assertThat(json)
+                .contains("\"active\":")
+                .contains("\"type\":\"boolean\"")
+                .contains("\"default\":true");
+        assertThat(json).contains("\"rate\":").contains("\"type\":\"number\"").contains("\"default\":3.14");
     }
 
     @Test
