@@ -10,6 +10,7 @@ import io.tiko.mcp.tools.ExplainWiringTool;
 import io.tiko.mcp.tools.GetConfigSchemaTool;
 import io.tiko.mcp.tools.ListComponentsTool;
 import io.tiko.mcp.tools.ListEventsTool;
+import io.tiko.mcp.tools.ListWiringErrorsTool;
 import io.tiko.mcp.tools.ReloadTool;
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
@@ -38,18 +39,21 @@ public final class McpStdioBridge {
     private final GetConfigSchemaTool getConfigSchema;
     private final ExplainWiringTool explainWiring;
     private final ReloadTool reload;
+    private final ListWiringErrorsTool listWiringErrors;
 
     public McpStdioBridge(
             ListComponentsTool listComponents,
             ListEventsTool listEvents,
             GetConfigSchemaTool getConfigSchema,
             ExplainWiringTool explainWiring,
-            ReloadTool reload) {
+            ReloadTool reload,
+            ListWiringErrorsTool listWiringErrors) {
         this.listComponents = listComponents;
         this.listEvents = listEvents;
         this.getConfigSchema = getConfigSchema;
         this.explainWiring = explainWiring;
         this.reload = reload;
+        this.listWiringErrors = listWiringErrors;
     }
 
     /**
@@ -81,6 +85,9 @@ public final class McpStdioBridge {
         var reloadSchema = """
                 {"type":"object","properties":{}}""";
 
+        var listWiringErrorsSchema = """
+                {"type":"object","properties":{}}""";
+
         var server = McpServer.sync(transport)
                 .serverInfo("tiko-mcp", "0.1.0")
                 .capabilities(
@@ -105,7 +112,13 @@ public final class McpStdioBridge {
                                 "Explain dependency wiring for a component",
                                 explainWiringSchema,
                                 explainWiring::execute),
-                        spec(mapper, ReloadTool.NAME, "Reload Tiko topology from disk", reloadSchema, reload::execute))
+                        spec(mapper, ReloadTool.NAME, "Reload Tiko topology from disk", reloadSchema, reload::execute),
+                        spec(
+                                mapper,
+                                ListWiringErrorsTool.NAME,
+                                "List Tiko wiring-error diagnostics",
+                                listWiringErrorsSchema,
+                                listWiringErrors::execute))
                 .build();
 
         LoggerHolder.LOG.log(Level.INFO, "tiko-mcp server started on stdio");

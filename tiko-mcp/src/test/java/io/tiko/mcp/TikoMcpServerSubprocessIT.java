@@ -31,7 +31,7 @@ import org.junit.jupiter.api.io.TempDir;
 class TikoMcpServerSubprocessIT {
 
     private static final String[] EXPECTED_TOOLS = {
-        "list_components", "list_events", "get_config_schema", "explain_wiring", "reload"
+        "list_components", "list_events", "get_config_schema", "explain_wiring", "reload", "list_wiring_errors"
     };
 
     @Test
@@ -110,7 +110,8 @@ class TikoMcpServerSubprocessIT {
                     .contains("list_events")
                     .contains("get_config_schema")
                     .contains("explain_wiring")
-                    .contains("reload");
+                    .contains("reload")
+                    .contains("list_wiring_errors");
 
         } finally {
             reader.shutdownNow();

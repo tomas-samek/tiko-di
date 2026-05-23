@@ -161,9 +161,34 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
                     .getMessager()
                     .printMessage(Diagnostic.Kind.ERROR, "Tiko DI processing failed:\n" + formatStackTrace(e));
             return false;
+        } finally {
+            // Always emit the wiring-errors sibling artifact, even when validation or
+            // code generation aborted. Downstream tooling (tiko-mcp's list_wiring_errors)
+            // relies on the file being present on every processed round so a clean build
+            // ships {"errors": []} and a broken build ships the structured failures.
+            emitWiringErrors();
         }
 
         return true;
+    }
+
+    /**
+     * Emits {@code META-INF/tiko/wiring-errors.json} via {@link io.tiko.processor.topology.WiringErrorsWriter}.
+     * Gated on {@code -Atiko.topology.bundle=true} (the same opt-out as {@code topology.json}
+     * and {@code config-schema.json}). Wrapped in its own try/catch so an IOException
+     * during writer creation cannot mask a real processing failure earlier in the round.
+     */
+    private void emitWiringErrors() {
+        if (!topologyBundleEnabled()) return;
+        try {
+            new io.tiko.processor.topology.WiringErrorsWriter(context.getWiringErrors())
+                    .write(processingEnv.getFiler());
+        } catch (java.io.IOException e) {
+            processingEnv
+                    .getMessager()
+                    .printMessage(
+                            Diagnostic.Kind.WARNING, "Tiko DI: failed to emit wiring-errors.json: " + e.getMessage());
+        }
     }
 
     /**
