@@ -60,7 +60,7 @@ Deferred designs (discussed, no tracker issue yet, not bound to a phase):
 
 ### Phase 3 — onboarding & tooling
 
-[Phase 3 milestone](https://github.com/tomas-samek/tiko-di/milestone/3) — 5/6 closed.
+[Phase 3 milestone](https://github.com/tomas-samek/tiko-di/milestone/3) — 6/6 closed.
 
 Shipped:
 
@@ -69,10 +69,7 @@ Shipped:
 - ✅ tiko-test: `TikoOptions.override(Class, Supplier)` applies at injection sites keyed by the parameter's declared type — interface mocks work naturally, no `mockito-inline` required ([#128](https://github.com/tomas-samek/tiko-di/issues/128)).
 - ✅ tiko-test: production components in `src/main/java/` and test fixtures in `src/test/java/` — `AggregatingContainer` federates the test container with the existing main at runtime via `META-INF/tiko/test-shadows.properties` ([#129](https://github.com/tomas-samek/tiko-di/issues/129)).
 - ✅ tiko-archetype: ships AGENTS.md + `.github/copilot-instructions.md` + `.junie/guidelines.md` pointer files alongside the existing `CLAUDE.md` / `.cursor/rules/tiko.md` / `.ai-skills/SKILL.md` — generated projects come fully AI-aware, every tool's file points at `CLAUDE.md` as the single source of truth ([#21](https://github.com/tomas-samek/tiko-di/issues/21)).
-
-Open:
-
-- Machine-readable topology + config schema, plus an MCP server so AI agents can introspect the wiring ([#22](https://github.com/tomas-samek/tiko-di/issues/22)).
+- ✅ Machine-readable topology + config schema, plus an MCP server so AI agents can introspect the wiring ([#22](https://github.com/tomas-samek/tiko-di/issues/22)).
 
 ### Phase 4 — runtime hardening (in progress)
 
