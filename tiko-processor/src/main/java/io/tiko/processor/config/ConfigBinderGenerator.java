@@ -447,8 +447,13 @@ public final class ConfigBinderGenerator {
     private CodeBlock fallbackExpr(TypeMirror type) {
         if (type.getKind().isPrimitive()) {
             return switch (type.getKind()) {
-                case INT, LONG, SHORT, BYTE, CHAR -> CodeBlock.of("0");
-                case DOUBLE, FLOAT -> CodeBlock.of("0.0");
+                case INT -> CodeBlock.of("0");
+                case LONG -> CodeBlock.of("0L");
+                case SHORT -> CodeBlock.of("(short) 0");
+                case BYTE -> CodeBlock.of("(byte) 0");
+                case CHAR -> CodeBlock.of("'\\u0000'");
+                case DOUBLE -> CodeBlock.of("0.0");
+                case FLOAT -> CodeBlock.of("0.0f");
                 case BOOLEAN -> CodeBlock.of("false");
                 default -> CodeBlock.of("null");
             };
