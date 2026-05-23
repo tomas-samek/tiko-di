@@ -66,7 +66,7 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
 
     @Override
     public Set<String> getSupportedOptions() {
-        return Set.of("tiko.profiles");
+        return Set.of("tiko.profiles", "tiko.topology.bundle");
     }
 
     @Override
@@ -991,10 +991,12 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
 
         // Emit machine-readable topology.json for AI agents / IDE tooling / doc generators
         // when the build has anything worth describing. Gated to avoid empty-file noise.
-        if (!context.getActiveComponents().isEmpty()
-                || !context.getActiveFactoryMethods().isEmpty()
-                || !context.getEventHandlers().isEmpty()
-                || !context.getConfigurations().isEmpty()) {
+        // Suppressed entirely when -Atiko.topology.bundle=false (closed-source services, sensitive jars).
+        if (topologyBundleEnabled()
+                && (!context.getActiveComponents().isEmpty()
+                        || !context.getActiveFactoryMethods().isEmpty()
+                        || !context.getEventHandlers().isEmpty()
+                        || !context.getConfigurations().isEmpty())) {
             new io.tiko.processor.topology.TopologyWriter(context).write(processingEnv.getFiler());
         }
 
@@ -1002,6 +1004,16 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "Tiko DI: Generating container...");
         ContainerGenerator containerGenerator = new ContainerGenerator(context);
         containerGenerator.generate();
+    }
+
+    /**
+     * Returns true when the user has opted into topology emission (the default).
+     * Set {@code -Atiko.topology.bundle=false} to suppress {@code topology.json} and
+     * {@code config-schema.json} entirely (closed-source services, sensitive jars).
+     */
+    private boolean topologyBundleEnabled() {
+        var v = processingEnv.getOptions().get("tiko.topology.bundle");
+        return v == null || !v.equalsIgnoreCase("false");
     }
 
     /**
