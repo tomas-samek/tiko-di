@@ -23,11 +23,13 @@ public final class ListComponentsTool {
     public Map<String, Object> execute(Map<String, Object> args) {
         var scope = strOrNull(args.get("scope"));
         var iface = strOrNull(args.get("interface"));
+        var profile = strOrNull(args.get("profile"));
 
         var components = new ArrayList<Map<String, Object>>();
         for (var c : store.components()) {
             if (scope != null && !scope.equals(c.get("scope"))) continue;
             if (iface != null && !interfacesContain(c, iface)) continue;
+            if (profile != null && !ProfileSupport.profileMatches(c, profile)) continue;
             components.add(withKind(c, "COMPONENT"));
         }
         for (var f : store.factoryMethods()) {
@@ -37,6 +39,7 @@ public final class ListComponentsTool {
             // so this matches the common case. Producers returning a concrete impl of an interface
             // won't be surfaced under the interface filter — out of scope for #143.
             if (iface != null && !iface.equals(f.get("returnType"))) continue;
+            if (profile != null && !ProfileSupport.profileMatches(f, profile)) continue;
             components.add(FactoryProjection.fromFactory(f));
         }
 

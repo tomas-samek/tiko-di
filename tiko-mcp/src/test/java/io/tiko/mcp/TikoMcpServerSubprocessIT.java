@@ -38,7 +38,8 @@ class TikoMcpServerSubprocessIT {
         "reload",
         "list_wiring_errors",
         "find_dependents",
-        "trace_event_flow"
+        "trace_event_flow",
+        "list_profile_conflicts"
     };
 
     @Test
@@ -120,7 +121,8 @@ class TikoMcpServerSubprocessIT {
                     .contains("reload")
                     .contains("list_wiring_errors")
                     .contains("find_dependents")
-                    .contains("trace_event_flow");
+                    .contains("trace_event_flow")
+                    .contains("list_profile_conflicts");
 
         } finally {
             reader.shutdownNow();

@@ -11,6 +11,7 @@ import io.tiko.mcp.tools.FindDependentsTool;
 import io.tiko.mcp.tools.GetConfigSchemaTool;
 import io.tiko.mcp.tools.ListComponentsTool;
 import io.tiko.mcp.tools.ListEventsTool;
+import io.tiko.mcp.tools.ListProfileConflictsTool;
 import io.tiko.mcp.tools.ListWiringErrorsTool;
 import io.tiko.mcp.tools.ReloadTool;
 import io.tiko.mcp.tools.TraceEventFlowTool;
@@ -44,6 +45,7 @@ public final class McpStdioBridge {
     private final ListWiringErrorsTool listWiringErrors;
     private final FindDependentsTool findDependents;
     private final TraceEventFlowTool traceEventFlow;
+    private final ListProfileConflictsTool listProfileConflicts;
 
     public McpStdioBridge(
             ListComponentsTool listComponents,
@@ -53,7 +55,8 @@ public final class McpStdioBridge {
             ReloadTool reload,
             ListWiringErrorsTool listWiringErrors,
             FindDependentsTool findDependents,
-            TraceEventFlowTool traceEventFlow) {
+            TraceEventFlowTool traceEventFlow,
+            ListProfileConflictsTool listProfileConflicts) {
         this.listComponents = listComponents;
         this.listEvents = listEvents;
         this.getConfigSchema = getConfigSchema;
@@ -62,6 +65,7 @@ public final class McpStdioBridge {
         this.listWiringErrors = listWiringErrors;
         this.findDependents = findDependents;
         this.traceEventFlow = traceEventFlow;
+        this.listProfileConflicts = listProfileConflicts;
     }
 
     /**
@@ -74,7 +78,8 @@ public final class McpStdioBridge {
         var listComponentsSchema = """
                 {"type":"object","properties":{
                    "scope":{"type":"string","enum":["SINGLETON","REQUEST","EVENT","PROTOTYPE"]},
-                   "interface":{"type":"string"}}}""";
+                   "interface":{"type":"string"},
+                   "profile":{"type":"string"}}}""";
 
         var listEventsSchema = """
                 {"type":"object","properties":{
@@ -87,7 +92,8 @@ public final class McpStdioBridge {
         var explainWiringSchema = """
                 {"type":"object","properties":{
                    "componentFqn":{"type":"string"},
-                   "maxDepth":{"type":"integer","default":10}},
+                   "maxDepth":{"type":"integer","default":10},
+                   "profile":{"type":"string"}},
                  "required":["componentFqn"]}""";
 
         var reloadSchema = """
@@ -107,6 +113,9 @@ public final class McpStdioBridge {
                    "eventType":{"type":"string"},
                    "maxDepth":{"type":"integer","default":20}},
                  "required":["eventType"]}""";
+
+        var listProfileConflictsSchema = """
+                {"type":"object","properties":{}}""";
 
         var server = McpServer.sync(transport)
                 .serverInfo("tiko-mcp", "0.1.0")
@@ -150,7 +159,13 @@ public final class McpStdioBridge {
                                 TraceEventFlowTool.NAME,
                                 "Trace @EventTrigger DAG from an event type",
                                 traceEventFlowSchema,
-                                traceEventFlow::execute))
+                                traceEventFlow::execute),
+                        spec(
+                                mapper,
+                                ListProfileConflictsTool.NAME,
+                                "List components implementing the same type under disjoint profiles",
+                                listProfileConflictsSchema,
+                                listProfileConflicts::execute))
                 .build();
 
         LoggerHolder.LOG.log(Level.INFO, "tiko-mcp server started on stdio");

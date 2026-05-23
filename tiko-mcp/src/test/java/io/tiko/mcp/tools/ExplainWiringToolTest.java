@@ -184,6 +184,34 @@ class ExplainWiringToolTest {
         assertThat(producedBy.get("componentFqn")).isEqualTo("example.Producers");
     }
 
+    @Test
+    void respectsProfileWhenResolvingInterfaceDeps(@TempDir Path root) throws Exception {
+        var store = storeWith(root, """
+                {"schemaVersion":1,"module":"m",
+                 "components":[
+                   {"qualifiedName":"x.DevImpl","scope":"SINGLETON","interfaces":["x.IThing"],
+                    "profiles":["dev"],"constructorDependencies":[]},
+                   {"qualifiedName":"x.ProdImpl","scope":"SINGLETON","interfaces":["x.IThing"],
+                    "profiles":["prod"],"constructorDependencies":[]},
+                   {"qualifiedName":"x.Consumer","scope":"SINGLETON","interfaces":[],"profiles":[],
+                    "constructorDependencies":[
+                      {"type":"x.IThing","qualifier":null,"kind":"DIRECT","pickedType":null}]}
+                 ],
+                 "factoryMethods":[],"eventHandlers":[],"eventTriggers":[],"configurations":[]}
+                """);
+        var tool = new ExplainWiringTool(store);
+
+        @SuppressWarnings("unchecked")
+        var tree = (List<Map<String, Object>>) tool.execute(Map.of("componentFqn", "x.Consumer", "profile", "prod"))
+                .get("tree");
+
+        // Consumer (depth 0) + ProdImpl picked by profile (depth 1). DevImpl excluded.
+        assertThat(tree).hasSize(2);
+        @SuppressWarnings("unchecked")
+        var picked = (Map<String, Object>) tree.get(1).get("component");
+        assertThat(picked.get("qualifiedName")).isEqualTo("x.ProdImpl");
+    }
+
     private TopologyStore storeWith(Path root, String topologyJson) throws Exception {
         Path f = root.resolve("m/target/classes/META-INF/tiko/topology.json");
         Files.createDirectories(f.getParent());

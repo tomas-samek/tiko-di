@@ -5,6 +5,7 @@ import io.tiko.mcp.tools.FindDependentsTool;
 import io.tiko.mcp.tools.GetConfigSchemaTool;
 import io.tiko.mcp.tools.ListComponentsTool;
 import io.tiko.mcp.tools.ListEventsTool;
+import io.tiko.mcp.tools.ListProfileConflictsTool;
 import io.tiko.mcp.tools.ListWiringErrorsTool;
 import io.tiko.mcp.tools.ReloadTool;
 import io.tiko.mcp.tools.TraceEventFlowTool;
@@ -53,6 +54,7 @@ public final class TikoMcpServer {
         var listWiringErrors = new ListWiringErrorsTool(store);
         var findDependents = new FindDependentsTool(store);
         var traceEventFlow = new TraceEventFlowTool(store);
+        var listProfileConflicts = new ListProfileConflictsTool(store);
 
         new McpStdioBridge(
                         listComponents,
@@ -62,7 +64,8 @@ public final class TikoMcpServer {
                         reload,
                         listWiringErrors,
                         findDependents,
-                        traceEventFlow)
+                        traceEventFlow,
+                        listProfileConflicts)
                 .run();
     }
 }
