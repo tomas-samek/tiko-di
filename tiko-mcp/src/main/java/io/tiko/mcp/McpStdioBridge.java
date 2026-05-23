@@ -1,22 +1,36 @@
 package io.tiko.mcp;
 
+import io.modelcontextprotocol.json.McpJsonDefaults;
+import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.server.McpServer;
+import io.modelcontextprotocol.server.McpServerFeatures;
+import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
+import io.modelcontextprotocol.spec.McpSchema;
 import io.tiko.mcp.tools.ExplainWiringTool;
 import io.tiko.mcp.tools.GetConfigSchemaTool;
 import io.tiko.mcp.tools.ListComponentsTool;
 import io.tiko.mcp.tools.ListEventsTool;
+import java.lang.System.Logger;
+import java.lang.System.Logger.Level;
+import java.util.Map;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 
 /**
  * Thin adapter from Tiko's tool classes to the MCP SDK. Kept in a separate class
  * so {@link TikoMcpServer#main(String[])} stays readable and the SDK touch points
  * live in one place.
  *
- * <p><strong>Implementation note:</strong> the SDK class names and method
- * signatures depend on the version pinned in {@code tiko-bom}. Implement
- * {@link #run()} using the SDK's builder/server API — register each of the four
- * tool names with its input JSON schema and route the handler to the matching
- * {@code *.execute(args)} method below.
+ * <p>Each tool's input schema is inlined at its registration site below. Handler
+ * results (a {@code Map<String,Object>}) are JSON-encoded via the SDK's default
+ * mapper and returned as a single {@code TextContent} item — agents parse the
+ * JSON text payload, which matches the canonical {@code topology.json} shape.
  */
 public final class McpStdioBridge {
+
+    private static final class LoggerHolder {
+        static final Logger LOG = System.getLogger("io.tiko.mcp");
+    }
 
     private final ListComponentsTool listComponents;
     private final ListEventsTool listEvents;
@@ -36,45 +50,103 @@ public final class McpStdioBridge {
 
     /**
      * Start the SDK-managed stdio JSON-RPC loop. Returns when stdin closes.
-     *
-     * <p>Wire the four tools using the MCP SDK's tool-registration API. Each tool's
-     * input schema is shown below for the implementer to inline at the SDK call site.
      */
     public void run() throws Exception {
-        // list_components input schema
-        String listComponentsSchema = """
+        var mapper = McpJsonDefaults.getMapper();
+        var transport = new StdioServerTransportProvider(mapper);
+
+        var listComponentsSchema = """
                 {"type":"object","properties":{
                    "scope":{"type":"string","enum":["SINGLETON","REQUEST","EVENT","PROTOTYPE"]},
                    "interface":{"type":"string"}}}""";
 
-        // list_events input schema
-        String listEventsSchema = """
+        var listEventsSchema = """
                 {"type":"object","properties":{
                    "eventType":{"type":"string"}}}""";
 
-        // get_config_schema input schema
-        String getConfigSchemaSchema = """
+        var getConfigSchemaSchema = """
                 {"type":"object","properties":{
                    "prefix":{"type":"string"}}}""";
 
-        // explain_wiring input schema
-        String explainWiringSchema = """
+        var explainWiringSchema = """
                 {"type":"object","properties":{
                    "componentFqn":{"type":"string"},
                    "maxDepth":{"type":"integer","default":10}},
                  "required":["componentFqn"]}""";
 
-        // TODO (Task 22): replace the throw below with the real SDK API.
-        // The handler for each tool should return the JSON the SDK wraps as tool
-        // result content; route invocations to the matching *.execute(args) methods:
-        //   listComponents.execute(args)
-        //   listEvents.execute(args)
-        //   getConfigSchema.execute(args)
-        //   explainWiring.execute(args)
-        // The four schema strings above belong at their respective SDK registration
-        // call sites — inline them there rather than keeping them as locals.
-        throw new UnsupportedOperationException("Wire the four tools (list_components, list_events, get_config_schema,"
-                + " explain_wiring) to the MCP SDK pinned in tiko-bom."
-                + " See inline schema strings above.");
+        var server = McpServer.sync(transport)
+                .serverInfo("tiko-mcp", "0.1.0")
+                .capabilities(
+                        McpSchema.ServerCapabilities.builder().tools(false).build())
+                .tools(
+                        spec(
+                                mapper,
+                                ListComponentsTool.NAME,
+                                "List Tiko components",
+                                listComponentsSchema,
+                                listComponents::execute),
+                        spec(mapper, ListEventsTool.NAME, "List Tiko events", listEventsSchema, listEvents::execute),
+                        spec(
+                                mapper,
+                                GetConfigSchemaTool.NAME,
+                                "Get @Configuration JSON schema",
+                                getConfigSchemaSchema,
+                                getConfigSchema::execute),
+                        spec(
+                                mapper,
+                                ExplainWiringTool.NAME,
+                                "Explain dependency wiring for a component",
+                                explainWiringSchema,
+                                explainWiring::execute))
+                .build();
+
+        LoggerHolder.LOG.log(Level.INFO, "tiko-mcp server started on stdio");
+
+        // Block the main thread; the transport drives request handling on its
+        // own threads. Returns when stdin closes (transport terminates).
+        try {
+            Thread.currentThread().join();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            server.closeGracefully();
+        }
+    }
+
+    private static McpServerFeatures.SyncToolSpecification spec(
+            McpJsonMapper mapper,
+            String name,
+            String description,
+            String inputSchemaJson,
+            Function<Map<String, Object>, Map<String, Object>> handler) {
+        var tool = McpSchema.Tool.builder()
+                .name(name)
+                .description(description)
+                .inputSchema(mapper, inputSchemaJson)
+                .build();
+        BiFunction<io.modelcontextprotocol.server.McpSyncServerExchange, Map<String, Object>, McpSchema.CallToolResult>
+                call = (exchange, args) -> {
+                    try {
+                        var result = handler.apply(args == null ? Map.of() : args);
+                        var json = mapper.writeValueAsString(result);
+                        return McpSchema.CallToolResult.builder()
+                                .addTextContent(json)
+                                .build();
+                    } catch (Exception e) {
+                        LoggerHolder.LOG.log(Level.WARNING, "Tool " + name + " failed", e);
+                        return McpSchema.CallToolResult.builder()
+                                .addTextContent("{\"error\":\"" + escape(e.getMessage()) + "\"}")
+                                .isError(true)
+                                .build();
+                    }
+                };
+        return new McpServerFeatures.SyncToolSpecification(tool, call);
+    }
+
+    private static String escape(String s) {
+        if (s == null) {
+            return "";
+        }
+        return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
     }
 }
