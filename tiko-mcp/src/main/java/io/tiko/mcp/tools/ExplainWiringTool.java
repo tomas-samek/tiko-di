@@ -10,7 +10,13 @@ import java.util.Map;
 
 /**
  * MCP tool: BFS over a component's constructor-dependency edges, marking cycles
- * (re-visits) and cross-scope proxy edges.
+ * (re-visits), cross-scope proxy edges, and {@code @Configuration}-record leaves.
+ *
+ * <p>The walker descends through {@code @Component} dependencies and surfaces
+ * {@code @Configuration} record deps as terminal tree entries with
+ * {@code kind: "CONFIG"} so the full injection surface is visible in one call —
+ * agents don't have to cross-reference with {@code get_config_schema} just to
+ * discover that {@code OrderRepository} depends on {@code DbConfig}.
  */
 public final class ExplainWiringTool {
 
@@ -34,8 +40,11 @@ public final class ExplainWiringTool {
                     .map(c -> (String) c.get("qualifiedName"))
                     .filter(n -> n != null && n.contains(simpleName(fqn)))
                     .toList();
-            throw new IllegalArgumentException(
-                    "Unknown component '" + fqn + "'. Did you mean one of: " + matches + "?");
+            var msg = "Unknown component '" + fqn + "'.";
+            if (!matches.isEmpty()) {
+                msg += " Did you mean one of: " + matches + "?";
+            }
+            throw new IllegalArgumentException(msg);
         }
 
         var tree = new ArrayList<Map<String, Object>>();
@@ -48,26 +57,42 @@ public final class ExplainWiringTool {
             if (n.depth > maxDepth) continue;
 
             var component = findComponent(n.fqn);
-            if (component == null) continue;
+            if (component != null) {
+                var isCycle = !visited.add(n.fqn);
+                var entry = new LinkedHashMap<String, Object>();
+                entry.put("depth", n.depth);
+                entry.put("kind", "COMPONENT");
+                entry.put("component", component);
+                entry.put("via", n.via);
+                entry.put("cycle", isCycle);
+                entry.put("proxied", Boolean.TRUE.equals(component.get("requiresProxy")));
+                tree.add(entry);
 
-            var entry = new LinkedHashMap<String, Object>();
-            entry.put("depth", n.depth);
-            entry.put("component", component);
-            entry.put("via", n.via);
-            var isCycle = !visited.add(n.fqn);
-            entry.put("cycle", isCycle);
-            entry.put("proxied", Boolean.TRUE.equals(component.get("requiresProxy")));
-            tree.add(entry);
+                if (isCycle) continue; // don't descend through cycles
 
-            if (isCycle) continue; // don't descend through cycles
-
-            @SuppressWarnings("unchecked")
-            var deps = (List<Map<String, Object>>) component.getOrDefault("constructorDependencies", List.of());
-            for (var dep : deps) {
-                var depType = (String) dep.get("type");
-                if (depType != null) {
-                    queue.add(new Node(depType, n.depth + 1, dep));
+                @SuppressWarnings("unchecked")
+                var deps = (List<Map<String, Object>>) component.getOrDefault("constructorDependencies", List.of());
+                for (var dep : deps) {
+                    var depType = (String) dep.get("type");
+                    if (depType != null) {
+                        queue.add(new Node(depType, n.depth + 1, dep));
+                    }
                 }
+                continue;
+            }
+
+            var configuration = findConfiguration(n.fqn);
+            if (configuration != null) {
+                var isCycle = !visited.add(n.fqn);
+                var entry = new LinkedHashMap<String, Object>();
+                entry.put("depth", n.depth);
+                entry.put("kind", "CONFIG");
+                entry.put("component", configuration);
+                entry.put("via", n.via);
+                entry.put("cycle", isCycle);
+                entry.put("proxied", false);
+                tree.add(entry);
+                // Configurations are leaf records — no further deps to descend into.
             }
         }
 
@@ -103,6 +128,21 @@ public final class ExplainWiringTool {
             }
         }
         return testFallback;
+    }
+
+    /**
+     * Resolves a dependency type to a {@code @Configuration} record by qualified name.
+     * Configurations don't appear in {@code components[]} — they live in a separate
+     * topology section — so the walker checks here whenever {@link #findComponent}
+     * returns null.
+     */
+    private Map<String, Object> findConfiguration(String fqn) {
+        for (var cfg : store.configurations()) {
+            if (fqn.equals(cfg.get("qualifiedName"))) {
+                return cfg;
+            }
+        }
+        return null;
     }
 
     private static String simpleName(String fqn) {

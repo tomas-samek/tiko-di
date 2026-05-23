@@ -86,6 +86,53 @@ class ExplainWiringToolTest {
     }
 
     @Test
+    void surfacesConfigurationDependenciesAsLeafEntries(@TempDir Path root) throws Exception {
+        var store = storeWith(root, """
+                {"schemaVersion":1, "module":"m",
+                 "components":[
+                   {"qualifiedName":"io.example.OrderRepository","scope":"REQUEST","interfaces":[],
+                    "constructorDependencies":[{"type":"io.example.DbConfig","qualifier":null,"kind":"DIRECT","pickedType":null}]}
+                 ],
+                 "factoryMethods":[], "eventHandlers":[], "eventTriggers":[],
+                 "configurations":[
+                   {"qualifiedName":"io.example.DbConfig","prefix":"database","fields":[]}
+                 ]}
+                """);
+        var tool = new ExplainWiringTool(store);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> tree =
+                (List<Map<String, Object>>) tool.execute(Map.of("componentFqn", "io.example.OrderRepository"))
+                        .get("tree");
+
+        assertThat(tree).hasSize(2);
+        assertThat(tree.get(0).get("kind")).isEqualTo("COMPONENT");
+        assertThat(tree.get(1).get("kind")).isEqualTo("CONFIG");
+        assertThat(tree.get(1).get("depth")).isEqualTo(1L);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> config = (Map<String, Object>) tree.get(1).get("component");
+        assertThat(config.get("prefix")).isEqualTo("database");
+    }
+
+    @Test
+    void unknownComponentWithNoNearMatchesOmitsSuggestionClause(@TempDir Path root) throws Exception {
+        var store = storeWith(root, """
+                {"schemaVersion":1, "module":"m",
+                 "components":[
+                   {"qualifiedName":"io.example.OrderService","scope":"SINGLETON","interfaces":[],"constructorDependencies":[]}
+                 ],
+                 "factoryMethods":[], "eventHandlers":[], "eventTriggers":[], "configurations":[]}
+                """);
+        var tool = new ExplainWiringTool(store);
+
+        assertThatThrownBy(() -> tool.execute(Map.of("componentFqn", "io.example.DoesNotExist")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("io.example.DoesNotExist")
+                .hasMessageNotContaining("[]")
+                .hasMessageNotContaining("Did you mean");
+    }
+
+    @Test
     void unknownComponentThrowsWithSuggestions(@TempDir Path root) throws Exception {
         var store = storeWith(root, """
                 {"schemaVersion":1, "module":"m",
