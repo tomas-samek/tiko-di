@@ -1000,6 +1000,11 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
             new io.tiko.processor.topology.TopologyWriter(context).write(processingEnv.getFiler());
         }
 
+        // Emit config-schema.json when @Configuration records are present
+        if (topologyBundleEnabled() && !context.getConfigurations().isEmpty()) {
+            new io.tiko.processor.topology.ConfigSchemaWriter(context).write(processingEnv.getFiler());
+        }
+
         // Generate container (must be last)
         processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "Tiko DI: Generating container...");
         ContainerGenerator containerGenerator = new ContainerGenerator(context);
