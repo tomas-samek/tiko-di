@@ -7,6 +7,7 @@ import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.tiko.mcp.tools.ExplainWiringTool;
+import io.tiko.mcp.tools.FindDependentsTool;
 import io.tiko.mcp.tools.GetConfigSchemaTool;
 import io.tiko.mcp.tools.ListComponentsTool;
 import io.tiko.mcp.tools.ListEventsTool;
@@ -40,6 +41,7 @@ public final class McpStdioBridge {
     private final ExplainWiringTool explainWiring;
     private final ReloadTool reload;
     private final ListWiringErrorsTool listWiringErrors;
+    private final FindDependentsTool findDependents;
 
     public McpStdioBridge(
             ListComponentsTool listComponents,
@@ -47,13 +49,15 @@ public final class McpStdioBridge {
             GetConfigSchemaTool getConfigSchema,
             ExplainWiringTool explainWiring,
             ReloadTool reload,
-            ListWiringErrorsTool listWiringErrors) {
+            ListWiringErrorsTool listWiringErrors,
+            FindDependentsTool findDependents) {
         this.listComponents = listComponents;
         this.listEvents = listEvents;
         this.getConfigSchema = getConfigSchema;
         this.explainWiring = explainWiring;
         this.reload = reload;
         this.listWiringErrors = listWiringErrors;
+        this.findDependents = findDependents;
     }
 
     /**
@@ -88,6 +92,12 @@ public final class McpStdioBridge {
         var listWiringErrorsSchema = """
                 {"type":"object","properties":{}}""";
 
+        var findDependentsSchema = """
+                {"type":"object","properties":{
+                   "componentFqn":{"type":"string"},
+                   "transitive":{"type":"boolean","default":false}},
+                 "required":["componentFqn"]}""";
+
         var server = McpServer.sync(transport)
                 .serverInfo("tiko-mcp", "0.1.0")
                 .capabilities(
@@ -118,7 +128,13 @@ public final class McpStdioBridge {
                                 ListWiringErrorsTool.NAME,
                                 "List Tiko wiring-error diagnostics",
                                 listWiringErrorsSchema,
-                                listWiringErrors::execute))
+                                listWiringErrors::execute),
+                        spec(
+                                mapper,
+                                FindDependentsTool.NAME,
+                                "Find reverse dependents of a component",
+                                findDependentsSchema,
+                                findDependents::execute))
                 .build();
 
         LoggerHolder.LOG.log(Level.INFO, "tiko-mcp server started on stdio");
