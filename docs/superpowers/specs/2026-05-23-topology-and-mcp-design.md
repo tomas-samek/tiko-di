@@ -48,12 +48,27 @@ The non-obvious calls, with rationale:
 
 1. **Emit to `META-INF/tiko/topology.json` and
    `META-INF/tiko/config-schema.json` — not `target/tiko/…`.** The
-   issue body suggests `target/tiko/topology.json`, but every other
-   Tiko build artifact already lives under `META-INF/tiko/` so it
-   travels with the jar. Same for config-schema. The MCP server then
-   finds both files in `target/classes/META-INF/tiko/` on a project
-   under development **and** inside an installed jar — one locate
-   strategy, two delivery channels.
+   issue body suggests `target/tiko/topology.json` (a build-only
+   location), but shipping the artifacts inside the jar unlocks
+   strictly more use cases:
+
+   - **Inspect third-party Tiko deps.** `tiko-mcp` (or any tool) can
+     answer *"what components does `com.acme:billing-adapter:2.1`
+     expose? what config keys?"* by reading the dep's jar — no source,
+     no boot, no build of the consumer. Natural extension of Tiko's
+     "compile-time, mechanically verifiable" positioning.
+   - **MCP against a deployed fat jar.** No `target/` next to it, but
+     the topology still ships with every constituent jar.
+   - **Single locate strategy.** The MCP server walks the same path
+     under `target/classes/` (project under development) **and** under
+     any installed jar — one code path, two delivery channels.
+
+   Cost is small: a medium service is ~20-50 KB compressed in the
+   jar; information disclosure is bounded (bytecode already reveals
+   every type and signature). The precedent matches: `components.txt`,
+   `configs.txt`, `container.properties` already ship in the jar
+   because the runtime container reads them across modules. Topology
+   is the human/agent-facing equivalent.
 2. **Hand-rolled JSON writer in `tiko-processor`.** A 200-line
    `JsonWriter` helper covers the shapes we emit. Pulling in Jackson
    adds ~2 MB to the processor jar and a transitive that downstream
