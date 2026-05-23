@@ -77,11 +77,32 @@ public final class ExplainWiringTool {
         return out;
     }
 
+    /**
+     * Resolves a dependency type to its providing component. Prefers an exact
+     * {@code qualifiedName} match (the concrete component case); falls back to
+     * scanning {@code interfaces[]} so interface-typed deps walk through to the
+     * implementing component — mirrors the runtime container's interface dispatch.
+     * If multiple components implement the same interface, prefer the first
+     * non-test one (matches {@code ProcessorContext.findComponentOrFactory}).
+     */
     private Map<String, Object> findComponent(String fqn) {
-        return store.components().stream()
-                .filter(c -> fqn.equals(c.get("qualifiedName")))
-                .findFirst()
-                .orElse(null);
+        for (var c : store.components()) {
+            if (fqn.equals(c.get("qualifiedName"))) {
+                return c;
+            }
+        }
+        Map<String, Object> testFallback = null;
+        for (var c : store.components()) {
+            @SuppressWarnings("unchecked")
+            var interfaces = (List<String>) c.getOrDefault("interfaces", List.of());
+            if (interfaces.contains(fqn)) {
+                if (!Boolean.TRUE.equals(c.get("isTestComponent"))) {
+                    return c;
+                }
+                if (testFallback == null) testFallback = c;
+            }
+        }
+        return testFallback;
     }
 
     private static String simpleName(String fqn) {

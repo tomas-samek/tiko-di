@@ -59,6 +59,33 @@ class ExplainWiringToolTest {
     }
 
     @Test
+    void walksThroughInterfaceTypedDependencies(@TempDir Path root) throws Exception {
+        var store = storeWith(root, """
+                {"schemaVersion":1, "module":"m",
+                 "components":[
+                   {"qualifiedName":"io.example.A","scope":"SINGLETON","interfaces":[],
+                    "constructorDependencies":[{"type":"io.example.IB","qualifier":null,"kind":"DIRECT","pickedType":null}]},
+                   {"qualifiedName":"io.example.B","scope":"REQUEST","interfaces":["io.example.IB"],
+                    "constructorDependencies":[]}
+                 ],
+                 "factoryMethods":[], "eventHandlers":[], "eventTriggers":[], "configurations":[]}
+                """);
+        var tool = new ExplainWiringTool(store);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> tree = (List<Map<String, Object>>)
+                tool.execute(Map.of("componentFqn", "io.example.A")).get("tree");
+        assertThat(tree).hasSize(2);
+        assertThat(tree.get(0).get("depth")).isEqualTo(0L);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> implComponent = (Map<String, Object>) tree.get(1).get("component");
+        assertThat(implComponent.get("qualifiedName")).isEqualTo("io.example.B");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> via = (Map<String, Object>) tree.get(1).get("via");
+        assertThat(via.get("type")).isEqualTo("io.example.IB");
+    }
+
+    @Test
     void unknownComponentThrowsWithSuggestions(@TempDir Path root) throws Exception {
         var store = storeWith(root, """
                 {"schemaVersion":1, "module":"m",
