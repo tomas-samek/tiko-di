@@ -96,6 +96,18 @@ The non-obvious calls, with rationale:
    stands alone and ships value (topology JSON is useful even without
    the MCP server; the MCP server only needs the two JSONs to exist).
    Keeps reviews focused.
+9. **Opt-out via processor option `-Atiko.topology.bundle=false`.**
+   Default is to emit both JSONs to `META-INF/tiko/`. Closed-source
+   services or jars where the maintainer treats topology as
+   information disclosure can suppress emission with a single
+   compiler arg — matches the existing `-Atiko.profiles=…` option
+   shape, and `getSupportedOptions()` already declares the namespace.
+   Setting it to `false` skips emission entirely (no
+   `target/classes/META-INF/tiko/…` either); a module that opts out
+   is not introspectable by MCP, by design. Users who want local
+   introspection but no published metadata exclude the path via
+   `maven-jar-plugin` `<excludes>` — a documented recipe, not a
+   first-class switch (rare case, not worth the API surface).
 
 ## Architecture
 
@@ -538,6 +550,11 @@ Two surgical additions:
 
        java -jar tiko-mcp.jar /path/to/your/project
 
+   The metadata ships inside the jar so MCP can also introspect Tiko
+   dependencies you didn't build yourself. To suppress emission for
+   a module (closed-source service, sensitive jars), add
+   `-Atiko.topology.bundle=false` to the annotation processor args.
+
    See [`tiko-examples/13_mcp_introspection`](./tiko-examples/13_mcp_introspection)
    for a runnable demo.
    ```
@@ -568,6 +585,9 @@ Phase 3 milestone in the roadmap intro (6/6 closed).
   the top-level `"schemaVersion": 1` field is present. If anyone bumps
   this number, the test fails and forces them to read the additive
   rule.
+- **Opt-out IT**: compile the same fixture with
+  `-Atiko.topology.bundle=false`; assert neither `topology.json` nor
+  `config-schema.json` is emitted to the in-memory file manager.
 
 ### PR 2 — Config Schema JSON
 
@@ -605,6 +625,8 @@ Phase 3 milestone in the roadmap intro (6/6 closed).
   `docs/topology-schema.md`.
 - [ ] `META-INF/tiko/config-schema.json` emitted when at least one
   `@Configuration` record is present. Valid JSON Schema draft 2020-12.
+- [ ] `-Atiko.topology.bundle=false` suppresses emission of both
+  files entirely; covered by an IT.
 - [ ] `tiko-mcp` runnable jar passes MCP protocol smoke test
   (`tools/list` returns the four tools; each tool call returns valid
   JSON).
