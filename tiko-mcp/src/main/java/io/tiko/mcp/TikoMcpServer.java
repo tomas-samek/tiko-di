@@ -1,6 +1,7 @@
 package io.tiko.mcp;
 
 import io.tiko.mcp.tools.ExplainWiringTool;
+import io.tiko.mcp.tools.FindDependentsTool;
 import io.tiko.mcp.tools.GetConfigSchemaTool;
 import io.tiko.mcp.tools.ListComponentsTool;
 import io.tiko.mcp.tools.ListEventsTool;
@@ -49,7 +50,16 @@ public final class TikoMcpServer {
         var explainWiring = new ExplainWiringTool(store);
         var reload = new ReloadTool(store);
         var listWiringErrors = new ListWiringErrorsTool(store);
+        var findDependents = new FindDependentsTool(store);
 
-        new McpStdioBridge(listComponents, listEvents, getConfigSchema, explainWiring, reload, listWiringErrors).run();
+        new McpStdioBridge(
+                        listComponents,
+                        listEvents,
+                        getConfigSchema,
+                        explainWiring,
+                        reload,
+                        listWiringErrors,
+                        findDependents)
+                .run();
     }
 }
