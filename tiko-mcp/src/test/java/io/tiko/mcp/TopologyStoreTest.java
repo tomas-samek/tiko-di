@@ -50,6 +50,29 @@ class TopologyStoreTest {
     }
 
     @Test
+    void loadsWiringErrorsAcrossModules(@TempDir Path root) throws Exception {
+        writeJson(root.resolve("module-a/target/classes/META-INF/tiko/wiring-errors.json"), """
+                        {"errors":[
+                          {"kind":"MISSING_DEPENDENCY","sourceFile":null,"line":0,
+                           "componentFqn":"io.example.A","message":"x","suggestedFix":null}
+                        ]}
+                        """);
+        writeJson(root.resolve("module-b/target/classes/META-INF/tiko/wiring-errors.json"), """
+                        {"errors":[]}
+                        """);
+        // Empty topology so the store can be loaded; the wiring-errors loop runs
+        // independently of the topology.json loop.
+        writeJson(root.resolve("module-a/target/classes/META-INF/tiko/topology.json"), """
+                        {"schemaVersion":1,"module":"m","components":[],"factoryMethods":[],
+                         "eventHandlers":[],"eventTriggers":[],"configurations":[]}
+                        """);
+
+        var store = TopologyStore.loadFrom(root);
+        assertThat(store.wiringErrors()).hasSize(1);
+        assertThat(store.wiringErrors().get(0).get("kind")).isEqualTo("MISSING_DEPENDENCY");
+    }
+
+    @Test
     void reloadPicksUpFilesystemChanges(@TempDir Path root) throws Exception {
         var f = root.resolve("m/target/classes/META-INF/tiko/topology.json");
         Files.createDirectories(f.getParent());

@@ -4,6 +4,7 @@ import io.tiko.processor.config.ConfigurationModel;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.EventHandlerModel;
 import io.tiko.processor.model.FactoryMethodModel;
+import io.tiko.processor.model.WiringError;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -45,6 +46,12 @@ public final class ProcessorContext {
     // main factory for shadowed entries. LinkedHashMap preserves registration order.
     private final Map<String, ComponentModel> shadowedByTestOverride = new LinkedHashMap<>();
 
+    // Structured wiring diagnostics captured for META-INF/tiko/wiring-errors.json.
+    // Populated by ErrorReporter on every error() call (and a few direct addWiringError
+    // call sites for non-ErrorReporter diagnostics). Reads/writes are unsynchronised:
+    // annotation processing runs single-threaded, so the simple ArrayList is fine.
+    private final List<WiringError> wiringErrors = new ArrayList<>();
+
     // Active profiles (for filtering components during generation)
     private final List<String> activeProfiles;
 
@@ -57,7 +64,11 @@ public final class ProcessorContext {
         this.typeUtils = processingEnv.getTypeUtils();
         this.filer = processingEnv.getFiler();
         this.messager = processingEnv.getMessager();
-        this.errorReporter = new ErrorReporter(messager);
+        // ErrorReporter forwards every recorded error to this context's wiring-errors
+        // list so the JSON sibling artifact captures the same diagnostics the Messager
+        // prints. Lambda is a `this::addWiringError` style sink — keeps ErrorReporter
+        // dependency-free of ProcessorContext.
+        this.errorReporter = new ErrorReporter(messager, this::addWiringError);
         this.activeProfiles = new ArrayList<>(activeProfiles);
     }
 
@@ -86,6 +97,21 @@ public final class ProcessorContext {
         return errorReporter;
     }
 
+    /**
+     * Records a structured wiring diagnostic for {@code META-INF/tiko/wiring-errors.json}.
+     * Called by {@link ErrorReporter} for every reported error, and directly by a few
+     * call sites that bypass {@code ErrorReporter} (raw {@code messager.printMessage}
+     * users in the generator and leak validator).
+     */
+    public void addWiringError(WiringError error) {
+        wiringErrors.add(error);
+    }
+
+    /** Snapshot of every wiring diagnostic recorded so far. */
+    public List<WiringError> getWiringErrors() {
+        return List.copyOf(wiringErrors);
+    }
+
     public List<String> getActiveProfiles() {
         return List.copyOf(activeProfiles);
     }
@@ -103,10 +129,13 @@ public final class ProcessorContext {
         String key = factory.getComponentKey();
         if (factoryMethods.containsKey(key)) {
             errorReporter.error(
-                    factory.getMethodElement(), "Duplicate factory method: " + key + " is already registered");
+                    ErrorReporter.KIND_BAD_PRODUCES,
+                    factory.getMethodElement(),
+                    "Duplicate factory method: " + key + " is already registered");
         }
         if (components.containsKey(key)) {
             errorReporter.error(
+                    ErrorReporter.KIND_BAD_PRODUCES,
                     factory.getMethodElement(),
                     "Factory method produces type " + key + " which is already provided by a @Component");
         }

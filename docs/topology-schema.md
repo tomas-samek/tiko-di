@@ -136,6 +136,21 @@ Every `@Configuration` record.
 | `fields[].cardinality` | string enum | `REQUIRED` / `OPTIONAL` / `DEFAULTED` |
 | `fields[].default` | string \| null | Raw `@Default("...")` value, null unless `DEFAULTED` |
 
+## Sibling artifact: `wiring-errors.json`
+
+Emitted alongside `topology.json` whenever the annotation processor runs.
+An empty `{"errors": []}` ships on a clean build so consumers can rely on
+the file always being present.
+
+| Field          | Type           | Notes |
+| -------------- | -------------- | ----- |
+| `kind`         | string enum    | `MISSING_DEPENDENCY` / `CIRCULAR_DEPENDENCY` / `SCOPE_VIOLATION` / `AMBIGUOUS_QUALIFIER` / `BAD_PRODUCES` / `OTHER` |
+| `sourceFile`   | string \| null | Project-relative path, best-effort |
+| `line`         | integer        | 1-based, 0 when not derivable |
+| `componentFqn` | string \| null | Owning component when known |
+| `message`      | string         | Same text the Messager prints |
+| `suggestedFix` | string \| null | One-line hint when available |
+
 ## Consuming the file
 
 From the shell:

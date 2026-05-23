@@ -9,6 +9,7 @@ import io.tiko.processor.model.FactoryMethodModel;
 import io.tiko.processor.util.ProcessorContext;
 import java.io.IOException;
 import java.io.StringWriter;
+import java.io.UncheckedIOException;
 import java.io.Writer;
 import java.util.List;
 import javax.annotation.processing.Filer;
@@ -41,6 +42,8 @@ public final class TopologyWriter {
         FileObject f = filer.createResource(StandardLocation.CLASS_OUTPUT, "", PATH);
         try (Writer w = f.openWriter()) {
             renderTo(w);
+        } catch (UncheckedIOException uncheckedIo) {
+            throw uncheckedIo.getCause();
         }
     }
 

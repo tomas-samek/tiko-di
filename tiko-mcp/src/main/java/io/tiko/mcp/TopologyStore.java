@@ -15,11 +15,12 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Loads {@code META-INF/tiko/topology.json} and {@code META-INF/tiko/config-schema.json}
- * from every Maven module under the given project root and merges the topology
- * documents into a single in-memory model. Config schemas are merged into a
- * single {@code properties: {}} union keyed by prefix (later modules win on
- * collision).
+ * Loads {@code META-INF/tiko/topology.json}, {@code META-INF/tiko/config-schema.json},
+ * and {@code META-INF/tiko/wiring-errors.json} from every Maven module under the
+ * given project root and merges them into a single in-memory model. Config schemas
+ * are merged into a single {@code properties: {}} union keyed by prefix (later
+ * modules win on collision). Wiring errors are appended across modules in the
+ * order they are visited.
  */
 public final class TopologyStore {
 
@@ -29,6 +30,7 @@ public final class TopologyStore {
     private final List<Map<String, Object>> eventHandlers;
     private final List<Map<String, Object>> eventTriggers;
     private final List<Map<String, Object>> configurations;
+    private final List<Map<String, Object>> wiringErrors;
     private Map<String, Object> configSchema; // nullable
     private Instant loadedAt;
 
@@ -39,6 +41,7 @@ public final class TopologyStore {
             List<Map<String, Object>> eventHandlers,
             List<Map<String, Object>> eventTriggers,
             List<Map<String, Object>> configurations,
+            List<Map<String, Object>> wiringErrors,
             Map<String, Object> configSchema,
             Instant loadedAt) {
         this.projectRoot = projectRoot;
@@ -47,6 +50,7 @@ public final class TopologyStore {
         this.eventHandlers = eventHandlers;
         this.eventTriggers = eventTriggers;
         this.configurations = configurations;
+        this.wiringErrors = wiringErrors;
         this.configSchema = configSchema;
         this.loadedAt = loadedAt;
     }
@@ -57,6 +61,7 @@ public final class TopologyStore {
         var eventHandlers = new ArrayList<Map<String, Object>>();
         var eventTriggers = new ArrayList<Map<String, Object>>();
         var configurations = new ArrayList<Map<String, Object>>();
+        var wiringErrors = new ArrayList<Map<String, Object>>();
         Map<String, Object> mergedSchema = null;
 
         for (var topologyFile : findFiles(projectRoot, "topology.json")) {
@@ -66,6 +71,11 @@ public final class TopologyStore {
             appendIfArray(doc, "eventHandlers", eventHandlers);
             appendIfArray(doc, "eventTriggers", eventTriggers);
             appendIfArray(doc, "configurations", configurations);
+        }
+
+        for (var wiringErrorsFile : findFiles(projectRoot, "wiring-errors.json")) {
+            var doc = readJsonObject(wiringErrorsFile);
+            appendIfArray(doc, "errors", wiringErrors);
         }
 
         for (var schemaFile : findFiles(projectRoot, "config-schema.json")) {
@@ -96,6 +106,7 @@ public final class TopologyStore {
                 eventHandlers,
                 eventTriggers,
                 configurations,
+                wiringErrors,
                 mergedSchema,
                 Instant.now());
     }
@@ -112,6 +123,8 @@ public final class TopologyStore {
         this.eventTriggers.addAll(fresh.eventTriggers);
         this.configurations.clear();
         this.configurations.addAll(fresh.configurations);
+        this.wiringErrors.clear();
+        this.wiringErrors.addAll(fresh.wiringErrors);
         this.configSchema = fresh.configSchema;
         this.loadedAt = fresh.loadedAt;
     }
@@ -138,6 +151,10 @@ public final class TopologyStore {
 
     public List<Map<String, Object>> configurations() {
         return configurations;
+    }
+
+    public List<Map<String, Object>> wiringErrors() {
+        return wiringErrors;
     }
 
     public Map<String, Object> configSchema() {

@@ -4,6 +4,7 @@ import io.tiko.mcp.tools.ExplainWiringTool;
 import io.tiko.mcp.tools.GetConfigSchemaTool;
 import io.tiko.mcp.tools.ListComponentsTool;
 import io.tiko.mcp.tools.ListEventsTool;
+import io.tiko.mcp.tools.ListWiringErrorsTool;
 import io.tiko.mcp.tools.ReloadTool;
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
@@ -47,7 +48,8 @@ public final class TikoMcpServer {
         var getConfigSchema = new GetConfigSchemaTool(store);
         var explainWiring = new ExplainWiringTool(store);
         var reload = new ReloadTool(store);
+        var listWiringErrors = new ListWiringErrorsTool(store);
 
-        new McpStdioBridge(listComponents, listEvents, getConfigSchema, explainWiring, reload).run();
+        new McpStdioBridge(listComponents, listEvents, getConfigSchema, explainWiring, reload, listWiringErrors).run();
     }
 }
