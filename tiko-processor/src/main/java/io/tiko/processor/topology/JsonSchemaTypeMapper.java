@@ -5,7 +5,6 @@ import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
-import javax.lang.model.util.Types;
 
 /**
  * Maps a {@link TypeMirror} (as collected from a {@code @Configuration} record
@@ -16,12 +15,6 @@ import javax.lang.model.util.Types;
  * new accepted type means updating both.
  */
 public final class JsonSchemaTypeMapper {
-
-    private final Types typeUtils;
-
-    public JsonSchemaTypeMapper(Types typeUtils) {
-        this.typeUtils = typeUtils;
-    }
 
     public String mapType(TypeMirror type) {
         if (type.getKind().isPrimitive()) {
