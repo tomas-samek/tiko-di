@@ -81,6 +81,28 @@ public final class ExplainWiringTool {
                 continue;
             }
 
+            var factory = findFactory(n.fqn);
+            if (factory != null) {
+                var isCycle = !visited.add(n.fqn);
+                var entry = new LinkedHashMap<String, Object>();
+                entry.put("depth", n.depth);
+                entry.put("kind", "PRODUCED");
+                entry.put("component", FactoryProjection.fromFactory(factory));
+                entry.put("via", n.via);
+                entry.put("cycle", isCycle);
+                entry.put("proxied", Boolean.TRUE.equals(factory.get("requiresProxy")));
+                tree.add(entry);
+                if (isCycle) continue;
+                queue.add(new Node((String) factory.get("declaringClass"), n.depth + 1, null));
+                @SuppressWarnings("unchecked")
+                var deps = (List<Map<String, Object>>) factory.getOrDefault("constructorDependencies", List.of());
+                for (var dep : deps) {
+                    var depType = (String) dep.get("type");
+                    if (depType != null) queue.add(new Node(depType, n.depth + 1, dep));
+                }
+                continue;
+            }
+
             var configuration = findConfiguration(n.fqn);
             if (configuration != null) {
                 var isCycle = !visited.add(n.fqn);
@@ -128,6 +150,21 @@ public final class ExplainWiringTool {
             }
         }
         return testFallback;
+    }
+
+    /**
+     * Resolves a dependency type to a {@code @Produces} factory method by {@code returnType}.
+     * Factory-produced beans don't appear in {@code components[]} — they live in
+     * {@code factoryMethods[]} — so the walker checks here between the component and
+     * configuration resolution steps.
+     */
+    private Map<String, Object> findFactory(String fqn) {
+        for (var f : store.factoryMethods()) {
+            if (fqn.equals(f.get("returnType"))) {
+                return f;
+            }
+        }
+        return null;
     }
 
     /**

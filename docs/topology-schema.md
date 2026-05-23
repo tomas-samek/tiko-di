@@ -84,6 +84,13 @@ Every `@Produces` method.
 | `requiresProxy`   | boolean        | True when a cross-scope proxy was generated |
 | `constructorDependencies` | object[] | Same shape as `components[].constructorDependencies` (method parameter list) |
 
+**Note on consumption via MCP:** When `tiko-mcp`'s `list_components` and
+`explain_wiring` tools surface factory outputs, each `factoryMethods[]`
+entry is projected as a synthetic component with `kind: "PRODUCED"` and a
+`producedBy: {componentFqn, methodName, isStatic}` sub-object. The
+`returnType` becomes the projected `qualifiedName`. The topology document
+itself is unchanged — the projection is purely a tooling convenience.
+
 ## `eventHandlers[]`
 
 Every `@EventHandler` method.
