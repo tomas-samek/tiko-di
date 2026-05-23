@@ -10,6 +10,7 @@ import io.tiko.mcp.tools.ExplainWiringTool;
 import io.tiko.mcp.tools.GetConfigSchemaTool;
 import io.tiko.mcp.tools.ListComponentsTool;
 import io.tiko.mcp.tools.ListEventsTool;
+import io.tiko.mcp.tools.ReloadTool;
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
 import java.util.Map;
@@ -36,16 +37,19 @@ public final class McpStdioBridge {
     private final ListEventsTool listEvents;
     private final GetConfigSchemaTool getConfigSchema;
     private final ExplainWiringTool explainWiring;
+    private final ReloadTool reload;
 
     public McpStdioBridge(
             ListComponentsTool listComponents,
             ListEventsTool listEvents,
             GetConfigSchemaTool getConfigSchema,
-            ExplainWiringTool explainWiring) {
+            ExplainWiringTool explainWiring,
+            ReloadTool reload) {
         this.listComponents = listComponents;
         this.listEvents = listEvents;
         this.getConfigSchema = getConfigSchema;
         this.explainWiring = explainWiring;
+        this.reload = reload;
     }
 
     /**
@@ -74,6 +78,9 @@ public final class McpStdioBridge {
                    "maxDepth":{"type":"integer","default":10}},
                  "required":["componentFqn"]}""";
 
+        var reloadSchema = """
+                {"type":"object","properties":{}}""";
+
         var server = McpServer.sync(transport)
                 .serverInfo("tiko-mcp", "0.1.0")
                 .capabilities(
@@ -97,7 +104,8 @@ public final class McpStdioBridge {
                                 ExplainWiringTool.NAME,
                                 "Explain dependency wiring for a component",
                                 explainWiringSchema,
-                                explainWiring::execute))
+                                explainWiring::execute),
+                        spec(mapper, ReloadTool.NAME, "Reload Tiko topology from disk", reloadSchema, reload::execute))
                 .build();
 
         LoggerHolder.LOG.log(Level.INFO, "tiko-mcp server started on stdio");
