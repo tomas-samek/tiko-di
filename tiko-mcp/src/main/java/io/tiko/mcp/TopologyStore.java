@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.nio.file.PathMatcher;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,26 +23,32 @@ import java.util.Map;
  */
 public final class TopologyStore {
 
+    private final Path projectRoot;
     private final List<Map<String, Object>> components;
     private final List<Map<String, Object>> factoryMethods;
     private final List<Map<String, Object>> eventHandlers;
     private final List<Map<String, Object>> eventTriggers;
     private final List<Map<String, Object>> configurations;
-    private final Map<String, Object> configSchema; // nullable
+    private Map<String, Object> configSchema; // nullable
+    private Instant loadedAt;
 
     private TopologyStore(
+            Path projectRoot,
             List<Map<String, Object>> components,
             List<Map<String, Object>> factoryMethods,
             List<Map<String, Object>> eventHandlers,
             List<Map<String, Object>> eventTriggers,
             List<Map<String, Object>> configurations,
-            Map<String, Object> configSchema) {
+            Map<String, Object> configSchema,
+            Instant loadedAt) {
+        this.projectRoot = projectRoot;
         this.components = components;
         this.factoryMethods = factoryMethods;
         this.eventHandlers = eventHandlers;
         this.eventTriggers = eventTriggers;
         this.configurations = configurations;
         this.configSchema = configSchema;
+        this.loadedAt = loadedAt;
     }
 
     public static TopologyStore loadFrom(Path projectRoot) {
@@ -83,7 +90,34 @@ public final class TopologyStore {
         }
 
         return new TopologyStore(
-                components, factoryMethods, eventHandlers, eventTriggers, configurations, mergedSchema);
+                projectRoot,
+                components,
+                factoryMethods,
+                eventHandlers,
+                eventTriggers,
+                configurations,
+                mergedSchema,
+                Instant.now());
+    }
+
+    public synchronized void reload() {
+        var fresh = loadFrom(projectRoot);
+        this.components.clear();
+        this.components.addAll(fresh.components);
+        this.factoryMethods.clear();
+        this.factoryMethods.addAll(fresh.factoryMethods);
+        this.eventHandlers.clear();
+        this.eventHandlers.addAll(fresh.eventHandlers);
+        this.eventTriggers.clear();
+        this.eventTriggers.addAll(fresh.eventTriggers);
+        this.configurations.clear();
+        this.configurations.addAll(fresh.configurations);
+        this.configSchema = fresh.configSchema;
+        this.loadedAt = fresh.loadedAt;
+    }
+
+    public Instant loadedAt() {
+        return loadedAt;
     }
 
     public List<Map<String, Object>> components() {

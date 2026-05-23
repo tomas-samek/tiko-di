@@ -49,6 +49,32 @@ class TopologyStoreTest {
         assertThat(store.configSchemaPrefixes()).containsExactly("database");
     }
 
+    @Test
+    void reloadPicksUpFilesystemChanges(@TempDir Path root) throws Exception {
+        var f = root.resolve("m/target/classes/META-INF/tiko/topology.json");
+        Files.createDirectories(f.getParent());
+        Files.writeString(f, """
+                {"schemaVersion":1,"module":"m",
+                 "components":[{"qualifiedName":"io.example.A","scope":"SINGLETON","interfaces":[]}],
+                 "factoryMethods":[],"eventHandlers":[],"eventTriggers":[],"configurations":[]}
+                """, StandardCharsets.UTF_8);
+
+        var store = TopologyStore.loadFrom(root);
+        assertThat(store.components()).hasSize(1);
+
+        Files.writeString(f, """
+                {"schemaVersion":1,"module":"m",
+                 "components":[
+                   {"qualifiedName":"io.example.A","scope":"SINGLETON","interfaces":[]},
+                   {"qualifiedName":"io.example.B","scope":"REQUEST","interfaces":[]}
+                 ],
+                 "factoryMethods":[],"eventHandlers":[],"eventTriggers":[],"configurations":[]}
+                """, StandardCharsets.UTF_8);
+
+        store.reload();
+        assertThat(store.components()).hasSize(2);
+    }
+
     private static void writeJson(Path file, String content) throws Exception {
         Files.createDirectories(file.getParent());
         Files.writeString(file, content, StandardCharsets.UTF_8);

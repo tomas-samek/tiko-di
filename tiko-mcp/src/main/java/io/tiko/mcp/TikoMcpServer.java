@@ -4,6 +4,7 @@ import io.tiko.mcp.tools.ExplainWiringTool;
 import io.tiko.mcp.tools.GetConfigSchemaTool;
 import io.tiko.mcp.tools.ListComponentsTool;
 import io.tiko.mcp.tools.ListEventsTool;
+import io.tiko.mcp.tools.ReloadTool;
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
 import java.nio.file.Path;
@@ -45,7 +46,8 @@ public final class TikoMcpServer {
         var listEvents = new ListEventsTool(store);
         var getConfigSchema = new GetConfigSchemaTool(store);
         var explainWiring = new ExplainWiringTool(store);
+        var reload = new ReloadTool(store);
 
-        new McpStdioBridge(listComponents, listEvents, getConfigSchema, explainWiring).run();
+        new McpStdioBridge(listComponents, listEvents, getConfigSchema, explainWiring, reload).run();
     }
 }

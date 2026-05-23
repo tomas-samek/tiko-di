@@ -20,7 +20,7 @@ import org.junit.jupiter.api.io.TempDir;
 /**
  * Spawns the shaded {@code tiko-mcp.jar} as a subprocess, sends JSON-RPC
  * {@code initialize} + {@code tools/list} requests over stdin, asserts the
- * response advertises the four tools.
+ * response advertises all expected tools.
  *
  * <p>Skipped when {@code tiko-mcp/target/tiko-mcp-0.1.0.jar} is not built —
  * keeps {@code mvn test} green on freshly-cloned trees.
@@ -31,11 +31,11 @@ import org.junit.jupiter.api.io.TempDir;
 class TikoMcpServerSubprocessIT {
 
     private static final String[] EXPECTED_TOOLS = {
-        "list_components", "list_events", "get_config_schema", "explain_wiring"
+        "list_components", "list_events", "get_config_schema", "explain_wiring", "reload"
     };
 
     @Test
-    void serverAdvertisesFourTools(@TempDir Path projectDir) throws Exception {
+    void serverAdvertisesAllExpectedTools(@TempDir Path projectDir) throws Exception {
         var jar = Paths.get("target/tiko-mcp-0.1.0.jar");
         if (!Files.exists(jar)) {
             // Shaded jar not built yet — run `mvn package` first. Treat as pass.
@@ -92,7 +92,7 @@ class TikoMcpServerSubprocessIT {
                 // Step 3: request the tools list.
                 stdin.println("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}");
 
-                // Read remaining lines until all four tool names appear.
+                // Read remaining lines until all expected tool names appear.
                 String line;
                 while ((line = stdout.readLine()) != null) {
                     sb.append(line).append('\n');
@@ -109,7 +109,8 @@ class TikoMcpServerSubprocessIT {
                     .contains("list_components")
                     .contains("list_events")
                     .contains("get_config_schema")
-                    .contains("explain_wiring");
+                    .contains("explain_wiring")
+                    .contains("reload");
 
         } finally {
             reader.shutdownNow();
