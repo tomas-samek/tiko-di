@@ -33,8 +33,9 @@ public final class ExplainWiringTool {
     public Map<String, Object> execute(Map<String, Object> args) {
         var fqn = required(args, "componentFqn");
         long maxDepth = args.get("maxDepth") instanceof Long l ? l : DEFAULT_MAX_DEPTH;
+        var profile = strOrNull(args.get("profile"));
 
-        var root = findComponent(fqn);
+        var root = findComponent(fqn, profile);
         if (root == null) {
             var matches = store.components().stream()
                     .map(c -> (String) c.get("qualifiedName"))
@@ -56,7 +57,7 @@ public final class ExplainWiringTool {
             var n = queue.poll();
             if (n.depth > maxDepth) continue;
 
-            var component = findComponent(n.fqn);
+            var component = findComponent(n.fqn, profile);
             if (component != null) {
                 var isCycle = !visited.add(n.fqn);
                 var entry = new LinkedHashMap<String, Object>();
@@ -132,7 +133,7 @@ public final class ExplainWiringTool {
      * If multiple components implement the same interface, prefer the first
      * non-test one (matches {@code ProcessorContext.findComponentOrFactory}).
      */
-    private Map<String, Object> findComponent(String fqn) {
+    private Map<String, Object> findComponent(String fqn, String profile) {
         for (var c : store.components()) {
             if (fqn.equals(c.get("qualifiedName"))) {
                 return c;
@@ -142,12 +143,12 @@ public final class ExplainWiringTool {
         for (var c : store.components()) {
             @SuppressWarnings("unchecked")
             var interfaces = (List<String>) c.getOrDefault("interfaces", List.of());
-            if (interfaces.contains(fqn)) {
-                if (!Boolean.TRUE.equals(c.get("isTestComponent"))) {
-                    return c;
-                }
-                if (testFallback == null) testFallback = c;
+            if (!interfaces.contains(fqn)) continue;
+            if (profile != null && !ProfileSupport.profileMatches(c, profile)) continue;
+            if (!Boolean.TRUE.equals(c.get("isTestComponent"))) {
+                return c;
             }
+            if (testFallback == null) testFallback = c;
         }
         return testFallback;
     }
@@ -193,6 +194,12 @@ public final class ExplainWiringTool {
             throw new IllegalArgumentException("Missing required argument: " + key);
         }
         return v.toString();
+    }
+
+    private static String strOrNull(Object v) {
+        if (v == null) return null;
+        var s = v.toString();
+        return s.isEmpty() ? null : s;
     }
 
     private record Node(String fqn, long depth, Map<String, Object> via) {}

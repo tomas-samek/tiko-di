@@ -70,6 +70,25 @@ class ListComponentsToolTest {
     }
 
     @Test
+    void filterByProfile(@TempDir Path root) throws Exception {
+        var store = storeWith(root, """
+                {"schemaVersion":1,"module":"m",
+                 "components":[
+                   {"qualifiedName":"x.DevImpl","scope":"SINGLETON","interfaces":["x.IThing"],"profiles":["dev"]},
+                   {"qualifiedName":"x.ProdImpl","scope":"SINGLETON","interfaces":["x.IThing"],"profiles":["prod"]},
+                   {"qualifiedName":"x.Always","scope":"SINGLETON","interfaces":[],"profiles":[]}
+                 ],
+                 "factoryMethods":[],"eventHandlers":[],"eventTriggers":[],"configurations":[]}
+                """);
+        var tool = new ListComponentsTool(store);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> dev = (List<Map<String, Object>>)
+                tool.execute(Map.of("profile", "dev")).get("components");
+        assertThat(dev).extracting(c -> c.get("qualifiedName")).containsExactlyInAnyOrder("x.DevImpl", "x.Always");
+    }
+
+    @Test
     void includesProducedFactoryOutputs(@TempDir Path root) throws Exception {
         var store = storeWith(root, """
                 {"schemaVersion":1,"module":"m",
