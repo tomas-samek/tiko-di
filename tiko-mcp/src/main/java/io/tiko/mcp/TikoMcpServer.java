@@ -7,6 +7,7 @@ import io.tiko.mcp.tools.ListComponentsTool;
 import io.tiko.mcp.tools.ListEventsTool;
 import io.tiko.mcp.tools.ListWiringErrorsTool;
 import io.tiko.mcp.tools.ReloadTool;
+import io.tiko.mcp.tools.TraceEventFlowTool;
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
 import java.nio.file.Path;
@@ -51,6 +52,7 @@ public final class TikoMcpServer {
         var reload = new ReloadTool(store);
         var listWiringErrors = new ListWiringErrorsTool(store);
         var findDependents = new FindDependentsTool(store);
+        var traceEventFlow = new TraceEventFlowTool(store);
 
         new McpStdioBridge(
                         listComponents,
@@ -59,7 +61,8 @@ public final class TikoMcpServer {
                         explainWiring,
                         reload,
                         listWiringErrors,
-                        findDependents)
+                        findDependents,
+                        traceEventFlow)
                 .run();
     }
 }

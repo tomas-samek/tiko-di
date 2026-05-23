@@ -13,6 +13,7 @@ import io.tiko.mcp.tools.ListComponentsTool;
 import io.tiko.mcp.tools.ListEventsTool;
 import io.tiko.mcp.tools.ListWiringErrorsTool;
 import io.tiko.mcp.tools.ReloadTool;
+import io.tiko.mcp.tools.TraceEventFlowTool;
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
 import java.util.Map;
@@ -42,6 +43,7 @@ public final class McpStdioBridge {
     private final ReloadTool reload;
     private final ListWiringErrorsTool listWiringErrors;
     private final FindDependentsTool findDependents;
+    private final TraceEventFlowTool traceEventFlow;
 
     public McpStdioBridge(
             ListComponentsTool listComponents,
@@ -50,7 +52,8 @@ public final class McpStdioBridge {
             ExplainWiringTool explainWiring,
             ReloadTool reload,
             ListWiringErrorsTool listWiringErrors,
-            FindDependentsTool findDependents) {
+            FindDependentsTool findDependents,
+            TraceEventFlowTool traceEventFlow) {
         this.listComponents = listComponents;
         this.listEvents = listEvents;
         this.getConfigSchema = getConfigSchema;
@@ -58,6 +61,7 @@ public final class McpStdioBridge {
         this.reload = reload;
         this.listWiringErrors = listWiringErrors;
         this.findDependents = findDependents;
+        this.traceEventFlow = traceEventFlow;
     }
 
     /**
@@ -98,6 +102,12 @@ public final class McpStdioBridge {
                    "transitive":{"type":"boolean","default":false}},
                  "required":["componentFqn"]}""";
 
+        var traceEventFlowSchema = """
+                {"type":"object","properties":{
+                   "eventType":{"type":"string"},
+                   "maxDepth":{"type":"integer","default":20}},
+                 "required":["eventType"]}""";
+
         var server = McpServer.sync(transport)
                 .serverInfo("tiko-mcp", "0.1.0")
                 .capabilities(
@@ -134,7 +144,13 @@ public final class McpStdioBridge {
                                 FindDependentsTool.NAME,
                                 "Find reverse dependents of a component",
                                 findDependentsSchema,
-                                findDependents::execute))
+                                findDependents::execute),
+                        spec(
+                                mapper,
+                                TraceEventFlowTool.NAME,
+                                "Trace @EventTrigger DAG from an event type",
+                                traceEventFlowSchema,
+                                traceEventFlow::execute))
                 .build();
 
         LoggerHolder.LOG.log(Level.INFO, "tiko-mcp server started on stdio");
