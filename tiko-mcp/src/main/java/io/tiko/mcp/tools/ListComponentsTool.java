@@ -1,6 +1,7 @@
 package io.tiko.mcp.tools;
 
 import io.tiko.mcp.TopologyStore;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,13 +24,30 @@ public final class ListComponentsTool {
         var scope = strOrNull(args.get("scope"));
         var iface = strOrNull(args.get("interface"));
 
-        var filtered = store.components().stream()
-                .filter(c -> scope == null || scope.equals(c.get("scope")))
-                .filter(c -> iface == null || interfacesContain(c, iface))
-                .toList();
+        var components = new ArrayList<Map<String, Object>>();
+        for (var c : store.components()) {
+            if (scope != null && !scope.equals(c.get("scope"))) continue;
+            if (iface != null && !interfacesContain(c, iface)) continue;
+            components.add(withKind(c, "COMPONENT"));
+        }
+        for (var f : store.factoryMethods()) {
+            if (scope != null && !scope.equals(f.get("scope"))) continue;
+            // Produced entries don't carry an `interfaces[]` array; filter by returnType only.
+            // Idiomatic @Produces returns the interface directly (e.g. `@Produces public DataSource ...`),
+            // so this matches the common case. Producers returning a concrete impl of an interface
+            // won't be surfaced under the interface filter — out of scope for #143.
+            if (iface != null && !iface.equals(f.get("returnType"))) continue;
+            components.add(FactoryProjection.fromFactory(f));
+        }
 
         var out = new LinkedHashMap<String, Object>();
-        out.put("components", filtered);
+        out.put("components", components);
+        return out;
+    }
+
+    private static Map<String, Object> withKind(Map<String, Object> c, String kind) {
+        var out = new LinkedHashMap<String, Object>(c);
+        out.putIfAbsent("kind", kind);
         return out;
     }
 
