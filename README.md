@@ -127,6 +127,22 @@ mvn exec:java   # prints: Hello, world!
 
 The generated project ships with AI-context files for the major coding agents — `CLAUDE.md` (canonical), `AGENTS.md`, `.cursor/rules/tiko.md`, `.github/copilot-instructions.md`, `.junie/guidelines.md`, and `.ai-skills/SKILL.md`. Each tool-specific file points at `CLAUDE.md` as the source of truth, so edit one file when conventions change.
 
+### AI-agent topology server (MCP)
+
+Every Tiko build emits machine-readable topology + config schema to
+`META-INF/tiko/`. The `tiko-mcp` companion jar exposes them to any
+MCP-aware coding agent (Claude Code, Cursor, …):
+
+    java -jar tiko-mcp.jar /path/to/your/project
+
+The metadata ships inside the jar so MCP can also introspect Tiko
+dependencies you didn't build yourself. To suppress emission for a
+module (closed-source service, sensitive jars), add
+`-Atiko.topology.bundle=false` to the annotation processor args.
+
+See [`tiko-examples/13_mcp_introspection`](./tiko-examples/13_mcp_introspection)
+for a runnable demo.
+
 ## Annotations at a glance
 
 | Annotation                          | Purpose                                                                  | Deep dive                              |
@@ -236,7 +252,8 @@ policy — a different layer than framework logging.
 
 - **Phase 1 — Alpha completion.** ✅ Closed. Core DI, scopes, lifecycle events, `@EventTrigger` chains, multi-module aggregation.
 - **Phase 2 — Configuration & distributed events.** ✅ Closed. `@Configuration` v1 + nested records + `Set<X>` + YAML source anchors, Kafka transport, `ErrorContext` hook, async event executor + shutdown timeout, `System.Logger` migration.
-- **Phase 3 — Onboarding & tooling.** AI-assistant-aware archetype, `tiko-test` JUnit 5 module, machine-readable topology + MCP server.
+- **Phase 3 — Onboarding & tooling.** ✅ Closed. AI-assistant-aware archetype, `tiko-test` JUnit 5 module, machine-readable topology + MCP server.
+- ✅ Machine-readable topology + config schema + MCP server — every build emits `META-INF/tiko/topology.json` and `META-INF/tiko/config-schema.json`; `tiko-mcp` exposes both to AI agents via stdio MCP. See [topology schema](./docs/topology-schema.md), [`tiko-mcp`](./tiko-mcp), and [`tiko-examples/13_mcp_introspection`](./tiko-examples/13_mcp_introspection). ([#22](https://github.com/tomas-samek/tiko-di/issues/22))
 - **Phase 4 — Runtime hardening (in progress).** Structured `RuntimeException` subtypes, checked-exception propagation through `@Produces` / `@PostConstruct` (✅), framework-managed JVM shutdown hook, JaCoCo coverage + SonarCloud static analysis. AOP / metrics / GraalVM dropped from scope until a concrete driver appears.
 - **Phase 5 — Resiliency layer.** Timeouts, retries, bounded-queue backpressure, executor pool knobs, DLQ for failed/timed-out events.
 - **Phase 6 — Distributed transports.** RabbitMQ + JMS adapters, `TransportBootstrap` SPI audit, pluggable serializer SPI.

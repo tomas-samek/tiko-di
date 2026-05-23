@@ -24,6 +24,7 @@
         <module>tiko-kafka-it</module>
         <module>tiko-examples</module>
         <module>tiko-archetype</module>
+        <module>tiko-mcp</module>
     </modules>
 
     <properties>
@@ -47,6 +48,7 @@
         <javalin.version>6.7.0</javalin.version>
         <hikari.version>6.2.1</hikari.version>
         <h2.version>2.3.232</h2.version>
+        <mcp-sdk.version>0.18.2</mcp-sdk.version>
     </properties>
 
     <dependencyManagement>
@@ -81,6 +83,16 @@
                 <groupId>io.tiko</groupId>
                 <artifactId>tiko-kafka</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.tiko</groupId>
+                <artifactId>tiko-mcp</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
+                <artifactId>mcp</artifactId>
+                <version>${mcp-sdk.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.yaml</groupId>

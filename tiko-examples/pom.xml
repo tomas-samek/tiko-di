@@ -30,6 +30,7 @@
         <module>10_persistence_jdbc</module>
         <module>11_custom_logger</module>
         <module>12_testing</module>
+        <module>13_mcp_introspection</module>
     </modules>
 
     <!--

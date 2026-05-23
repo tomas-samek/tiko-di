@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "tiko": {
+      "command": "java",
+      "args": [
+        "-jar",
+        "../../tiko-mcp/target/tiko-mcp-0.1.0.jar",
+        "."
+      ]
+    }
+  }
+}

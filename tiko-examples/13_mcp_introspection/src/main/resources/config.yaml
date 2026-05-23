@@ -1,0 +1,4 @@
+database:
+  url: jdbc:h2:mem:demo
+  username: demo
+  poolSize: 5
