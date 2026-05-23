@@ -989,6 +989,15 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         new io.tiko.processor.config.ConfigManifestWriter(processingEnv.getFiler(), regGen.registryClassFqn())
                 .write(configs);
 
+        // Emit machine-readable topology.json for AI agents / IDE tooling / doc generators
+        // when the build has anything worth describing. Gated to avoid empty-file noise.
+        if (!context.getActiveComponents().isEmpty()
+                || !context.getActiveFactoryMethods().isEmpty()
+                || !context.getEventHandlers().isEmpty()
+                || !context.getConfigurations().isEmpty()) {
+            new io.tiko.processor.topology.TopologyWriter(context).write(processingEnv.getFiler());
+        }
+
         // Generate container (must be last)
         processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "Tiko DI: Generating container...");
         ContainerGenerator containerGenerator = new ContainerGenerator(context);
