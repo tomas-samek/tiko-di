@@ -13,6 +13,7 @@ import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 
 /**
  * Entrypoint for the {@code tiko-mcp} runnable jar. Reads {@code args[0]} as the
@@ -56,16 +57,62 @@ public final class TikoMcpServer {
         var traceEventFlow = new TraceEventFlowTool(store);
         var listProfileConflicts = new ListProfileConflictsTool(store);
 
-        new McpStdioBridge(
-                        listComponents,
-                        listEvents,
-                        getConfigSchema,
-                        explainWiring,
-                        reload,
-                        listWiringErrors,
-                        findDependents,
-                        traceEventFlow,
-                        listProfileConflicts)
-                .run();
+        var registrations = List.of(
+                new ToolRegistration(ListComponentsTool.NAME, "List Tiko components", """
+                        {"type":"object","properties":{
+                           "scope":{"type":"string","enum":["SINGLETON","REQUEST","EVENT","PROTOTYPE"]},
+                           "interface":{"type":"string"},
+                           "profile":{"type":"string"}}}""", listComponents::execute),
+                new ToolRegistration(ListEventsTool.NAME, "List Tiko events", """
+                        {"type":"object","properties":{
+                           "eventType":{"type":"string"}}}""", listEvents::execute),
+                new ToolRegistration(
+                        GetConfigSchemaTool.NAME, "Get @Configuration JSON schema", """
+                        {"type":"object","properties":{
+                           "prefix":{"type":"string"}}}""", getConfigSchema::execute),
+                new ToolRegistration(
+                        ExplainWiringTool.NAME,
+                        "Explain dependency wiring for a component",
+                        """
+                        {"type":"object","properties":{
+                           "componentFqn":{"type":"string"},
+                           "maxDepth":{"type":"integer","default":10},
+                           "profile":{"type":"string"}},
+                         "required":["componentFqn"]}""",
+                        explainWiring::execute),
+                new ToolRegistration(ReloadTool.NAME, "Reload Tiko topology from disk", """
+                        {"type":"object","properties":{}}""", reload::execute),
+                new ToolRegistration(
+                        ListWiringErrorsTool.NAME,
+                        "List Tiko wiring-error diagnostics",
+                        """
+                        {"type":"object","properties":{}}""",
+                        listWiringErrors::execute),
+                new ToolRegistration(
+                        FindDependentsTool.NAME,
+                        "Find reverse dependents of a component",
+                        """
+                        {"type":"object","properties":{
+                           "componentFqn":{"type":"string"},
+                           "transitive":{"type":"boolean","default":false}},
+                         "required":["componentFqn"]}""",
+                        findDependents::execute),
+                new ToolRegistration(
+                        TraceEventFlowTool.NAME,
+                        "Trace @EventTrigger DAG from an event type",
+                        """
+                        {"type":"object","properties":{
+                           "eventType":{"type":"string"},
+                           "maxDepth":{"type":"integer","default":20}},
+                         "required":["eventType"]}""",
+                        traceEventFlow::execute),
+                new ToolRegistration(
+                        ListProfileConflictsTool.NAME,
+                        "List components implementing the same type under disjoint profiles",
+                        """
+                        {"type":"object","properties":{}}""",
+                        listProfileConflicts::execute));
+
+        new McpStdioBridge(registrations).run();
     }
 }
