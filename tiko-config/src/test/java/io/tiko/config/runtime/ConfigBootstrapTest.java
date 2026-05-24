@@ -60,4 +60,57 @@ class ConfigBootstrapTest {
         assertThatThrownBy(() -> ConfigBootstrap.bind("c.yaml", src, List.of(new DbConfigBinder())))
                 .hasMessageContaining("MISSING");
     }
+
+    // ---- dotted-prefix nested-YAML support (#149) ------------------------------------
+
+    record KafkaConfig(String bootstrap) {}
+
+    static class KafkaConfigBinder implements ConfigBinder<KafkaConfig> {
+        public Class<KafkaConfig> type() {
+            return KafkaConfig.class;
+        }
+
+        public String prefix() {
+            return "tiko.kafka";
+        }
+
+        public KafkaConfig bind(Map<String, Object> root, BindContext ctx) {
+            Map<String, Object> node = ctx.requireSection(root, "tiko.kafka");
+            String bootstrap = ctx.requireScalar(
+                    node, "bootstrap-servers", "tiko.kafka.bootstrap-servers", Coercers.stringCoercer(), "");
+            ctx.checkUnknownKeys(node, "tiko.kafka", Set.of("bootstrap-servers"));
+            return new KafkaConfig(bootstrap);
+        }
+    }
+
+    @Test
+    void dotted_prefix_accepts_nested_yaml_form() {
+        // tiko: kafka: { bootstrap-servers: ... }  — the natural YAML structure
+        ConfigSource src =
+                ConfigSources.fromMap(Map.of("tiko", Map.of("kafka", Map.of("bootstrap-servers", "broker:9092"))));
+        Map<Class<?>, Object> result = ConfigBootstrap.bind("c.yaml", src, List.of(new KafkaConfigBinder()));
+        assertThat(((KafkaConfig) result.get(KafkaConfig.class)).bootstrap()).isEqualTo("broker:9092");
+    }
+
+    @Test
+    void dotted_prefix_also_accepts_flat_dotted_yaml_form_for_back_compat() {
+        // "tiko.kafka": { bootstrap-servers: ... }  — flat literal-dotted key
+        ConfigSource src = ConfigSources.fromMap(Map.of("tiko.kafka", Map.of("bootstrap-servers", "broker:9092")));
+        Map<Class<?>, Object> result = ConfigBootstrap.bind("c.yaml", src, List.of(new KafkaConfigBinder()));
+        assertThat(((KafkaConfig) result.get(KafkaConfig.class)).bootstrap()).isEqualTo("broker:9092");
+    }
+
+    @Test
+    void unknown_top_level_under_nested_form_still_rejects_truly_unknown_keys() {
+        // 'tiko' is a known top-level (first segment of "tiko.kafka") so it must NOT trigger
+        // the unknown-section error even when no binder claims exactly "tiko". 'random' is
+        // truly unknown and must trigger.
+        ConfigSource src = ConfigSources.fromMap(Map.of(
+                "tiko", Map.of("kafka", Map.of("bootstrap-servers", "x")),
+                "random", Map.of("k", "v")));
+        assertThatThrownBy(() -> ConfigBootstrap.bind("c.yaml", src, List.of(new KafkaConfigBinder())))
+                .isInstanceOf(ConfigValidationException.class)
+                .hasMessageContaining("unknown top-level section 'random'")
+                .satisfies(e -> assertThat(e.getMessage()).doesNotContain("unknown top-level section 'tiko'"));
+    }
 }

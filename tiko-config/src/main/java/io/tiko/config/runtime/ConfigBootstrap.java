@@ -72,10 +72,19 @@ public final class ConfigBootstrap {
             }
         }
 
-        // 5. Top-level prefix check
+        // 5. Top-level prefix check. A top-level YAML key is accepted if it matches a
+        // claimed prefix literally (flat-dotted form, e.g. `"tiko.kafka":`) OR if it's
+        // the first segment of any dotted prefix (nested form, e.g. `tiko: kafka: ...`
+        // for prefix `tiko.kafka`). Both forms route to the same binder via
+        // BindContext.requireSection.
         Set<String> claimed = new LinkedHashSet<>(prefixToTypes.keySet());
+        Set<String> claimedFirstSegments = new LinkedHashSet<>();
+        for (String p : claimed) {
+            int dot = p.indexOf('.');
+            claimedFirstSegments.add(dot < 0 ? p : p.substring(0, dot));
+        }
         for (String k : interpolated.keySet()) {
-            if (!claimed.contains(k)) {
+            if (!claimed.contains(k) && !claimedFirstSegments.contains(k)) {
                 String suggestion = nearest(k, claimed);
                 String hint = suggestion != null ? " Did you mean '" + suggestion + "'?" : "";
                 ctx.reportAtPath(ConfigIssueCode.UNKNOWN_SECTION, k, "unknown top-level section '" + k + "'." + hint);
