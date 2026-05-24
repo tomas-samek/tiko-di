@@ -247,6 +247,11 @@
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>3.2.2</version>
                 </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-failsafe-plugin</artifactId>
+                    <version>3.2.2</version>
+                </plugin>
             </plugins>
         </pluginManagement>
 
@@ -254,6 +259,25 @@
              validate phase so even `mvn compile`/`mvn test`/`mvn package` (CI) fail
              fast on formatting violations. Run `mvn spotless:apply` locally to fix. -->
         <plugins>
+            <!-- Failsafe binds `*IT.java` execution to integration-test + verify. Inherited by
+                 every child module so an integration test added to any module just runs on
+                 `mvn verify` — no per-module pom plumbing. Modules with zero ITs see this as
+                 a no-op. Surefire continues to own `*Test.java` at the test phase, so
+                 `mvn test` stays the fast lane. See CLAUDE.md "Testing Strategy" for the
+                 naming convention (#193). -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>

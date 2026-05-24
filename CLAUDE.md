@@ -433,8 +433,12 @@ what they do, not where they're called from.
 
 - **Framework: JUnit 5 only.** No JUnit 4, no mixing. AssertJ for assertions
   (no Hamcrest, no JUnit's `Assertions`).
-- **Class naming:** `xxxTest` for unit tests, `xxxIT` for integration tests
-  (Failsafe picks up `*IT`).
+- **Class naming:** `xxxTest` for unit tests, `xxxIT` for integration tests.
+  Surefire runs `*Test` at the `test` phase (fast lane: `mvn test`). Failsafe runs
+  `*IT` at the `integration-test` / `verify` phases (`mvn verify`). Both runners are
+  wired in the root `pom.xml` and inherited by every module — no per-module plumbing.
+  A misnamed `*IT.java` won't be discovered by surefire, so it will only run under
+  `mvn verify`; check the output to confirm your IT actually ran.
 - **Method naming: camelCase, no underscores.** New tests use
   `applicationStartedPublishedOnceAfterContainerBoot`, not
   `application_started_published_once`. Existing snake_case tests stay until
