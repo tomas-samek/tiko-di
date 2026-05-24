@@ -1,12 +1,14 @@
 # Defaults baked into tiko-kafka.jar. User application.yaml entries override these
 # per-key; values not overridden fall through to @Default annotations on KafkaConfig.
-# The top-level key is the literal string "tiko.kafka" (dotted, matching the @Configuration prefix).
-"tiko.kafka":
-  bootstrap-servers: "localhost:9092"
-  consumer-group: "tiko-app"
-  serializer: json
-  auto-offset-reset: earliest
-  poll-timeout: PT0.5S
-  shutdown-timeout: PT5S
-  producer-properties: {}
-  consumer-properties: {}
+# Nested form matches what users naturally write — both the user file and this one
+# must use the same shape so the layered deep-merge actually unifies them.
+tiko:
+  kafka:
+    bootstrap-servers: "localhost:9092"
+    consumer-group: "tiko-app"
+    serializer: json
+    auto-offset-reset: earliest
+    poll-timeout: PT0.5S
+    shutdown-timeout: PT5S
+    producer-properties: {}
+    consumer-properties: {}
