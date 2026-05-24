@@ -245,6 +245,8 @@ policy — a different layer than framework logging.
 | [docs/jdk-23-setup.md](./docs/jdk-23-setup.md)        | Annotation processing on JDK 23+ — Maven / Gradle / plain `javac`.                          |
 | [docs/roadmap.md](./docs/roadmap.md)                  | What ships today, what's planned per phase, known limitations.                              |
 | [docs/release-process.md](./docs/release-process.md)  | Release engineering notes (maintainers).                                                    |
+| [docs/qa-playbook.md](./docs/qa-playbook.md)          | Structured QA passes over the framework + examples; issue body template; rules for what to file and what not to. |
+| [docs/issue-fix-playbook.md](./docs/issue-fix-playbook.md) | Counterpart to the QA playbook — how to work a filed issue without anchoring on its framing. Four-phase fix workflow + common traps. |
 | [comparisons/README.md](./comparisons/README.md)      | Side-by-side cold-start benchmarks across 8 DI frameworks.                                  |
 | [docs/superpowers/specs/2026-05-12-kafka-event-bus-design.md](./docs/superpowers/specs/2026-05-12-kafka-event-bus-design.md) | Kafka event bus design — universal transport adapter pattern. |
 
@@ -293,7 +295,7 @@ Contributions are welcome. Open issues or pull requests on GitHub.
 4. Push to the branch
 5. Open a Pull Request
 
-Bug reports should include Java version, Maven version, and a minimal reproducer.
+Bug reports should include Java version, Maven version, and a minimal reproducer. State symptoms and observable facts only — no "probable cause" or "suggested fix" sections, those bias whoever picks the issue up. The full format and rationale are in [docs/qa-playbook.md](./docs/qa-playbook.md); the counterpart workflow for working a filed issue is [docs/issue-fix-playbook.md](./docs/issue-fix-playbook.md).
 
 ## License
 

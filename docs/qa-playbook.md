@@ -44,6 +44,16 @@ If you can't reproduce in isolation, the finding is a `documentation` or `enhanc
 
 Concrete example from 2026-05-23: the missing-interface check (Pass 4) looked at first like a test-coverage gap (which would be `enhancement`). The scratch test showed the check doesn't fire at all → real bug → filed as `bug` (#164).
 
+### Issue bodies state symptoms, not theories
+
+**No "## Probable cause" or "## Suggested fix" sections.** Symptoms, reproduction, expected-vs-actual, and acceptance only. Speculation in the body biases whoever picks up the issue — they start chasing the reporter's hypothesis instead of the evidence, and "satisfy the literal acceptance" fixes win over deeper-correct ones. Acceptance criteria should describe the user-visible outcome (`the IT runs and passes with Docker available; fails loudly without`), not the proposed mechanism (`wire failsafe in the e2e pom`).
+
+If a hint genuinely disambiguates, state it as evidence — `the diagnostic surfaced at X.java:42` — not as a theory. The implementer (or future you) approaches the bug with a clean head; you're handing them facts, not a working hypothesis.
+
+Concrete example (2026-05-24, #149): the issue framed the e2e failure as a failsafe-wiring gap with a timing-flavoured acceptance. Following that hypothesis cost a CI cycle. The actual chain was two latent bugs in `tiko-config` and `tiko-kafka` the silent-skip had been hiding for months — none of which the body mentioned, because the reporter saw the first error and stopped. The body would have aged better as `mvn verify` doesn't run OrderToWarehouseE2EIT. Acceptance: it runs end-to-end and passes with Docker; fails loudly without.
+
+For how to read such a body once it's filed — and resist anchoring on it when you do — see [issue-fix-playbook.md](./issue-fix-playbook.md).
+
 ### Bug-severity heuristic (for milestone choice)
 
 - **Critical (gate release / current phase):** user-facing example doesn't run, documented contract silently violated, framework cascades on user input, security-relevant. → Phase 3 if shippable in the window, else surface separately.
@@ -63,21 +73,24 @@ Things that look like Tiko bugs but aren't:
 
 ### Issue body template
 
-Use this skeleton for every filed issue. Project style is "scope + concrete files + acceptance + out-of-scope, rationale lives in linked predecessor issues."
+Use this skeleton for every filed issue. Project style is "scope + concrete files + acceptance + out-of-scope, rationale lives in linked predecessor issues." Note the explicit absence of a "## Probable cause" or "## Suggested fix" section — see "Issue bodies state symptoms, not theories" above.
 
 ```markdown
 Follow-up to <predecessor issue or QA pass>.
 
 ## Scope
-<one paragraph: what's wrong / what needs adding, with reproducer if applicable>
+<one paragraph: what's wrong / what needs adding, with reproducer if applicable.
+Symptoms and observable facts only — no speculation about cause.>
 
 ## Files
-- `path/to/file.ext` — what changes
-- `path/to/new-file.ext` (new) — what it contains
+- `path/to/file.ext` — relevant to the symptom (where the diagnostic surfaces,
+  where the behaviour is documented, where the affected code lives). NOT a
+  prescription of which files the fix should touch.
+- `path/to/new-file.ext` (new) — if the symptom is "missing file", name it.
 
 ## Acceptance
-- <observable outcome 1>
-- <observable outcome 2>
+- <user-visible outcome 1, not mechanism>
+- <user-visible outcome 2>
 - <error message shape / format requirement if relevant>
 
 ## Out of scope

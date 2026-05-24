@@ -104,10 +104,20 @@ public final class BindContext {
      * Returns the sub-map at {@code key}, or an empty map (with an error) if absent.
      * The returned map is read-only; binders consume keys from it via the scalar
      * read methods which remove consumed keys, enabling {@link #checkUnknownKeys}.
+     *
+     * <p>A dotted {@code key} (e.g. {@code "tiko.kafka"}) is resolved by walking the
+     * nested map path — {@code root.get("tiko").get("kafka")} — matching how users
+     * naturally write multi-segment configs in YAML. If the nested form isn't found,
+     * falls back to a literal flat-key lookup ({@code root.get("tiko.kafka")}) so
+     * existing flat-dotted YAML (e.g. {@code tiko-kafka}'s baked-in defaults.yaml)
+     * keeps working unchanged.
      */
     @SuppressWarnings("unchecked")
     public Map<String, Object> requireSection(Map<String, Object> root, String key) {
-        Object v = root.get(key);
+        Object v = resolveByDottedPath(root, key);
+        if (v == null) {
+            v = root.get(key);
+        }
         if (v == null) {
             reportAtPath(ConfigIssueCode.MISSING_SECTION, key, "missing required section '" + key + "'");
             return new LinkedHashMap<>();
@@ -121,6 +131,24 @@ public final class BindContext {
             return new LinkedHashMap<>();
         }
         return new LinkedHashMap<>((Map<String, Object>) v);
+    }
+
+    /**
+     * Walks a dotted path through nested maps. Returns {@code null} when any segment
+     * is absent or a non-map. Single-segment keys delegate to a normal {@code get}.
+     */
+    @SuppressWarnings("unchecked")
+    private static Object resolveByDottedPath(Map<String, Object> root, String dottedKey) {
+        if (!dottedKey.contains(".")) {
+            return root.get(dottedKey);
+        }
+        Object current = root;
+        for (String segment : dottedKey.split("\\.")) {
+            if (!(current instanceof Map<?, ?> m)) return null;
+            current = ((Map<String, Object>) m).get(segment);
+            if (current == null) return null;
+        }
+        return current;
     }
 
     // -- Field reads -------------------------------------------------------
