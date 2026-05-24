@@ -15,7 +15,7 @@ mvn -pl tiko-examples/01_basic_di exec:java \
 
 ## 02 — Configuration &nbsp;<sub>[`02_config/`](./02_config)</sub>
 
-Typed YAML config injection: `@Configuration` records, generated per-record binders, `@Default` and `@Key`, layered `ConfigSources`, `${VAR}` interpolation, strict-mode error reporting that fails the boot rather than serving with broken config.
+Typed YAML config injection: `@Configuration` records (`DbConfig`, `AppConfig`), generated per-record binders, `@Default` for missing fields, `${VAR:default}` interpolation, and nested-record binding (`AppConfig.server` → `ServerConfig`).
 
 ```
 mvn -pl tiko-examples/02_config exec:java \
