@@ -57,6 +57,62 @@ class FindDependentsToolTest {
     }
 
     @Test
+    void factoryHostIsReportedAsDependent(@TempDir Path root) throws Exception {
+        // A @Produces factory method's parameter dep on the target → the factory's
+        // declaringClass appears in the result (#183).
+        var store = storeWith(root, """
+                {"schemaVersion":1,"module":"m",
+                 "components":[
+                   {"qualifiedName":"example.DbConfig","scope":"SINGLETON","interfaces":[],
+                    "constructorDependencies":[]},
+                   {"qualifiedName":"example.Producers","scope":"SINGLETON","interfaces":[],
+                    "constructorDependencies":[]}
+                 ],
+                 "factoryMethods":[
+                   {"declaringClass":"example.Producers","methodName":"primaryShim",
+                    "returnType":"example.HikariShim","scope":"SINGLETON","qualifier":"primary",
+                    "profiles":[],"static":false,"autoCloseable":false,"requiresProxy":false,
+                    "constructorDependencies":[{"type":"example.DbConfig","qualifier":null,"kind":"DIRECT","pickedType":null}]}
+                 ],
+                 "eventHandlers":[],"eventTriggers":[],"configurations":[]}
+                """);
+        var tool = new FindDependentsTool(store);
+
+        @SuppressWarnings("unchecked")
+        var dependents = (List<String>)
+                tool.execute(Map.of("componentFqn", "example.DbConfig")).get("dependents");
+        assertThat(dependents).containsExactly("example.Producers");
+    }
+
+    @Test
+    void componentAndFactoryHostDedupedWhenSameHostUsesBoth(@TempDir Path root) throws Exception {
+        // A @Component that both injects the target AND hosts a factory method taking the
+        // target must appear at most once in the result (#183 dedup contract).
+        var store = storeWith(root, """
+                {"schemaVersion":1,"module":"m",
+                 "components":[
+                   {"qualifiedName":"example.DbConfig","scope":"SINGLETON","interfaces":[],
+                    "constructorDependencies":[]},
+                   {"qualifiedName":"example.MultiUser","scope":"SINGLETON","interfaces":[],
+                    "constructorDependencies":[{"type":"example.DbConfig","qualifier":null,"kind":"DIRECT","pickedType":null}]}
+                 ],
+                 "factoryMethods":[
+                   {"declaringClass":"example.MultiUser","methodName":"helper",
+                    "returnType":"example.Helper","scope":"SINGLETON","qualifier":null,
+                    "profiles":[],"static":false,"autoCloseable":false,"requiresProxy":false,
+                    "constructorDependencies":[{"type":"example.DbConfig","qualifier":null,"kind":"DIRECT","pickedType":null}]}
+                 ],
+                 "eventHandlers":[],"eventTriggers":[],"configurations":[]}
+                """);
+        var tool = new FindDependentsTool(store);
+
+        @SuppressWarnings("unchecked")
+        var dependents = (List<String>)
+                tool.execute(Map.of("componentFqn", "example.DbConfig")).get("dependents");
+        assertThat(dependents).containsExactly("example.MultiUser");
+    }
+
+    @Test
     void unknownFqnThrowsWithDidYouMean(@TempDir Path root) throws Exception {
         var store = storeWith(root, """
                 {"schemaVersion":1,"module":"m",

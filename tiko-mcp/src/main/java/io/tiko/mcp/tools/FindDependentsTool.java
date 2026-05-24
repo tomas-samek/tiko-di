@@ -10,11 +10,15 @@ import java.util.Map;
 
 /**
  * MCP tool: reverse-index lookup. Given {@code componentFqn}, returns the list of
- * components whose {@code constructorDependencies} reference it. With
+ * components whose {@code constructorDependencies} reference it AND the host components
+ * of any {@code @Produces} factory method whose parameters reference it (#183). With
  * {@code transitive: true}, walks the reverse graph with a visited set to bound cycles.
  *
  * <p>Configurations are valid lookup targets — they appear as deps in
- * {@code constructorDependencies}, same as components.
+ * {@code constructorDependencies}, same as components. Factory-host entries report the
+ * {@code declaringClass} FQN (not {@code declaringClass#methodName}) so the result list
+ * is uniformly component-FQN-shaped; pinpoint which method via {@code list_components}
+ * (look at the host's {@code PRODUCED} entries) or {@code explain_wiring}.
  */
 public final class FindDependentsTool {
 
@@ -67,12 +71,25 @@ public final class FindDependentsTool {
 
     private List<String> directDependents(String target) {
         var result = new ArrayList<String>();
+        var seen = new HashSet<String>();
         for (var c : store.components()) {
             @SuppressWarnings("unchecked")
             var deps = (List<Map<String, Object>>) c.getOrDefault("constructorDependencies", List.of());
             for (var d : deps) {
                 if (target.equals(d.get("type"))) {
-                    result.add((String) c.get("qualifiedName"));
+                    var name = (String) c.get("qualifiedName");
+                    if (name != null && seen.add(name)) result.add(name);
+                    break;
+                }
+            }
+        }
+        for (var f : store.factoryMethods()) {
+            @SuppressWarnings("unchecked")
+            var deps = (List<Map<String, Object>>) f.getOrDefault("constructorDependencies", List.of());
+            for (var d : deps) {
+                if (target.equals(d.get("type"))) {
+                    var declaringClass = (String) f.get("declaringClass");
+                    if (declaringClass != null && seen.add(declaringClass)) result.add(declaringClass);
                     break;
                 }
             }

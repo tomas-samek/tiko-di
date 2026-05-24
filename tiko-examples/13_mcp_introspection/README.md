@@ -45,7 +45,7 @@ Plus two events: `OrderPlaced` (input to `OrderService.validate`) and
 | `explain_wiring` | original | BFS tree of a component's constructor-dep graph; follows producer edges; honours `profile` |
 | `reload` | #145 | re-reads `META-INF/tiko/*.json` from disk after `mvn compile`, no server restart |
 | `list_wiring_errors` | #142 | structured processor diagnostics persisted to `wiring-errors.json` |
-| `find_dependents` | #141 | reverse-index lookup; optional `transitive: true` walks the graph |
+| `find_dependents` | #141, #183 | reverse-index lookup over both constructor and `@Produces` deps; optional `transitive: true` walks the graph |
 | `trace_event_flow` | #140 | static DAG over `@EventTrigger` chains from a given event type |
 | `list_profile_conflicts` | #144 | (interface, qualifier) groups whose entries pin to ≥2 distinct profiles |
 
@@ -127,17 +127,18 @@ scope violation, bad `@Produces`, circular dep), each entry carries
 `kind`, `componentFqn`, `message`, optional `suggestedFix`, and a
 best-effort `sourceFile` / `line`.
 
-### "Who depends on DbConfig?" (#141)
+### "Who depends on DbConfig?" (#141, #183)
 
 Tool: `find_dependents` &nbsp; Args: `{"componentFqn": "example.DbConfig"}`
 
 ```json
-{"dependents": ["example.OrderRepository"]}
+{"dependents": ["example.OrderRepository", "example.Producers"]}
 ```
 
-`OrderRepository` injects `DbConfig` via constructor. `Producers#primaryShim`
-also references it as a factory-method parameter but doesn't appear in this
-response — see #183 for the planned extension to walk factory deps. Pass
+`OrderRepository` injects `DbConfig` via constructor; `Producers` hosts the
+`primaryShim` `@Produces` method that takes `DbConfig` as a parameter (#183
+extended the walk to include factory-host components). When the same host
+both injects AND produces using the target, it appears at most once. Pass
 `"transitive": true` to walk the reverse graph (dependents-of-dependents).
 
 ### "Trace the event flow from OrderPlaced" (#140)
