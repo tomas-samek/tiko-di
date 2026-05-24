@@ -476,7 +476,11 @@ project — those go stale.
 
 ### Issue Writing
 
-Issue bodies: scope + concrete file list + acceptance + out-of-scope. Rationale lives in linked predecessor issues, not duplicated.
+Issue bodies: scope + concrete file list + acceptance + out-of-scope. Rationale lives in linked predecessor issues, not duplicated. **No "## Probable cause" or "## Suggested fix" sections** — symptoms and observable facts only. Speculation in the body biases whoever picks the issue up; let them analyse the evidence with a clean head. Acceptance describes the user-visible outcome, not the proposed mechanism.
+
+The full discipline lives in two playbooks:
+- [docs/qa-playbook.md](./docs/qa-playbook.md) — surfacing bugs, structured QA passes, issue body template.
+- [docs/issue-fix-playbook.md](./docs/issue-fix-playbook.md) — reading a filed issue without anchoring, four-phase fix workflow, common traps.
 
 ## Common Patterns
 
