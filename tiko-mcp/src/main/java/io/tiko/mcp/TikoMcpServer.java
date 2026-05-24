@@ -33,7 +33,7 @@ public final class TikoMcpServer {
 
     public static void main(String[] args) throws Exception {
         if (args.length == 0) {
-            System.err.println("Usage: java -jar tiko-mcp.jar <project-dir>");
+            LoggerHolder.LOG.log(Level.ERROR, "Usage: java -jar tiko-mcp.jar <project-dir>");
             System.exit(2);
         }
         Path projectRoot = Paths.get(args[0]).toAbsolutePath();
