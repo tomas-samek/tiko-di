@@ -31,15 +31,15 @@ public final class ExplainWiringTool {
     }
 
     public Map<String, Object> execute(Map<String, Object> args) {
-        var fqn = required(args, "componentFqn");
+        var fqn = ToolArgs.required(args, "componentFqn");
         long maxDepth = args.get("maxDepth") instanceof Long l ? l : DEFAULT_MAX_DEPTH;
-        var profile = strOrNull(args.get("profile"));
+        var profile = ToolArgs.strOrNull(args.get("profile"));
 
         var root = findComponent(fqn, profile);
         if (root == null) {
             var matches = store.components().stream()
                     .map(c -> (String) c.get("qualifiedName"))
-                    .filter(n -> n != null && n.contains(simpleName(fqn)))
+                    .filter(n -> n != null && n.contains(ToolArgs.simpleName(fqn)))
                     .toList();
             var msg = "Unknown component '" + fqn + "'.";
             if (!matches.isEmpty()) {
@@ -181,25 +181,6 @@ public final class ExplainWiringTool {
             }
         }
         return null;
-    }
-
-    private static String simpleName(String fqn) {
-        var dot = fqn.lastIndexOf('.');
-        return dot < 0 ? fqn : fqn.substring(dot + 1);
-    }
-
-    private static String required(Map<String, Object> args, String key) {
-        var v = args.get(key);
-        if (v == null || v.toString().isEmpty()) {
-            throw new IllegalArgumentException("Missing required argument: " + key);
-        }
-        return v.toString();
-    }
-
-    private static String strOrNull(Object v) {
-        if (v == null) return null;
-        var s = v.toString();
-        return s.isEmpty() ? null : s;
     }
 
     private record Node(String fqn, long depth, Map<String, Object> via) {}

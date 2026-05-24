@@ -30,7 +30,7 @@ public final class TraceEventFlowTool {
     }
 
     public Map<String, Object> execute(Map<String, Object> args) {
-        var eventType = required(args, "eventType");
+        var eventType = ToolArgs.required(args, "eventType");
         long maxDepth = args.get("maxDepth") instanceof Long l ? l : DEFAULT_MAX_DEPTH;
 
         if (handlersFor(eventType).isEmpty() && !isReachable(eventType)) {
@@ -105,14 +105,6 @@ public final class TraceEventFlowTool {
             if (eventType.equals(t.get("eventType"))) return true;
         }
         return false;
-    }
-
-    private static String required(Map<String, Object> args, String key) {
-        var v = args.get(key);
-        if (v == null || v.toString().isEmpty()) {
-            throw new IllegalArgumentException("Missing required argument: " + key);
-        }
-        return v.toString();
     }
 
     private record Frame(String event, long depth) {}
