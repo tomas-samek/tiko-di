@@ -22,7 +22,7 @@ import org.junit.jupiter.api.Test;
  * random port + real HTTP via {@link HttpClient}. Each test sets up and tears
  * down per-test for isolation.
  */
-class TicketHttpIntegrationTest {
+class TicketHttpIT {
 
     private static final ObjectMapper JSON = new ObjectMapper();
 

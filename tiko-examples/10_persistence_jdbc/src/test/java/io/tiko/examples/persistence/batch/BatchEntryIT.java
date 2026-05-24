@@ -19,7 +19,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-class BatchEntryIntegrationTest {
+class BatchEntryIT {
 
     private static final String JDBC_URL = "jdbc:h2:mem:tiko;DB_CLOSE_DELAY=-1;MODE=PostgreSQL";
 
