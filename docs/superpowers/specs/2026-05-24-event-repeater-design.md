@@ -3,7 +3,6 @@
 **Status:** Design (v1)
 **Date:** 2026-05-24
 **Author:** Tomáš Samek
-**Prior art:** [`oracle.jet.catalog.cdi.annotation.EventTriggerRepeater`](file:///W:/workspace/bckup/exchange-cdi/src/main/java/oracle/jet/catalog/cdi/annotation/EventTriggerRepeater.java) (exchange-cdi)
 
 ## Problem
 
@@ -31,6 +30,13 @@ Users today have to wire `ScheduledExecutorService`, manage cancellation/restart
 - Programmatic cancel handles. No injected `PeriodicHandle.reset()` API; everything is declarative.
 - A standalone `@Periodic` annotation independent of a handler. If you need "fire at boot," subscribe to `ApplicationStartedEvent` and add `@EventRepeater` to that handler.
 
+The following are deferred candidates for v2 once v1 ships and gets real use:
+
+- REQUEST/EVENT-scoped repeaters (per-scope lifecycle, cancellation on scope exit).
+- `restartOn = {OtherEvent.class}` to allow a different event class to reset the timer.
+- Cron-style scheduling for "every Tuesday at 09:00" use cases.
+- Programmatic `PeriodicHandle` for handlers that want explicit reset/cancel control.
+
 ## Public API
 
 ### `@EventRepeater` annotation
@@ -46,8 +52,8 @@ public @interface EventRepeater {
     /** Period between ticks. Friendly duration string (e.g. "30s", "5m", "PT1H"). Required, must parse to > 0. */
     String every();
 
-    /** Delay before the first tick. Defaults to {@code every()}. Same parsing rules. */
-    String initialDelay() default "";
+    /** Delay before the first tick. Default {@code "0s"} fires immediately after handler return. Same parsing rules as {@code every()}. */
+    String initialDelay() default "0s";
 
     /** One or more triggers fired on each tick. Reuses all @EventTrigger knobs (name, async, spread, guard). */
     EventTrigger[] trigger();
@@ -115,8 +121,6 @@ After `initialDelay()` from the schedule point, then every `every()` thereafter,
 
 Any publish of the originating event type that invokes this handler — anywhere in the application — cancels the in-flight schedule and (post-handler-completion) starts a fresh one.
 
-> **Why "any publish"?** A SINGLETON-scoped handler has one instance per container; the timer is bound to the *handler*, not to a particular call site. Identifying the originating event class is sufficient.
-
 ### Payload on each tick
 
 - Handler returns a value → that value is cached and used as the payload for each tick's `@EventTrigger`.
@@ -126,7 +130,11 @@ Any publish of the originating event type that invokes this handler — anywhere
 
 ### Shutdown
 
-`ApplicationEndingEvent` cancels all active repeater schedules. The scheduled executor drains within `TikoOptions.shutdownTimeout` (uses friendly Duration syntax from #113 once that lands).
+`ApplicationEndingEvent` cancels all active repeater schedules. The scheduled executor drains within `TikoOptions.shutdownTimeout`.
+
+### Duration parsing
+
+`every()` and `initialDelay()` parse via the same coercer used for `tiko.shutdownTimeout` in `tiko-config`. Once #113 (friendly Duration syntax) lands, `"30s"` / `"5m"` / `"1h"` are accepted alongside ISO-8601 (`"PT30S"`, `"PT5M"`). Until then, only ISO-8601 works — implementation order should sequence #113 first.
 
 ## Internals
 
@@ -190,34 +198,27 @@ Error format follows the standard from CLAUDE.md (location, what's wrong, at lea
   - `ApplicationEndingEvent` cancels all active repeaters; no ticks after container shutdown.
   - `TikoOptions.scheduledExecutor` override is honored (use a fake one and assert ticks scheduled on it).
 - **Example module:**
-  - `tiko-examples/15_event_repeater/` (or next free index) — health-check pattern, narrates the cancel-on-fresh-event behavior in `Main`'s output. Wires `@EventRepeater` into a tiny realistic scenario rather than a toy demo.
-
-## Open follow-ups (not blocking v1)
-
-- REQUEST/EVENT-scoped repeaters (per-scope lifecycle, cancellation on scope exit).
-- `restartOn = {OtherEvent.class}` to allow a different event class to reset the timer.
-- Cron-style scheduling for "every Tuesday at 09:00" use cases.
-- Programmatic `PeriodicHandle` for handlers that want explicit reset/cancel control.
+  - `tiko-examples/14_event_repeater/` — health-check pattern, narrates the cancel-on-fresh-event behavior in `Main`'s output. Wires `@EventRepeater` into a tiny realistic scenario rather than a toy demo.
 
 ## Files affected
 
 New:
 - `tiko-api/src/main/java/io/tiko/annotations/EventRepeater.java`
-- `tiko-runtime/src/main/java/io/tiko/runtime/TikoOptions.java` — add `scheduledExecutor` field/builder
-- `tiko-processor/src/main/java/io/tiko/processor/generator/EventRepeaterGenerator.java` (or fold into existing `EventRegistry` generator)
-- `tiko-examples/15_event_repeater/`
+- `tiko-examples/14_event_repeater/`
 - `tiko-processor/src/test/java/io/tiko/processor/EventRepeaterValidationTest.java`
-- `tiko-runtime/src/test/java/io/tiko/runtime/EventRepeaterRuntimeIT.java`
+- `tiko-runtime/src/test/java/io/tiko/runtime/EventRepeaterRuntimeTest.java`
 
 Modified:
-- `tiko-processor/src/main/java/io/tiko/processor/generator/EventRegistryGenerator.java` (or equivalent) — hook into dispatch wrapping
+- `tiko-runtime/src/main/java/io/tiko/runtime/TikoOptions.java` — add `scheduledExecutor` field/builder
+- `tiko-processor/src/main/java/io/tiko/processor/generator/EventRegistryGenerator.java` — fold repeater dispatch wrapping and tick-runnable emission into the existing generator
 - `CLAUDE.md` — add `@EventRepeater` to the Event System section under "Core Annotations"
 - `tiko-examples/README.md` — list the new example
 
 ## Acceptance
 
-- A SINGLETON handler annotated with `@EventRepeater(every = "30s", trigger = @EventTrigger(eventName = "Tick"))` produces a `Tick` event 30s after handler completion, again every 30s, with the cached payload.
-- Re-firing the originating event before 30s elapses suppresses the pending tick and starts a fresh 30s clock from the new handler completion.
+- A SINGLETON handler annotated with `@EventRepeater(every = "30s", trigger = @EventTrigger(eventName = "Tick"))` produces a `Tick` event immediately after handler completion (per default `initialDelay = "0s"`), then every 30s thereafter, with the cached payload.
+- An explicit `initialDelay = "30s"` defers the first tick by one full period.
+- Re-firing the originating event before the next tick elapses suppresses the pending tick and starts a fresh clock from the new handler completion.
 - Compile-time errors for: unparseable `every`, missing `@EventHandler`, non-SINGLETON scope, unknown `trigger.eventName`, unknown `trigger.guard`.
 - Container shutdown cancels all active timers; no ticks fire after `ApplicationEndingEvent`.
 - Example module demonstrates the pattern end-to-end with narrated `Main` output.
