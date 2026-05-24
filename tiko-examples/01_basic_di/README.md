@@ -1,108 +1,85 @@
 # Example 01: Basic Dependency Injection
 
-This example demonstrates the core features of Tiko DI framework.
+The comprehensive feature tour. `Main` walks through nine titled sections covering every
+core DI capability; the `expose/`, `teardown/`, and `trigger/` subpackages carry test
+fixtures that pin contracts the runtime demo can't show in stdout.
 
-## What This Example Demonstrates
-
-### 1. Constructor Injection
-- `MessageService` depends on `MessageRepository`
-- `AuditService` depends on `RequestContext` and `EventContext`
-- Dependencies injected via `@Inject` constructor
-
-### 2. Lifecycle Methods
-- `@PostConstruct` - Called after component construction and dependency injection
-- `@PreDestroy` - Called before container shutdown
-- Execution order respects dependency graph
-
-### 3. Multiple Scopes
-
-| Scope | Lifetime | Examples |
-|-------|----------|----------|
-| `SINGLETON` | Application lifetime | MessageRepository, MessageService, AuditService |
-| `REQUEST` | Request/transaction | RequestContextImpl |
-| `EVENT` | Single event processing | EventContextImpl |
-| `PROTOTYPE` | Per injection | (not used in this example) |
-
-### 4. Cross-Scope Injection with Automatic Proxies
-
-`AuditService` (SINGLETON) injects:
-- `RequestContext` (REQUEST scope) → **Automatic proxy generated**
-- `EventContext` (EVENT scope) → **Automatic proxy generated**
-
-The annotation processor will generate proxy classes that delegate to the current scope instance.
-
-### 5. Event Handling
-
-- `MessageCreatedEvent` - Simple event record
-- `AuditService.onMessageCreated()` - Event handler with `@EventHandler`
-- Events published via `EventBus`
-
-## Component Graph
+## How to run
 
 ```
-MessageRepository (SINGLETON)
-    └─ No dependencies
-    └─ Lifecycle: @PostConstruct, @PreDestroy
-
-MessageService (SINGLETON)
-    └─ Depends on: MessageRepository
-    └─ Lifecycle: @PostConstruct, @PreDestroy
-
-RequestContextImpl (REQUEST)
-    └─ No dependencies
-    └─ Implements: RequestContext interface (required for proxy)
-
-EventContextImpl (EVENT)
-    └─ No dependencies
-    └─ Implements: EventContext interface (required for proxy)
-
-AuditService (SINGLETON)
-    └─ Depends on: RequestContext (proxy), EventContext (proxy)
-    └─ Event handler: onMessageCreated(MessageCreatedEvent)
-    └─ Lifecycle: @PostConstruct
+mvn -pl tiko-examples/01_basic_di exec:java \
+    -Dexec.mainClass=io.tiko.examples.basic.Main
 ```
 
-## Expected Generated Code
+Assumes you've run `mvn install` once at the repo root. To run the unit + integration
+tests for this example only:
 
-When the annotation processor is implemented, it will generate:
-
-### Factory Classes (Isolating)
 ```
-io.tiko.generated.MessageRepositoryFactory
-io.tiko.generated.MessageServiceFactory
-io.tiko.generated.RequestContextImplFactory
-io.tiko.generated.EventContextImplFactory
-io.tiko.generated.AuditServiceFactory
+mvn -pl tiko-examples/01_basic_di test
 ```
 
-### Proxy Classes
+## What `Main` demonstrates (the nine sections)
+
+| # | Section | Capability |
+|---|---|---|
+| 1 | `INITIALIZING CONTAINER` | SINGLETON eager init + `@PostConstruct` in dependency order; auto-generated proxies for cross-scope deps |
+| 2 | `RETRIEVING COMPONENTS` | `container.get(Class)` resolution |
+| 3 | `DEMONSTRATING REQUEST SCOPE` | `runInRequestScope` + nested `runInEventScope`; one REQUEST can wrap many EVENTs; each scope gets a fresh `RequestContext` / `EventContext` |
+| 4 | `DEMONSTRATING LIFECYCLE EVENTS` | `ApplicationStartedEvent` / `RequestStartedEvent` / `EventStartedEvent` (and the matching `Ending` counterparts) published automatically by the container |
+| 5 | `DEMONSTRATING PROVIDER<T>` | Lazy lookup, breaking circular deps, on-demand PROTOTYPE instances |
+| 6 | `DEMONSTRATING EVENT CHAINING` | `@EventTrigger`: return-as-payload, guards, `spread = true`, full origin chain via `Event<?>` wrapper (the trigger code itself lives in the `trigger/` subpackage; this section narrates the flow) |
+| 7 | `AUDIT LOG` | `EventBus` + `@EventHandler` cross-scope wiring of the AuditService |
+| 8 | `SCOPE SUMMARY` | Scope hierarchy + cross-scope injection rules cheat sheet |
+| 9 | `SHUTTING DOWN CONTAINER` | `@PreDestroy` fires in **reverse-dep LIFO** order (issue #151); `MessageService` destroyed before `MessageRepository` |
+
+## Component map (the runtime-demo side)
+
+The classes `Main` directly exercises:
+
 ```
-io.tiko.generated.RequestContextProxy
-io.tiko.generated.EventContextProxy
+MessageRepository (SINGLETON, @PostConstruct + @PreDestroy)
+  └ no deps
+
+MessageService (SINGLETON, @PostConstruct + @PreDestroy)
+  └ depends on MessageRepository
+
+AuditService (SINGLETON, @PostConstruct, @EventHandler)
+  ├ depends on RequestContext (REQUEST → auto-proxied, interface required)
+  └ depends on EventContext  (EVENT   → auto-proxied, interface required)
+
+RequestContextImpl (REQUEST)   implements RequestContext
+EventContextImpl   (EVENT)     implements EventContext
+
+MessageCreatedEvent (record) — payload published by MessageService and observed by AuditService
 ```
 
-### Container and Event Registry (Aggregating)
-```
-io.tiko.generated.TikoContainerImpl
-io.tiko.generated.EventRegistry
-```
+A handful of other root-package classes (`Polyglot`, `PickerConsumer`, `Greeter` / `EnglishGreeter` / `SpanishGreeter`, `Speaker` / `DefaultSpeaker`, `Cache` / `CacheFactories`, `Timestamp` / `TimestampFactory`, `AsyncPing` / `AsyncRecorder` / `AsyncThrower`, `Ping`, `Ticket` / `TicketBooth`, `LifecycleRecorder`, `ShutdownTestCounter`, `ThrowingHandler`) exist as test fixtures for the unit-test layer — they verify `@Named` / `@Pick` qualifier resolution, `@Produces` factory methods, async handler dispatch, and error-routing edges. None of them is required for `Main` to run.
 
-## Running the Example
+## Subpackage tour (the test-fixture side)
 
-**Current state:** The example code is ready but won't compile until the annotation processor is implemented.
+The three subpackages house JUnit 5 fixtures that pin contracts the runtime demo doesn't visualise:
 
-**After processor implementation:**
+- **`expose/`** — `@Component(expose = {...})` interface routing. Verifies the
+  permissive default (every implemented interface is routable), the `expose = {...}`
+  whitelist mode, and that multi-interface beans resolve to the same scope-cached
+  instance regardless of which interface the caller asks for.
 
-```bash
-# Build the project
-mvn clean compile
+- **`teardown/`** — Lifecycle teardown contract. `LifoSingletonA`/`B`/`C`,
+  `LifoRequestA`/`B`/`C`, `LifoEventA`/`B`/`C`, and `LifoFactoryChain*` pin LIFO
+  destruction across SINGLETON `@Component` beans, REQUEST/EVENT scopes, and
+  `@Produces` factory-produced AutoCloseables (issues #151, #189). `AutoCloseable*Holder`,
+  `FakePool*`, `ExplicitWinsBean`, and `ThrowingPreDestroy*` cover implicit
+  `close()`, factory cleanup, explicit-over-implicit precedence, and error routing
+  through `DefaultErrorHandler`.
 
-# Run the example
-mvn exec:java -pl tiko-examples \
-  -Dexec.mainClass="io.tiko.examples.basic.Main"
-```
+- **`trigger/`** — `@EventTrigger` declarative event chains. `OrderTriggerService`
+  exercises return-as-payload (`OrderCreatedEvent → OrderValidatedEvent →
+  OrderProcessedEvent`), guard predicates (`AmountGuard` on `GuardTestEvent`),
+  `spread = true` over `List` payloads (`BatchReceivedEvent → BatchItemEvent`),
+  multi-trigger fan-out, and async dispatch. Test classes assert on the
+  `Event<?>` wrapper's origin chain.
 
-## Expected Output
+## Expected output
 
 ```
 ======================================================================
@@ -111,15 +88,15 @@ Tiko DI - Basic Example
 
 1. INITIALIZING CONTAINER
 ----------------------------------------------------------------------
+[AuditService] Constructor called
+[AuditService] RequestContext type: io.tiko.generated.RequestContextImplProxy
+[AuditService] EventContext type: io.tiko.generated.EventContextImplProxy
+[AuditService] @PostConstruct - Audit service ready
 [MessageRepository] Constructor called
 [MessageRepository] @PostConstruct - Initializing repository
-[MessageService] Constructor called with repository: MessageRepository@...
+[MessageService] Constructor called with repository: io.tiko.examples.basic.MessageRepository@...
 [MessageService] @PostConstruct - Service initialized
 [MessageService] Repository has 2 messages
-[AuditService] Constructor called
-[AuditService] RequestContext type: io.tiko.generated.RequestContextProxy
-[AuditService] EventContext type: io.tiko.generated.EventContextProxy
-[AuditService] @PostConstruct - Audit service ready
 
 2. RETRIEVING COMPONENTS
 ----------------------------------------------------------------------
@@ -128,29 +105,71 @@ Tiko DI - Basic Example
 ----------------------------------------------------------------------
 
 >>> Request 1: Creating multiple messages
-[RequestContext] Created for request: REQ-abc12345
-[EventContext] Created for event: EVT-xyz67890
 [MessageRepository] Saved message 3: [1] First message
-[AUDIT] Request=REQ-abc12345, Event=EVT-xyz67890, User=user-123 created message 3: First message
-[EventContext] Created for event: EVT-def11111
+[RequestContext] Created for request: REQ-...
+[EventContext] Created for event: EVT-...
+[AUDIT] Request=REQ-..., Event=EVT-..., User=user-123 created message 3: First message
 [MessageRepository] Saved message 4: [2] Second message
-[AUDIT] Request=REQ-abc12345, Event=EVT-def11111, User=user-123 created message 4: Second message
+[EventContext] Created for event: EVT-...
+[AUDIT] Request=REQ-..., Event=EVT-..., User=user-123 created message 4: Second message
 Request 1 complete - processed 2 messages
 
 >>> Request 2: Creating another message
-[RequestContext] Created for request: REQ-ghi22222
-[EventContext] Created for event: EVT-jkl33333
 [MessageRepository] Saved message 5: [3] Third message
-[AUDIT] Request=REQ-ghi22222, Event=EVT-jkl33333, User=user-456 created message 5: Third message
+[RequestContext] Created for request: REQ-...
+[EventContext] Created for event: EVT-...
+[AUDIT] Request=REQ-..., Event=EVT-..., User=user-456 created message 5: Third message
 Request 2 complete - total messages: 3
 
-4. AUDIT LOG
+4. DEMONSTRATING LIFECYCLE EVENTS
 ----------------------------------------------------------------------
-[AUDIT] Request=REQ-abc12345, Event=EVT-xyz67890, User=user-123 created message 3: First message
-[AUDIT] Request=REQ-abc12345, Event=EVT-def11111, User=user-123 created message 4: Second message
-[AUDIT] Request=REQ-ghi22222, Event=EVT-jkl33333, User=user-456 created message 5: Third message
+Lifecycle events are automatically published by the container:
+  - ApplicationStartedEvent (on container start)
+  - RequestStartedEvent/RequestEndingEvent (on request scope)
+  - EventStartedEvent/EventEndingEvent (on event scope)
+  - ApplicationEndingEvent (on container shutdown)
 
-5. SHUTTING DOWN CONTAINER
+These enable metrics, logging, and tracing without cluttering business logic.
+
+5. DEMONSTRATING PROVIDER<T> (Lazy Injection)
+----------------------------------------------------------------------
+Provider<T> enables:
+  - Lazy initialization of expensive dependencies
+  - Breaking circular dependencies
+  - Getting new PROTOTYPE instances on demand
+
+6. DEMONSTRATING EVENT CHAINING
+----------------------------------------------------------------------
+@EventTrigger enables declarative event workflows:
+
+>>> Publishing OrderCreatedEvent...
+    Event chaining flow:
+    1. OrderCreatedEvent published
+    2. Handler validates -> returns ValidationResult
+    3. ValidationResult triggers next handler
+    4. Handler processes payment -> returns PaymentProcessedEvent
+    5. Origin chain: [OrderCreatedEvent, ValidationResult, PaymentProcessedEvent]
+
+7. AUDIT LOG
+----------------------------------------------------------------------
+[AUDIT] Request=REQ-..., Event=EVT-..., User=user-123 created message 3: First message
+[AUDIT] Request=REQ-..., Event=EVT-..., User=user-123 created message 4: Second message
+[AUDIT] Request=REQ-..., Event=EVT-..., User=user-456 created message 5: Third message
+
+8. SCOPE SUMMARY
+----------------------------------------------------------------------
+Scope hierarchy (longest to shortest lifetime):
+  SINGLETON - Application lifetime (e.g., services, repositories)
+  REQUEST   - Transaction/batch scope (e.g., DB transaction, HTTP request)
+  EVENT     - Single event processing (e.g., one message, one event handler)
+  PROTOTYPE - Per injection (e.g., DTOs, temporary objects)
+
+Cross-scope injection:
+  SINGLETON -> REQUEST/EVENT = Automatic proxy (requires interface)
+  REQUEST -> EVENT = Automatic proxy (requires interface)
+  Any scope -> PROTOTYPE = New instance each time
+
+9. SHUTTING DOWN CONTAINER
 ----------------------------------------------------------------------
 [MessageService] @PreDestroy - Service shutting down
 [MessageService] Processed 3 messages
@@ -161,51 +180,21 @@ Example completed successfully
 ======================================================================
 ```
 
-## Key Observations
+`REQ-...` / `EVT-...` IDs are random per run; everything else is stable. Construction
+order under "INITIALIZING CONTAINER" follows hash-bucket iteration over the SINGLETON
+set, which is why `AuditService` appears before `MessageRepository` despite the latter
+being the deeper dep — `Main` only triggers eager construction, not a dep-graph walk.
+Teardown under section 9 IS dep-graph-ordered (LIFO) per the contract in #151.
 
-1. **Initialization Order**: Components initialized in dependency order
-   - `MessageRepository` first (no dependencies)
-   - `MessageService` second (depends on repository)
-   - `AuditService` last (depends on contexts via proxies)
+## Key behaviour the output shows
 
-2. **Proxy Injection**: Notice the proxy class names in AuditService constructor
-   - `RequestContextProxy` instead of `RequestContextImpl`
-   - `EventContextProxy` instead of `EventContextImpl`
-
-3. **Scope Behavior**:
-   - One REQUEST can contain multiple EVENTs (Request 1 processes 2 events)
-   - Each request gets a new `RequestContext` instance
-   - Each event gets a new `EventContext` instance
-   - SINGLETON components reused throughout
-
-4. **Lifecycle Order**: `@PreDestroy` called in reverse dependency order
-   - `MessageService` destroyed before `MessageRepository`
-
-## Design Validation
-
-This example validates several annotation processor requirements:
-
-- ✅ Dependency graph resolution
-- ✅ Circular dependency detection (none present)
-- ✅ Scope violation detection (REQUEST/EVENT injected into SINGLETON)
-- ✅ Interface requirement for proxies (RequestContext, EventContext)
-- ✅ Factory code generation pattern
-- ✅ Event handler registration
-- ✅ Lifecycle method ordering
-
-## Next Steps for Processor Implementation
-
-Use this example for test-driven development:
-
-1. **Scanning Phase**: Find all `@Component` annotated classes
-2. **Validation Phase**:
-   - Build dependency graph
-   - Check for cycles
-   - Validate scope rules
-   - Verify interfaces for proxies
-3. **Generation Phase**:
-   - Generate factory classes
-   - Generate proxy classes
-   - Generate container implementation
-   - Generate event registry
-4. **Incremental Compilation**: Use `originatingElements` to track dependencies
+- **Cross-scope auto-proxy**. `AuditService` (SINGLETON) sees its `RequestContext` /
+  `EventContext` dependencies through proxy types
+  (`io.tiko.generated.RequestContextImplProxy` etc.) instead of the concrete impls. Each
+  call to a proxy method resolves to the current scope's instance.
+- **One request, many events**. Request 1 wraps two `runInEventScope` blocks — two
+  distinct `EventContext` instances under a single `RequestContext`. Request 2 starts a
+  fresh `RequestContext`.
+- **LIFO destroy order**. Section 9 destroys `MessageService` before
+  `MessageRepository` because Service depends on Repository — the LIFO contract the
+  framework documents.

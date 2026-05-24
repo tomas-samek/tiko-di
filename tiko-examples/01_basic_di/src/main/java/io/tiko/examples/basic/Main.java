@@ -40,9 +40,6 @@ public class Main {
         System.out.println("Tiko DI - Basic Example");
         System.out.println("=".repeat(70));
 
-        // NOTE: This code won't compile until the annotation processor is implemented
-        // The processor will generate io.tiko.generated.TikoContainerImpl
-
         System.out.println("\n1. INITIALIZING CONTAINER");
         System.out.println("-".repeat(70));
 
