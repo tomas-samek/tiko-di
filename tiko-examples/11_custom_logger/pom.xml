@@ -83,6 +83,27 @@
                     </execution>
                 </executions>
             </plugin>
+
+            <!--
+                exec:exec forks a real JVM so the example's classpath becomes the system
+                classpath. That's required for slf4j-jdk-platform-logging's System.LoggerFinder
+                SPI to be visible to ServiceLoader — exec:java would resolve the LoggerFinder
+                against Maven's own classloader and bind it to the JDK default (JUL) before
+                any user code runs.
+            -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
+                <configuration>
+                    <executable>java</executable>
+                    <arguments>
+                        <argument>-cp</argument>
+                        <classpath/>
+                        <argument>io.tiko.examples.logger.Main</argument>
+                    </arguments>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 </project>
