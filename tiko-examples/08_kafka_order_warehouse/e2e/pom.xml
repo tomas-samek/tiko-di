@@ -12,22 +12,6 @@
     <artifactId>kafka-e2e</artifactId>
     <name>08 / e2e</name>
 
-    <build>
-        <plugins>
-            <!-- TODO(#149): OrderToWarehouseE2EIT has a real-world failure (Awaitility timeout
-                 on the order→warehouse flow) that was hidden by the previous silent-skip bug.
-                 #193 wired failsafe globally and exposed it. Skip just this module's IT until
-                 #149 lands the actual test fix; once it passes, remove this override. -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-failsafe-plugin</artifactId>
-                <configuration>
-                    <skipITs>true</skipITs>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
-
     <dependencies>
         <dependency>
             <groupId>io.tiko.examples</groupId>
