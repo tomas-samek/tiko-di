@@ -24,7 +24,7 @@ mvn -pl tiko-examples/02_config exec:java \
 
 ## 03 — Events &nbsp;<sub>[`03_events/`](./03_events)</sub>
 
-Lifecycle observability via `ApplicationStarted/Ending` + `Request/EventStarted/Ending` events, plus declarative event chains with `@EventTrigger` (return-as-payload, guards, `spread = true`, `async = true`) and full origin tracking through the `Event<?>` wrapper.
+Lifecycle observability via `ApplicationStarted/Ending` + `Request/EventStarted/Ending` events, plus declarative event chains with `@EventTrigger` (return-as-payload, guards, `spread = true`) and full origin tracking through the `Event<?>` wrapper. `async = true` triggers are shown in example 07.
 
 ```
 mvn -pl tiko-examples/03_events exec:java \
