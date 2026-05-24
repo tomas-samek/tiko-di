@@ -30,6 +30,22 @@ Add a `logback.xml` on your classpath (this example's is in `src/main/resources/
 
 That's it. Every framework log goes through slf4j → logback.
 
+## How to run
+
+```
+mvn -pl tiko-examples/11_custom_logger exec:exec
+```
+
+This uses `exec:exec` (forks a JVM) rather than `exec:java` (in-process). The reason matters
+for this example: `java.lang.System.LoggerFinder` is resolved once per JVM via
+`ServiceLoader.load(System.LoggerFinder.class, getSystemClassLoader())`. Under `mvn exec:java`,
+the example's deps live on the exec plugin's child classloader, not the system classloader,
+so `slf4j-jdk-platform-logging`'s SPI is invisible and the JDK binds to its default JUL
+finder — every `System.Logger` call then formats with JUL's `WARNING:` prefix instead of
+logback's pattern. `exec:exec` forks a real JVM whose system classpath includes the SPI
+provider, so the bridge takes effect normally. The same caveat applies to any embedded host
+that pre-resolves `System.LoggerFinder` before user code loads.
+
 ## Expected output when you run `Main`
 
 ```

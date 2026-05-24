@@ -87,6 +87,12 @@ Persistence cookbook in code form. REQUEST-scoped JDBC transactions wrap both an
 
 Routes Tiko's internal logging through slf4j + logback by adding `slf4j-jdk-platform-logging` to the classpath. Zero Tiko-side configuration; the JDK's `System.Logger` SPI does the dispatch.
 
+```
+mvn -pl tiko-examples/11_custom_logger exec:exec
+```
+
+Note this example uses `exec:exec` (forks a JVM), not `exec:java`. `System.LoggerFinder` is resolved once per JVM via the system classloader's `ServiceLoader`; under `exec:java` the SPI provider lives on the exec plugin's child classloader and is invisible, so the JDK binds to its default JUL finder. See the example's own README for the full explanation.
+
 ## 12 — Testing &nbsp;<sub>[`12_testing/`](./12_testing)</sub>
 
 Runnable demo of the `tiko-test` JUnit 5 extension: `@TikoTest` boots a container around each test (`PER_METHOD` default, `PER_CLASS` opt-in), parameters are resolved via JUnit's `ParameterResolver` (no field injection), `RecordingEventBus` provides fluent publish-assertions including `awaitAsyncDispatch(Duration)` for `@EventHandler(async = true)`, and `@RequestScopeTest` / `@EventScopeTest` wrap the test body in container scopes. See the example's own README for the per-file feature map and the full guide at [docs/testing.md](../docs/testing.md).
