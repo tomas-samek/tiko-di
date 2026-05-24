@@ -29,7 +29,7 @@ import org.junit.jupiter.api.Test;
  * a cross-connection JDBC query that proves what was (or wasn't)
  * committed independent of any Tiko-side state.
  */
-class HttpEntryIntegrationTest {
+class HttpEntryIT {
 
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final String JDBC_URL = "jdbc:h2:mem:tiko;DB_CLOSE_DELAY=-1;MODE=PostgreSQL";
