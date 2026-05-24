@@ -19,7 +19,8 @@ Users today have to wire `ScheduledExecutorService`, manage cancellation/restart
 - Declarative, compile-time-validated periodic event emission attached to an existing `@EventHandler`.
 - Reuse `@EventTrigger`'s vocabulary (name, async, spread, guard) for what gets fired on each tick.
 - "Originating event resets the timer" semantics by default.
-- Cached payload semantics — last handler return value (or originating event for `void` handlers) is the tick payload.
+- Cached payload semantics — the handler's last return value is the tick payload; `void` handlers tick fresh no-arg instances of the trigger target.
+- Tick events keep the `Event<T>` origin chain back to the originating event, so `getOriginChain()` / `findInChain(...)` work on tick handlers.
 - Plays nicely with `TikoOptions` for executor configuration and clean shutdown.
 
 ## Non-goals (v1)
@@ -124,9 +125,15 @@ Any publish of the originating event type that invokes this handler — anywhere
 ### Payload on each tick
 
 - Handler returns a value → that value is cached and used as the payload for each tick's `@EventTrigger`.
-- Handler returns `void` → the originating event instance is used as the payload.
+- Handler returns `void` → each `trigger.eventName` must resolve to a no-arg-constructible type (no-component record, or class with a public no-arg constructor); each tick instantiates a fresh marker via that constructor. This is the natural model for heartbeats / pings where the tick carries no data.
 - Spread (`@EventTrigger(spread = true)`) applies as usual to the cached value.
 - Guards (`@EventTrigger(guard = …)`) are evaluated per-tick with `(payload, originatingEvent)`.
+
+### Origin chain
+
+Tick events chain back to the event that scheduled them. Mechanism: at handler completion the generated code captures both the return value (or absence thereof) **and** the current `Event<?>` wrapper (the one the event bus established for this handler invocation). The tick runnable publishes through `EventChainContext.publishWithOrigin(bus, payload, capturedWrapper)` — the same primitive `@EventTrigger(async = true)` already uses to thread origin across executor boundaries.
+
+Downstream handlers can call `event.findInChain(OriginatingEvent.class)` on a tick and find the event that started the heartbeat, just as they would for a sync `@EventTrigger` continuation.
 
 ### Shutdown
 
@@ -154,19 +161,25 @@ Ticks publish through the standard event bus, so any existing `eventExecutor` co
 
 For each handler carrying `@EventRepeater`, the processor adds — into the same generated class that already wires the `@EventHandler` and `@EventTrigger` calls (`EventRegistry_<hash>.java`):
 
-- A per-handler `ScheduledFuture<?>` field plus a payload-cache field.
+- A per-handler `ScheduledFuture<?>` field, a payload-cache field, and a captured-wrapper field (the `Event<?>` from the originating bus dispatch — needed for the origin-chain story above).
 - A wrapper around the handler's dispatch that:
   1. Invokes the handler as today.
-  2. On success, caches the return value (or the originating event for `void`).
+  2. On success, caches the return value (or marks the payload-cache as void) **and** captures the current `Event<?>` wrapper via the existing `EventChainContext` accessor.
   3. Cancels any prior `ScheduledFuture` for this handler.
   4. Schedules a new `tickHandler_<n>()` runnable at fixed delay using `TikoOptions.scheduledExecutor`.
-- A `tickHandler_<n>()` runnable that re-runs each declared `@EventTrigger` (guard + spread + async/sync) against the cached payload.
-- Shutdown wiring: `cancel(false)` on each future from the container's existing `@PreDestroy` /`ApplicationEndingEvent` path.
+- A `tickHandler_<n>()` runnable that, for each declared `@EventTrigger`:
+  - For non-void handlers: publishes the cached payload via `EventChainContext.publishWithOrigin(...)` (or `publishSpreadWithOrigin` / `publishAsync` per `spread` / `async` flags).
+  - For void handlers: instantiates a fresh `new TriggerEventClass()` per tick and publishes via the same origin-aware primitive.
+  - Evaluates guards per-tick before publishing.
+- Shutdown wiring: `cancel(false)` on each future from the container's existing `@PreDestroy` / `ApplicationEndingEvent` path.
 
 ### Concurrency
 
-- Each handler has its own future. A handler that fires while a tick is running: the tick's publish path is independent; the future-replace happens after handler return. No locking required beyond what the bus already provides.
-- The payload cache is a single field written by the dispatch thread; readers (tick runnable) see a happens-before via the `ScheduledExecutorService`'s task submission. Mark the field `volatile`.
+The cancel-old-future + replace + schedule-new sequence races when the same handler runs on two threads concurrently (the bus delivers two originating events in close succession). Naïve "no locking" can leave both futures alive or schedule out of order.
+
+v1 implementation must address this — likely `AtomicReference<ScheduledFuture<?>>` with a CAS replace, or a per-handler `ReentrantLock` around the replace-and-schedule region. The payload-cache and captured-wrapper fields should be `volatile` (or sit behind the same lock) so the tick thread sees a consistent snapshot.
+
+Deferring the final design to implementation: #120 (shared MQ events) will surface broader cross-instance coordination needs and may inform the right primitive to share between bus dispatch and repeater scheduling.
 
 ### Multi-module / `AggregatingContainer`
 
@@ -177,11 +190,12 @@ Repeaters live in the module that declares the handler. Shutdown ordering follow
 The processor emits a clear error if any of the following fail:
 
 - `every()` does not parse as a `Duration`, or parses to `<= 0`.
-- `initialDelay()` is non-empty but does not parse, or parses to `< 0`.
+- `initialDelay()` does not parse, or parses to `< 0`.
 - The annotated method is not also `@EventHandler`.
 - The annotated method's enclosing component is not `Scope.SINGLETON`.
 - Any `trigger[].eventName` does not resolve (existing `@EventTrigger` validation).
 - Any `trigger[].guard` class is unknown or does not implement `EventTriggerGuard`.
+- The handler returns `void` **and** any `trigger[].eventName` resolves to a type without a no-arg constructor (i.e. a record with components, or a class with no public no-arg ctor). Error message points users at three fixes: return the desired payload from the handler, switch the tick event to a no-component record, or add a no-arg constructor.
 
 Error format follows the standard from CLAUDE.md (location, what's wrong, at least one suggested fix).
 
@@ -193,10 +207,12 @@ Error format follows the standard from CLAUDE.md (location, what's wrong, at lea
 - **Runtime tests** (in `tiko-runtime`):
   - Tick fires after `initialDelay`, then on period — verified with Awaitility.
   - Originating event resets the timer (tick suppressed when handler re-fires within period).
-  - Cached payload is used for non-void handlers; originating event for void.
+  - Cached payload is used for non-void handlers; fresh no-arg marker instance for void handlers.
   - Spread, async, and guard semantics from `@EventTrigger` carry through unchanged on each tick.
+  - Tick events chain origin to the originating event: a downstream handler can `event.findInChain(OriginatingEvent.class)` and find it.
   - `ApplicationEndingEvent` cancels all active repeaters; no ticks after container shutdown.
   - `TikoOptions.scheduledExecutor` override is honored (use a fake one and assert ticks scheduled on it).
+  - Concurrent originating-event dispatches don't leave duplicate futures alive (whichever concurrency primitive the implementation picks).
 - **Example module:**
   - `tiko-examples/14_event_repeater/` — health-check pattern, narrates the cancel-on-fresh-event behavior in `Main`'s output. Wires `@EventRepeater` into a tiny realistic scenario rather than a toy demo.
 
@@ -219,6 +235,8 @@ Modified:
 - A SINGLETON handler annotated with `@EventRepeater(every = "30s", trigger = @EventTrigger(eventName = "Tick"))` produces a `Tick` event immediately after handler completion (per default `initialDelay = "0s"`), then every 30s thereafter, with the cached payload.
 - An explicit `initialDelay = "30s"` defers the first tick by one full period.
 - Re-firing the originating event before the next tick elapses suppresses the pending tick and starts a fresh clock from the new handler completion.
-- Compile-time errors for: unparseable `every`, missing `@EventHandler`, non-SINGLETON scope, unknown `trigger.eventName`, unknown `trigger.guard`.
+- Compile-time errors for: unparseable `every`, missing `@EventHandler`, non-SINGLETON scope, unknown `trigger.eventName`, unknown `trigger.guard`, `void` handler with a trigger target lacking a no-arg constructor.
+- A `void` handler ticks fresh no-arg instances of each `trigger.eventName` target.
+- Tick events report the originating event via `Event<T>.findInChain(...)` — origin chain is preserved across the scheduling boundary.
 - Container shutdown cancels all active timers; no ticks fire after `ApplicationEndingEvent`.
 - Example module demonstrates the pattern end-to-end with narrated `Main` output.
