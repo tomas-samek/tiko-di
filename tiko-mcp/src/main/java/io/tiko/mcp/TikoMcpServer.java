@@ -17,8 +17,8 @@ import java.nio.file.Paths;
 /**
  * Entrypoint for the {@code tiko-mcp} runnable jar. Reads {@code args[0]} as the
  * project root, walks the multi-module classpath layout for
- * {@code META-INF/tiko/topology.json} and {@code config-schema.json}, then serves
- * the four read-only MCP tools over stdio.
+ * {@code META-INF/tiko/topology.json}, {@code config-schema.json}, and
+ * {@code wiring-errors.json}, then serves all registered read-only MCP tools over stdio.
  *
  * <p>Stdout is reserved for JSON-RPC framing — all logging goes to stderr via
  * {@link java.lang.System.Logger}.
