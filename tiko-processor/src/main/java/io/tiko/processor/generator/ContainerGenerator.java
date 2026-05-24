@@ -1238,14 +1238,14 @@ public final class ContainerGenerator {
         method.addStatement("inShutdownThread.set($T.TRUE)", Boolean.class);
         method.beginControlFlow("try");
 
-        // Snapshot SINGLETON components with destroy hooks in registration order, then walk in reverse.
-        // start() initialises eagerly in registration order, so reverse iteration approximates LIFO.
-        List<ComponentModel> singletonHooks = new ArrayList<>();
-        for (ComponentModel component : activeComponents()) {
-            if (component.getScope() == Scope.SINGLETON && component.hasDestroyHook() && !component.requiresProxy()) {
-                singletonHooks.add(component);
-            }
-        }
+        // Topologically sort SINGLETON components by constructor-dep edges so deps come BEFORE
+        // dependents. Reverse iteration below then destroys dependents first — true LIFO of the
+        // dep graph (#151). ProcessorContext.components is a HashMap, so its iteration order
+        // does not correspond to dep order; relying on it gave Repo-before-Service teardown
+        // when the README contract is the opposite.
+        List<ComponentModel> singletonHooks = topoSortByDeps(activeComponents()).stream()
+                .filter(c -> c.getScope() == Scope.SINGLETON && c.hasDestroyHook() && !c.requiresProxy())
+                .toList();
 
         for (int i = singletonHooks.size() - 1; i >= 0; i--) {
             ComponentModel component = singletonHooks.get(i);
@@ -1787,6 +1787,39 @@ public final class ContainerGenerator {
      * to map types to per-module containers. The two files live in {@code target/classes}
      * and {@code target/test-classes} respectively, so they never collide.
      */
+    /**
+     * Topologically sorts {@code components} by SINGLETON→SINGLETON constructor-dep edges so
+     * deps appear BEFORE the components that depend on them. Used by the shutdown sequence:
+     * reverse-iteration over this list destroys dependents first, matching the documented
+     * LIFO {@code @PreDestroy} contract (#151).
+     *
+     * <p>Only SINGLETON deps drive ordering — REQUEST/EVENT deps are injected via proxies and
+     * impose no construction-order constraint on the owning singleton. Factory-produced
+     * (@Produces) deps are also skipped here; they have a separate shutdown section with its
+     * own ordering. Cycles cannot occur (caught at compile-time by CircularDependencyDetector);
+     * the {@code visited} guard is defensive.
+     */
+    private List<ComponentModel> topoSortByDeps(List<ComponentModel> components) {
+        var sorted = new ArrayList<ComponentModel>(components.size());
+        var visited = new HashSet<String>();
+        for (ComponentModel c : components) {
+            visit(c, visited, sorted);
+        }
+        return sorted;
+    }
+
+    private void visit(ComponentModel component, Set<String> visited, List<ComponentModel> sorted) {
+        if (!visited.add(component.getComponentKey())) return;
+        for (DependencyModel dep : component.getDependencies()) {
+            String depKey = dep.getDependencyKey();
+            var resolved = context.findComponentOrFactory(depKey).orElse(null);
+            if (resolved instanceof ComponentModel depComponent && depComponent.getScope() == Scope.SINGLETON) {
+                visit(depComponent, visited, sorted);
+            }
+        }
+        sorted.add(component);
+    }
+
     private void generateComponentsListFile(List<ComponentModel> components) throws IOException {
         try (var writer = context.getFiler()
                 .createResource(javax.tools.StandardLocation.CLASS_OUTPUT, "", "META-INF/tiko/components.txt")
