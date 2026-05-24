@@ -31,7 +31,7 @@ public final class FindDependentsTool {
     }
 
     public Map<String, Object> execute(Map<String, Object> args) {
-        var target = required(args, "componentFqn");
+        var target = ToolArgs.required(args, "componentFqn");
         var transitive = Boolean.TRUE.equals(args.get("transitive"));
 
         if (!isKnown(target)) {
@@ -56,7 +56,7 @@ public final class FindDependentsTool {
     }
 
     private List<String> candidateMatches(String fqn) {
-        var simple = simpleName(fqn);
+        var simple = ToolArgs.simpleName(fqn);
         var result = new ArrayList<String>();
         for (var c : store.components()) {
             var n = (String) c.get("qualifiedName");
@@ -111,18 +111,5 @@ public final class FindDependentsTool {
             }
         }
         return result;
-    }
-
-    private static String simpleName(String fqn) {
-        var dot = fqn.lastIndexOf('.');
-        return dot < 0 ? fqn : fqn.substring(dot + 1);
-    }
-
-    private static String required(Map<String, Object> args, String key) {
-        var v = args.get(key);
-        if (v == null || v.toString().isEmpty()) {
-            throw new IllegalArgumentException("Missing required argument: " + key);
-        }
-        return v.toString();
     }
 }

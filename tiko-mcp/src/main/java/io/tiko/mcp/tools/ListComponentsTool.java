@@ -21,9 +21,9 @@ public final class ListComponentsTool {
     }
 
     public Map<String, Object> execute(Map<String, Object> args) {
-        var scope = strOrNull(args.get("scope"));
-        var iface = strOrNull(args.get("interface"));
-        var profile = strOrNull(args.get("profile"));
+        var scope = ToolArgs.strOrNull(args.get("scope"));
+        var iface = ToolArgs.strOrNull(args.get("interface"));
+        var profile = ToolArgs.strOrNull(args.get("profile"));
 
         var components = new ArrayList<Map<String, Object>>();
         for (var c : store.components()) {
@@ -59,11 +59,5 @@ public final class ListComponentsTool {
         var v = component.get("interfaces");
         if (!(v instanceof List)) return false;
         return ((List<Object>) v).stream().anyMatch(fqn::equals);
-    }
-
-    private static String strOrNull(Object v) {
-        if (v == null) return null;
-        var s = v.toString();
-        return s.isEmpty() ? null : s;
     }
 }
