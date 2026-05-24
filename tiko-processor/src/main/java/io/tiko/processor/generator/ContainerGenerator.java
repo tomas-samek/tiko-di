@@ -1238,88 +1238,28 @@ public final class ContainerGenerator {
         method.addStatement("inShutdownThread.set($T.TRUE)", Boolean.class);
         method.beginControlFlow("try");
 
-        // Topologically sort SINGLETON components by constructor-dep edges so deps come BEFORE
-        // dependents. Reverse iteration below then destroys dependents first — true LIFO of the
-        // dep graph (#151). ProcessorContext.components is a HashMap, so its iteration order
-        // does not correspond to dep order; relying on it gave Repo-before-Service teardown
-        // when the README contract is the opposite.
-        List<ComponentModel> singletonHooks = topoSortByDeps(activeComponents()).stream()
-                .filter(c -> c.getScope() == Scope.SINGLETON && c.hasDestroyHook() && !c.requiresProxy())
-                .toList();
+        // Unified topo-sort across SINGLETON @Component beans AND SINGLETON @Produces factory
+        // beans, ordered so deps come BEFORE dependents. Reverse iteration then destroys
+        // dependents first — true LIFO of the dep graph (#151, #189). Crossing kinds matters:
+        // a Component injecting a factory-produced bean, OR a factory whose method takes a
+        // Component, both must honour LIFO. Two separate snapshot+emit loops can't express
+        // the interleaving required for the latter direction.
+        List<ShutdownTarget> shutdownTargets = topoSortShutdownTargets();
 
-        for (int i = singletonHooks.size() - 1; i >= 0; i--) {
-            ComponentModel component = singletonHooks.get(i);
-            String componentKey = component.getComponentKey();
-            TypeName componentType = ClassName.get(component.getTypeElement());
-            String variableName = Character.toLowerCase(component.getClassName().charAt(0))
-                    + component.getClassName().substring(1);
-
-            method.addStatement(
-                    "$T $L = ($T) singletons.get($S)", componentType, variableName, componentType, componentKey);
-
-            method.beginControlFlow("if ($L != null)", variableName);
-            method.beginControlFlow("try");
-            boolean isAutoCloseOnly = component.isAutoCloseable()
-                    && component.getPreDestroyMethods().isEmpty();
-            if (isAutoCloseOnly) {
-                method.addStatement("$L.close()", variableName);
-            } else {
-                for (var preDestroy : component.getPreDestroyMethods()) {
-                    method.addStatement("$L.$L()", variableName, preDestroy.getSimpleName());
+        for (int i = shutdownTargets.size() - 1; i >= 0; i--) {
+            ShutdownTarget target = shutdownTargets.get(i);
+            switch (target) {
+                case ShutdownTarget.Component(var component) -> {
+                    if (component.hasDestroyHook()) {
+                        emitComponentDestroy(method, component, loggerLevel);
+                    }
+                }
+                case ShutdownTarget.Factory(var factory) -> {
+                    if (factory.isAutoCloseable()) {
+                        emitFactoryDestroy(method, factory, loggerLevel);
+                    }
                 }
             }
-            method.nextControlFlow("catch ($T __t)", Throwable.class);
-            String hookLabel = isAutoCloseOnly ? "AutoCloseable.close()" : "@PreDestroy";
-            method.addStatement(
-                    "$T.getLogger($S).log($T.WARNING, $S, __t)",
-                    ClassName.get("java.lang", "System"),
-                    "io.tiko.events",
-                    loggerLevel,
-                    hookLabel + " threw on " + component.getClassName());
-            ClassName failureType = isAutoCloseOnly
-                    ? ClassName.get("io.tiko", "AutoCloseFailure")
-                    : ClassName.get("io.tiko", "PreDestroyFailure");
-            method.addStatement("errorHandler.onError(new $T($T.class, __t))", failureType, componentType);
-            method.endControlFlow(); // try/catch
-            method.endControlFlow(); // if non-null
-        }
-
-        // Factory-produced SINGLETON beans whose return type implements AutoCloseable.
-        // Covers @Produces returning third-party closeables (data sources, HTTP clients,
-        // Kafka producers) without forcing the user to write a wrapper @Component.
-        List<FactoryMethodModel> singletonFactoryHooks = new ArrayList<>();
-        for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
-            if (factory.getScope() == Scope.SINGLETON && factory.isAutoCloseable()) {
-                singletonFactoryHooks.add(factory);
-            }
-        }
-        for (int i = singletonFactoryHooks.size() - 1; i >= 0; i--) {
-            FactoryMethodModel factory = singletonFactoryHooks.get(i);
-            String factoryKey = factory.getComponentKey();
-            String variableName = "__factory_" + factory.getFactoryIdentifier();
-
-            method.addStatement(
-                    "$T $L = ($T) singletons.get($S)",
-                    ClassName.get(AutoCloseable.class),
-                    variableName,
-                    ClassName.get(AutoCloseable.class),
-                    factoryKey);
-            method.beginControlFlow("if ($L != null)", variableName);
-            method.beginControlFlow("try");
-            method.addStatement("$L.close()", variableName);
-            method.nextControlFlow("catch ($T __t)", Throwable.class);
-            method.addStatement(
-                    "$T.getLogger($S).log($T.WARNING, $S, __t)",
-                    ClassName.get("java.lang", "System"),
-                    "io.tiko.events",
-                    loggerLevel,
-                    "AutoCloseable.close() threw on " + factory.getFactoryIdentifier());
-            method.addStatement(
-                    "errorHandler.onError(new $T($L.getClass(), __t))",
-                    ClassName.get("io.tiko", "AutoCloseFailure"),
-                    variableName);
-            method.endControlFlow(); // try/catch
-            method.endControlFlow(); // if non-null
         }
 
         method.nextControlFlow("finally");
@@ -1788,36 +1728,162 @@ public final class ContainerGenerator {
      * and {@code target/test-classes} respectively, so they never collide.
      */
     /**
-     * Topologically sorts {@code components} by SINGLETON→SINGLETON constructor-dep edges so
-     * deps appear BEFORE the components that depend on them. Used by the shutdown sequence:
-     * reverse-iteration over this list destroys dependents first, matching the documented
-     * LIFO {@code @PreDestroy} contract (#151).
-     *
-     * <p>Only SINGLETON deps drive ordering — REQUEST/EVENT deps are injected via proxies and
-     * impose no construction-order constraint on the owning singleton. Factory-produced
-     * (@Produces) deps are also skipped here; they have a separate shutdown section with its
-     * own ordering. Cycles cannot occur (caught at compile-time by CircularDependencyDetector);
-     * the {@code visited} guard is defensive.
+     * Heterogeneous shutdown node: wraps either a {@code @Component} or a {@code @Produces}
+     * factory so the topo-sort and emission loop can treat both kinds uniformly. Required
+     * because the two destroy paths (component {@code @PreDestroy} vs. factory {@code close()})
+     * must interleave in a single LIFO order to honour cross-kind dep chains (#189).
      */
-    private List<ComponentModel> topoSortByDeps(List<ComponentModel> components) {
-        var sorted = new ArrayList<ComponentModel>(components.size());
+    private sealed interface ShutdownTarget {
+        String key();
+
+        List<DependencyModel> dependencies();
+
+        record Component(ComponentModel model) implements ShutdownTarget {
+            @Override
+            public String key() {
+                return model.getComponentKey();
+            }
+
+            @Override
+            public List<DependencyModel> dependencies() {
+                return model.getDependencies();
+            }
+        }
+
+        record Factory(FactoryMethodModel model) implements ShutdownTarget {
+            @Override
+            public String key() {
+                return model.getComponentKey();
+            }
+
+            @Override
+            public List<DependencyModel> dependencies() {
+                return model.getDependencies();
+            }
+        }
+    }
+
+    /**
+     * Topologically sorts all SINGLETON shutdown targets — {@code @Component} beans and
+     * {@code @Produces} factory beans — by their constructor / method-parameter dep edges so
+     * deps appear BEFORE the targets that depend on them. Reverse iteration in
+     * {@link #createShutdownMethod} then destroys dependents first, matching the documented
+     * LIFO destruction contract (#151, #189).
+     *
+     * <p>Edges followed: SINGLETON→SINGLETON, across both Component and Factory providers.
+     * REQUEST/EVENT deps inject via proxies and impose no construction-order constraint.
+     * Cycles cannot occur (caught at compile-time by CircularDependencyDetector); the
+     * {@code visited} guard is defensive.
+     */
+    private List<ShutdownTarget> topoSortShutdownTargets() {
+        var seeds = new ArrayList<ShutdownTarget>();
+        for (ComponentModel c : activeComponents()) {
+            if (c.getScope() == Scope.SINGLETON && !c.requiresProxy()) {
+                seeds.add(new ShutdownTarget.Component(c));
+            }
+        }
+        for (FactoryMethodModel f : context.getActiveFactoryMethods()) {
+            if (f.getScope() == Scope.SINGLETON) {
+                seeds.add(new ShutdownTarget.Factory(f));
+            }
+        }
+
+        var sorted = new ArrayList<ShutdownTarget>();
         var visited = new HashSet<String>();
-        for (ComponentModel c : components) {
-            visit(c, visited, sorted);
+        for (var seed : seeds) {
+            visitShutdownTarget(seed, visited, sorted);
         }
         return sorted;
     }
 
-    private void visit(ComponentModel component, Set<String> visited, List<ComponentModel> sorted) {
-        if (!visited.add(component.getComponentKey())) return;
-        for (DependencyModel dep : component.getDependencies()) {
+    private void visitShutdownTarget(ShutdownTarget target, Set<String> visited, List<ShutdownTarget> sorted) {
+        if (!visited.add(target.key())) return;
+        for (DependencyModel dep : target.dependencies()) {
             String depKey = dep.getDependencyKey();
             var resolved = context.findComponentOrFactory(depKey).orElse(null);
-            if (resolved instanceof ComponentModel depComponent && depComponent.getScope() == Scope.SINGLETON) {
-                visit(depComponent, visited, sorted);
+            ShutdownTarget child = null;
+            if (resolved instanceof ComponentModel c && c.getScope() == Scope.SINGLETON && !c.requiresProxy()) {
+                child = new ShutdownTarget.Component(c);
+            } else if (resolved instanceof FactoryMethodModel f && f.getScope() == Scope.SINGLETON) {
+                child = new ShutdownTarget.Factory(f);
+            }
+            if (child != null) visitShutdownTarget(child, visited, sorted);
+        }
+        sorted.add(target);
+    }
+
+    /**
+     * Emits the {@code @PreDestroy} (or implicit {@code AutoCloseable.close()}) invocation for
+     * one SINGLETON {@code @Component}, including the null guard, try/catch, log + ErrorHandler
+     * routing. Called from {@link #createShutdownMethod}'s unified LIFO loop.
+     */
+    private void emitComponentDestroy(MethodSpec.Builder method, ComponentModel component, ClassName loggerLevel) {
+        String componentKey = component.getComponentKey();
+        TypeName componentType = ClassName.get(component.getTypeElement());
+        String variableName = Character.toLowerCase(component.getClassName().charAt(0))
+                + component.getClassName().substring(1);
+
+        method.addStatement(
+                "$T $L = ($T) singletons.get($S)", componentType, variableName, componentType, componentKey);
+
+        method.beginControlFlow("if ($L != null)", variableName);
+        method.beginControlFlow("try");
+        boolean isAutoCloseOnly =
+                component.isAutoCloseable() && component.getPreDestroyMethods().isEmpty();
+        if (isAutoCloseOnly) {
+            method.addStatement("$L.close()", variableName);
+        } else {
+            for (var preDestroy : component.getPreDestroyMethods()) {
+                method.addStatement("$L.$L()", variableName, preDestroy.getSimpleName());
             }
         }
-        sorted.add(component);
+        method.nextControlFlow("catch ($T __t)", Throwable.class);
+        String hookLabel = isAutoCloseOnly ? "AutoCloseable.close()" : "@PreDestroy";
+        method.addStatement(
+                "$T.getLogger($S).log($T.WARNING, $S, __t)",
+                ClassName.get("java.lang", "System"),
+                "io.tiko.events",
+                loggerLevel,
+                hookLabel + " threw on " + component.getClassName());
+        ClassName failureType = isAutoCloseOnly
+                ? ClassName.get("io.tiko", "AutoCloseFailure")
+                : ClassName.get("io.tiko", "PreDestroyFailure");
+        method.addStatement("errorHandler.onError(new $T($T.class, __t))", failureType, componentType);
+        method.endControlFlow(); // try/catch
+        method.endControlFlow(); // if non-null
+    }
+
+    /**
+     * Emits {@code close()} for one factory-produced SINGLETON {@code AutoCloseable}, including
+     * the null guard, try/catch, log + ErrorHandler routing. Covers third-party closeables
+     * (data sources, HTTP clients, Kafka producers) returned by {@code @Produces} methods.
+     */
+    private void emitFactoryDestroy(MethodSpec.Builder method, FactoryMethodModel factory, ClassName loggerLevel) {
+        String factoryKey = factory.getComponentKey();
+        String variableName = "__factory_" + factory.getFactoryIdentifier();
+
+        method.addStatement(
+                "$T $L = ($T) singletons.get($S)",
+                ClassName.get(AutoCloseable.class),
+                variableName,
+                ClassName.get(AutoCloseable.class),
+                factoryKey);
+        method.beginControlFlow("if ($L != null)", variableName);
+        method.beginControlFlow("try");
+        method.addStatement("$L.close()", variableName);
+        method.nextControlFlow("catch ($T __t)", Throwable.class);
+        method.addStatement(
+                "$T.getLogger($S).log($T.WARNING, $S, __t)",
+                ClassName.get("java.lang", "System"),
+                "io.tiko.events",
+                loggerLevel,
+                "AutoCloseable.close() threw on " + factory.getFactoryIdentifier());
+        method.addStatement(
+                "errorHandler.onError(new $T($L.getClass(), __t))",
+                ClassName.get("io.tiko", "AutoCloseFailure"),
+                variableName);
+        method.endControlFlow(); // try/catch
+        method.endControlFlow(); // if non-null
     }
 
     private void generateComponentsListFile(List<ComponentModel> components) throws IOException {
