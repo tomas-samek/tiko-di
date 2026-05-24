@@ -36,7 +36,7 @@ mvn -pl tiko-examples/03_events exec:java \
 Library/consumer separation: the `app` compiles against `module-api` (interfaces and DTOs only) and pulls `module-impl` at **runtime** scope. The container resolves implementations through interface dispatch in `container.get(Class)`, so consumer code never sees the `*Impl` types at compile time.
 
 ```
-mvn -pl tiko-examples/04_api_impl/app -am exec:java \
+mvn -pl tiko-examples/04_api_impl/app exec:java \
     -Dexec.mainClass=io.tiko.examples.apiimpl.app.Main
 ```
 
@@ -47,7 +47,7 @@ Run `mvn -pl tiko-examples/04_api_impl/app dependency:tree` to confirm `module-i
 Two domain modules (`module-a`, `module-b`) each run the annotation processor and emit their own `TikoContainerImpl_<hash>`. The runtime's `AggregatingContainer` finds them via `META-INF/tiko/container.properties` and federates lookups across both — no special wiring code in the app.
 
 ```
-mvn -pl tiko-examples/05_multi_module/app -am exec:java \
+mvn -pl tiko-examples/05_multi_module/app exec:java \
     -Dexec.mainClass=io.tiko.examples.multimodule.app.Main
 ```
 
@@ -56,8 +56,8 @@ mvn -pl tiko-examples/05_multi_module/app -am exec:java \
 Sibling modules each ship their own `@Configuration` record plus a baked-in `META-INF/tiko/defaults.yaml`. The `AggregatingContainer` discovers all of them and layers a user-supplied YAML on top.
 
 ```
-mvn -pl tiko-examples/06_config_multi_module/app -am exec:java \
-    -Dexec.mainClass=io.tiko.examples.configmm.app.Main
+mvn -pl tiko-examples/06_config_multi_module/app exec:java \
+    -Dexec.mainClass=io.tiko.examples.multimodule.config.app.Main
 ```
 
 ## 07 — Async startup &nbsp;<sub>[`07_async_start/`](./07_async_start)</sub>
@@ -65,7 +65,7 @@ mvn -pl tiko-examples/06_config_multi_module/app -am exec:java \
 `@EventHandler(async = true)` on `ApplicationStartedEvent` keeps slow warmup work (cache priming, schema migration, remote-config fetch) off the critical path — `Tiko.create()` returns while the handler runs on the framework's bounded executor.
 
 ```
-mvn -pl tiko-examples/07_async_start -am exec:java \
+mvn -pl tiko-examples/07_async_start exec:java \
     -Dexec.mainClass=io.tiko.examples.asyncstart.Main
 ```
 
