@@ -72,7 +72,7 @@ tiko:
   shutdownTimeout: PT5S    # event-executor graceful drain window; see events.md
 ```
 
-Duration values use ISO-8601 syntax (`PT5S`, `PT30S`, `PT5M`). Phase 6 (Resiliency)
+Duration values use ISO-8601 syntax (`PT5S`, `PT30S`, `PT5M`). Phase 7 (resiliency)
 will add sibling keys (executor sizing, queue capacity, etc.). Do not declare your
 own `@Configuration(prefix = "tiko")` — that prefix is the framework's.
 
