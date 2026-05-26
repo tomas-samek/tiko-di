@@ -120,7 +120,11 @@ public final class ProcessorContext {
     public void registerComponent(ComponentModel component) {
         String key = component.getComponentKey();
         if (components.containsKey(key)) {
-            errorReporter.error(component.getTypeElement(), "Duplicate component: " + key + " is already registered");
+            errorReporter.error(
+                    component.getTypeElement(),
+                    "Duplicate component: " + key + " is already registered",
+                    "Give one of the components a unique @Component(name = \"...\")",
+                    "Remove the duplicate @Component declaration");
         }
         components.put(key, component);
     }
@@ -131,13 +135,17 @@ public final class ProcessorContext {
             errorReporter.error(
                     ErrorReporter.KIND_BAD_PRODUCES,
                     factory.getMethodElement(),
-                    "Duplicate factory method: " + key + " is already registered");
+                    "Duplicate factory method: " + key + " is already registered",
+                    "Give one of the @Produces methods a unique @Produces(name = \"...\")",
+                    "Remove the duplicate @Produces method");
         }
         if (components.containsKey(key)) {
             errorReporter.error(
                     ErrorReporter.KIND_BAD_PRODUCES,
                     factory.getMethodElement(),
-                    "Factory method produces type " + key + " which is already provided by a @Component");
+                    "Factory method produces type " + key + " which is already provided by a @Component",
+                    "Give the @Produces method or the @Component a distinct name qualifier",
+                    "Remove either the @Produces method or the conflicting @Component");
         }
         factoryMethods.put(key, factory);
     }

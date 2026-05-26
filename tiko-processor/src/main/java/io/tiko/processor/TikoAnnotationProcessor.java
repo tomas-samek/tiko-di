@@ -127,7 +127,8 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
             // Stage 2: Validate
             processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "Tiko DI: Starting validation...");
             if (!validate()) {
-                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "Tiko DI: Validation failed!");
+                // The validators have already emitted specific, located errors that fail the
+                // compile — no generic trailer (it only added a content-free second error).
                 return false;
             }
             processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "Tiko DI: Validation passed");
@@ -198,7 +199,11 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
     private void collectComponents(RoundEnvironment roundEnv) {
         for (Element element : roundEnv.getElementsAnnotatedWith(Component.class)) {
             if (!(element instanceof TypeElement typeElement)) {
-                context.getErrorReporter().error(element, "@Component can only be applied to classes");
+                context.getErrorReporter()
+                        .error(
+                                element,
+                                "@Component can only be applied to classes",
+                                "Move @Component to a class declaration");
                 continue;
             }
 
@@ -215,7 +220,11 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         if (testComponentType != null) {
             for (Element element : roundEnv.getElementsAnnotatedWith(testComponentType)) {
                 if (!(element instanceof TypeElement typeElement)) {
-                    context.getErrorReporter().error(element, "@TestComponent can only be applied to classes");
+                    context.getErrorReporter()
+                            .error(
+                                    element,
+                                    "@TestComponent can only be applied to classes",
+                                    "Move @TestComponent to a class declaration");
                     continue;
                 }
                 ComponentModel component = buildTestComponentModel(typeElement);
@@ -568,7 +577,12 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
 
             if (constructor.getAnnotation(Inject.class) != null) {
                 if (injectConstructor != null) {
-                    context.getErrorReporter().error(typeElement, "Multiple constructors annotated with @Inject");
+                    context.getErrorReporter()
+                            .error(
+                                    typeElement,
+                                    "Multiple constructors annotated with @Inject",
+                                    "Annotate exactly one constructor with @Inject",
+                                    "Remove @Inject from the extra constructor(s)");
                     return null;
                 }
                 injectConstructor = constructor;
@@ -685,7 +699,11 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
     private void collectFactoryMethods(RoundEnvironment roundEnv) {
         for (Element element : roundEnv.getElementsAnnotatedWith(Produces.class)) {
             if (!(element instanceof ExecutableElement methodElement)) {
-                context.getErrorReporter().error(element, "@Produces can only be applied to methods");
+                context.getErrorReporter()
+                        .error(
+                                element,
+                                "@Produces can only be applied to methods",
+                                "Move @Produces to a method that returns the produced type");
                 continue;
             }
 
@@ -786,7 +804,11 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
     private void collectEventHandlers(RoundEnvironment roundEnv) {
         for (Element element : roundEnv.getElementsAnnotatedWith(EventHandler.class)) {
             if (!(element instanceof ExecutableElement methodElement)) {
-                context.getErrorReporter().error(element, "@EventHandler can only be applied to methods");
+                context.getErrorReporter()
+                        .error(
+                                element,
+                                "@EventHandler can only be applied to methods",
+                                "Move @EventHandler to a method that takes the event as its first parameter");
                 continue;
             }
 
@@ -814,7 +836,10 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         List<? extends VariableElement> parameters = methodElement.getParameters();
         if (parameters.isEmpty()) {
             context.getErrorReporter()
-                    .error(methodElement, "@EventHandler method must have at least one parameter (the event)");
+                    .error(
+                            methodElement,
+                            "@EventHandler method must have at least one parameter (the event)",
+                            "Add the event type as the method's first parameter");
             return null;
         }
 
