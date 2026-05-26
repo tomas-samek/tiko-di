@@ -898,6 +898,14 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
             }
         }
 
+        // Validate @Produces method signatures the code generator can realize (no void /
+        // primitive / non-public / abstract). Catches these before codegen so the user gets
+        // one clean error instead of a cascade of javac errors on generated source.
+        ProducesSignatureValidator producesValidator = new ProducesSignatureValidator(context);
+        if (!producesValidator.validate()) {
+            valid = false;
+        }
+
         // Validate @Component(expose = {...}) entries are actually implemented.
         ExposureValidator exposureValidator = new ExposureValidator(context, typeUtil);
         if (!exposureValidator.validate()) {
