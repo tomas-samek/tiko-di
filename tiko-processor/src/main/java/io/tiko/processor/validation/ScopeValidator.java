@@ -6,6 +6,7 @@ import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
 import io.tiko.processor.util.ProcessorContext;
 import java.util.Optional;
+import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.TypeElement;
 
 /**
@@ -83,6 +84,7 @@ public final class ScopeValidator {
         return validateScopeHierarchy(
                 consumer.getTypeElement(),
                 consumer.getScope(),
+                consumer.getClassName(),
                 providerScope,
                 dependency.getTypeName(),
                 provider.get());
@@ -114,6 +116,7 @@ public final class ScopeValidator {
         return validateScopeHierarchy(
                 factory.getMethodElement(),
                 factory.getScope(),
+                factory.getDeclaringClass().getSimpleName() + "." + factory.getMethodName(),
                 providerScope,
                 dependency.getTypeName(),
                 provider.get());
@@ -132,40 +135,37 @@ public final class ScopeValidator {
     private boolean validateScopeHierarchy(
             javax.lang.model.element.Element consumerElement,
             Scope consumerScope,
+            String consumerName,
             Scope providerScope,
             String providerTypeName,
             Object providerObj) {
         int consumerLevel = getScopeLevel(consumerScope);
         int providerLevel = getScopeLevel(providerScope);
 
-        // Consumer has longer or equal lifetime - valid
-        if (consumerLevel <= providerLevel) {
+        // Consumer is same-lived or shorter-lived than the provider (e.g. REQUEST consuming
+        // SINGLETON, EVENT consuming REQUEST): a direct reference is safe, no proxy needed.
+        if (consumerLevel >= providerLevel) {
             return true;
         }
 
-        // Consumer has shorter lifetime - needs proxy
-        // Check if provider implements an interface for proxy generation
+        // Consumer outlives the provider: the container injects a generated proxy so the
+        // long-lived consumer resolves the current scope's instance on every call. The proxy
+        // implements an interface, so the shorter-lived bean must expose one — a concrete
+        // class cannot be proxied without runtime bytecode tricks Tiko deliberately avoids.
+        String reason = "A proxy is generated when " + consumerScope + "-scoped '" + consumerName + "' injects this "
+                + providerScope + "-scoped bean; the proxy needs an interface to implement.";
+
         if (providerObj instanceof ComponentModel component) {
             if (component.getImplementedInterface().isEmpty()) {
-                context.getErrorReporter()
-                        .missingInterface(
-                                consumerElement,
-                                providerTypeName,
-                                "Required for proxy generation when injecting " + providerScope + "-scoped bean into "
-                                        + consumerScope + "-scoped consumer");
+                context.getErrorReporter().missingInterface(consumerElement, providerTypeName, reason);
                 return false;
             }
         } else if (providerObj instanceof FactoryMethodModel factory) {
-            // For factory methods, check if return type implements an interface
+            // A @Produces output is proxied against its return type, so the return type must
+            // itself be an interface (the proxy does `implements <returnType>`).
             TypeElement returnTypeElement = context.getElementUtils().getTypeElement(factory.getReturnTypeName());
-
-            if (returnTypeElement != null && returnTypeElement.getInterfaces().isEmpty()) {
-                context.getErrorReporter()
-                        .missingInterface(
-                                consumerElement,
-                                factory.getReturnTypeName(),
-                                "Required for proxy generation when injecting " + providerScope + "-scoped bean into "
-                                        + consumerScope + "-scoped consumer");
+            if (returnTypeElement != null && returnTypeElement.getKind() != ElementKind.INTERFACE) {
+                context.getErrorReporter().missingInterface(consumerElement, factory.getReturnTypeName(), reason);
                 return false;
             }
         }
