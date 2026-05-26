@@ -109,7 +109,12 @@ public final class ConfigurationValidator {
     private boolean walk(TypeElement type, Set<String> visiting, ConfigurationModel root) {
         String fqn = type.getQualifiedName().toString();
         if (!visiting.add(fqn)) {
-            ctx.getErrorReporter().error(root.element(), "Recursive record reference detected at " + fqn);
+            ctx.getErrorReporter()
+                    .error(
+                            root.element(),
+                            "Recursive record reference detected at " + fqn,
+                            "Break the cycle: a @Configuration record cannot reference itself, directly or transitively",
+                            "Flatten the recursive component into a separate top-level @Configuration record");
             return false;
         }
         for (var member : type.getEnclosedElements()) {

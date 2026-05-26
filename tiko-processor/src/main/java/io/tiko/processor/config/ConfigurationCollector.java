@@ -36,7 +36,11 @@ public final class ConfigurationCollector {
     public void collect(RoundEnvironment roundEnv) {
         for (Element el : roundEnv.getElementsAnnotatedWith(Configuration.class)) {
             if (!(el instanceof TypeElement type)) {
-                ctx.getErrorReporter().error(el, "@Configuration can only be applied to types");
+                ctx.getErrorReporter()
+                        .error(
+                                el,
+                                "@Configuration can only be applied to types",
+                                "Move @Configuration to a record type");
                 continue;
             }
             if (type.getKind() != ElementKind.RECORD) {

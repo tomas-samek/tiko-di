@@ -32,22 +32,18 @@ public final class CircularDependencyDetector {
 
         // Check each component
         for (ComponentModel component : context.getActiveComponents()) {
-            Set<String> visiting = new HashSet<>();
-            List<String> path = new ArrayList<>();
-
-            if (hasCycle(component.getComponentKey(), visiting, path)) {
-                reportCycle(component, path);
+            List<String> cycle = findCycle(component.getComponentKey(), new HashSet<>(), new ArrayList<>());
+            if (!cycle.isEmpty()) {
+                reportCycle(component, cycle);
                 valid = false;
             }
         }
 
         // Check each factory method
         for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
-            Set<String> visiting = new HashSet<>();
-            List<String> path = new ArrayList<>();
-
-            if (hasCycle(factory.getComponentKey(), visiting, path)) {
-                reportCycleForFactory(factory, path);
+            List<String> cycle = findCycle(factory.getComponentKey(), new HashSet<>(), new ArrayList<>());
+            if (!cycle.isEmpty()) {
+                reportCycleForFactory(factory, cycle);
                 valid = false;
             }
         }
@@ -56,45 +52,42 @@ public final class CircularDependencyDetector {
     }
 
     /**
-     * Performs depth-first search to detect cycles.
-     * Returns true if a cycle is detected.
+     * Depth-first search returning the full cycle path (e.g. {@code [A, B, A]}) when a cycle is
+     * reachable from {@code key}, or an empty list otherwise. Uses a single {@code visiting} set
+     * and {@code path} list with backtracking, so the detected path propagates back to the caller
+     * intact — the earlier copy-on-recurse logic discarded it and surfaced only the root node.
      */
-    private boolean hasCycle(String componentKey, Set<String> visiting, List<String> path) {
-        // Already visiting this node - cycle detected
-        if (visiting.contains(componentKey)) {
-            // Add to path to show the cycle
-            path.add(componentKey);
-            return true;
+    private List<String> findCycle(String key, Set<String> visiting, List<String> path) {
+        // Back-edge to a node already on the current path: close the cycle from its first
+        // occurrence to the end, then repeat the node so the rendered path reads A -> B -> A.
+        if (visiting.contains(key)) {
+            List<String> cycle = new ArrayList<>(path.subList(path.indexOf(key), path.size()));
+            cycle.add(key);
+            return cycle;
         }
 
-        // Mark as visiting
-        visiting.add(componentKey);
-        path.add(componentKey);
+        // Missing dependency is reported by DependencyGraphValidator, not here.
+        if (context.findComponentOrFactory(key).isEmpty()) {
+            return List.of();
+        }
 
-        // Get dependencies
-        List<DependencyModel> dependencies = getDependencies(componentKey);
+        visiting.add(key);
+        path.add(key);
 
-        for (DependencyModel dependency : dependencies) {
+        for (DependencyModel dependency : getDependencies(key)) {
             // Provider<T> breaks cycles - skip
             if (dependency.isProvider()) {
                 continue;
             }
-
-            String depKey = dependency.getDependencyKey();
-
-            // Check if dependency exists
-            if (!context.findComponentOrFactory(depKey).isPresent()) {
-                // Missing dependency will be caught by DependencyGraphValidator
-                continue;
-            }
-
-            // Recursively check for cycles
-            if (hasCycle(depKey, new HashSet<>(visiting), new ArrayList<>(path))) {
-                return true;
+            List<String> cycle = findCycle(dependency.getDependencyKey(), visiting, path);
+            if (!cycle.isEmpty()) {
+                return cycle;
             }
         }
 
-        return false;
+        visiting.remove(key);
+        path.remove(path.size() - 1);
+        return List.of();
     }
 
     /**

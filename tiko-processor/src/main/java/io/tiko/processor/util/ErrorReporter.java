@@ -153,7 +153,11 @@ public final class ErrorReporter {
     }
 
     public void invalidAnnotationUsage(Element element, String annotationName, String reason) {
-        error(element, "Invalid use of " + annotationName + ": " + reason);
+        reportError(
+                KIND_OTHER,
+                element,
+                "Invalid use of " + annotationName + ": " + reason,
+                "Review the " + annotationName + " usage against the Tiko documentation");
     }
 
     public void duplicateQualifier(Element element, String qualifier, String existingComponent) {
@@ -199,7 +203,9 @@ public final class ErrorReporter {
                         "Scope mismatch: @TestComponent %s declares scope %s but shadows @Component %s "
                                 + "declared with scope %s. Either match the scope or use TikoOptions.override(...) "
                                 + "for different lifecycle.",
-                        testFqn, testScope, mainFqn, mainScope));
+                        testFqn, testScope, mainFqn, mainScope),
+                "Declare @TestComponent " + testFqn + " with scope " + mainScope,
+                "Use TikoOptions.override(...) when the test lifecycle must differ");
     }
 
     // ----- internal -----

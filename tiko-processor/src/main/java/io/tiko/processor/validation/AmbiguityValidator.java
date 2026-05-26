@@ -3,7 +3,6 @@ package io.tiko.processor.validation;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
-import io.tiko.processor.util.ErrorReporter;
 import io.tiko.processor.util.ProcessorContext;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -172,11 +171,9 @@ public final class AmbiguityValidator {
         String providerList =
                 providers.stream().map(p -> p.label + " (" + p.kind + ")").collect(Collectors.joining(", "));
         String simpleName = simpleName(typeKey);
-        ErrorReporter errorReporter = context.getErrorReporter();
-
-        for (ProviderInfo provider : providers) {
-            errorReporter.ambiguousProviders(provider.element, typeKey, providerList, simpleName);
-        }
+        // Emit once per ambiguous type (attached to the first provider) rather than once per
+        // provider — the message already lists every contributing provider.
+        context.getErrorReporter().ambiguousProviders(providers.get(0).element, typeKey, providerList, simpleName);
     }
 
     private static String simpleName(String qualifiedName) {
