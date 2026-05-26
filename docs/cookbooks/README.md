@@ -15,7 +15,7 @@ example proves it compiles, runs, and stays green under CI.
 - **Kafka surfacing** — cross-references to `08_kafka_order_warehouse` and a "when to reach for distributed events" narrative.
 - **Non-goals + recommended integrations** — single top-level page naming the boundary of what Tiko owns and the recommended pairing for each non-goal.
 
-Resilience was previously slated as a cookbook (Resilience4j around `@Component` boundaries) but has since been promoted to a first-party milestone — see Phase 6 in [docs/roadmap.md](../roadmap.md). The framework owns the async event bus, so handler timeouts / retries / backpressure / DLQ ship in Tiko rather than as a pairing recipe.
+Resilience was previously slated as a cookbook (Resilience4j around `@Component` boundaries) but has since been promoted to a first-party milestone — see Phase 7 in [docs/roadmap.md](../roadmap.md). The framework owns the async event bus, so handler timeouts / retries / backpressure / DLQ ship in Tiko rather than as a pairing recipe.
 
 The cookbook track exists because reviewers consistently read silence on
 persistence/security/resilience as "framework is incomplete" rather than

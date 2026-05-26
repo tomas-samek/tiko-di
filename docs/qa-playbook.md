@@ -69,7 +69,7 @@ Things that look like Tiko bugs but aren't:
 - **Mockito agent warning** ("dynamic agent loading"). JDK 21 noise, not Tiko.
 - **Missing Docker.** Skip the Pass 1 Kafka runtime portion and document the manual run sequence; don't file.
 - **Spotless formatting "changes."** Run `mvn spotless:apply`.
-- **Pre-existing roadmap items** that are unshipped (Phase 5 resiliency, Phase 6 transports). Don't QA what doesn't exist.
+- **Pre-existing roadmap items** that are unshipped (Phase 7 resiliency, Phase 8 transports). Don't QA what doesn't exist.
 
 ### Issue body template
 
@@ -382,7 +382,7 @@ When a new MCP tool is added to `tiko-mcp/.../tools/`:
 - **Unit test coverage** — `mvn test` is a different lens; if a unit-test gap is the finding, file it as a `test` issue but don't conflate with playbook scenarios.
 - **Performance.** Cold-start harness exists separately.
 - **Security review.** A separate skill (`/security-review`) exists.
-- **Unshipped features.** Phase 5 (resiliency, #106–#111) and Phase 6 (distributed transports, #117–#120) — don't QA what doesn't exist yet.
+- **Unshipped features.** Phase 7 (resiliency, #106–#111) and Phase 8 (distributed transports, #117–#120) — don't QA what doesn't exist yet.
 
 ---
 
