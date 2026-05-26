@@ -47,9 +47,25 @@ public final class ConfigurationCollector {
 
             Configuration ann = type.getAnnotation(Configuration.class);
             String prefix = ann.prefix();
-            String pkg = ((PackageElement) type.getEnclosingElement())
-                    .getQualifiedName()
-                    .toString();
+
+            // @Configuration records must be top-level: the binder is keyed by package + simple
+            // name, and nested records would collide. Guard the cast so a nested record yields a
+            // clear diagnostic instead of a ClassCastException from inside the processor (#105).
+            Element enclosing = type.getEnclosingElement();
+            if (!(enclosing instanceof PackageElement pkgElement)) {
+                String enclosingName = enclosing instanceof TypeElement enclosingType
+                        ? enclosingType.getQualifiedName().toString()
+                        : enclosing.getSimpleName().toString();
+                ctx.getErrorReporter()
+                        .error(
+                                type,
+                                "@Configuration record '" + type.getSimpleName()
+                                        + "' must be top-level (declared inside '" + enclosingName
+                                        + "'). Move it to its own .java file.",
+                                "Move " + type.getSimpleName() + " to its own top-level .java file");
+                continue;
+            }
+            String pkg = pkgElement.getQualifiedName().toString();
             String simple = type.getSimpleName().toString();
             String qualified = type.getQualifiedName().toString();
 
