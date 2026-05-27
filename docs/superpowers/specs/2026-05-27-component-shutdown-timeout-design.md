@@ -16,19 +16,35 @@ work runs," which is also what **#107 (handler timeouts)** is. #106 and #107 are
 same concept applied to two units (teardown vs handler dispatch). #106 establishes the
 shared primitive and the failure convention the resiliency cluster (#107–#111) inherits.
 
+## Per-phase timeout policy
+
+`@PostConstruct`, `@EventHandler`, and a teardown hook are all units the same
+`BoundedExecution` primitive can bound — but the **on-timeout policy differs by phase**,
+which is why they are a family of per-phase knobs, not one "event timeout":
+
+- **Teardown (`@PreDestroy` / `close`, this issue):** best-effort — a timeout logs via
+  `ErrorHandler` and shutdown **continues** (the bean is being destroyed anyway).
+- **`@PostConstruct` (construction):** must succeed — a timeout means the bean isn't
+  constructed, so it is **fail-fast** (a startup error), the opposite policy. A future
+  `constructionTimeout` knob, not built here.
+- **`@EventHandler` (dispatch):** route the failure, possibly retry — #107 / #108.
+
+So `teardownTimeout` names the teardown (log-and-continue) policy specifically. Shared
+mechanism, per-phase limits and policy. Kept lean: only teardown ships now.
+
 ## API
 
 One new opt-in knob on `TikoOptions`:
 
 ```java
-TikoOptions.builder().componentShutdownTimeout(Duration.ofSeconds(5)).build();
+TikoOptions.builder().teardownTimeout(Duration.ofSeconds(5)).build();
 ```
 
 - **Unset (default) = unbounded** → exactly today's inline behavior; zero overhead and
   zero behavior change unless the user opts in.
 - Validated non-negative (mirrors `shutdownTimeout`). `Duration.ZERO` = give the hook no
   time → immediate timeout.
-- Getter `componentShutdownTimeout()` returns `null` when unset.
+- Getter `teardownTimeout()` returns `null` when unset.
 - **Scope: container shutdown only** (SINGLETON teardown). REQUEST/EVENT scope-exit
   teardown stays inline, untouched — that is a far more frequent path and is out of scope.
 
@@ -53,10 +69,11 @@ public static void run(
 
 `ContainerGenerator.createShutdownMethod` (the SINGLETON teardown — `emitComponentDestroy`
 / `emitFactoryDestroy`) emits a `BoundedExecution.run(...)` call passing
-`this.options.componentShutdownTimeout()` and a failure factory lambda
+`this.options.teardownTimeout()` and a failure factory lambda
 (`t -> new PreDestroyFailure(Bean.class, t)` / the `AutoCloseFailure` variant) instead of
-the inline try/catch. Multi-module is covered automatically — each per-module container's
-generated shutdown uses the helper with its own `options`.
+the inline try/catch.
+Multi-module is covered automatically — each per-module container's generated shutdown
+uses the helper with its own `options`.
 
 ## Failure routing
 
@@ -77,7 +94,7 @@ executor drain. Documented alongside `shutdownTimeout`.
   `TimeoutException`-caused failure; fast task → completes, no timeout). Deterministic via
   latches, no `Thread.sleep`.
 - `tiko-processor` (compile-testing) — generated shutdown calls `BoundedExecution.run(...)`
-  passing `options.componentShutdownTimeout()` and the `PreDestroyFailure` / `AutoCloseFailure`
+  passing `options.teardownTimeout()` and the `PreDestroyFailure` / `AutoCloseFailure`
   factories.
 - `tiko-runtime` — `TikoOptions` knob round-trips and rejects a negative duration.
 
@@ -86,4 +103,6 @@ executor drain. Documented alongside `shutdownTimeout`.
 - REQUEST/EVENT scope-exit hook timeouts.
 - Per-hook-type knobs (one timeout covers both `@PreDestroy` and `close()`).
 - Per-component annotation override.
-- #107 handler timeouts (separate issue; reuses this primitive's convention).
+- `@PostConstruct` / construction timeout (fail-fast) and `@EventHandler` timeout (#107) —
+  same `BoundedExecution` primitive, different per-phase policy; not built now (kept lean).
+  Future knobs would be `constructionTimeout` / `handlerTimeout`.
