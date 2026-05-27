@@ -188,6 +188,32 @@ The container automatically publishes lifecycle events that you can subscribe to
 
 All are Java records with timestamps and (where relevant) durations.
 
+### Container lifecycle: caller-managed vs daemon
+
+Two lifecycle models, and the return type tells you which one you're in:
+
+- **`Tiko.create(...)` → `Container` (AutoCloseable).** *You* own the lifecycle — close it with try-with-resources or an explicit `container.shutdown()`. No JVM hook is installed. Best for tests, embedded use, and request/job-scoped work.
+- **`Tiko.daemon(...)` → `TikoDaemon` (not AutoCloseable).** For long-lived processes (servers). It registers a JVM shutdown hook that calls `shutdown()` on `Ctrl+C` / `SIGTERM`, so cleanup runs without you wiring `Runtime.addShutdownHook`. Resolve beans via `daemon.container()`; call `daemon.stop()` only for an explicit shutdown (tests, in-process restart). It is deliberately *not* AutoCloseable — the framework owns the lifecycle, so there's nothing for you to close.
+
+In **both** models, `ApplicationEndingEvent` fires *before* any `@PreDestroy`, so the natural place to drain an external resource (stop an HTTP server, flush a buffer) is a subscriber:
+
+```java
+@Component(scope = Scope.SINGLETON)
+public class HttpServerLifecycle {
+    private final Javalin app;
+    // ...
+    @EventHandler
+    public void onApplicationEnding(ApplicationEndingEvent event) {
+        app.stop(); // drained before any bean's @PreDestroy runs
+    }
+}
+
+// Long-lived server — the JVM hook shuts the container down on exit:
+TikoDaemon daemon = Tiko.daemon(opts);
+var routes = daemon.container().get(TicketRoutes.class);
+// ... start serving ...
+```
+
 ### Example — metrics collection
 
 ```java

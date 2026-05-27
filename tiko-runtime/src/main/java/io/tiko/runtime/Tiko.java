@@ -84,6 +84,36 @@ public final class Tiko {
         return createInternal(options);
     }
 
+    /**
+     * Creates a container and registers a JVM shutdown hook that calls {@code shutdown()} on
+     * process exit — for long-lived processes (servers, daemons) that want {@code @PreDestroy} /
+     * {@code ApplicationEndingEvent} to fire on {@code Ctrl+C} / {@code SIGTERM} without wiring
+     * their own hook.
+     *
+     * <p>Returns a {@link TikoDaemon}, deliberately <em>not</em> {@link AutoCloseable}: a daemon's
+     * lifecycle is owned by the framework (the hook), not a try-with-resources block. Use
+     * {@link TikoDaemon#container()} to resolve beans and {@link TikoDaemon#stop()} to shut down
+     * explicitly. For caller-managed lifecycles, use {@link #create(TikoOptions)} instead — it
+     * returns an AutoCloseable container and installs no hook.
+     *
+     * @param options framework knobs. Never {@code null}.
+     */
+    public static TikoDaemon daemon(TikoOptions options) {
+        return new TikoDaemon(create(options));
+    }
+
+    /** Daemon variant of {@link #create()}; see {@link #daemon(TikoOptions)}. */
+    public static TikoDaemon daemon() {
+        return daemon(TikoOptions.builder().build());
+    }
+
+    /** Daemon variant of {@link #create(ConfigSource)}; see {@link #daemon(TikoOptions)}. */
+    public static TikoDaemon daemon(ConfigSource source) {
+        return daemon(TikoOptions.builder()
+                .configSource(Objects.requireNonNull(source, "source"))
+                .build());
+    }
+
     private static Container createInternal(TikoOptions options) {
         try {
             // 1. Resolve the ErrorHandler — user-supplied or the JUL-backed DefaultErrorHandler.
