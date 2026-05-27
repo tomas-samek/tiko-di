@@ -56,10 +56,9 @@ class LoggerRoutingTest {
     }
 
     @Test
-    void bothFrameworkWarningsAppear() throws Exception {
-        // Counts the WARN occurrences to pin the duplicate-log behaviour the README
-        // explicitly documents (lines 50-53): the generated catch site emits one, and
-        // DefaultErrorHandler emits a second on the same teardown failure.
+    void frameworkWarningAppearsExactlyOnce() throws Exception {
+        // #116: a teardown failure routes solely through DefaultErrorHandler — exactly one WARN
+        // line, not the previous catch-site + ErrorHandler duplicate.
         var classpath = System.getProperty("java.class.path");
         var javaBin = System.getProperty("java.home") + "/bin/java";
 
@@ -79,6 +78,8 @@ class LoggerRoutingTest {
         List<String> warnLines = output.stream()
                 .filter(s -> s.startsWith("WARN  [io.tiko.events]"))
                 .toList();
-        assertThat(warnLines).hasSize(2);
+        assertThat(warnLines)
+                .as("a teardown failure must log exactly one WARN line (#116)")
+                .hasSize(1);
     }
 }
