@@ -30,6 +30,7 @@ public final class TikoOptions {
     private final ErrorHandler errorHandler;
     private final java.util.concurrent.ExecutorService eventExecutor;
     private final Duration shutdownTimeout;
+    private final Duration teardownTimeout;
     private final java.util.function.UnaryOperator<EventBus> eventBusDecorator;
     private final java.util.Map<OverrideKey, java.util.function.Supplier<?>> overrides;
 
@@ -38,6 +39,7 @@ public final class TikoOptions {
         this.errorHandler = b.errorHandler;
         this.eventExecutor = b.eventExecutor;
         this.shutdownTimeout = b.shutdownTimeout;
+        this.teardownTimeout = b.teardownTimeout;
         this.eventBusDecorator = b.eventBusDecorator;
         this.overrides = b.overrides == null
                 ? new java.util.concurrent.ConcurrentHashMap<>()
@@ -76,6 +78,19 @@ public final class TikoOptions {
      */
     public Duration shutdownTimeout() {
         return shutdownTimeout;
+    }
+
+    /**
+     * @return the per-component teardown bound, or {@code null} when unset (the default —
+     *         each SINGLETON {@code @PreDestroy} / factory {@code AutoCloseable.close()} runs
+     *         inline on the shutdown thread with no time limit, exactly as before). When set,
+     *         {@code Container.shutdown()} runs each such hook under this bound and routes a
+     *         {@code TimeoutException}-caused {@code PreDestroyFailure} / {@code AutoCloseFailure}
+     *         through the {@link ErrorHandler} if the hook overruns, then continues to the next
+     *         component. REQUEST/EVENT scope-exit teardown is unaffected.
+     */
+    public Duration teardownTimeout() {
+        return teardownTimeout;
     }
 
     /**
@@ -145,6 +160,7 @@ public final class TikoOptions {
         private ErrorHandler errorHandler;
         private java.util.concurrent.ExecutorService eventExecutor;
         private Duration shutdownTimeout;
+        private Duration teardownTimeout;
         private java.util.function.UnaryOperator<EventBus> eventBusDecorator;
         private java.util.Map<OverrideKey, java.util.function.Supplier<?>> overrides;
 
@@ -194,6 +210,39 @@ public final class TikoOptions {
                 throw new IllegalArgumentException("shutdownTimeout must not be negative");
             }
             this.shutdownTimeout = timeout;
+            return this;
+        }
+
+        /**
+         * Maximum time {@link io.tiko.Container#shutdown()} waits for a single SINGLETON
+         * {@code @PreDestroy} method or factory-produced {@code AutoCloseable.close()} to return
+         * before interrupting it and moving on to the next component.
+         *
+         * <p>This bounds the <em>per-component teardown hook</em>, a distinct concern from
+         * {@link #shutdownTimeout(Duration)} (which bounds the event-executor drain). Leaving it
+         * unset preserves today's behavior exactly: hooks run inline on the shutdown thread with
+         * no time limit, so a hook that hangs blocks shutdown forever.
+         *
+         * <p>When set, an overrunning hook is interrupted ({@code Future.cancel(true)}) and its
+         * failure is routed as a {@code PreDestroyFailure} / {@code AutoCloseFailure} whose cause
+         * is a {@link java.util.concurrent.TimeoutException}, via the {@link ErrorHandler}; shutdown
+         * then continues. A hook that ignores interrupts cannot be forcibly killed — the same JVM
+         * contract as {@link #shutdownTimeout(Duration)}.
+         *
+         * <p>Scope: SINGLETON container shutdown only. REQUEST/EVENT scope-exit teardown is
+         * unaffected.
+         *
+         * @param timeout non-negative duration; {@link Duration#ZERO} gives the hook no time and
+         *                routes a timeout immediately
+         * @throws IllegalArgumentException if {@code timeout} is negative
+         * @throws NullPointerException if {@code timeout} is null
+         */
+        public Builder teardownTimeout(Duration timeout) {
+            Objects.requireNonNull(timeout, "teardownTimeout");
+            if (timeout.isNegative()) {
+                throw new IllegalArgumentException("teardownTimeout must not be negative");
+            }
+            this.teardownTimeout = timeout;
             return this;
         }
 

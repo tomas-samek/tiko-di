@@ -97,6 +97,43 @@ class TikoOptionsTest {
     }
 
     @Test
+    void builderRoundTripsTeardownTimeout() {
+        TikoOptions options =
+                TikoOptions.builder().teardownTimeout(Duration.ofSeconds(5)).build();
+
+        assertThat(options.teardownTimeout()).isEqualTo(Duration.ofSeconds(5));
+    }
+
+    @Test
+    void teardownTimeoutDefaultIsNull() {
+        // null = "unset" = unbounded inline teardown (today's behavior), zero overhead.
+        assertThat(TikoOptions.builder().build().teardownTimeout()).isNull();
+    }
+
+    @Test
+    void builderAcceptsZeroTeardownTimeout() {
+        // ZERO is a valid degenerate config: give each hook no time, route a timeout immediately.
+        TikoOptions options =
+                TikoOptions.builder().teardownTimeout(Duration.ZERO).build();
+
+        assertThat(options.teardownTimeout()).isEqualTo(Duration.ZERO);
+    }
+
+    @Test
+    void builderRejectsNegativeTeardownTimeout() {
+        TikoOptions.Builder b = TikoOptions.builder();
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> b.teardownTimeout(Duration.ofSeconds(-1)))
+                .withMessageContaining("teardownTimeout");
+    }
+
+    @Test
+    void builderRejectsNullTeardownTimeout() {
+        TikoOptions.Builder b = TikoOptions.builder();
+        assertThatNullPointerException().isThrownBy(() -> b.teardownTimeout(null));
+    }
+
+    @Test
     void eventBusDecoratorDefaultsToNull() {
         TikoOptions opts = TikoOptions.builder().build();
         assertThat(opts.eventBusDecorator()).isNull();
