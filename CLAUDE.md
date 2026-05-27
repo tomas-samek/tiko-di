@@ -208,6 +208,12 @@ The container automatically publishes lifecycle events for async hooks without c
 - `ApplicationStartedEvent(Instant timestamp)` - Published when container starts
 - `ApplicationEndingEvent(Instant timestamp, Duration uptime)` - Published before shutdown
 
+**Automatic JVM shutdown hook:** `Tiko.create()` registers a JVM shutdown hook by default, so
+`ApplicationEndingEvent` and `@PreDestroy` fire on `Ctrl+C` / `SIGTERM` without a user-wired
+`Runtime.addShutdownHook`. `ApplicationEndingEvent` fires *before* `@PreDestroy`, so external
+cleanup (stop an HTTP server, flush a buffer) belongs in an `@EventHandler(ApplicationEndingEvent)`
+subscriber. Opt out with `TikoOptions.builder().registerShutdownHook(false)` for embedded use or tests.
+
 **Request Scope Lifecycle:**
 - `RequestStartedEvent(String requestId, Instant timestamp)` - Published on scope entry
 - `RequestEndingEvent(String requestId, Instant timestamp, Duration duration)` - Published on scope exit

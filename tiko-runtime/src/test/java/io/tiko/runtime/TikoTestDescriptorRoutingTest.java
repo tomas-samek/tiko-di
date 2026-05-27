@@ -34,7 +34,10 @@ class TikoTestDescriptorRoutingTest {
         ClassLoader previous = Thread.currentThread().getContextClassLoader();
         Thread.currentThread().setContextClassLoader(cl);
 
-        try (Container c = Tiko.create(TikoOptions.builder().build())) {
+        // Opt out of the JVM shutdown hook so the returned container isn't wrapped in
+        // ShutdownHookContainer — this test inspects the inner routing type, not the hook.
+        try (Container c =
+                Tiko.create(TikoOptions.builder().registerShutdownHook(false).build())) {
             // The container should be (or wrap) an AggregatingContainer instance.
             // TransportAwareContainer may wrap the inner container; unwrap if needed.
             Container inner = c;

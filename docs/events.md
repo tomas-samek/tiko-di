@@ -188,6 +188,28 @@ The container automatically publishes lifecycle events that you can subscribe to
 
 All are Java records with timestamps and (where relevant) durations.
 
+### Automatic JVM shutdown hook
+
+`Tiko.create()` registers a JVM shutdown hook by default, so `ApplicationEndingEvent`, `@PreDestroy`, and `AutoCloseable.close()` all fire on `Ctrl+C` / `SIGTERM` — you do **not** need to wire your own `Runtime.addShutdownHook`. `ApplicationEndingEvent` fires *before* any `@PreDestroy`, so the natural place to drain an external resource (stop an HTTP server, flush a buffer) is a subscriber:
+
+```java
+@Component(scope = Scope.SINGLETON)
+public class HttpServerLifecycle {
+    private final Javalin app;
+    // ...
+    @EventHandler
+    public void onApplicationEnding(ApplicationEndingEvent event) {
+        app.stop(); // drained before any bean's @PreDestroy runs
+    }
+}
+```
+
+The hook is idempotent with an explicit `container.shutdown()` / try-with-resources `close()`: the container's shutdown short-circuits on a second call, and the explicit path removes the hook so it does not fire again at exit. Opt out when you manage the lifecycle yourself (embedded use, tests):
+
+```java
+TikoOptions opts = TikoOptions.builder().registerShutdownHook(false).build();
+```
+
 ### Example — metrics collection
 
 ```java

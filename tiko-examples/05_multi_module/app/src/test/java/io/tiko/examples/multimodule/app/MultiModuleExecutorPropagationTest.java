@@ -89,8 +89,19 @@ class MultiModuleExecutorPropagationTest {
 
     @SuppressWarnings("unchecked")
     private static java.util.List<Container> perModuleContainers(Container aggregator) throws Exception {
-        var field = aggregator.getClass().getDeclaredField("moduleContainers");
-        field.setAccessible(true);
-        return (java.util.List<Container>) field.get(aggregator);
+        // Unwrap delegating wrappers (ShutdownHookContainer, TransportAwareContainer) to reach
+        // the AggregatingContainer that owns moduleContainers.
+        Object c = aggregator;
+        while (true) {
+            try {
+                var field = c.getClass().getDeclaredField("moduleContainers");
+                field.setAccessible(true);
+                return (java.util.List<Container>) field.get(c);
+            } catch (NoSuchFieldException notAggregator) {
+                var delegateField = c.getClass().getDeclaredField("delegate");
+                delegateField.setAccessible(true);
+                c = delegateField.get(c);
+            }
+        }
     }
 }

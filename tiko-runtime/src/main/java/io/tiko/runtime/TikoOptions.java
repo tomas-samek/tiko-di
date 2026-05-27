@@ -31,6 +31,7 @@ public final class TikoOptions {
     private final java.util.concurrent.ExecutorService eventExecutor;
     private final Duration shutdownTimeout;
     private final java.util.function.UnaryOperator<EventBus> eventBusDecorator;
+    private final boolean registerShutdownHook;
     private final java.util.Map<OverrideKey, java.util.function.Supplier<?>> overrides;
 
     private TikoOptions(Builder b) {
@@ -39,6 +40,7 @@ public final class TikoOptions {
         this.eventExecutor = b.eventExecutor;
         this.shutdownTimeout = b.shutdownTimeout;
         this.eventBusDecorator = b.eventBusDecorator;
+        this.registerShutdownHook = b.registerShutdownHook;
         this.overrides = b.overrides == null
                 ? new java.util.concurrent.ConcurrentHashMap<>()
                 : new java.util.concurrent.ConcurrentHashMap<>(b.overrides);
@@ -85,6 +87,17 @@ public final class TikoOptions {
      */
     public java.util.function.UnaryOperator<EventBus> eventBusDecorator() {
         return eventBusDecorator;
+    }
+
+    /**
+     * @return whether {@link Tiko#create(TikoOptions)} registers a JVM shutdown hook that calls
+     *         {@code container.shutdown()} on process exit. Defaults to {@code true} so
+     *         {@code @PreDestroy} / {@code AutoCloseable.close()} and {@code ApplicationEndingEvent}
+     *         fire on {@code Ctrl+C} / {@code SIGTERM} without the user wiring their own hook. Set
+     *         {@code false} for embedded use or tests that manage the container lifecycle directly.
+     */
+    public boolean registerShutdownHook() {
+        return registerShutdownHook;
     }
 
     public boolean hasOverride(Class<?> type) {
@@ -146,6 +159,7 @@ public final class TikoOptions {
         private java.util.concurrent.ExecutorService eventExecutor;
         private Duration shutdownTimeout;
         private java.util.function.UnaryOperator<EventBus> eventBusDecorator;
+        private boolean registerShutdownHook = true;
         private java.util.Map<OverrideKey, java.util.function.Supplier<?>> overrides;
 
         private Builder() {}
@@ -203,6 +217,17 @@ public final class TikoOptions {
          */
         public Builder eventBusDecorator(java.util.function.UnaryOperator<EventBus> wrap) {
             this.eventBusDecorator = Objects.requireNonNull(wrap, "eventBusDecorator");
+            return this;
+        }
+
+        /**
+         * Controls whether {@link Tiko#create(TikoOptions)} registers a JVM shutdown hook that
+         * calls {@code container.shutdown()} on process exit. Defaults to {@code true}. Pass
+         * {@code false} when the caller manages the container lifecycle itself (embedded use,
+         * tests) and does not want a hook registered.
+         */
+        public Builder registerShutdownHook(boolean register) {
+            this.registerShutdownHook = register;
             return this;
         }
 
