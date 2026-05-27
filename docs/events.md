@@ -188,9 +188,14 @@ The container automatically publishes lifecycle events that you can subscribe to
 
 All are Java records with timestamps and (where relevant) durations.
 
-### Automatic JVM shutdown hook
+### Container lifecycle: caller-managed vs daemon
 
-`Tiko.create()` registers a JVM shutdown hook by default, so `ApplicationEndingEvent`, `@PreDestroy`, and `AutoCloseable.close()` all fire on `Ctrl+C` / `SIGTERM` — you do **not** need to wire your own `Runtime.addShutdownHook`. `ApplicationEndingEvent` fires *before* any `@PreDestroy`, so the natural place to drain an external resource (stop an HTTP server, flush a buffer) is a subscriber:
+Two lifecycle models, and the return type tells you which one you're in:
+
+- **`Tiko.create(...)` → `Container` (AutoCloseable).** *You* own the lifecycle — close it with try-with-resources or an explicit `container.shutdown()`. No JVM hook is installed. Best for tests, embedded use, and request/job-scoped work.
+- **`Tiko.daemon(...)` → `TikoDaemon` (not AutoCloseable).** For long-lived processes (servers). It registers a JVM shutdown hook that calls `shutdown()` on `Ctrl+C` / `SIGTERM`, so cleanup runs without you wiring `Runtime.addShutdownHook`. Resolve beans via `daemon.container()`; call `daemon.stop()` only for an explicit shutdown (tests, in-process restart). It is deliberately *not* AutoCloseable — the framework owns the lifecycle, so there's nothing for you to close.
+
+In **both** models, `ApplicationEndingEvent` fires *before* any `@PreDestroy`, so the natural place to drain an external resource (stop an HTTP server, flush a buffer) is a subscriber:
 
 ```java
 @Component(scope = Scope.SINGLETON)
@@ -202,12 +207,11 @@ public class HttpServerLifecycle {
         app.stop(); // drained before any bean's @PreDestroy runs
     }
 }
-```
 
-The hook is idempotent with an explicit `container.shutdown()` / try-with-resources `close()`: the container's shutdown short-circuits on a second call, and the explicit path removes the hook so it does not fire again at exit. Opt out when you manage the lifecycle yourself (embedded use, tests):
-
-```java
-TikoOptions opts = TikoOptions.builder().registerShutdownHook(false).build();
+// Long-lived server — the JVM hook shuts the container down on exit:
+TikoDaemon daemon = Tiko.daemon(opts);
+var routes = daemon.container().get(TicketRoutes.class);
+// ... start serving ...
 ```
 
 ### Example — metrics collection

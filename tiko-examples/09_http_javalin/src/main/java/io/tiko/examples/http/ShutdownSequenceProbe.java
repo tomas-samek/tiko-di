@@ -9,10 +9,11 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Demonstrates the #92 cleanup pattern: with the framework's auto-registered JVM shutdown hook,
- * resource teardown hangs off {@code ApplicationEndingEvent} — the natural place to stop the HTTP
- * server ({@code javalinApp.stop()}) — and runs <em>before</em> any {@code @PreDestroy}, with no
- * manual {@code Runtime.addShutdownHook}. The recorded order proves that ordering.
+ * Demonstrates the #92 cleanup pattern: resource teardown hangs off {@code ApplicationEndingEvent}
+ * — the natural place to stop the HTTP server ({@code javalinApp.stop()}) — and runs <em>before</em>
+ * any {@code @PreDestroy}. Triggered by an explicit {@code shutdown()} / try-with-resources
+ * {@code close()} ({@code Tiko.create}) or by the JVM shutdown hook a {@code Tiko.daemon(...)}
+ * installs — no manual {@code Runtime.addShutdownHook} either way. The recorded order proves it.
  */
 @Component(scope = Scope.SINGLETON)
 public class ShutdownSequenceProbe {
