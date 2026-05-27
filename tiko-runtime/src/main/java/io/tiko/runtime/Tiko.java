@@ -170,18 +170,16 @@ public final class Tiko {
                 bootstraps.add(tb);
             }
 
-            Container result = bootstraps.isEmpty() ? container : new TransportAwareContainer(container, bootstraps);
-
-            // Register a JVM shutdown hook (opt-out via TikoOptions) so @PreDestroy and
-            // ApplicationEndingEvent fire on Ctrl+C / SIGTERM without the user wiring their own.
-            Container publicHandle = options.registerShutdownHook() ? new ShutdownHookContainer(result) : result;
-
-            // Start transports against the public-facing handle (outermost wrapper) so they hold
-            // the same container instance the caller receives.
-            for (TransportBootstrap tb : bootstraps) {
-                tb.start(publicHandle);
+            if (bootstraps.isEmpty()) {
+                return container;
             }
-            return publicHandle;
+
+            // Build the wrapper first so start() callers receive the public-facing handle.
+            TransportAwareContainer wrapper = new TransportAwareContainer(container, bootstraps);
+            for (TransportBootstrap tb : bootstraps) {
+                tb.start(wrapper);
+            }
+            return wrapper;
         } catch (RuntimeException e) {
             throw e;
         } catch (ClassNotFoundException e) {
@@ -545,108 +543,6 @@ public final class Tiko {
                 } catch (Exception ignored) {
                     /* best-effort */
                 }
-            }
-            delegate.shutdown();
-        }
-    }
-
-    /**
-     * Outermost wrapper that registers a JVM shutdown hook invoking {@code delegate.shutdown()}
-     * on process exit (#92), so {@code @PreDestroy} / {@code AutoCloseable.close()} and
-     * {@code ApplicationEndingEvent} fire on {@code Ctrl+C} / {@code SIGTERM}. An explicit
-     * {@code shutdown()} / {@code close()} removes the hook so the container can be collected and
-     * the hook does not fire again at exit; the delegate's own idempotent shutdown makes a
-     * double call harmless either way.
-     */
-    static final class ShutdownHookContainer implements Container {
-        private final Container delegate;
-        private final Thread hook;
-
-        ShutdownHookContainer(Container delegate) {
-            this.delegate = delegate;
-            this.hook = new Thread(delegate::shutdown, "tiko-shutdown");
-            Runtime.getRuntime().addShutdownHook(hook);
-        }
-
-        /** The registered JVM shutdown hook — package-private for tests. */
-        Thread shutdownHook() {
-            return hook;
-        }
-
-        @Override
-        public <T> T get(Class<T> type) {
-            return delegate.get(type);
-        }
-
-        @Override
-        public <T> T get(Class<T> type, String name) {
-            return delegate.get(type, name);
-        }
-
-        @Override
-        public <T> java.util.List<T> getAll(Class<T> type) {
-            return delegate.getAll(type);
-        }
-
-        @Override
-        public <T> io.tiko.Provider<T> getProvider(Class<T> type) {
-            return delegate.getProvider(type);
-        }
-
-        @Override
-        public <T> io.tiko.Provider<T> getProvider(Class<T> type, String name) {
-            return delegate.getProvider(type, name);
-        }
-
-        @Override
-        public void runInRequestScope(Runnable runnable) {
-            delegate.runInRequestScope(runnable);
-        }
-
-        @Override
-        public <T> T supplyInRequestScope(java.util.function.Supplier<T> s) {
-            return delegate.supplyInRequestScope(s);
-        }
-
-        @Override
-        public void runInEventScope(Runnable runnable) {
-            delegate.runInEventScope(runnable);
-        }
-
-        @Override
-        public <T> T supplyInEventScope(java.util.function.Supplier<T> s) {
-            return delegate.supplyInEventScope(s);
-        }
-
-        @Override
-        public void start() {
-            delegate.start();
-        }
-
-        @Override
-        public io.tiko.EventBus getEventBus() {
-            return delegate.getEventBus();
-        }
-
-        @Override
-        public java.util.concurrent.ExecutorService getEventExecutor() {
-            return delegate.getEventExecutor();
-        }
-
-        @Override
-        public io.tiko.ErrorHandler getErrorHandler() {
-            return delegate.getErrorHandler();
-        }
-
-        @Override
-        public void shutdown() {
-            // Explicit shutdown: drop the hook so the container can be GC'd and it does not fire
-            // again at JVM exit. removeShutdownHook throws ISE only once the JVM shutdown sequence
-            // has begun (i.e. this call arrived via a JVM hook) — a no-op case, so swallow it.
-            try {
-                Runtime.getRuntime().removeShutdownHook(hook);
-            } catch (IllegalStateException jvmAlreadyShuttingDown) {
-                // expected when shutdown() is reached during JVM shutdown
             }
             delegate.shutdown();
         }
