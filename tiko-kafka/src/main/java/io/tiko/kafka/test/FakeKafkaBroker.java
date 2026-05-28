@@ -105,11 +105,15 @@ public final class FakeKafkaBroker {
         @Override
         public boolean equals(Object o) {
             if (this == o) return true;
-            if (!(o instanceof StoredRecord other)) return false;
-            return offset == other.offset
-                    && timestamp == other.timestamp
-                    && Arrays.equals(payload, other.payload)
-                    && Objects.equals(headers, other.headers);
+            if (!(o
+                    instanceof
+                    StoredRecord(int otherOffset, byte[] otherPayload, Headers otherHeaders, long otherTs))) {
+                return false;
+            }
+            return offset == otherOffset
+                    && timestamp == otherTs
+                    && Arrays.equals(payload, otherPayload)
+                    && Objects.equals(headers, otherHeaders);
         }
 
         @Override
