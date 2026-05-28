@@ -3,6 +3,7 @@ package io.tiko.examples.basic;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.tiko.Container;
+import io.tiko.ContainerShutDownException;
 import io.tiko.runtime.Tiko;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -12,7 +13,7 @@ import org.junit.jupiter.api.RepeatedTest;
  * Property test for #47: concurrent {@code get()} on thread A racing
  * {@code shutdown()} on thread B should never deadlock, hang, or throw an
  * unexpected exception. The getter either succeeds (returning the singleton)
- * or is cleanly rejected with {@link IllegalStateException} per the post-shutdown
+ * or is cleanly rejected with {@link ContainerShutDownException} per the post-shutdown
  * gate. {@code @PreDestroy} runs exactly once regardless of the race winner.
  *
  * <p>Single-module {@code Tiko.create()} eagerly constructs all SINGLETON
@@ -39,7 +40,7 @@ class ConcurrentGetShutdownTest {
                         start.await();
                         container.get(ShutdownTestCounter.class);
                         getterSucceeded.set(true);
-                    } catch (IllegalStateException expected) {
+                    } catch (ContainerShutDownException expected) {
                         // shutdown() raced ahead; this is the documented post-shutdown behaviour
                         getterRejected.set(true);
                     } catch (InterruptedException ie) {
@@ -67,7 +68,8 @@ class ConcurrentGetShutdownTest {
         shutter.join(2000);
 
         assertThat(getterSucceeded.get() || getterRejected.get())
-                .as("getter must complete with either success or a clean ISE — never hang or throw something else")
+                .as(
+                        "getter must complete with either success or a clean ContainerShutDownException — never hang or throw something else")
                 .isTrue();
         assertThat(ShutdownTestCounter.preDestroyCount.get())
                 .as("singleton was eagerly constructed in start(); shutdown runs @PreDestroy exactly once")
