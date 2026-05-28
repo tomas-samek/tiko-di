@@ -739,20 +739,20 @@ public final class ContainerGenerator {
         if (provider instanceof FactoryMethodModel factoryDep) {
             call = factoryGetterName(factoryDep) + "()";
         } else if (provider instanceof ComponentModel component) {
-            String methodName = "get" + component.getClassName();
+            // Named lookup routes through the typed get(Class, name) dispatcher; per-class getters
+            // are no-arg and cannot take a qualifier (#242).
             call = dependency
                     .getQualifier()
-                    .map(q -> methodName + "(\"" + q + "\")")
-                    .orElse(methodName + "()");
+                    .map(q -> "get(" + typeName + ".class, \"" + q + "\")")
+                    .orElse("get" + component.getClassName() + "()");
         } else if (provider instanceof io.tiko.processor.config.ConfigurationModel) {
             // @Configuration records are stored in configSingletons and retrieved via get(Class)
             call = "get(" + typeName + ".class)";
         } else {
-            String methodName = "get" + simpleClassName(typeName);
             call = dependency
                     .getQualifier()
-                    .map(q -> methodName + "(\"" + q + "\")")
-                    .orElse(methodName + "()");
+                    .map(q -> "get(" + typeName + ".class, \"" + q + "\")")
+                    .orElse("get" + simpleClassName(typeName) + "()");
         }
 
         return dependency.isProvider() ? "() -> " + call : call;

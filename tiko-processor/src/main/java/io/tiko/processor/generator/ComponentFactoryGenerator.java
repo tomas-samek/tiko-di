@@ -263,15 +263,14 @@ public final class ComponentFactoryGenerator {
         Object provider = context.findComponentOrFactory(dependencyKey).orElse(null);
 
         if (provider instanceof ComponentModel component) {
-            // Use the actual component class name, not the interface
-            String className = component.getClassName();
-            String methodName = "get" + className;
             if (dependency.getQualifier().isPresent()) {
+                // Named lookup routes through the typed get(Class, name) dispatcher — the per-class
+                // getter is no-arg and cannot take a qualifier (#242). The declared type keys the
+                // lookup, exactly like the container.get(Type.class, name) runtime API.
                 String qualifier = dependency.getQualifier().orElseThrow();
-                return String.format("container.%s(\"%s\")", methodName, qualifier);
-            } else {
-                return String.format("container.%s()", methodName);
+                return String.format("container.get(%s.class, \"%s\")", typeName, qualifier);
             }
+            return String.format("container.get%s()", component.getClassName());
         } else if (provider instanceof io.tiko.processor.model.FactoryMethodModel factory) {
             // Factories are addressed by their unique produce_<id>() getter regardless
             // of qualifier — the qualifier already disambiguated which factory the
@@ -291,15 +290,13 @@ public final class ComponentFactoryGenerator {
             // @Configuration records are stored in configSingletons and retrieved via container.get(Class)
             return String.format("container.get(%s.class)", typeName);
         } else {
-            // Fallback to the requested type name
-            String className = getSimpleClassName(typeName);
-            String methodName = "get" + className;
+            // Fallback to the requested type name. Same #242 rule: a qualified lookup goes through
+            // the typed dispatcher, an unqualified one through the no-arg per-class getter.
             if (dependency.getQualifier().isPresent()) {
                 String qualifier = dependency.getQualifier().orElseThrow();
-                return String.format("container.%s(\"%s\")", methodName, qualifier);
-            } else {
-                return String.format("container.%s()", methodName);
+                return String.format("container.get(%s.class, \"%s\")", typeName, qualifier);
             }
+            return String.format("container.get%s()", getSimpleClassName(typeName));
         }
     }
 
