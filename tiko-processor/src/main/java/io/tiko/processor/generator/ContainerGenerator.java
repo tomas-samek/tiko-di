@@ -919,6 +919,7 @@ public final class ContainerGenerator {
     private static final ClassName EVENT_ENDING = ClassName.get("io.tiko.events", "EventEndingEvent");
     private static final ClassName APP_STARTED = ClassName.get("io.tiko.events", "ApplicationStartedEvent");
     private static final ClassName APP_ENDING = ClassName.get("io.tiko.events", "ApplicationEndingEvent");
+    private static final ClassName BOUNDED_EXECUTION = ClassName.get("io.tiko.runtime", "BoundedExecution");
 
     /**
      * Creates runInRequestScope method.
@@ -1811,25 +1812,44 @@ public final class ContainerGenerator {
         method.addStatement(
                 "$T $L = ($T) singletons.get($S)", componentType, variableName, componentType, componentKey);
 
-        method.beginControlFlow("if ($L != null)", variableName);
-        method.beginControlFlow("try");
         boolean isAutoCloseOnly =
                 component.isAutoCloseable() && component.getPreDestroyMethods().isEmpty();
-        if (isAutoCloseOnly) {
-            method.addStatement("$L.close()", variableName);
-        } else {
-            for (var preDestroy : component.getPreDestroyMethods()) {
-                method.addStatement("$L.$L()", variableName, preDestroy.getSimpleName());
-            }
-        }
-        method.nextControlFlow("catch ($T __t)", Throwable.class);
-        // Failures route solely through ErrorHandler (#116) — no catch-site log.
         ClassName failureType = isAutoCloseOnly
                 ? ClassName.get("io.tiko", "AutoCloseFailure")
                 : ClassName.get("io.tiko", "PreDestroyFailure");
-        method.addStatement("errorHandler.onError(new $T($T.class, __t))", failureType, componentType);
-        method.endControlFlow(); // try/catch
+
+        method.beginControlFlow("if ($L != null)", variableName);
+        // Teardown runs under options.teardownTimeout() (#106): unset → inline on the shutdown
+        // thread (today's behavior, zero overhead), set → bounded with TimeoutException-caused
+        // routing. Either way failures route solely through ErrorHandler (#116) — no catch-site log.
+        method.addStatement(
+                "$T.run($L, this.options.teardownTimeout(), errorHandler, __t -> new $T($T.class, __t))",
+                BOUNDED_EXECUTION,
+                componentDestroyTask(component, variableName, isAutoCloseOnly),
+                failureType,
+                componentType);
         method.endControlFlow(); // if non-null
+    }
+
+    /**
+     * Builds the teardown task lambda for one SINGLETON component: {@code () -> bean.close()} for an
+     * AutoCloseable-only component, {@code () -> bean.preDestroy()} for a single {@code @PreDestroy},
+     * or a block lambda invoking each {@code @PreDestroy} in turn.
+     */
+    private CodeBlock componentDestroyTask(ComponentModel component, String variableName, boolean isAutoCloseOnly) {
+        if (isAutoCloseOnly) {
+            return CodeBlock.of("() -> $L.close()", variableName);
+        }
+        var preDestroys = component.getPreDestroyMethods();
+        if (preDestroys.size() == 1) {
+            return CodeBlock.of(
+                    "() -> $L.$L()", variableName, preDestroys.get(0).getSimpleName());
+        }
+        CodeBlock.Builder body = CodeBlock.builder().add("() -> {\n").indent();
+        for (var preDestroy : preDestroys) {
+            body.addStatement("$L.$L()", variableName, preDestroy.getSimpleName());
+        }
+        return body.unindent().add("}").build();
     }
 
     /**
@@ -1848,14 +1868,15 @@ public final class ContainerGenerator {
                 ClassName.get(AutoCloseable.class),
                 factoryKey);
         method.beginControlFlow("if ($L != null)", variableName);
-        method.beginControlFlow("try");
-        method.addStatement("$L.close()", variableName);
-        method.nextControlFlow("catch ($T __t)", Throwable.class);
+        // Bounded by options.teardownTimeout() (#106), same as component @PreDestroy; failures route
+        // solely through ErrorHandler (#116).
         method.addStatement(
-                "errorHandler.onError(new $T($L.getClass(), __t))",
+                "$T.run(() -> $L.close(), this.options.teardownTimeout(), errorHandler,"
+                        + " __t -> new $T($L.getClass(), __t))",
+                BOUNDED_EXECUTION,
+                variableName,
                 ClassName.get("io.tiko", "AutoCloseFailure"),
                 variableName);
-        method.endControlFlow(); // try/catch
         method.endControlFlow(); // if non-null
     }
 
