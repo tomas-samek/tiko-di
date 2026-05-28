@@ -33,6 +33,13 @@
         <module>13_mcp_introspection</module>
     </modules>
 
+    <properties>
+        <!-- Demonstration code, not the maintained library surface — skip SonarCloud analysis for
+             every example module (inherited by all submodules). Their JaCoCo reports are likewise
+             left out of the tiko-coverage aggregate. -->
+        <sonar.skip>true</sonar.skip>
+    </properties>
+
     <!--
       No logging-binding deps inherited by examples. Tiko's framework code logs
       via java.util.logging (see #53), so examples need no extra binding to
