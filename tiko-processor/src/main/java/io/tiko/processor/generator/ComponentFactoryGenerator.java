@@ -133,7 +133,7 @@ public final class ComponentFactoryGenerator {
                 TypeName innerType = TypeName.get(dependency.getUnwrappedType().orElseThrow());
                 String existing = generateContainerGetCall(dependency, component);
                 if (dependency.getQualifier().isPresent() && !dependency.isPicked()) {
-                    String qualifier = dependency.getQualifier().get();
+                    String qualifier = dependency.getQualifier().orElseThrow();
                     methodBuilder.addStatement(
                             "$1T $2L = () -> container.options().hasOverride($3T.class, $4S) ? ($3T) container.options().getOverride($3T.class, $4S).get() : $5L",
                             providerType,
@@ -168,7 +168,7 @@ public final class ComponentFactoryGenerator {
                 TypeName declaredType = TypeName.get(dependency.getType());
                 String existing = generateContainerGetCall(dependency, component);
                 if (dependency.getQualifier().isPresent() && !dependency.isPicked()) {
-                    String qualifier = dependency.getQualifier().get();
+                    String qualifier = dependency.getQualifier().orElseThrow();
                     methodBuilder.addStatement(
                             "$1T $2L = container.options().hasOverride($1T.class, $3S) ? ($1T) container.options().getOverride($1T.class, $3S).get() : $4L",
                             declaredType,
@@ -232,8 +232,9 @@ public final class ComponentFactoryGenerator {
      *     current scope).
      */
     private String generateContainerGetCall(DependencyModel dependency, ComponentModel consumer) {
-        String typeName =
-                dependency.isProvider() ? dependency.getUnwrappedType().get().toString() : dependency.getTypeName();
+        String typeName = dependency.isProvider()
+                ? dependency.getUnwrappedType().orElseThrow().toString()
+                : dependency.getTypeName();
 
         // @Pick: identity is the picked impl class. When @Named is also present, the
         // qualifier narrows further — the lookup goes through the composite key
@@ -242,7 +243,7 @@ public final class ComponentFactoryGenerator {
         // produce_<id>() getter; components have one getter per class regardless of
         // any @Component(name=...) metadata.
         if (dependency.isPicked()) {
-            String pickedFqn = dependency.getPickedTypeName().get();
+            String pickedFqn = dependency.getPickedTypeName().orElseThrow();
             Object pickedProvider = dependency
                     .getQualifier()
                     .map(q ->
@@ -266,7 +267,7 @@ public final class ComponentFactoryGenerator {
             String className = component.getClassName();
             String methodName = "get" + className;
             if (dependency.getQualifier().isPresent()) {
-                String qualifier = dependency.getQualifier().get();
+                String qualifier = dependency.getQualifier().orElseThrow();
                 return String.format("container.%s(\"%s\")", methodName, qualifier);
             } else {
                 return String.format("container.%s()", methodName);
@@ -294,7 +295,7 @@ public final class ComponentFactoryGenerator {
             String className = getSimpleClassName(typeName);
             String methodName = "get" + className;
             if (dependency.getQualifier().isPresent()) {
-                String qualifier = dependency.getQualifier().get();
+                String qualifier = dependency.getQualifier().orElseThrow();
                 return String.format("container.%s(\"%s\")", methodName, qualifier);
             } else {
                 return String.format("container.%s()", methodName);

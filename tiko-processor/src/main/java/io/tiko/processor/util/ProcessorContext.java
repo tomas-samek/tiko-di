@@ -251,7 +251,8 @@ public final class ProcessorContext {
         for (ComponentModel component : components.values()) {
             // Check if component implements the requested interface
             if (component.getImplementedInterface().isPresent()) {
-                String interfaceName = component.getImplementedInterface().get().toString();
+                String interfaceName =
+                        component.getImplementedInterface().orElseThrow().toString();
                 if (interfaceName.equals(typeName)) {
                     // Check qualifier matches if present
                     if (qualifier.isEmpty()

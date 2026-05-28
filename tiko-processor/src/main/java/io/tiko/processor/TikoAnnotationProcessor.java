@@ -955,11 +955,8 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
             valid = false;
         }
 
-        // Validate Picker<T> injection points (warn if no local impls)
-        PickerValidator pickerValidator = new PickerValidator(context);
-        if (!pickerValidator.validate()) {
-            valid = false;
-        }
+        // Validate Picker<T> injection points (warn-only — never fails the build, so no verdict)
+        new PickerValidator(context).validate();
 
         // Validate @Pick usage on injection-point parameters
         PickValidator pickValidator = new PickValidator(context);

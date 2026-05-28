@@ -702,19 +702,20 @@ public final class ContainerGenerator {
         // Picker<T> is constructed inline via the generic ContainerPicker — no provider
         // lookup. Inside the container we pass `this` (we ARE the container).
         if (dependency.isPicker()) {
-            String baseType = dependency.getUnwrappedType().get().toString();
+            String baseType = dependency.getUnwrappedType().orElseThrow().toString();
             return "new io.tiko.runtime.ContainerPicker<>(this, " + baseType + ".class)";
         }
 
-        String typeName =
-                dependency.isProvider() ? dependency.getUnwrappedType().get().toString() : dependency.getTypeName();
+        String typeName = dependency.isProvider()
+                ? dependency.getUnwrappedType().orElseThrow().toString()
+                : dependency.getTypeName();
 
         // @Pick: route to the picked impl's getter. When @Named is also present, the
         // qualifier narrows the lookup to a specific provider via the (impl#name) key —
         // typically one of several @Produces methods that all return the picked class.
         // Mirrors ComponentFactoryGenerator without the "container." prefix.
         if (dependency.isPicked()) {
-            String pickedFqn = dependency.getPickedTypeName().get();
+            String pickedFqn = dependency.getPickedTypeName().orElseThrow();
             Object pickedProvider = dependency
                     .getQualifier()
                     .map(q ->
@@ -1410,7 +1411,7 @@ public final class ContainerGenerator {
         boolean first = true;
         for (ComponentModel component : named) {
             String getterName = "get" + component.getClassName();
-            String componentName = component.getName().get();
+            String componentName = component.getName().orElseThrow();
             List<TypeName> keys = effectiveRoutableTypes(component);
             if (keys.isEmpty()) continue;
 

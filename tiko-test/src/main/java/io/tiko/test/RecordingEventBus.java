@@ -10,6 +10,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Spy {@link EventBus} that records every published event before forwarding to a delegate bus.
@@ -31,7 +32,9 @@ public final class RecordingEventBus implements EventBus {
 
     private final EventBus delegate;
     private final List<Object> captured = new CopyOnWriteArrayList<>();
-    private volatile ExecutorService eventExecutor;
+    // AtomicReference, not a volatile field: wired in after construction and read from other
+    // threads, so it needs safe publication without S3077's volatile-on-a-mutable-object smell.
+    private final AtomicReference<ExecutorService> eventExecutor = new AtomicReference<>();
 
     public RecordingEventBus(EventBus delegate) {
         this.delegate = delegate;
@@ -43,7 +46,7 @@ public final class RecordingEventBus implements EventBus {
      * {@link #awaitAsyncDispatch(Duration)} to function.
      */
     public void setEventExecutor(ExecutorService executor) {
-        this.eventExecutor = executor;
+        this.eventExecutor.set(executor);
     }
 
     @Override
@@ -120,7 +123,7 @@ public final class RecordingEventBus implements EventBus {
      * @throws TimeoutException if the executor does not drain within {@code timeout}
      */
     public void awaitAsyncDispatch(Duration timeout) throws TimeoutException {
-        var exec = this.eventExecutor;
+        var exec = this.eventExecutor.get();
         if (exec == null) {
             throw new IllegalStateException(
                     "awaitAsyncDispatch requires the event executor to be wired (setEventExecutor). "

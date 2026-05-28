@@ -28,28 +28,28 @@ public final class PickerValidator {
         this.context = context;
     }
 
-    public boolean validate() {
-        boolean valid = true;
+    /**
+     * Runs the picker checks. <strong>Warn-only in v1</strong>: a missing local impl is a warning,
+     * not a build failure (cross-module impls are legitimate), so this never fails the build. The
+     * orchestrator invokes it for its diagnostics, not for a pass/fail verdict — hence {@code void}
+     * (the sibling validators that <em>can</em> fail return {@code boolean}).
+     */
+    public void validate() {
         for (ComponentModel component : context.getActiveComponents()) {
             for (DependencyModel dep : component.getDependencies()) {
-                if (!validateDep(dep)) {
-                    valid = false;
-                }
+                checkPicker(dep);
             }
         }
         for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
             for (DependencyModel dep : factory.getDependencies()) {
-                if (!validateDep(dep)) {
-                    valid = false;
-                }
+                checkPicker(dep);
             }
         }
-        return valid;
     }
 
-    private boolean validateDep(DependencyModel dep) {
+    private void checkPicker(DependencyModel dep) {
         if (!dep.isPicker()) {
-            return true;
+            return;
         }
         TypeMirror baseType = dep.getUnwrappedType().orElseThrow();
         String baseFqn = dep.getDependencyKey();
@@ -59,7 +59,7 @@ public final class PickerValidator {
         // outputs (matched against return type).
         boolean hasLocalImpl = anyComponentAssignableTo(baseType) || anyFactoryAssignableTo(baseType);
         if (hasLocalImpl) {
-            return true;
+            return;
         }
 
         // No local impl. We do NOT enforce cross-module visibility here in v1 — the
@@ -72,7 +72,6 @@ public final class PickerValidator {
                         dep.getParameter(),
                         "Picker<" + simpleName(baseFqn)
                                 + "> has no impls registered in this module. If the impls live in another module this is fine; otherwise the picker will always be empty.");
-        return true;
     }
 
     private boolean anyComponentAssignableTo(TypeMirror baseType) {

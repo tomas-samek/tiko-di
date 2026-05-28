@@ -46,6 +46,11 @@ public final class BoundedExecution {
      * @param failure maps the failing {@link Throwable} (thrown cause or {@link TimeoutException}) to
      *     the {@link ErrorContext} to route
      */
+    // S2095 (close the ExecutorService via try-with-resources): deliberately not done. The executor
+    // is shut down with shutdownNow() in the finally below — close()/try-with-resources would call
+    // shutdown() + awaitTermination, blocking on a hung task, which is exactly the case this method
+    // exists to bound. Forceful shutdownNow() is the correct cleanup here.
+    @SuppressWarnings("java:S2095")
     public static void run(
             CheckedRunnable task,
             Duration timeout,
