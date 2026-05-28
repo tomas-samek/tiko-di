@@ -51,6 +51,22 @@
         <hikari.version>6.2.1</hikari.version>
         <h2.version>2.3.232</h2.version>
         <mcp-sdk.version>0.18.2</mcp-sdk.version>
+
+        <!-- SonarCloud, CI-based analysis (the SonarCloud GitHub App's Automatic Analysis is
+             disabled in the UI — the two modes are mutually exclusive). The Maven scanner reads
+             these pom properties; it does NOT read sonar-project.properties, which is why that
+             file was removed when this landed. -->
+        <sonar-maven-plugin.version>5.1.0.4751</sonar-maven-plugin.version>
+        <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+        <sonar.organization>tomas-samek</sonar.organization>
+        <sonar.projectKey>tomas-samek_tiko-di</sonar.projectKey>
+        <!-- One aggregate report covers every module. ${maven.multiModuleProjectDirectory} resolves
+             to the reactor root for every module, so each points at the same aggregate file. -->
+        <sonar.coverage.jacoco.xmlReportPaths>${maven.multiModuleProjectDirectory}/tiko-coverage/target/site/jacoco-aggregate/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
+        <!-- Generated code carries no human-written logic to analyse (mirrors the JaCoCo excludes).
+             Example modules are excluded via sonar.skip in tiko-examples/pom.xml; comparisons/ is not
+             a reactor module, so the scanner never sees it. -->
+        <sonar.exclusions>**/generated-sources/**,**/io/tiko/generated/**</sonar.exclusions>
     </properties>
 
     <dependencyManagement>
@@ -253,6 +269,11 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-failsafe-plugin</artifactId>
                     <version>3.2.2</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.sonarsource.scanner.maven</groupId>
+                    <artifactId>sonar-maven-plugin</artifactId>
+                    <version>${sonar-maven-plugin.version}</version>
                 </plugin>
                 <plugin>
                     <groupId>org.jacoco</groupId>

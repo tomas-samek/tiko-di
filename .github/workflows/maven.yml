@@ -46,6 +46,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history so SonarCloud can attribute new-code/blame accurately.
+          fetch-depth: 0
       - name: Set up JDK ${{ matrix.java }}
         uses: actions/setup-java@v4
         with:
@@ -58,6 +61,16 @@ jobs:
       # fails to find tiko-bom in central.
       - name: Run integration tests
         run: mvn -B install --file pom.xml
+      # SonarCloud CI-based analysis, on the JDK 21 leg only (one analysis per build). Runs after
+      # `install`, reusing the compiled classes + the JaCoCo aggregate from this same job — no
+      # rebuild. Requires the SONAR_TOKEN secret and Automatic Analysis DISABLED in the SonarCloud
+      # UI (the two analysis modes are mutually exclusive). Project key, org, host, coverage path,
+      # and exclusions all come from the root pom's <properties>.
+      - name: SonarCloud scan
+        if: matrix.java == '21'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: mvn -B sonar:sonar --file pom.xml
       # `install` runs the verify phase, so JaCoCo's per-module `report` and the aggregate
       # `report-aggregate` have produced their XML by now. Upload them so coverage tooling
       # (e.g. a future SonarCloud CI scanner) can consume them without re-running the build.
