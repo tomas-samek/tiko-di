@@ -5,7 +5,7 @@ argument-hint: <issue-number>
 
 Implement GitHub issue #$ARGUMENTS in this repo. Run the loop below end-to-end without confirming between steps unless a stop condition fires.
 
-The deliverable is a **green PR** ready for human review — branch pushed, PR opened, CI green. Merging and closing the issue are the repo owner's call: never merge the PR yourself, and never close the issue by hand (the `Closes #` line in the PR body does that on merge).
+The deliverable is a **green PR** ready for human review — branch pushed, PR opened, and **every check green (including the SonarCloud scan)**. Opening the PR is not the finish line: you must wait for the PR's checks to land and confirm they pass (step 6) before reporting the work done. Merging and closing the issue are the repo owner's call: never merge the PR yourself, and never close the issue by hand (the `Closes #` line in the PR body does that on merge).
 
 ## Tooling locations
 
@@ -52,6 +52,15 @@ If a memo is older than a couple of days, verify its claims against current code
   - **Title** mirroring the commit subject.
   - **Body** containing `## Summary` (what changed and why), `## Test plan` (checklist of what was verified), and `Closes #$ARGUMENTS`.
 - Return the PR URL.
+
+## 6. Wait for the PR checks — they are part of the deliverable
+
+A green local build is **not** sufficient. CI runs a JDK matrix (21/25/26) and the SonarCloud scan, and exercises timing-sensitive and integration paths a local `-DskipITs` run skips — so a PR can be red even when `mvn clean install` passed locally. Do not report the issue as done while checks are pending or failing.
+
+- After opening the PR, wait for the checks to complete: `gh pr checks <pr>` (or `gh run watch <run-id> --exit-status`, resolving the run via `gh run list --branch <branch> --limit 1`). Checks take a few minutes; poll or watch rather than declaring victory immediately.
+- **All checks must be green**, explicitly including the **SonarCloud scan / Quality Gate** (run by the CI-based analysis). A failing Build, Integration Test, or Sonar check means the work is unfinished.
+- If anything is red, read the failing job log (`gh run view --job <id> --log`, grepping for `FAILURE!`, `ERROR`, `Failed to execute goal`, `Reactor Summary`), diagnose, fix on the same branch, push a follow-up commit, and re-verify. Treat a CI-only failure (passes locally, fails in CI) as a real bug — usually a JDK-matrix or timing-dependent path the local run didn't hit.
+- The issue is done only once the branch is pushed, the PR is open, and **every check — CI and Sonar — is green**.
 
 ## Stop conditions (flag and wait)
 
