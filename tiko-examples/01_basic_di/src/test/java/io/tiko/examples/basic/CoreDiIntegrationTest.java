@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.tiko.Container;
+import io.tiko.NoSuchComponentException;
 import io.tiko.runtime.Tiko;
 import org.junit.jupiter.api.Test;
 
@@ -30,7 +31,14 @@ class CoreDiIntegrationTest {
     @Test
     void get_unknownType_throws() {
         try (Container container = Tiko.create()) {
-            assertThatThrownBy(() -> container.get(String.class)).isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> container.get(String.class))
+                    .isInstanceOf(NoSuchComponentException.class)
+                    // structured field carries the requested type, not just a message
+                    .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.type(NoSuchComponentException.class))
+                    .satisfies(e -> {
+                        assertThat(e.type()).isEqualTo(String.class);
+                        assertThat(e.qualifier()).isNull();
+                    });
         }
     }
 

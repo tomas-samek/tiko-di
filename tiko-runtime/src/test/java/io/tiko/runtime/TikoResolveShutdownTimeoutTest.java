@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.tiko.ConfigSource;
+import io.tiko.ContainerInitializationException;
 import java.time.Duration;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -57,6 +58,7 @@ class TikoResolveShutdownTimeoutTest {
         TikoOptions opts = TikoOptions.builder().configSource(source).build();
 
         assertThatThrownBy(() -> Tiko.resolveShutdownTimeout(opts, CL))
+                .isInstanceOf(ContainerInitializationException.class)
                 .hasMessageContaining("shutdownTimeout")
                 .hasMessageContaining("negative");
     }

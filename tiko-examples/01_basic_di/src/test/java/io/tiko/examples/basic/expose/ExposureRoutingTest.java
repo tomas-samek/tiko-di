@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.tiko.Container;
+import io.tiko.NoSuchComponentException;
 import io.tiko.runtime.Tiko;
 import org.junit.jupiter.api.Test;
 
@@ -52,7 +53,7 @@ class ExposureRoutingTest {
             assertThat(viaGamma).isInstanceOf(RestrictedBean.class);
             // Delta is implemented but NOT exposed — must not be routable.
             assertThatThrownBy(() -> container.get(Delta.class))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(NoSuchComponentException.class)
                     .hasMessageContaining(Delta.class.getName());
             // exposeSelf is true by default — the concrete class still routes.
             RestrictedBean viaConcrete = container.get(RestrictedBean.class);
@@ -68,7 +69,7 @@ class ExposureRoutingTest {
             assertThat(viaEpsilon).isInstanceOf(SelfHiddenBean.class);
             // The concrete class is hidden — exposeSelf = false.
             assertThatThrownBy(() -> container.get(SelfHiddenBean.class))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(NoSuchComponentException.class)
                     .hasMessageContaining(SelfHiddenBean.class.getName());
         }
     }
@@ -95,7 +96,7 @@ class ExposureRoutingTest {
                     .isTrue();
             // The bean itself remains unreachable from the public lookup API.
             assertThatThrownBy(() -> container.get(HiddenEventListener.class))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(NoSuchComponentException.class)
                     .hasMessageContaining(HiddenEventListener.class.getName());
         }
     }

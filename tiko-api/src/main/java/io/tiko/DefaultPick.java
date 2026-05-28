@@ -40,7 +40,7 @@ final class DefaultPick<T> implements Pick<T> {
     public T orDefault(T fallback) {
         try {
             return resolve();
-        } catch (IllegalArgumentException missing) {
+        } catch (NoSuchComponentException missing) {
             return fallback;
         }
     }

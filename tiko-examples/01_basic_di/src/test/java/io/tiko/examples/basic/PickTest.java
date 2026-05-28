@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.tiko.Container;
+import io.tiko.NoSuchComponentException;
 import io.tiko.Pick;
 import io.tiko.Provider;
 import io.tiko.runtime.Tiko;
@@ -65,7 +66,7 @@ class PickTest {
     void resolve_unknownName_throws() {
         try (Container container = Tiko.create()) {
             Pick<Greeter> pick = container.pick(Greeter.class).withName("french");
-            assertThatThrownBy(pick::resolve).isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(pick::resolve).isInstanceOf(NoSuchComponentException.class);
         }
     }
 
@@ -74,7 +75,7 @@ class PickTest {
         try (Container container = Tiko.create()) {
             Provider<Greeter> provider =
                     container.pick(Greeter.class).withName("french").asProvider();
-            assertThatThrownBy(provider::get).isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(provider::get).isInstanceOf(NoSuchComponentException.class);
         }
     }
 }

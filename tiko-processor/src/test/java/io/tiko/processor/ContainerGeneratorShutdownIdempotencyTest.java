@@ -60,7 +60,7 @@ class ContainerGeneratorShutdownIdempotencyTest {
         String content = generateContainerSource();
 
         assertThat(content).contains("if (stopped.get() && !inShutdownThread.get())");
-        assertThat(content).contains("throw new IllegalStateException(\"Container has been shut down\")");
+        assertThat(content).contains("throw new ContainerShutDownException()");
         assertThat(content).contains("inFlightGets.incrementAndGet()");
         assertThat(content).contains("inFlightGets.decrementAndGet()");
     }

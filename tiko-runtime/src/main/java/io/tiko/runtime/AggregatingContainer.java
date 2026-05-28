@@ -1,8 +1,10 @@
 package io.tiko.runtime;
 
 import io.tiko.Container;
+import io.tiko.ContainerInitializationException;
 import io.tiko.ErrorHandler;
 import io.tiko.EventBus;
+import io.tiko.NoSuchComponentException;
 import io.tiko.Provider;
 import io.tiko.events.ApplicationEndingEvent;
 import io.tiko.events.ApplicationStartedEvent;
@@ -68,7 +70,7 @@ public final class AggregatingContainer implements Container {
      *                         instance and owns its lifecycle (shuts it down on
      *                         {@link #shutdown()}). When non-{@code null}, the user owns
      *                         the lifecycle — the aggregator never shuts it down.
-     * @throws IllegalStateException if container discovery or initialization fails
+     * @throws ContainerInitializationException if container discovery or initialization fails
      */
     public AggregatingContainer(
             EventBus eventBus, ErrorHandler errorHandler, java.util.concurrent.ExecutorService userEventExecutor) {
@@ -154,7 +156,7 @@ public final class AggregatingContainer implements Container {
         try {
             discoverAndInitializeModuleContainers();
         } catch (Exception e) {
-            throw new IllegalStateException("Failed to initialize aggregating container", e);
+            throw new ContainerInitializationException("Failed to initialize aggregating container", e);
         }
     }
 
@@ -251,7 +253,7 @@ public final class AggregatingContainer implements Container {
         }
 
         if (moduleContainers.isEmpty()) {
-            throw new IllegalStateException(
+            throw new ContainerInitializationException(
                     "No Tiko containers found on classpath. Expected at least one " + descriptorName + " file.");
         }
     }
@@ -276,7 +278,8 @@ public final class AggregatingContainer implements Container {
         java.util.function.Supplier<T> supplier = () -> {
             Container shadowContainer = containersByImplName.get(shadowContainerFqn);
             if (shadowContainer == null) {
-                throw new IllegalStateException("Shadow declaration target not instantiated: " + shadowContainerFqn);
+                throw new ContainerInitializationException(
+                        "Shadow declaration target not instantiated: " + shadowContainerFqn);
             }
             return (T) shadowContainer.get(componentClass);
         };
@@ -299,7 +302,7 @@ public final class AggregatingContainer implements Container {
 
         String implClassName = props.getProperty("impl");
         if (implClassName == null || implClassName.trim().isEmpty()) {
-            throw new IllegalStateException("Missing 'impl' property in " + resourceUrl);
+            throw new ContainerInitializationException("Missing 'impl' property in " + resourceUrl);
         }
 
         // Load and instantiate the container with the canonical constructor
@@ -370,7 +373,7 @@ public final class AggregatingContainer implements Container {
                         configToContainer.put(typeClass, moduleContainer);
                     } catch (ClassNotFoundException e) {
                         // Module declared a config record class that's not on the classpath — surface a clear failure.
-                        throw new IllegalStateException(
+                        throw new ContainerInitializationException(
                                 "Configuration record " + fqn + " referenced in configs.txt is not on the classpath",
                                 e);
                     }
@@ -391,7 +394,7 @@ public final class AggregatingContainer implements Container {
         try {
             return new URL(base.getProtocol(), base.getHost(), base.getPort(), siblingPath);
         } catch (java.net.MalformedURLException e) {
-            throw new IllegalStateException("Failed to derive " + sibling + " URL from " + base, e);
+            throw new ContainerInitializationException("Failed to derive " + sibling + " URL from " + base, e);
         }
     }
 
@@ -401,8 +404,7 @@ public final class AggregatingContainer implements Container {
         if (ccfg != null) return ccfg.get(type);
         Container container = componentToContainerMap.get(type);
         if (container == null) {
-            throw new IllegalArgumentException("No component found for type: " + type.getName()
-                    + ". Available components: " + componentToContainerMap.keySet());
+            throw new NoSuchComponentException(type);
         }
         return container.get(type);
     }
@@ -413,11 +415,11 @@ public final class AggregatingContainer implements Container {
         for (Container container : moduleContainers) {
             try {
                 return container.get(type, name);
-            } catch (IllegalArgumentException e) {
+            } catch (NoSuchComponentException e) {
                 // Try next container
             }
         }
-        throw new IllegalArgumentException("No component found for type: " + type.getName() + " with name: " + name);
+        throw new NoSuchComponentException(type, name);
     }
 
     @Override
@@ -437,7 +439,7 @@ public final class AggregatingContainer implements Container {
     public <T> Provider<T> getProvider(Class<T> type) {
         Container container = componentToContainerMap.get(type);
         if (container == null) {
-            throw new IllegalArgumentException("No component found for type: " + type.getName());
+            throw new NoSuchComponentException(type);
         }
         return container.getProvider(type);
     }
@@ -448,11 +450,11 @@ public final class AggregatingContainer implements Container {
         for (Container container : moduleContainers) {
             try {
                 return container.getProvider(type, name);
-            } catch (UnsupportedOperationException | IllegalArgumentException e) {
+            } catch (UnsupportedOperationException | NoSuchComponentException e) {
                 // Try next container
             }
         }
-        throw new IllegalArgumentException("No component found for type: " + type.getName() + " with name: " + name);
+        throw new NoSuchComponentException(type, name);
     }
 
     @Override
@@ -607,7 +609,7 @@ public final class AggregatingContainer implements Container {
         for (java.util.Map.Entry<Class<?>, Object> e : configs.entrySet()) {
             Container target = configToContainer.get(e.getKey());
             if (target == null) {
-                throw new IllegalStateException("No module owns config type "
+                throw new ContainerInitializationException("No module owns config type "
                         + e.getKey().getName() + ". Discovered config types: " + configToContainer.keySet());
             }
             try {
@@ -615,7 +617,7 @@ public final class AggregatingContainer implements Container {
                         .getMethod("injectConfigs", java.util.Map.class)
                         .invoke(target, java.util.Map.of(e.getKey(), e.getValue()));
             } catch (Exception ex) {
-                throw new IllegalStateException(
+                throw new ContainerInitializationException(
                         "Failed to inject config " + e.getKey().getName(), ex);
             }
         }
