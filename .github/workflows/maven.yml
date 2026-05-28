@@ -58,3 +58,15 @@ jobs:
       # fails to find tiko-bom in central.
       - name: Run integration tests
         run: mvn -B install --file pom.xml
+      # `install` runs the verify phase, so JaCoCo's per-module `report` and the aggregate
+      # `report-aggregate` have produced their XML by now. Upload them so coverage tooling
+      # (e.g. a future SonarCloud CI scanner) can consume them without re-running the build.
+      - name: Upload JaCoCo coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-coverage-jdk${{ matrix.java }}
+          path: |
+            **/target/site/jacoco/jacoco.xml
+            tiko-coverage/target/site/jacoco-aggregate/jacoco.xml
+          if-no-files-found: warn
