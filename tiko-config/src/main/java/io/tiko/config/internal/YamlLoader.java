@@ -1,6 +1,9 @@
 package io.tiko.config.internal;
 
+import io.tiko.ConfigIssue;
+import io.tiko.ConfigIssueCode;
 import io.tiko.SourceLocation;
+import io.tiko.config.ConfigValidationException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -10,6 +13,7 @@ import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
 import org.yaml.snakeyaml.error.Mark;
+import org.yaml.snakeyaml.error.MarkedYAMLException;
 import org.yaml.snakeyaml.nodes.MappingNode;
 import org.yaml.snakeyaml.nodes.Node;
 import org.yaml.snakeyaml.nodes.NodeTuple;
@@ -40,7 +44,15 @@ public final class YamlLoader {
         // but spelling it out makes the security property a code-level invariant.
         var yaml = new Yaml(new SafeConstructor(opts));
 
-        Node root = yaml.compose(new java.io.InputStreamReader(input, java.nio.charset.StandardCharsets.UTF_8));
+        Node root;
+        try {
+            root = yaml.compose(new java.io.InputStreamReader(input, java.nio.charset.StandardCharsets.UTF_8));
+        } catch (MarkedYAMLException e) {
+            // A YAML syntax error (unclosed bracket, bad indentation) would otherwise surface as a
+            // raw SnakeYAML exception. Re-shape it as a Tiko config error anchored at the source's
+            // file:line:col so a malformed file reads like every other config failure at boot.
+            throw malformedYaml(sourceLabel, e);
+        }
         if (root == null) {
             return new LoadedYaml(new LinkedHashMap<>(), new LinkedHashMap<>());
         }
@@ -123,6 +135,15 @@ public final class YamlLoader {
         opts.setAllowDuplicateKeys(false);
         var yaml = new Yaml(new SafeConstructor(opts));
         return yaml.load(scalar.getValue());
+    }
+
+    private static ConfigValidationException malformedYaml(String sourceLabel, MarkedYAMLException e) {
+        Mark mark = e.getProblemMark();
+        String anchor =
+                mark != null ? sourceLabel + ":" + (mark.getLine() + 1) + ":" + (mark.getColumn() + 1) : sourceLabel;
+        String problem = e.getProblem() != null ? e.getProblem() : "malformed YAML";
+        return new ConfigValidationException(
+                sourceLabel, List.of(new ConfigIssue(ConfigIssueCode.INVALID_VALUE, anchor + ": " + problem)));
     }
 
     private static SourceLocation locationOf(Node node, String sourceLabel) {

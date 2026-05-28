@@ -6,8 +6,12 @@ import com.google.testing.compile.Compilation;
 import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
 import io.tiko.processor.TikoAnnotationProcessor;
+import java.util.stream.Stream;
 import javax.tools.JavaFileObject;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class ConfigurationValidatorTest {
 
@@ -75,19 +79,40 @@ class ConfigurationValidatorTest {
         assertThat(c).hadErrorContaining("@Default cannot be combined with Optional");
     }
 
-    @Test
-    void unparseableDefault_emitsError() {
+    /**
+     * #169 part C: a {@code @Default} literal is coerced to the field's declared type at compile
+     * time, so a value that cannot parse fails the build (naming the field + type) while a parseable
+     * one compiles. One row per acceptance case — a bad {@code int} and {@code Duration}, a good
+     * {@code boolean} and {@code String}.
+     */
+    static Stream<Arguments> defaultLiteralCases() {
+        return Stream.of(
+                Arguments.of("non-numeric int is rejected", "int", "abc", false),
+                Arguments.of("non-duration Duration is rejected", "java.time.Duration", "not-a-duration", false),
+                Arguments.of("boolean literal compiles", "boolean", "true", true),
+                Arguments.of("string literal compiles", "String", "INFO", true));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("defaultLiteralCases")
+    void defaultLiteralIsTypeCheckedAtCompileTime(String name, String fieldType, String literal, boolean expectOk) {
         JavaFileObject src = JavaFileObjects.forSourceLines(
-                "io.example.U",
+                "io.example.D",
                 "package io.example;",
                 "import io.tiko.annotations.Configuration;",
                 "import io.tiko.annotations.Default;",
-                "@Configuration(prefix = \"u\")",
-                "public record U(@Default(\"abc\") int v) {}");
+                "@Configuration(prefix = \"d\")",
+                "public record D(@Default(\"" + literal + "\") " + fieldType + " v) {}");
         Compilation c =
                 Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(src);
-        assertThat(c).failed();
-        assertThat(c).hadErrorContaining("@Default('abc') on int field 'v'");
+
+        if (expectOk) {
+            assertThat(c).succeeded();
+        } else {
+            assertThat(c).failed();
+            assertThat(c).hadErrorContaining("@Default('" + literal + "')");
+            assertThat(c).hadErrorContaining("field 'v'");
+        }
     }
 
     @Test

@@ -44,6 +44,37 @@ class InterpolatorTest {
         assertThat(ctx.errors().get(0).message()).contains("DB_URL");
     }
 
+    // Nested interpolation (#169) — pins the ACTUAL behavior, which is that nested placeholders in a
+    // default are NOT supported: the default group of the placeholder regex is `[^}]*`, so it stops
+    // at the first `}`. For input `${A:${B}}` the regex matches `${A:${B}` (default = the literal
+    // `${B`) and leaves a trailing `}`. The single matcher pass never re-scans its own output, so the
+    // inner `${B}` is never resolved. These tests document that boundary so lifting it later is a
+    // deliberate, test-breaking change.
+
+    @Test
+    void nestedDefaultPlaceholderIsNotResolvedWhenOuterIsSet() {
+        Map<String, Object> tree = Map.of("v", "${A:${B}}");
+        BindContext ctx = new BindContext("c.yaml");
+        Map<String, Object> result =
+                (Map<String, Object>) Interpolator.interpolate(tree, env(Map.of("A", "alpha", "B", "beta")), ctx);
+        // A resolves; the unmatched trailing brace is left verbatim (the inner `${B}` was never a unit).
+        assertThat(result).containsEntry("v", "alpha}");
+        assertThat(ctx.hasErrors()).isFalse();
+    }
+
+    @Test
+    void nestedDefaultPlaceholderIsLeftLiteralWhenOuterIsAbsent() {
+        Map<String, Object> tree = Map.of("v", "${A:${B}}");
+        BindContext ctx = new BindContext("c.yaml");
+        // B is set, but it is trapped inside the literal default `${B` and never resolved.
+        Map<String, Object> result =
+                (Map<String, Object>) Interpolator.interpolate(tree, env(Map.of("B", "beta")), ctx);
+        assertThat(result).containsEntry("v", "${B}");
+        // No error: the outer placeholder has a (literal) default, so the unresolved-variable path is
+        // never taken — even though nothing actually resolved.
+        assertThat(ctx.hasErrors()).isFalse();
+    }
+
     @Test
     void multiple_substitutions_per_scalar() {
         Map<String, Object> tree = Map.of("conn", "${HOST}:${PORT}");
