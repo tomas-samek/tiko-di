@@ -61,10 +61,15 @@ class EventTest {
     @Test
     void identityIsByEventId() {
         Event<Created> a = new Event<>(new Created(1));
-        Event<Created> b = new Event<>(new Created(1)); // same payload, different event id
+        Event<Created> b = new Event<>(new Created(1)); // same payload, distinct (random) event id
+        Object notAnEvent = "x";
 
-        assertThat(a).isEqualTo(a).hasSameHashCodeAs(a);
-        assertThat(a).isNotEqualTo(b).isNotEqualTo("not an event").isNotEqualTo(null);
+        // Direct boolean form, not assertThat(a).isEqualTo(...): self/dissimilar-type AssertJ
+        // comparisons are themselves flagged as reliability bugs (S5863/S5845).
+        assertThat(a.equals(b)).as("distinct event ids -> not equal").isFalse();
+        assertThat(a.equals(notAnEvent)).as("non-Event -> not equal").isFalse();
+        assertThat(a.equals(null)).isFalse();
+        assertThat(a.hashCode()).isEqualTo(java.util.Objects.hash(a.getEventId()));
     }
 
     @Test
