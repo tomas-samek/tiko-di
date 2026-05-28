@@ -36,20 +36,24 @@ class PostShutdownGetTest {
     }
 
     @Test
-    void shutdown_returns_immediately_on_repeated_call() {
+    void repeatedShutdownRunsPreDestroyExactlyOnce() {
+        // #85: idempotency is proven by a side-effect counter, not a wall-clock bound. The old test
+        // asserted an absolute 1 ms cap on the second call, which flaked under JIT/GC/CI noise at
+        // sub-millisecond granularity. Counting @PreDestroy invocations is deterministic.
         Container container = Tiko.create();
-        long t0 = System.nanoTime();
-        container.shutdown();
-        long firstCall = System.nanoTime() - t0;
+        // Force the SINGLETON to exist so its @PreDestroy participates in shutdown.
+        container.get(ShutdownTestCounter.class);
 
-        long t1 = System.nanoTime();
         container.shutdown();
-        long secondCall = System.nanoTime() - t1;
+        assertThat(ShutdownTestCounter.preDestroyCount.get())
+                .as("first shutdown() runs @PreDestroy")
+                .isEqualTo(1);
 
-        // Second call should be ~free (just CAS read). Allow generous slack: 1 ms.
-        assertThat(secondCall)
-                .as("second shutdown() returns via idempotency CAS, not full sequence")
-                .isLessThan(1_000_000L);
-        assertThat(secondCall).isLessThan(firstCall);
+        // The idempotency CAS short-circuits the second call, so the teardown sequence — and thus
+        // @PreDestroy — must not run again.
+        container.shutdown();
+        assertThat(ShutdownTestCounter.preDestroyCount.get())
+                .as("second shutdown() is a no-op — @PreDestroy is not re-run")
+                .isEqualTo(1);
     }
 }
