@@ -61,6 +61,37 @@ class CoercersTest {
         assertThat(Coercers.durationCoercer().coerce("PT30S")).isEqualTo(Duration.ofSeconds(30));
     }
 
+    static Stream<Arguments> friendlyDurations() {
+        return Stream.of(
+                Arguments.of("5s", Duration.ofSeconds(5)),
+                Arguments.of("30s", Duration.ofSeconds(30)),
+                Arguments.of("5m", Duration.ofMinutes(5)),
+                Arguments.of("1h", Duration.ofHours(1)),
+                Arguments.of("2d", Duration.ofDays(2)),
+                Arguments.of("500ms", Duration.ofMillis(500)),
+                Arguments.of("100ns", Duration.ofNanos(100)),
+                Arguments.of("-5s", Duration.ofSeconds(-5)),
+                // ISO-8601 forms keep working unchanged — the friendly path only matches bare
+                // <amount><unit>; anything starting with P falls through to Duration.parse.
+                Arguments.of("PT5S", Duration.ofSeconds(5)),
+                Arguments.of("PT1H30M", Duration.ofHours(1).plusMinutes(30)),
+                Arguments.of("P2D", Duration.ofDays(2)));
+    }
+
+    @ParameterizedTest(name = "{0} -> {1}")
+    @MethodSource("friendlyDurations")
+    void durationCoercerParsesFriendlyAndIsoSyntax(String input, Duration expected) {
+        assertThat(Coercers.durationCoercer().coerce(input)).isEqualTo(expected);
+    }
+
+    @Test
+    void durationCoercerRejectsGarbageNamingBothForms() {
+        assertThatThrownBy(() -> Coercers.durationCoercer().coerce("soon"))
+                .isInstanceOf(CoercionException.class)
+                .hasMessageContaining("5s") // friendly form named
+                .hasMessageContaining("PT5S"); // ISO-8601 form named
+    }
+
     @Test
     void instant_coercer_parses_iso8601() {
         assertThat(Coercers.instantCoercer().coerce("2026-05-04T12:00:00Z"))
