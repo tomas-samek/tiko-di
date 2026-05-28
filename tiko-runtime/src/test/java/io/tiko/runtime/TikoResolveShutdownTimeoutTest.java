@@ -63,6 +63,18 @@ class TikoResolveShutdownTimeoutTest {
                 .hasMessageContaining("negative");
     }
 
+    @Test
+    void unparseableYamlValueThrowsContainerInitialization() {
+        // Neither friendly (#113) nor ISO-8601 — the coercer rejects it, and the bootstrap surfaces
+        // it as a typed init failure (#98) rather than a raw coercion/invocation exception.
+        ConfigSource source = new MapConfigSource(Map.of("tiko", Map.of("shutdownTimeout", "abc")));
+        TikoOptions opts = TikoOptions.builder().configSource(source).build();
+
+        assertThatThrownBy(() -> Tiko.resolveShutdownTimeout(opts, CL))
+                .isInstanceOf(ContainerInitializationException.class)
+                .hasMessageContaining("shutdownTimeout");
+    }
+
     /**
      * Minimal in-memory ConfigSource — avoids depending on ConfigSources.fromMap (which lives
      * in tiko-config and may not be on the tiko-runtime test classpath at this point).

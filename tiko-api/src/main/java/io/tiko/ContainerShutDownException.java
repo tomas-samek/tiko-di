@@ -10,8 +10,4 @@ public final class ContainerShutDownException extends TikoException {
     public ContainerShutDownException() {
         super("Container has been shut down");
     }
-
-    public ContainerShutDownException(String message) {
-        super(message);
-    }
 }
