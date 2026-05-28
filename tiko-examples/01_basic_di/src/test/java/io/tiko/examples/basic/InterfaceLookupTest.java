@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.tiko.Container;
+import io.tiko.NoSuchComponentException;
 import io.tiko.runtime.Tiko;
 import org.junit.jupiter.api.Test;
 
@@ -32,7 +33,7 @@ class InterfaceLookupTest {
         // Greeter has two @Component impls (EnglishGreeter, SpanishGreeter) — both named.
         // No unnamed "default" exists, so get(Greeter.class) without a name must fail.
         try (Container container = Tiko.create()) {
-            assertThatThrownBy(() -> container.get(Greeter.class)).isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> container.get(Greeter.class)).isInstanceOf(NoSuchComponentException.class);
         }
     }
 }

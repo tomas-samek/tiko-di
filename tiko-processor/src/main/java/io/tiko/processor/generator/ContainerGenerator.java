@@ -920,6 +920,8 @@ public final class ContainerGenerator {
     private static final ClassName APP_STARTED = ClassName.get("io.tiko.events", "ApplicationStartedEvent");
     private static final ClassName APP_ENDING = ClassName.get("io.tiko.events", "ApplicationEndingEvent");
     private static final ClassName BOUNDED_EXECUTION = ClassName.get("io.tiko.runtime", "BoundedExecution");
+    private static final ClassName CONTAINER_SHUT_DOWN = ClassName.get("io.tiko", "ContainerShutDownException");
+    private static final ClassName NO_SUCH_COMPONENT = ClassName.get("io.tiko", "NoSuchComponentException");
 
     /**
      * Creates runInRequestScope method.
@@ -1289,7 +1291,7 @@ public final class ContainerGenerator {
 
         // Post-shutdown gate (#47). PreDestroy methods on the shutdown thread bypass via the thread-local.
         method.beginControlFlow("if (stopped.get() && !inShutdownThread.get())");
-        method.addStatement("throw new $T($S)", IllegalStateException.class, "Container has been shut down");
+        method.addStatement("throw new $T()", CONTAINER_SHUT_DOWN);
         method.endControlFlow();
 
         // Drain barrier (#47): mark this get() as in-flight so shutdown() can wait for it.
@@ -1357,8 +1359,7 @@ public final class ContainerGenerator {
         }
 
         // If no match found, throw exception
-        method.addStatement(
-                "throw new $T($S + type.getName())", IllegalArgumentException.class, "No component found for type: ");
+        method.addStatement("throw new $T(type)", NO_SUCH_COMPONENT);
 
         method.nextControlFlow("finally");
         method.addStatement("inFlightGets.decrementAndGet()");
@@ -1388,7 +1389,7 @@ public final class ContainerGenerator {
 
         // Post-shutdown gate (#47).
         method.beginControlFlow("if (stopped.get() && !inShutdownThread.get())");
-        method.addStatement("throw new $T($S)", IllegalStateException.class, "Container has been shut down");
+        method.addStatement("throw new $T()", CONTAINER_SHUT_DOWN);
         method.endControlFlow();
         method.addStatement("inFlightGets.incrementAndGet()");
         method.beginControlFlow("try");
@@ -1454,11 +1455,7 @@ public final class ContainerGenerator {
             method.endControlFlow();
         }
 
-        method.addStatement(
-                "throw new $T($S + name + $S + type.getName())",
-                IllegalArgumentException.class,
-                "No component found for name '",
-                "' and type: ");
+        method.addStatement("throw new $T(type, name)", NO_SUCH_COMPONENT);
 
         method.nextControlFlow("finally");
         method.addStatement("inFlightGets.decrementAndGet()");
@@ -1490,7 +1487,7 @@ public final class ContainerGenerator {
 
         // Post-shutdown gate, mirrors get(Class).
         method.beginControlFlow("if (stopped.get() && !inShutdownThread.get())");
-        method.addStatement("throw new $T($S)", IllegalStateException.class, "Container has been shut down");
+        method.addStatement("throw new $T()", CONTAINER_SHUT_DOWN);
         method.endControlFlow();
 
         method.addStatement("inFlightGets.incrementAndGet()");

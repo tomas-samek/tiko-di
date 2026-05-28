@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.tiko.Container;
+import io.tiko.NoSuchComponentException;
 import io.tiko.Provider;
 import io.tiko.runtime.Tiko;
 import org.junit.jupiter.api.Test;
@@ -26,7 +27,7 @@ class ProviderTest {
             // Obtaining the Provider must not invoke get(type) yet —
             // an unknown type should only fail when .get() is called.
             Provider<String> provider = container.getProvider(String.class);
-            assertThatThrownBy(provider::get).isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(provider::get).isInstanceOf(NoSuchComponentException.class);
         }
     }
 

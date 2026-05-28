@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.tiko.ConfigSource;
+import io.tiko.ContainerInitializationException;
 import java.time.Duration;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -57,8 +58,21 @@ class TikoResolveShutdownTimeoutTest {
         TikoOptions opts = TikoOptions.builder().configSource(source).build();
 
         assertThatThrownBy(() -> Tiko.resolveShutdownTimeout(opts, CL))
+                .isInstanceOf(ContainerInitializationException.class)
                 .hasMessageContaining("shutdownTimeout")
                 .hasMessageContaining("negative");
+    }
+
+    @Test
+    void unparseableYamlValueThrowsContainerInitialization() {
+        // Neither friendly (#113) nor ISO-8601 — the coercer rejects it, and the bootstrap surfaces
+        // it as a typed init failure (#98) rather than a raw coercion/invocation exception.
+        ConfigSource source = new MapConfigSource(Map.of("tiko", Map.of("shutdownTimeout", "abc")));
+        TikoOptions opts = TikoOptions.builder().configSource(source).build();
+
+        assertThatThrownBy(() -> Tiko.resolveShutdownTimeout(opts, CL))
+                .isInstanceOf(ContainerInitializationException.class)
+                .hasMessageContaining("shutdownTimeout");
     }
 
     /**

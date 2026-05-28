@@ -2,6 +2,7 @@ package io.tiko.runtime;
 
 import io.tiko.ConfigSource;
 import io.tiko.Container;
+import io.tiko.ContainerInitializationException;
 import io.tiko.ErrorHandler;
 import io.tiko.EventBus;
 import io.tiko.TransportBootstrap;
@@ -213,11 +214,11 @@ public final class Tiko {
         } catch (RuntimeException e) {
             throw e;
         } catch (ClassNotFoundException e) {
-            throw new IllegalStateException(
+            throw new ContainerInitializationException(
                     "Tiko container implementation not found. Did you include tiko-processor in your annotation processor path?",
                     e);
         } catch (Exception e) {
-            throw new IllegalStateException("Failed to create container instance", e);
+            throw new ContainerInitializationException("Failed to create container instance", e);
         }
     }
 
@@ -331,7 +332,8 @@ public final class Tiko {
         java.time.Duration fromYaml = readYamlShutdownTimeout(options.configSource(), classLoader);
         if (fromYaml != null) {
             if (fromYaml.isNegative()) {
-                throw new IllegalArgumentException("tiko.shutdownTimeout must not be negative; got " + fromYaml);
+                throw new ContainerInitializationException(
+                        "tiko.shutdownTimeout must not be negative; got " + fromYaml);
             }
             return fromYaml;
         }
@@ -384,13 +386,13 @@ public final class Tiko {
         } catch (java.lang.reflect.InvocationTargetException ite) {
             // CoercionException or similar from the coercer — surface its message.
             Throwable cause = ite.getCause();
-            throw new IllegalArgumentException(
+            throw new ContainerInitializationException(
                     "Invalid tiko.shutdownTimeout in YAML: " + (cause == null ? ite.getMessage() : cause.getMessage()),
                     cause);
         } catch (Exception e) {
             // Reflective infrastructure error (e.g. method missing). Surface as runtime to
             // avoid silently masking a wiring bug.
-            throw new IllegalStateException("Failed to read tiko.shutdownTimeout from YAML", e);
+            throw new ContainerInitializationException("Failed to read tiko.shutdownTimeout from YAML", e);
         }
     }
 

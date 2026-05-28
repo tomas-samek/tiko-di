@@ -1,6 +1,7 @@
 package io.tiko.runtime;
 
 import io.tiko.Container;
+import io.tiko.NoSuchComponentException;
 import io.tiko.Picker;
 import java.util.List;
 import java.util.Optional;
@@ -42,7 +43,7 @@ public final class ContainerPicker<T> implements Picker<T> {
     public Optional<T> byName(String name) {
         try {
             return Optional.ofNullable(container.get(baseType, name));
-        } catch (IllegalArgumentException notFound) {
+        } catch (NoSuchComponentException notFound) {
             return Optional.empty();
         }
     }
@@ -61,7 +62,7 @@ public final class ContainerPicker<T> implements Picker<T> {
                 return Optional.empty();
             }
             return Optional.of(bean);
-        } catch (IllegalArgumentException notFound) {
+        } catch (NoSuchComponentException notFound) {
             return Optional.empty();
         }
     }
