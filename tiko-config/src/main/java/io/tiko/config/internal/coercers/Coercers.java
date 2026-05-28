@@ -11,6 +11,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.UUID;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -128,7 +129,36 @@ public final class Coercers {
     }
 
     public static TypeCoercer<Duration> durationCoercer() {
-        return parsing("duration", Duration::parse);
+        return parsing(
+                "duration (e.g. \"5s\", \"30m\", \"1h\", or ISO-8601 \"PT5S\")", Coercers::parseFriendlyDuration);
+    }
+
+    /** Bare integer amount + a single unit suffix — the friendly forms layered over ISO-8601 (#113). */
+    private static final Pattern FRIENDLY_DURATION = Pattern.compile("([+-]?\\d+)(ns|ms|s|m|h|d)");
+
+    /**
+     * Parses a duration accepting either a friendly {@code <amount><unit>} form ({@code 5s},
+     * {@code 30m}, {@code 1h}, {@code 500ms}, {@code -5s}) or ISO-8601 ({@code PT5S}, {@code PT1H30M},
+     * {@code P2D}). The friendly form requires an integer amount; anything else (fractions, ISO,
+     * garbage) falls through to {@link Duration#parse}, which either succeeds or throws and is
+     * surfaced as a {@code CoercionException} by {@link #parsing}.
+     */
+    private static Duration parseFriendlyDuration(String raw) {
+        String value = raw.trim();
+        Matcher matcher = FRIENDLY_DURATION.matcher(value);
+        if (matcher.matches()) {
+            long amount = Long.parseLong(matcher.group(1));
+            return switch (matcher.group(2)) {
+                case "ns" -> Duration.ofNanos(amount);
+                case "ms" -> Duration.ofMillis(amount);
+                case "s" -> Duration.ofSeconds(amount);
+                case "m" -> Duration.ofMinutes(amount);
+                case "h" -> Duration.ofHours(amount);
+                case "d" -> Duration.ofDays(amount);
+                default -> throw new IllegalStateException("unreachable duration unit: " + matcher.group(2));
+            };
+        }
+        return Duration.parse(value);
     }
 
     public static TypeCoercer<Instant> instantCoercer() {
