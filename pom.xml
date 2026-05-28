@@ -25,6 +25,7 @@
         <module>tiko-examples</module>
         <module>tiko-archetype</module>
         <module>tiko-mcp</module>
+        <module>tiko-coverage</module>
     </modules>
 
     <properties>
@@ -44,6 +45,7 @@
         <kafka-clients.version>3.9.2</kafka-clients.version>
         <jackson.version>2.18.0</jackson.version>
         <maven-shade.version>3.6.0</maven-shade.version>
+        <jacoco.version>0.8.13</jacoco.version>
         <testcontainers.version>1.20.4</testcontainers.version>
         <javalin.version>6.7.0</javalin.version>
         <hikari.version>6.2.1</hikari.version>
@@ -252,6 +254,21 @@
                     <artifactId>maven-failsafe-plugin</artifactId>
                     <version>3.2.2</version>
                 </plugin>
+                <plugin>
+                    <groupId>org.jacoco</groupId>
+                    <artifactId>jacoco-maven-plugin</artifactId>
+                    <version>${jacoco.version}</version>
+                    <configuration>
+                        <!-- Machine-generated code carries no human-written branches worth covering;
+                             excluding it keeps the percentages honest. Covers factories,
+                             TikoContainerImpl_*, EventRegistry, and the config binders, all under
+                             io.tiko.generated(.config). Applies to both the per-module `report` and
+                             the aggregate `report-aggregate` in tiko-coverage. -->
+                        <excludes>
+                            <exclude>io/tiko/generated/**</exclude>
+                        </excludes>
+                    </configuration>
+                </plugin>
             </plugins>
         </pluginManagement>
 
@@ -304,6 +321,31 @@
                         <phase>validate</phase>
                         <goals>
                             <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- JaCoCo, inherited by every module (#124): the agent is attached at `initialize`
+                 (so surefire/failsafe runs are instrumented) and a per-module HTML+XML report is
+                 written at `verify`. The cross-module aggregate lives in the `tiko-coverage` module
+                 via `report-aggregate`. Version + generated-code excludes come from pluginManagement. -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>jacoco-prepare-agent</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>jacoco-report</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report</goal>
                         </goals>
                     </execution>
                 </executions>
