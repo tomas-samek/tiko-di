@@ -4,10 +4,12 @@ import io.tiko.kafka.client.KafkaConsumerClient;
 import io.tiko.kafka.client.KafkaProducerClient;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -97,7 +99,34 @@ public final class FakeKafkaBroker {
 
     // --- internal types -----------------------------------------------------------
 
-    record StoredRecord(int offset, byte[] payload, Headers headers, long timestamp) {}
+    record StoredRecord(int offset, byte[] payload, Headers headers, long timestamp) {
+        // Override the record defaults because of the byte[] component (S6218): the generated
+        // equals/hashCode/toString use array identity, not contents.
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (!(o
+                    instanceof
+                    StoredRecord(int otherOffset, byte[] otherPayload, Headers otherHeaders, long otherTs))) {
+                return false;
+            }
+            return offset == otherOffset
+                    && timestamp == otherTs
+                    && Arrays.equals(payload, otherPayload)
+                    && Objects.equals(headers, otherHeaders);
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * Objects.hash(offset, timestamp, headers) + Arrays.hashCode(payload);
+        }
+
+        @Override
+        public String toString() {
+            return "StoredRecord[offset=" + offset + ", payload=" + Arrays.toString(payload) + ", headers=" + headers
+                    + ", timestamp=" + timestamp + "]";
+        }
+    }
 
     synchronized List<StoredRecord> recordsFor(String topic) {
         return records.computeIfAbsent(topic, k -> new ArrayList<>());
