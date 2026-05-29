@@ -72,6 +72,8 @@
         <maven-shade.version>3.6.0</maven-shade.version>
         <maven-source-plugin.version>3.4.0</maven-source-plugin.version>
         <maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
+        <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
+        <central-publishing-maven-plugin.version>0.10.0</central-publishing-maven-plugin.version>
         <jacoco.version>0.8.13</jacoco.version>
         <testcontainers.version>1.20.4</testcontainers.version>
         <javalin.version>6.7.0</javalin.version>
@@ -445,6 +447,50 @@
                                 </goals>
                             </execution>
                         </executions>
+                    </plugin>
+                    <!-- Central requires every deployable artifact (jar, pom, sources, javadoc) to be
+                         GPG-signed. Signing runs at verify so the .asc files exist before the publish
+                         step. CI imports the key and exports MAVEN_GPG_PASSPHRASE (see
+                         .github/workflows/release.yml); loopback pinentry lets gpg read the passphrase
+                         non-interactively. -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>${maven-gpg-plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                                <configuration>
+                                    <gpgArguments>
+                                        <arg>--pinentry-mode</arg>
+                                        <arg>loopback</arg>
+                                    </gpgArguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!-- Publishes the reactor to the Sonatype Central Portal (the OSSRH successor).
+                         autoPublish=false: artifacts land in Central Portal staging for manual
+                         inspection and release — nothing goes public automatically. Non-library
+                         modules opt out via <skipPublishing>true</skipPublishing> in their own
+                         <properties> (kafka transports, kafka-it, archetype, coverage aggregator) or,
+                         for the examples subtree, inherited from tiko-examples. The published surface
+                         is the parent POM + everything tiko-bom exposes. Credentials come from the
+                         `central` server in settings.xml (configured by setup-java in CI). -->
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>${central-publishing-maven-plugin.version}</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>central</publishingServerId>
+                            <autoPublish>false</autoPublish>
+                            <deploymentName>tiko-${project.version}</deploymentName>
+                        </configuration>
                     </plugin>
                 </plugins>
             </build>

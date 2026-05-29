@@ -20,6 +20,12 @@
         annotation-processor path.
     </description>
 
+    <properties>
+        <!-- Kafka transport is a Phase 6 deliverable, not part of the 0.x core release — keep it out
+             of the Central Portal bundle. -->
+        <skipPublishing>true</skipPublishing>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>io.tiko</groupId>

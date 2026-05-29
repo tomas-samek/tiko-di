@@ -16,6 +16,11 @@
     <name>Tiko DI - Archetype</name>
     <description>Maven archetype that scaffolds a runnable single-module Tiko DI project</description>
 
+    <properties>
+        <!-- Scaffolding tool, not a 0.x library artifact — keep it out of the Central Portal bundle. -->
+        <skipPublishing>true</skipPublishing>
+    </properties>
+
     <build>
         <extensions>
             <extension>
