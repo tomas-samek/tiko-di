@@ -172,6 +172,8 @@ public class DataService {
 }
 ```
 
+`@Named` resolves named `@Component`s (above) and named `@Produces` outputs alike. **Reach for `@Named` when the qualifier is genuinely a string** — externally configured, supplied at runtime, or familiar to teams coming from `jakarta.inject`. When the disambiguator is a *class* you can name at compile time, prefer `@Pick` (next) for refactor safety. A runnable injection-site example lives in `tiko-examples/01_basic_di` (`NamedGreeterConsumer`).
+
 ### `@Pick(Class)` — class-literal, refactor-safe
 
 When the disambiguator is a *class* — not a string — `@Pick(SomeImpl.class)` is the compile-time alternative to `@Named`. Typos become compile errors, IDE rename refactors update every usage, and the choice of implementation is visible in the constructor signature.
