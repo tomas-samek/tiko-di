@@ -19,6 +19,11 @@
         annotation processors must exist on disk before testCompile resolves them.
     </description>
 
+    <properties>
+        <!-- Integration-test module: never published to the Central Portal. -->
+        <skipPublishing>true</skipPublishing>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>io.tiko</groupId>

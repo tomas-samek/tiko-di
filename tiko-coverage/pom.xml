@@ -24,8 +24,10 @@
     </description>
 
     <properties>
-        <!-- Reporting-only module: never publish it. -->
+        <!-- Reporting-only module: never publish it. maven.deploy.skip stops the legacy deploy goal;
+             skipPublishing stops the Central Portal plugin, which replaces it. -->
         <maven.deploy.skip>true</maven.deploy.skip>
+        <skipPublishing>true</skipPublishing>
     </properties>
 
     <!-- The modules whose coverage is aggregated. report-aggregate reads each dependency's exec

@@ -24,6 +24,9 @@
         <!-- Jackson lives under a relocated package after shading; keep the un-relocated
              scope to compile so source code uses the standard package names. -->
         <jackson.relocate.target>io.tiko.kafka.internal.jackson</jackson.relocate.target>
+        <!-- Kafka transport is a Phase 6 deliverable, not part of the 0.x core release — keep it out
+             of the Central Portal bundle. -->
+        <skipPublishing>true</skipPublishing>
     </properties>
 
     <dependencies>
