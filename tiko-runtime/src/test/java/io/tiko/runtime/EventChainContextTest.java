@@ -50,7 +50,9 @@ class EventChainContextTest {
         public <T> Subscription subscribe(Class<T> eventType, EventCallback<T> callback) {
             return new Subscription() {
                 @Override
-                public void unsubscribe() {}
+                public void unsubscribe() {
+                    /* no-op: the recording fake tracks no real subscriptions */
+                }
 
                 @Override
                 public boolean isActive() {
@@ -168,7 +170,7 @@ class EventChainContextTest {
     }
 
     @Test
-    void publishAsyncSwallowsErrorHandlerFailureAsLastResort() throws Exception {
+    void publishAsyncSwallowsErrorHandlerFailureAsLastResort() {
         EventBus throwingBus = new EventBus() {
             @Override
             public <T> void publish(T event) {
