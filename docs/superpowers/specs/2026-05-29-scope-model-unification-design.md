@@ -16,8 +16,16 @@ PROTOTYPE   per injection (default)
 
 `Scope.REQUEST` **leaves the core enum.** REQUEST was only ever the *HTTP flavour* of a unit of
 work — the outermost unit whose stimulus is an HTTP request. The general **typed-flavour API**
-(`@ScopeFlavour` / `@RequestScoped`, pinning a bean to an *ancestor* unit) is **deferred** until a
-real HTTP/batch integration drives it. In `0.x.0`, beans bind to the **current** unit only.
+(`@ScopeFlavour` / `@RequestScoped`, identifying a unit's *origin*) is **deferred** until a real
+HTTP/batch integration drives it. In `0.x.0`, beans bind to the **current** unit only.
+
+**A unit-scoped resource belongs to exactly one unit of work.** A live `Transaction` / `Connection`
+is instance-bound and non-serializable — it cannot follow work that detaches or distributes, which
+the model permits at every async/transport hop. So sharing such a resource *across* units (the old
+"one transaction spanning a batch of REQUEST-scoped events" pattern) is an **explicit non-goal**, not
+a deferred feature. "One transaction across a batch" is really *one* unit — open the transaction,
+loop the items inside it, commit. Genuinely independent (distributable) events each own their
+resource; cross-unit consistency is a **saga / outbox / idempotency** concern, above the DI layer.
 
 ### Why now (publish gate)
 
@@ -70,7 +78,8 @@ bean holds a shorter-lived one:
 | PROTOTYPE                 | direct    | direct         | direct    |
 
 The entire REQUEST row and column disappear. `EVENT → EVENT` is same-unit direct injection — there
-is no "inject an ancestor unit's bean" in `0.x.0` (that is the deferred flavour/outer-pin case).
+is no "inject an ancestor unit's bean." Resources bind to the current unit only; sharing one across
+units is a non-goal (see §1 and §4), not merely deferred.
 
 ## 3. Internals (`tiko-runtime`, `tiko-processor`)
 
@@ -85,11 +94,14 @@ is no "inject an ancestor unit's bean" in `0.x.0` (that is the deferred flavour/
 
 ## 4. Explicitly deferred / out of scope for 0.x.0
 
-- The **typed-flavour API** (`@ScopeFlavour` meta-annotation, `@RequestScoped`, ancestor/outer-unit
-  pinning). Reintroduced when a real HTTP/batch integration drives it. *(Out of scope for #226 per
-  the issue.)*
-- **Outer-unit binding** — "one transaction spanning a batch of events." The structure survives
-  (nested units) but pinning a bean to the outer unit awaits the flavour API.
+- The **typed-flavour API** (`@ScopeFlavour` meta-annotation, `@RequestScoped`) — a way to *type a
+  unit's origin* ("the nearest HTTP-request unit"), reintroduced when a real HTTP/batch integration
+  drives it. *(Out of scope for #226 per the issue.)* It identifies units; it does **not** share
+  resources across them.
+- **Sharing a unit-scoped resource across units** — a **NON-GOAL**, not a deferred feature. A
+  transaction/connection is instance-bound and cannot follow detached or distributed work, so the
+  framework will not smuggle one across unit boundaries. Cross-unit transactional consistency is a
+  saga / outbox / idempotency concern, above the DI layer (see §1).
 - **Async fork / continuation** (#220 fork-a-new-root-unit, #221 carry-one-unit-across-a-gap). These
   *derive* from this model but are Phase 7 items with their own design
   (see `project_async_event_scope_model`).
@@ -103,7 +115,7 @@ is no "inject an ancestor unit's bean" in `0.x.0` (that is the deferred flavour/
 | `tiko-processor` | `ScopeValidator`, `ProxyGenerator`, `ContainerGenerator` (33 refs), `FactoryMethodModel`; rewrite/trim REQUEST-specific tests (`CrossScopeMatrixTest`, `ProxyForProducesOutputCrossScopeTest`, `RequiredInterfaceForProxyTest`, …). |
 | `tiko-runtime` | `AggregatingContainer` unit stack; `Tiko`, `TikoOptions`; runtime tests. |
 | `tiko-test` | `RequestScopeTest`, `TikoTestExtension`, `RequestScopedService` fixture, `ScopeHelpersTest`. |
-| examples | `01_basic_di` (REQUEST lifecycle/teardown demos), `09_http_javalin` (RequestId), **`10_persistence_jdbc`** (batch-shared-transaction variant reworked to per-item units + a "shared transaction across a batch awaits the flavour API" note), `03_events`, `12_testing`, `13_mcp_introspection`. |
+| examples | `01_basic_di` (REQUEST lifecycle/teardown demos), `09_http_javalin` (RequestId), **`10_persistence_jdbc`** (rework the batch to **one unit / one transaction with an internal loop**; remove the shared-transaction-across-events variant and add a short note that genuinely independent events each own their transaction — cross-event consistency is an outbox, not a shared handle), `03_events`, `12_testing`, `13_mcp_introspection`. |
 | docs | `docs/di-and-scopes.md`, the scope tables + cross-scope matrix in `CLAUDE.md`, any scope mention in README. |
 
 ## 6. Implementation staging (for writing-plans)
@@ -133,5 +145,6 @@ issue (or a small sequence), separate from this decision.
   re-entrancy needs targeted tests (nested units → independent frames, correct LIFO teardown).
 - **Lost observability distinction** (request vs event) until flavours land — acceptable pre-publish,
   called out in docs.
-- **Example regression** (`10_persistence` batch-shared-transaction) — reworked, not silently
-  dropped; documented as flavour-API-pending.
+- **Example change** (`10_persistence`) — the shared-transaction-across-events variant is removed as
+  an anti-pattern (the resource can't follow distributable work), not deferred; the batch becomes one
+  unit / one transaction, with an outbox pointer for the genuinely-independent-events case.
