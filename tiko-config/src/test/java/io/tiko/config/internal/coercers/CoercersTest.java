@@ -178,6 +178,66 @@ class CoercersTest {
                 .hasMessageContaining("out of byte range");
     }
 
+    @Test
+    void char_coercer_takes_a_single_character() {
+        TypeCoercer<Character> coercer = Coercers.charCoercer();
+        assertThat(coercer.coerce("x")).isEqualTo('x');
+        assertThat(coercer.coerce('y')).isEqualTo('y');
+        assertThatThrownBy(() -> coercer.coerce("xy"))
+                .isInstanceOf(CoercionException.class)
+                .hasMessageContaining("single character");
+    }
+
+    @Test
+    void float_coercer_parses_number_and_string() {
+        TypeCoercer<Float> coercer = Coercers.floatCoercer();
+        assertThat(coercer.coerce(1.5f)).isEqualTo(1.5f);
+        assertThat(coercer.coerce("2.5")).isEqualTo(2.5f);
+        assertThatThrownBy(() -> coercer.coerce("nope"))
+                .isInstanceOf(CoercionException.class)
+                .hasMessageContaining("expected float");
+    }
+
+    @Test
+    void short_coercer_parses_and_range_checks() {
+        TypeCoercer<Short> coercer = Coercers.shortCoercer();
+        assertThat(coercer.coerce(7)).isEqualTo((short) 7);
+        assertThatThrownBy(() -> coercer.coerce(40000))
+                .isInstanceOf(CoercionException.class)
+                .hasMessageContaining("out of short range");
+    }
+
+    @Test
+    void string_coercer_stringifies_or_passes_null() {
+        TypeCoercer<String> coercer = Coercers.stringCoercer();
+        assertThat(coercer.coerce("hi")).isEqualTo("hi");
+        assertThat(coercer.coerce(42)).isEqualTo("42");
+        assertThat(coercer.coerce(null)).isNull();
+    }
+
+    @Test
+    void parsing_coercers_wrap_parser_failures_as_coercion_exceptions() {
+        TypeCoercer<?> uri = Coercers.uriCoercer();
+        TypeCoercer<?> pattern = Coercers.patternCoercer();
+        TypeCoercer<?> zoneId = Coercers.zoneIdCoercer();
+        assertThatThrownBy(() -> uri.coerce("a b")).isInstanceOf(CoercionException.class);
+        assertThatThrownBy(() -> pattern.coerce("[unclosed")).isInstanceOf(CoercionException.class);
+        assertThatThrownBy(() -> zoneId.coerce("Nowhere/Nope")).isInstanceOf(CoercionException.class);
+    }
+
+    @Test
+    void coercers_reject_non_coercible_value_types() {
+        TypeCoercer<Integer> intCoercer = Coercers.intCoercer();
+        TypeCoercer<Boolean> booleanCoercer = Coercers.booleanCoercer();
+        Object notCoercible = new Object(); // extracted so each lambda has a single throwing call
+        assertThatThrownBy(() -> intCoercer.coerce(notCoercible))
+                .isInstanceOf(CoercionException.class)
+                .hasMessageContaining("expected integer");
+        assertThatThrownBy(() -> booleanCoercer.coerce(notCoercible))
+                .isInstanceOf(CoercionException.class)
+                .hasMessageContaining("expected boolean");
+    }
+
     enum TestKind {
         RED,
         BLUE
