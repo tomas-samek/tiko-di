@@ -12,6 +12,29 @@
 
     <name>Tiko DI - BOM</name>
     <description>Bill of Materials for Tiko DI framework - centralized dependency management</description>
+    <url>https://github.com/tomas-samek/tiko-di</url>
+
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>https://opensource.org/licenses/MIT</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>tomas-samek</id>
+            <name>Tomas Samek</name>
+            <url>https://github.com/tomas-samek</url>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:https://github.com/tomas-samek/tiko-di.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/tomas-samek/tiko-di.git</developerConnection>
+        <url>https://github.com/tomas-samek/tiko-di</url>
+    </scm>
 
     <properties>
         <!-- Tiko DI version -->
