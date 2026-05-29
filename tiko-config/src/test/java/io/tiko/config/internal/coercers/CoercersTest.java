@@ -229,10 +229,11 @@ class CoercersTest {
     void coercers_reject_non_coercible_value_types() {
         TypeCoercer<Integer> intCoercer = Coercers.intCoercer();
         TypeCoercer<Boolean> booleanCoercer = Coercers.booleanCoercer();
-        assertThatThrownBy(() -> intCoercer.coerce(new Object()))
+        Object notCoercible = new Object(); // extracted so each lambda has a single throwing call
+        assertThatThrownBy(() -> intCoercer.coerce(notCoercible))
                 .isInstanceOf(CoercionException.class)
                 .hasMessageContaining("expected integer");
-        assertThatThrownBy(() -> booleanCoercer.coerce(new Object()))
+        assertThatThrownBy(() -> booleanCoercer.coerce(notCoercible))
                 .isInstanceOf(CoercionException.class)
                 .hasMessageContaining("expected boolean");
     }
