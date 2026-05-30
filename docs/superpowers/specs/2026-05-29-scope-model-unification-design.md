@@ -1,7 +1,8 @@
 # Scope Model Unification — Design (#226)
 
-**Status:** Decided 2026-05-29. Decision = option 1 ("adopt now, publish on the aligned shape"),
-with per-frame lifecycle firing. Gates the `0.x.0` Maven Central publish.
+**Status:** Decided 2026-05-29. Decision = option 1 ("adopt now, publish on the aligned shape").
+EVENT ships **single-frame** in `0.x.0`; nestability is **deferred as an additive future change**
+(see the box in §1). Gates the `0.x.0` Maven Central publish.
 
 ## 1. The decision
 
@@ -10,9 +11,16 @@ becomes a breaking change:
 
 ```
 SINGLETON   application lifetime
-EVENT       one unit of work; nestable; the generic primitive
+EVENT       one unit of work; the generic primitive
 PROTOTYPE   per injection (default)
 ```
+
+> **Nestability deferred (2026-05-29).** EVENT's only driver for being *re-entrant* was the old
+> "one outer unit holding many inner events" shape — which the resource non-goal below dissolves
+> (a batch is one unit with an internal loop; async/distributed work forks a fresh *root* unit, not
+> a nested one). No `0.x.0` use case needs `runInEventScope` to nest, so EVENT stays **single-frame**
+> (today's behaviour, minus REQUEST). Making it nestable later is **additive** — `Scope.EVENT` and
+> `runInEventScope` keep the identical public shape — so deferring it does not reopen the publish gate.
 
 `Scope.REQUEST` **leaves the core enum.** REQUEST was only ever the *HTTP flavour* of a unit of
 work — the outermost unit whose stimulus is an HTTP request. The general **typed-flavour API**
@@ -52,17 +60,20 @@ removes a code path rather than adding one.
 ### 2.2 `Container`
 
 - **Remove** `runInRequestScope(Runnable)` and `supplyInRequestScope(Supplier<T>)`.
-- `runInEventScope(Runnable)` / `supplyInEventScope(Supplier<T>)` become **nestable**: an inner call
-  opens a *child* unit. Today's "one REQUEST containing many EVENTs" batch pattern becomes an outer
-  `runInEventScope { … inner runInEventScope … }`.
-- No new public API is added in `0.x.0` (the flavour entry point is deferred).
+- `runInEventScope(Runnable)` / `supplyInEventScope(Supplier<T>)` keep their current **single-frame**
+  shape — calling one while a unit is already open is not part of the `0.x.0` contract. Today's
+  "one REQUEST containing many EVENTs" batch pattern becomes **one `runInEventScope` with an
+  internal loop** (open the unit, iterate items inside it, close it), aligned with the resource
+  non-goal in §1.
+- No new public API is added in `0.x.0` (the flavour entry point is deferred; nestability is
+  deferred — both additive).
 
 ### 2.3 Lifecycle events (`io.tiko.events`)
 
 - **Remove** `RequestStartedEvent` and `RequestEndingEvent`.
-- **Keep** `EventStartedEvent` / `EventEndingEvent`. They fire **per unit frame, including nested
-  frames** — each unit is a real scope with its own beans and teardown, so each open/close is
-  observable. (Decided 2026-05-29.)
+- **Keep** `EventStartedEvent` / `EventEndingEvent`. They fire **once per unit** (single frame in
+  `0.x.0`). When nestability lands later, the same events fire per-frame including nested frames —
+  the contract is additive, not breaking.
 - The request-vs-event *distinction* that two event types provided is intentionally dropped for
   `0.x.0`; the typed-flavour API reintroduces a typed distinction later, when an integration needs it.
 
@@ -83,14 +94,15 @@ units is a non-goal (see §1 and §4), not merely deferred.
 
 ## 3. Internals (`tiko-runtime`, `tiko-processor`)
 
-- `AggregatingContainer`'s two ThreadLocals (`requestScoped` + `eventScoped`) collapse into a single
-  nestable **unit-of-work stack** (`ThreadLocal<Deque<UnitFrame>>`). Entering a unit pushes a frame;
-  exiting pops and tears it down (LIFO `@PreDestroy`, as today). `SINGLETON → EVENT` proxies resolve
-  to the **innermost** open frame.
+- `AggregatingContainer`'s two ThreadLocals (`requestScoped` + `eventScoped`) collapse into a
+  **single unit-of-work holder** for the currently-open unit (`ThreadLocal<UnitFrame>`). Entering a
+  unit installs the frame; exiting tears it down (LIFO `@PreDestroy`, as today). `SINGLETON → EVENT`
+  proxies resolve to that open frame. The holder is shaped so a future swap to `Deque<UnitFrame>`
+  (when nestability lands) is an internal change, not a public one.
 - `ScopeValidator` / `ProxyGenerator` / `ContainerGenerator`: drop all REQUEST handling. The proxy
   decision reduces to "is the dependency EVENT-scoped and the consumer longer-lived (SINGLETON)?".
-- Behavior change: **EVENT becomes nestable.** Today EVENT is effectively the leaf depth; the unit
-  stack makes `runInEventScope` re-entrant.
+- **No EVENT behaviour change.** Existing single-level EVENT semantics are preserved; REQUEST
+  simply collapses into EVENT.
 
 ## 4. Explicitly deferred / out of scope for 0.x.0
 
@@ -102,6 +114,10 @@ units is a non-goal (see §1 and §4), not merely deferred.
   transaction/connection is instance-bound and cannot follow detached or distributed work, so the
   framework will not smuggle one across unit boundaries. Cross-unit transactional consistency is a
   saga / outbox / idempotency concern, above the DI layer (see §1).
+- **EVENT nestability** — `runInEventScope` re-entering itself. `0.x.0` ships single-frame;
+  making it nestable later is an **additive** change (the public `Scope.EVENT` /
+  `runInEventScope` shape is unchanged), so deferring it does not reopen the publish gate. The
+  internal unit-of-work holder (§3) is shaped for an additive swap to a stack when a driver appears.
 - **Async fork / continuation** (#220 fork-a-new-root-unit, #221 carry-one-unit-across-a-gap). These
   *derive* from this model but are Phase 7 items with their own design
   (see `project_async_event_scope_model`).
@@ -113,7 +129,7 @@ units is a non-goal (see §1 and §4), not merely deferred.
 | --- | --- |
 | `tiko-api` | `Scope` enum; `Container` (remove Request methods); delete `RequestStartedEvent`/`RequestEndingEvent`; touch `Component`/`Produces`/`PreDestroy` javadoc referencing REQUEST. |
 | `tiko-processor` | `ScopeValidator`, `ProxyGenerator`, `ContainerGenerator` (33 refs), `FactoryMethodModel`; rewrite/trim REQUEST-specific tests (`CrossScopeMatrixTest`, `ProxyForProducesOutputCrossScopeTest`, `RequiredInterfaceForProxyTest`, …). |
-| `tiko-runtime` | `AggregatingContainer` unit stack; `Tiko`, `TikoOptions`; runtime tests. |
+| `tiko-runtime` | `AggregatingContainer` single unit-of-work holder; `Tiko`, `TikoOptions`; runtime tests. |
 | `tiko-test` | `RequestScopeTest`, `TikoTestExtension`, `RequestScopedService` fixture, `ScopeHelpersTest`. |
 | examples | `01_basic_di` (REQUEST lifecycle/teardown demos), `09_http_javalin` (RequestId), **`10_persistence_jdbc`** (rework the batch to **one unit / one transaction with an internal loop**; remove the shared-transaction-across-events variant and add a short note that genuinely independent events each own their transaction — cross-event consistency is an outbox, not a shared handle), `03_events`, `12_testing`, `13_mcp_introspection`. |
 | docs | `docs/di-and-scopes.md`, the scope tables + cross-scope matrix in `CLAUDE.md`, any scope mention in README. |
@@ -141,10 +157,12 @@ issue (or a small sequence), separate from this decision.
 
 ## 8. Risks
 
-- **Nestable EVENT is a behavior change.** Existing single-level EVENT usage is unaffected; new
-  re-entrancy needs targeted tests (nested units → independent frames, correct LIFO teardown).
 - **Lost observability distinction** (request vs event) until flavours land — acceptable pre-publish,
   called out in docs.
 - **Example change** (`10_persistence`) — the shared-transaction-across-events variant is removed as
   an anti-pattern (the resource can't follow distributable work), not deferred; the batch becomes one
   unit / one transaction, with an outbox pointer for the genuinely-independent-events case.
+- **Future nestability must stay additive.** When a driver for nested `runInEventScope` appears, the
+  public surface (`Scope.EVENT`, `runInEventScope`, `EventStartedEvent`/`EventEndingEvent` firing
+  per-frame) must remain unchanged — only the internal holder swaps from single-frame to a stack.
+  Holding that line is what lets us defer nestability without reopening the publish gate.
