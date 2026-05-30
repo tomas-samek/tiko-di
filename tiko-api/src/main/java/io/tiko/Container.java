@@ -12,30 +12,22 @@ package io.tiko;
  * <ul>
  *   <li>{@link io.tiko.events.ApplicationStartedEvent} - On container startup</li>
  *   <li>{@link io.tiko.events.ApplicationEndingEvent} - Before container shutdown</li>
- *   <li>{@link io.tiko.events.RequestStartedEvent} - On entering request scope</li>
- *   <li>{@link io.tiko.events.RequestEndingEvent} - Before exiting request scope</li>
- *   <li>{@link io.tiko.events.EventStartedEvent} - On entering event scope</li>
- *   <li>{@link io.tiko.events.EventEndingEvent} - Before exiting event scope</li>
+ *   <li>{@link io.tiko.events.EventStartedEvent} - On entering a unit of work</li>
+ *   <li>{@link io.tiko.events.EventEndingEvent} - Before exiting a unit of work</li>
  * </ul>
  *
  * <p>Example usage with try-with-resources:</p>
  * <pre>{@code
- * // Create container (triggers ApplicationStartedEvent)
  * try (Container container = Tiko.create()) {
- *     // Retrieve components
  *     UserService service = container.get(UserService.class);
  *
- *     // Run code in request scope (triggers Request lifecycle events)
- *     container.runInRequestScope(() -> {
- *         // Process multiple events in one request/transaction
- *         for (Order order : orders) {
- *             // Each event triggers Event lifecycle events
- *             container.runInEventScope(() -> {
- *                 container.getEventBus().publish(new OrderCreatedEvent(order));
- *             });
- *         }
- *     });
- * } // Automatic shutdown (triggers ApplicationEndingEvent)
+ *     // Each unit of work runs in its own EVENT scope
+ *     for (Order order : orders) {
+ *         container.runInEventScope(() -> {
+ *             container.getEventBus().publish(new OrderCreatedEvent(order));
+ *         });
+ *     }
+ * } // Automatic shutdown
  * }</pre>
  */
 public interface Container extends AutoCloseable {
@@ -114,48 +106,28 @@ public interface Container extends AutoCloseable {
     }
 
     /**
-     * Executes the given runnable within a request scope.
+     * Executes the given runnable within an EVENT scope (one unit of work).
      * <p>
-     * Request-scoped beans created during execution will be destroyed
-     * when the scope exits. Multiple events can be processed within
-     * a single request scope.
-     *
-     * @param runnable the code to execute in request scope
-     */
-    void runInRequestScope(Runnable runnable);
-
-    /**
-     * Executes the given supplier within a request scope and returns its result.
-     * <p>
-     * Request-scoped beans created during execution will be destroyed
-     * when the scope exits.
-     *
-     * @param supplier the code to execute in request scope
-     * @param <T>      the return type
-     * @return the result of the supplier
-     */
-    <T> T supplyInRequestScope(java.util.function.Supplier<T> supplier);
-
-    /**
-     * Executes the given runnable within an event scope.
-     * <p>
-     * Event-scoped beans created during execution will be destroyed
-     * when the scope exits. This represents a single event processing
-     * within a potentially larger request scope.
+     * EVENT-scoped beans created during execution are destroyed when the scope exits
+     * (LIFO {@code @PreDestroy}). EVENT is single-frame in {@code 0.x.0}: calling this
+     * method while a unit is already open throws {@link IllegalStateException}.
      *
      * @param runnable the code to execute in event scope
+     * @throws IllegalStateException if a unit of work is already open on the current thread
      */
     void runInEventScope(Runnable runnable);
 
     /**
-     * Executes the given supplier within an event scope and returns its result.
+     * Executes the given supplier within an EVENT scope (one unit of work) and returns its result.
      * <p>
-     * Event-scoped beans created during execution will be destroyed
-     * when the scope exits.
+     * EVENT-scoped beans created during execution are destroyed when the scope exits.
+     * EVENT is single-frame in {@code 0.x.0}: calling this method while a unit is
+     * already open throws {@link IllegalStateException}.
      *
      * @param supplier the code to execute in event scope
      * @param <T>      the return type
      * @return the result of the supplier
+     * @throws IllegalStateException if a unit of work is already open on the current thread
      */
     <T> T supplyInEventScope(java.util.function.Supplier<T> supplier);
 
