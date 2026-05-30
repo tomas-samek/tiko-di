@@ -525,16 +525,6 @@ public final class Tiko {
         }
 
         @Override
-        public void runInRequestScope(Runnable runnable) {
-            delegate.runInRequestScope(runnable);
-        }
-
-        @Override
-        public <T> T supplyInRequestScope(java.util.function.Supplier<T> s) {
-            return delegate.supplyInRequestScope(s);
-        }
-
-        @Override
         public void runInEventScope(Runnable runnable) {
             delegate.runInEventScope(runnable);
         }
