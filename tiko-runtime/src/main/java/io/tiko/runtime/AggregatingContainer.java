@@ -474,19 +474,6 @@ public final class AggregatingContainer implements Container {
     }
 
     @Override
-    public void runInRequestScope(Runnable task) {
-        // The task represents one request; it must run exactly once. Each module container
-        // still gets its own scope frame (so REQUEST-scoped beans isolate per module) — we
-        // achieve this by nesting the scope helpers and running the task in the innermost.
-        runNested(moduleContainers.iterator(), task, Container::runInRequestScope);
-    }
-
-    @Override
-    public <T> T supplyInRequestScope(Supplier<T> supplier) {
-        return supplyNested(moduleContainers.iterator(), supplier, Container::supplyInRequestScope);
-    }
-
-    @Override
     public void runInEventScope(Runnable task) {
         runNested(moduleContainers.iterator(), task, Container::runInEventScope);
     }
@@ -499,7 +486,7 @@ public final class AggregatingContainer implements Container {
     /**
      * Recursively nests {@code scopeHelper} calls across {@code containers}, ensuring
      * {@code task} is invoked exactly once inside the innermost scope frame. Each container
-     * still sees the task running within its own scope, so REQUEST/EVENT-scoped beans
+     * still sees the task running within its own scope, so EVENT-scoped beans
      * remain isolated per module while cross-module side effects (event publishes, etc.)
      * fire only once.
      */
