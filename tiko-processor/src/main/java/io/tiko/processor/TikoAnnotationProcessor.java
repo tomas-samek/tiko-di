@@ -470,8 +470,8 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
 
         implementedInterface.ifPresent(builder::implementedInterface);
 
-        // Determine if proxy is needed (REQUEST/EVENT scope with interface)
-        boolean needsProxy = (scope == Scope.REQUEST || scope == Scope.EVENT) && implementedInterface.isPresent();
+        // Determine if proxy is needed (EVENT scope with interface)
+        boolean needsProxy = scope == Scope.EVENT && implementedInterface.isPresent();
         builder.requiresProxy(needsProxy);
 
         return builder.build();
@@ -773,12 +773,12 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         // HttpClient, KafkaProducer, etc.).
         boolean factoryAutoCloseable = typeUtil.isAssignableTo(returnType, "java.lang.AutoCloseable");
 
-        // Auto-proxy: when a REQUEST/EVENT-scoped factory produces an interface, a longer-lived
-        // consumer (SINGLETON injecting a REQUEST-scoped Connection, for example) needs a proxy
+        // Auto-proxy: when an EVENT-scoped factory produces an interface, a longer-lived
+        // consumer (SINGLETON injecting an EVENT-scoped Connection, for example) needs a proxy
         // that resolves to the current scope's value on every method call — same teaching as
         // @Component-based cross-scope proxies. Proxying a concrete class would require bytecode
         // tricks Tiko deliberately avoids, so we only emit a proxy for interface returns.
-        boolean requiresProxy = (annotation.scope() == Scope.REQUEST || annotation.scope() == Scope.EVENT)
+        boolean requiresProxy = annotation.scope() == Scope.EVENT
                 && returnType.getKind() == javax.lang.model.type.TypeKind.DECLARED
                 && ((javax.lang.model.type.DeclaredType) returnType).asElement().getKind()
                         == javax.lang.model.element.ElementKind.INTERFACE;
