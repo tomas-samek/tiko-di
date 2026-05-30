@@ -21,10 +21,10 @@ import javax.lang.model.element.Modifier;
  *
  * This generator creates:
  * - Singleton storage
- * - REQUEST/EVENT scope storage (ThreadLocal)
+ * - EVENT scope storage (ThreadLocal)
  * - Factory instances for each component
  * - Getter methods for each component (respecting scope)
- * - Scope management methods (runInRequestScope, runInEventScope)
+ * - Scope management methods (runInEventScope)
  * - Lifecycle management (start, shutdown)
  */
 public final class ContainerGenerator {
@@ -165,7 +165,6 @@ public final class ContainerGenerator {
 
         // Add fields
         containerBuilder.addField(createSingletonStorageField());
-        containerBuilder.addField(createRequestScopeField());
         containerBuilder.addField(createEventScopeField());
         containerBuilder.addField(createEventBusField());
         containerBuilder.addField(createErrorHandlerField());
@@ -192,8 +191,6 @@ public final class ContainerGenerator {
         containerBuilder.addMethods(createComponentGetters());
 
         // Add scope management methods
-        containerBuilder.addMethod(createRunInRequestScopeMethod());
-        containerBuilder.addMethod(createSupplyInRequestScopeMethod());
         containerBuilder.addMethod(createRunInEventScopeMethod());
         containerBuilder.addMethod(createSupplyInEventScopeMethod());
 
@@ -288,26 +285,8 @@ public final class ContainerGenerator {
     }
 
     /**
-     * Creates the REQUEST scope storage field: ThreadLocal<Map<String, Object>>.
-     * <p>Uses {@link LinkedHashMap} so scope teardown can iterate beans in
-     * insertion order (= creation order for lazy scoped beans) and invoke
-     * {@code @PreDestroy} hooks in reverse-creation (LIFO) order. Per-thread
-     * via {@link ThreadLocal}, so the non-thread-safe map is fine.
-     */
-    private FieldSpec createRequestScopeField() {
-        ParameterizedTypeName mapType = ParameterizedTypeName.get(
-                ClassName.get(Map.class), ClassName.get(String.class), ClassName.get(Object.class));
-
-        ParameterizedTypeName threadLocalType = ParameterizedTypeName.get(ClassName.get(ThreadLocal.class), mapType);
-
-        return FieldSpec.builder(threadLocalType, "requestScoped", scopeStorageModifiers())
-                .initializer("$T.withInitial($T::new)", ThreadLocal.class, LinkedHashMap.class)
-                .build();
-    }
-
-    /**
      * Creates the EVENT scope storage field: ThreadLocal<Map<String, Object>>.
-     * Same rationale as the REQUEST field — {@link LinkedHashMap} for ordered teardown.
+     * Uses {@link LinkedHashMap} for ordered teardown — same rationale as the singleton map.
      */
     private FieldSpec createEventScopeField() {
         ParameterizedTypeName mapType = ParameterizedTypeName.get(
@@ -586,8 +565,8 @@ public final class ContainerGenerator {
         for (ComponentModel component : activeComponents()) {
             methods.add(createComponentGetter(component));
 
-            // If REQUEST or EVENT scoped, also create getCurrentXxx method for proxies
-            if (component.getScope() == Scope.REQUEST || component.getScope() == Scope.EVENT) {
+            // If EVENT scoped, also create getCurrentXxx method for proxies
+            if (component.getScope() == Scope.EVENT) {
                 methods.add(createCurrentScopedGetter(component));
             }
         }
@@ -602,7 +581,7 @@ public final class ContainerGenerator {
 
     /**
      * Creates a public getter for a @Produces factory method. The getter applies the
-     * method's scope (singleton cache / request / event / prototype) around a call to
+     * method's scope (singleton cache / event / prototype) around a call to
      * the factory method itself (instance or static).
      */
     private MethodSpec createFactoryMethodGetter(FactoryMethodModel factory) {
@@ -619,8 +598,6 @@ public final class ContainerGenerator {
             case SINGLETON ->
                 method.addStatement(
                         "return ($T) singletons.computeIfAbsent($S, k -> $L)", returnType, storageKey, callExpr);
-            case REQUEST ->
-                emitScopedGetOrCreateNoOverride(method, returnType, "requestScoped.get()", storageKey, callExpr);
             case EVENT ->
                 emitScopedGetOrCreateNoOverride(method, returnType, "eventScoped.get()", storageKey, callExpr);
             case PROTOTYPE -> method.addStatement("return $L", callExpr);
@@ -806,19 +783,6 @@ public final class ContainerGenerator {
                             factoryFieldName);
                 }
             }
-            case REQUEST -> {
-                // Return from REQUEST scope storage. Per-component getters are pure factory
-                // caches after #128: override consultation happens upstream at dispatcher
-                // heads (get(Class), get(Class, String)) and at factory call sites.
-                if (component.requiresProxy()) {
-                    // Proxies are created eagerly in constructor, just return the field
-                    String proxyFieldName = getProxyFieldName(component.getClassName());
-                    method.addStatement("return $L", proxyFieldName);
-                } else {
-                    emitScopedGetOrCreate(
-                            method, returnType, "requestScoped.get()", storageKey, factoryFieldName + ".create()");
-                }
-            }
             case EVENT -> {
                 // Return from EVENT scope storage. Per-component getters are pure factory
                 // caches after #128: override consultation happens upstream at dispatcher
@@ -840,7 +804,7 @@ public final class ContainerGenerator {
     }
 
     /**
-     * Creates getCurrentXxx method for REQUEST/EVENT scoped components (used by proxies).
+     * Creates getCurrentXxx method for EVENT-scoped components (used by proxies).
      */
     private MethodSpec createCurrentScopedGetter(ComponentModel component) {
         String methodName = "getCurrent" + component.getClassName();
@@ -852,12 +816,7 @@ public final class ContainerGenerator {
                 .addModifiers(Modifier.PUBLIC)
                 .returns(returnType);
 
-        if (component.getScope() == Scope.REQUEST) {
-            emitScopedGetOrCreate(
-                    method, returnType, "requestScoped.get()", storageKey, factoryFieldName + ".create()");
-        } else { // EVENT
-            emitScopedGetOrCreate(method, returnType, "eventScoped.get()", storageKey, factoryFieldName + ".create()");
-        }
+        emitScopedGetOrCreate(method, returnType, "eventScoped.get()", storageKey, factoryFieldName + ".create()");
 
         return method.build();
     }
@@ -867,7 +826,7 @@ public final class ContainerGenerator {
      * {@code computeIfAbsent} on {@link LinkedHashMap} throws
      * {@link java.util.ConcurrentModificationException} when the create lambda
      * recursively pulls another bean from the same map (e.g., dependency chains
-     * like REQUEST {@code TransactionContext} depending on REQUEST {@code Connection}
+     * like EVENT {@code EventContext} depending on another EVENT-scoped {@code Connection}
      * in {@code tiko-examples/10_persistence_jdbc}). The map is single-threaded
      * (per-thread {@code ThreadLocal}) so this non-atomic get/put pair is safe —
      * and produces the desired insertion order: dependencies are put first,
@@ -879,7 +838,7 @@ public final class ContainerGenerator {
      * {@link java.util.concurrent.ConcurrentHashMap} (chosen for thread safety,
      * since SINGLETON beans are reachable from any thread) and tolerates
      * recursive update on different keys in practice. SWAPPING THIS HELPER TO
-     * {@code computeIfAbsent} TO MATCH SINGLETON WILL BREAK any REQUEST/EVENT
+     * {@code computeIfAbsent} TO MATCH SINGLETON WILL BREAK any EVENT
      * dependency chain — see closed issue #100 for the analysis.
      *
      * <p>Per-component getters are pure factory caches: the override consultation
@@ -914,8 +873,6 @@ public final class ContainerGenerator {
         method.addStatement("return __existing");
     }
 
-    private static final ClassName REQUEST_STARTED = ClassName.get("io.tiko.events", "RequestStartedEvent");
-    private static final ClassName REQUEST_ENDING = ClassName.get("io.tiko.events", "RequestEndingEvent");
     private static final ClassName EVENT_STARTED = ClassName.get("io.tiko.events", "EventStartedEvent");
     private static final ClassName EVENT_ENDING = ClassName.get("io.tiko.events", "EventEndingEvent");
     private static final ClassName APP_STARTED = ClassName.get("io.tiko.events", "ApplicationStartedEvent");
@@ -925,68 +882,21 @@ public final class ContainerGenerator {
     private static final ClassName NO_SUCH_COMPONENT = ClassName.get("io.tiko", "NoSuchComponentException");
 
     /**
-     * Creates runInRequestScope method.
-     */
-    private MethodSpec createRunInRequestScopeMethod() {
-        MethodSpec.Builder method = MethodSpec.methodBuilder("runInRequestScope")
-                .addModifiers(Modifier.PUBLIC)
-                .addAnnotation(Override.class)
-                .addParameter(Runnable.class, "task")
-                .addStatement("$T __requestId = $T.randomUUID().toString()", String.class, UUID.class)
-                .addStatement("$T __requestStart = $T.now()", Instant.class, Instant.class)
-                .addStatement("eventBus.publish(new $T(__requestId, __requestStart))", REQUEST_STARTED)
-                .beginControlFlow("try")
-                .addStatement("task.run()")
-                .nextControlFlow("finally")
-                .addStatement("$T __requestEnd = $T.now()", Instant.class, Instant.class)
-                .addStatement(
-                        "eventBus.publish(new $T(__requestId, __requestEnd, $T.between(__requestStart, __requestEnd)))",
-                        REQUEST_ENDING,
-                        Duration.class);
-        emitScopedTeardown(method, Scope.REQUEST, "requestScoped.get()");
-        method.addStatement("requestScoped.get().clear()").endControlFlow();
-        return method.build();
-    }
-
-    /**
-     * Creates supplyInRequestScope method.
-     */
-    private MethodSpec createSupplyInRequestScopeMethod() {
-        TypeVariableName typeVar = TypeVariableName.get("T");
-        ParameterizedTypeName supplierType =
-                ParameterizedTypeName.get(ClassName.get(java.util.function.Supplier.class), typeVar);
-
-        MethodSpec.Builder method = MethodSpec.methodBuilder("supplyInRequestScope")
-                .addModifiers(Modifier.PUBLIC)
-                .addAnnotation(Override.class)
-                .addTypeVariable(typeVar)
-                .addParameter(supplierType, "supplier")
-                .returns(typeVar)
-                .addStatement("$T __requestId = $T.randomUUID().toString()", String.class, UUID.class)
-                .addStatement("$T __requestStart = $T.now()", Instant.class, Instant.class)
-                .addStatement("eventBus.publish(new $T(__requestId, __requestStart))", REQUEST_STARTED)
-                .beginControlFlow("try")
-                .addStatement("return supplier.get()")
-                .nextControlFlow("finally")
-                .addStatement("$T __requestEnd = $T.now()", Instant.class, Instant.class)
-                .addStatement(
-                        "eventBus.publish(new $T(__requestId, __requestEnd, $T.between(__requestStart, __requestEnd)))",
-                        REQUEST_ENDING,
-                        Duration.class);
-        emitScopedTeardown(method, Scope.REQUEST, "requestScoped.get()");
-        method.addStatement("requestScoped.get().clear()").endControlFlow();
-        return method.build();
-    }
-
-    /**
      * Creates runInEventScope method.
      */
     private MethodSpec createRunInEventScopeMethod() {
         MethodSpec.Builder method = MethodSpec.methodBuilder("runInEventScope")
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
-                .addParameter(Runnable.class, "task")
-                .addStatement("$T __eventId = $T.randomUUID().toString()", String.class, UUID.class)
+                .addParameter(Runnable.class, "task");
+        method.beginControlFlow("if (!eventScoped.get().isEmpty())");
+        method.addStatement(
+                "throw new $T($S)",
+                IllegalStateException.class,
+                "runInEventScope called while a unit of work is already open. "
+                        + "EVENT is single-frame in 0.x.0; nesting is not supported.");
+        method.endControlFlow();
+        method.addStatement("$T __eventId = $T.randomUUID().toString()", String.class, UUID.class)
                 .addStatement("$T __eventStart = $T.now()", Instant.class, Instant.class)
                 .addStatement("eventBus.publish(new $T(__eventId, __eventStart))", EVENT_STARTED)
                 .beginControlFlow("try")
@@ -1015,8 +925,15 @@ public final class ContainerGenerator {
                 .addAnnotation(Override.class)
                 .addTypeVariable(typeVar)
                 .addParameter(supplierType, "supplier")
-                .returns(typeVar)
-                .addStatement("$T __eventId = $T.randomUUID().toString()", String.class, UUID.class)
+                .returns(typeVar);
+        method.beginControlFlow("if (!eventScoped.get().isEmpty())");
+        method.addStatement(
+                "throw new $T($S)",
+                IllegalStateException.class,
+                "supplyInEventScope called while a unit of work is already open. "
+                        + "EVENT is single-frame in 0.x.0; nesting is not supported.");
+        method.endControlFlow();
+        method.addStatement("$T __eventId = $T.randomUUID().toString()", String.class, UUID.class)
                 .addStatement("$T __eventStart = $T.now()", Instant.class, Instant.class)
                 .addStatement("eventBus.publish(new $T(__eventId, __eventStart))", EVENT_STARTED)
                 .beginControlFlow("try")
@@ -1033,7 +950,7 @@ public final class ContainerGenerator {
     }
 
     /**
-     * Emits the destroy-hook walk for a REQUEST/EVENT scope teardown. Iterates the
+     * Emits the destroy-hook walk for an EVENT scope teardown. Iterates the
      * scope map's values in reverse insertion order (= reverse-creation, LIFO),
      * dispatches by concrete component type, and invokes either the explicit
      * {@code @PreDestroy} method(s) or the implicit {@code AutoCloseable.close()}.
@@ -1529,7 +1446,7 @@ public final class ContainerGenerator {
 
     /**
      * Creates getProvider(Class) method — a lazy handle that delegates to get(type)
-     * on each invocation, so scope semantics (singleton cache, request/event resolution,
+     * on each invocation, so scope semantics (singleton cache, event resolution,
      * prototype re-creation) are preserved.
      */
     private MethodSpec createGetProviderMethod() {
@@ -1755,7 +1672,7 @@ public final class ContainerGenerator {
      * LIFO destruction contract (#151, #189).
      *
      * <p>Edges followed: SINGLETON→SINGLETON, across both Component and Factory providers.
-     * REQUEST/EVENT deps inject via proxies and impose no construction-order constraint.
+     * EVENT deps inject via proxies and impose no construction-order constraint.
      * Cycles cannot occur (caught at compile-time by CircularDependencyDetector); the
      * {@code visited} guard is defensive.
      */
