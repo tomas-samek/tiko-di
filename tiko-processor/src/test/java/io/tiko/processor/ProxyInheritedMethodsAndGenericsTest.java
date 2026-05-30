@@ -52,7 +52,7 @@ class ProxyInheritedMethodsAndGenericsTest {
                 "package io.example;",
                 "import io.tiko.Scope;",
                 "import io.tiko.annotations.Component;",
-                "@Component(scope = Scope.REQUEST)",
+                "@Component(scope = Scope.EVENT)",
                 "public class ResourceImpl implements Resource {",
                 "  public String name() { return \"r\"; }",
                 "  public <T> T unwrap(Class<T> type) { return null; }",
@@ -111,7 +111,7 @@ class ProxyInheritedMethodsAndGenericsTest {
                 "import io.tiko.annotations.Produces;",
                 "@Component(scope = Scope.SINGLETON)",
                 "public class ResourceFactory {",
-                "  @Produces(scope = Scope.REQUEST)",
+                "  @Produces(scope = Scope.EVENT)",
                 "  public Resource resource() { return null; }",
                 "}");
 

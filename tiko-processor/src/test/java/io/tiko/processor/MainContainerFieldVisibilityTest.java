@@ -63,7 +63,6 @@ class MainContainerFieldVisibilityTest {
 
         org.assertj.core.api.Assertions.assertThat(content)
                 .contains("private final Map<String, Object> singletons")
-                .contains("private final ThreadLocal<Map<String, Object>> requestScoped")
                 .contains("private final ThreadLocal<Map<String, Object>> eventScoped")
                 .contains("private final TikoOptions options");
     }

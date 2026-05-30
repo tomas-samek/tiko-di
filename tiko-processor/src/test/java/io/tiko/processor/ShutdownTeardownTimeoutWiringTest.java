@@ -17,8 +17,8 @@ import org.junit.jupiter.api.Test;
  * {@code this.options.teardownTimeout()} and the {@code PreDestroyFailure} / {@code AutoCloseFailure}
  * factories — so an opt-in timeout bounds the hook while the unset default stays inline.
  *
- * <p>REQUEST scope-exit teardown is explicitly out of scope and must stay inline; the fixture
- * carries one REQUEST {@code @PreDestroy} + one REQUEST factory {@code AutoCloseable} alongside the
+ * <p>EVENT scope-exit teardown is explicitly out of scope and must stay inline; the fixture
+ * carries one EVENT {@code @PreDestroy} + one EVENT factory {@code AutoCloseable} alongside the
  * SINGLETON pair, and the test asserts exactly the two SINGLETON sites delegate to the primitive.
  */
 class ShutdownTeardownTimeoutWiringTest {
@@ -45,22 +45,22 @@ class ShutdownTeardownTimeoutWiringTest {
                 "  @PreDestroy public void down() {}",
                 "  @Produces(scope = Scope.SINGLETON) public SRes res() { return new SRes(); }",
                 "}");
-        JavaFileObject requestBean = JavaFileObjects.forSourceLines(
-                "io.example.RequestBean",
+        JavaFileObject eventBean = JavaFileObjects.forSourceLines(
+                "io.example.EventBean",
                 "package io.example;",
                 "import io.tiko.Scope;",
                 "import io.tiko.annotations.Component;",
                 "import io.tiko.annotations.PreDestroy;",
                 "import io.tiko.annotations.Produces;",
-                "@Component(scope = Scope.REQUEST)",
-                "public class RequestBean {",
+                "@Component(scope = Scope.EVENT)",
+                "public class EventBean {",
                 "  @PreDestroy public void down() {}",
-                "  @Produces(scope = Scope.REQUEST) public RRes res() { return new RRes(); }",
+                "  @Produces(scope = Scope.EVENT) public RRes res() { return new RRes(); }",
                 "}");
 
         Compilation c = Compiler.javac()
                 .withProcessors(new TikoAnnotationProcessor())
-                .compile(sRes, rRes, singletonBean, requestBean);
+                .compile(sRes, rRes, singletonBean, eventBean);
         CompilationSubject.assertThat(c).succeeded();
 
         JavaFileObject container = c.generatedSourceFiles().stream()
@@ -77,7 +77,7 @@ class ShutdownTeardownTimeoutWiringTest {
         assertThat(content).contains("PreDestroyFailure");
         assertThat(content).contains("AutoCloseFailure");
 
-        // Exactly the two SINGLETON sites delegate — REQUEST teardown stays inline (out of scope).
+        // Exactly the two SINGLETON sites delegate — EVENT teardown stays inline (out of scope).
         assertThat(countOccurrences(content, "BoundedExecution.run("))
                 .as("only the two SINGLETON teardown sites use the bounded primitive")
                 .isEqualTo(2);

@@ -15,51 +15,52 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 /**
- * The canonical map of the 16-cell cross-scope injection matrix (#161): one parameterized row per
- * {@code consumer -> dependency} scope pair, asserting that every cell compiles and generates the
- * expected wiring. Before this, most cells (EVENT&rarr;EVENT, REQUEST&rarr;PROTOTYPE,
- * PROTOTYPE&rarr;*, &hellip;) passed by virtue of not being broken rather than by assertion, so a
- * refactor breaking a specific cell could ship silently.
+ * The canonical map of the 9-cell cross-scope injection matrix (#161, #226): one parameterized row
+ * per {@code consumer -> dependency} scope pair, asserting that every cell compiles and generates
+ * the expected wiring. Before #161, most cells (EVENT&rarr;EVENT, PROTOTYPE&rarr;*, &hellip;)
+ * passed by virtue of not being broken rather than by assertion, so a refactor breaking a specific
+ * cell could ship silently. #226 collapsed the 4-scope model (SINGLETON/REQUEST/EVENT/PROTOTYPE)
+ * to 3 scopes (SINGLETON/EVENT/PROTOTYPE), removing REQUEST.
  *
  * <p>The dependency is always interface-backed ({@code Dep}/{@code DepImpl}) — interface-keyed
- * injection is valid in every cell (it is what makes the three proxy directions legal at all) and
- * matches the house "test against interfaces" rule, so a single uniform fixture covers all 16 cells.
+ * injection is valid in every cell (it is what makes the proxy direction legal at all) and matches
+ * the house "test against interfaces" rule, so a single uniform fixture covers all 9 cells.
  *
  * <p>Each row asserts: (1) compilation succeeds, (2) the dependency impl's {@code Factory} and the
  * consumer's {@code Factory} are generated, (3) a {@code DepImplProxy} is generated for exactly the
- * eight cells whose dependency is REQUEST/EVENT-scoped, and for no others.
+ * three cells whose dependency is EVENT-scoped, and for no others.
  *
- * <p>That proxy rule is worth stating precisely, because it is subtler than it looks (and than the
- * issue's premise assumed): for a {@code @Component} dependency, {@code requiresProxy} is a property
- * of the <em>dependency</em> alone — "REQUEST/EVENT-scoped behind an interface" — not of the
- * consumer/dependency pair. Such a component is always reached through its generated per-scope
- * resolving proxy, which is its single access path, regardless of whether the consumer outlives it;
- * SINGLETON and PROTOTYPE dependencies are injected directly. (The consumer-outlives gating exists
- * only for {@code @Produces} factory outputs — {@code ComponentFactoryGenerator} — which is a
- * separate matrix from this {@code @Component}-scope one.)
+ * <p>That proxy rule is worth stating precisely: for a {@code @Component} dependency,
+ * {@code requiresProxy} is a property of the <em>dependency</em> alone — "EVENT-scoped behind an
+ * interface" — not of the consumer/dependency pair. Such a component is always reached through its
+ * generated per-scope resolving proxy, which is its single access path, regardless of whether the
+ * consumer outlives it; SINGLETON and PROTOTYPE dependencies are injected directly. (The
+ * consumer-outlives gating exists only for {@code @Produces} factory outputs —
+ * {@code ComponentFactoryGenerator} — which is a separate matrix from this
+ * {@code @Component}-scope one.)
  *
  * <p><strong>Runtime smoke</strong> — retrieving and using a bean inside its scope — is pinned by
  * the existing real-container tests rather than re-asserted here (this layer compiles fixtures and
  * inspects generated source; it does not boot a container):
  * <ul>
- *   <li>cross-scope proxy delegation & per-scope freshness across SINGLETON/REQUEST/EVENT —
+ *   <li>cross-scope proxy delegation &amp; per-scope freshness across SINGLETON/EVENT —
  *       {@code CoreDiIntegrationTest} (01_basic_di), which the issue's out-of-scope cites;</li>
  *   <li>PROTOTYPE instance freshness (fresh instance per injection / {@code Provider} call) —
  *       {@code ProviderTest} (01_basic_di);</li>
- *   <li>the negative side of the three proxy directions (concrete shorter-lived bean &rarr; error) —
+ *   <li>the negative side of the proxy direction (concrete EVENT-scoped bean &rarr; error) —
  *       {@code RequiredInterfaceForProxyTest}.</li>
  * </ul>
  */
 class CrossScopeMatrixTest {
 
-    private static final String[] SCOPES = {"SINGLETON", "REQUEST", "EVENT", "PROTOTYPE"};
+    private static final String[] SCOPES = {"SINGLETON", "EVENT", "PROTOTYPE"};
 
     /**
      * The dependency scopes that are proxyable behind an interface, so a proxy class is generated
      * and used as the dependency's access path. PROTOTYPE produces a fresh instance per injection
      * and SINGLETON is always live, so neither is proxied.
      */
-    private static final Set<String> PROXYABLE_DEP_SCOPES = Set.of("REQUEST", "EVENT");
+    private static final Set<String> PROXYABLE_DEP_SCOPES = Set.of("EVENT");
 
     static Stream<Arguments> matrix() {
         return Stream.of(SCOPES).flatMap(consumer -> Stream.of(SCOPES).map(dep -> Arguments.of(consumer, dep)));
@@ -106,7 +107,7 @@ class CrossScopeMatrixTest {
                 .as("%s: the consumer's factory is generated", cell)
                 .isTrue();
         assertThat(generated(c, "DepImplProxy"))
-                .as("%s: a proxy is generated iff the dependency is REQUEST/EVENT-scoped (proxyable)", cell)
+                .as("%s: a proxy is generated iff the dependency is EVENT-scoped (proxyable)", cell)
                 .isEqualTo(PROXYABLE_DEP_SCOPES.contains(depScope));
     }
 

@@ -10,11 +10,6 @@ import org.junit.jupiter.api.Test;
 class ScopedGetterPureFactoryTest {
 
     @Test
-    void requestGetterContainsNoOverrideCheck() throws Exception {
-        verifyNoOverride("REQUEST", "RC");
-    }
-
-    @Test
     void eventGetterContainsNoOverrideCheck() throws Exception {
         verifyNoOverride("EVENT", "EC");
     }

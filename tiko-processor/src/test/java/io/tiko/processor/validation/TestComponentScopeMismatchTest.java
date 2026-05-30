@@ -26,19 +26,19 @@ class TestComponentScopeMismatchTest {
     @Test
     void scopeMismatchBetweenTestAndProductionFailsCompile() {
         var prod = JavaFileObjects.forSourceLines(
-                "demo.RequestRepo",
+                "demo.EventRepo",
                 "package demo;",
                 "import io.tiko.Scope;",
                 "import io.tiko.annotations.Component;",
-                "@Component(scope = Scope.REQUEST)",
-                "public class RequestRepo {}");
+                "@Component(scope = Scope.EVENT)",
+                "public class EventRepo {}");
         var fake = JavaFileObjects.forSourceLines(
                 "demo.FakeRepo",
                 "package demo;",
                 "import io.tiko.Scope;",
                 "import io.tiko.test.TestComponent;",
                 "@TestComponent(scope = Scope.SINGLETON)",
-                "public class FakeRepo extends RequestRepo {}");
+                "public class FakeRepo extends EventRepo {}");
         var consumer = JavaFileObjects.forSourceLines(
                 "demo.UsesRepo",
                 "package demo;",
@@ -47,7 +47,7 @@ class TestComponentScopeMismatchTest {
                 "import io.tiko.annotations.Inject;",
                 "@Component(scope = Scope.SINGLETON)",
                 "public class UsesRepo {",
-                "    @Inject public UsesRepo(RequestRepo r) {}",
+                "    @Inject public UsesRepo(EventRepo r) {}",
                 "}");
 
         var c = Compiler.javac()

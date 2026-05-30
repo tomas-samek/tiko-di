@@ -16,16 +16,15 @@ import org.junit.jupiter.api.Test;
  * longer-lived consumer must be mediated by a generated proxy.
  *
  * <p>Before this fix, only {@code @Component}-class outputs got auto-proxied;
- * a SINGLETON consumer that constructor-injected a REQUEST-scoped
+ * a SINGLETON consumer that constructor-injected an EVENT-scoped
  * {@code @Produces} output captured the connection (or whatever) at first
  * construction and reused it across all subsequent scope frames — exactly
  * the leak the proxy mechanism exists to prevent.
  *
  * <p>The fix extends {@code ProxyGenerator} to also produce a proxy class
- * for factory-method outputs whose declared scope is REQUEST or EVENT and
- * whose return type is an interface. The companion change in
- * {@code ComponentFactoryGenerator} instantiates the proxy when the
- * consumer's scope outlives the factory's scope.
+ * for factory-method outputs whose declared scope is EVENT and whose return
+ * type is an interface. The companion change in {@code ComponentFactoryGenerator}
+ * instantiates the proxy when the consumer's scope outlives the factory's scope.
  */
 class ProxyForProducesOutputCrossScopeTest {
 
@@ -42,7 +41,7 @@ class ProxyForProducesOutputCrossScopeTest {
                 "import io.tiko.annotations.Produces;",
                 "@Component(scope = Scope.SINGLETON)",
                 "public class GreetingFactory {",
-                "  @Produces(scope = Scope.REQUEST)",
+                "  @Produces(scope = Scope.EVENT)",
                 "  public Greeting greeting() { return () -> \"hi\"; }",
                 "}");
 
