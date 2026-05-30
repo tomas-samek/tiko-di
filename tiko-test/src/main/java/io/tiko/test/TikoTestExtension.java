@@ -103,10 +103,9 @@ public final class TikoTestExtension
             throws Throwable {
         Container container = store(eCtx).get(KEY_CONTAINER, Container.class);
         Method method = invocationContext.getExecutable();
-        boolean req = method.isAnnotationPresent(RequestScopeTest.class);
         boolean evt = method.isAnnotationPresent(EventScopeTest.class);
 
-        if (!req && !evt) {
+        if (!evt) {
             invocation.proceed();
             return;
         }
@@ -122,13 +121,7 @@ public final class TikoTestExtension
             }
         };
 
-        if (req && evt) {
-            container.runInRequestScope(() -> container.runInEventScope(body));
-        } else if (req) {
-            container.runInRequestScope(body);
-        } else {
-            container.runInEventScope(body);
-        }
+        container.runInEventScope(body);
 
         if (thrown[0] != null) {
             throw thrown[0];
