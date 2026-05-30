@@ -97,16 +97,6 @@ class TikoDaemonTest {
         }
 
         @Override
-        public void runInRequestScope(Runnable runnable) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public <T> T supplyInRequestScope(Supplier<T> supplier) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
         public void runInEventScope(Runnable runnable) {
             throw new UnsupportedOperationException();
         }

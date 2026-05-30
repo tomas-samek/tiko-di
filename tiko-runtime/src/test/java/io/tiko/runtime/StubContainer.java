@@ -61,16 +61,6 @@ public final class StubContainer implements Container {
     }
 
     @Override
-    public void runInRequestScope(Runnable runnable) {
-        runnable.run();
-    }
-
-    @Override
-    public <T> T supplyInRequestScope(Supplier<T> supplier) {
-        return supplier.get();
-    }
-
-    @Override
     public void runInEventScope(Runnable runnable) {
         runnable.run();
     }
