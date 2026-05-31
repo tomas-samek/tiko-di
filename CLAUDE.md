@@ -94,40 +94,31 @@ tiko-config (depends on tiko-api, snakeyaml)
 
 ### Scope Management
 
-Four scopes (via `Scope` enum) - from longest to shortest lifetime:
+Three scopes (via `Scope` enum) - from longest to shortest lifetime:
 - `Scope.SINGLETON` - Application lifetime
-- `Scope.REQUEST` - Request/transaction/batch scope (coarse-grained)
-- `Scope.EVENT` - Single event processing (fine-grained)
-- `Scope.PROTOTYPE` - Per injection (shortest)
+- `Scope.EVENT` - One unit of work (HTTP request, consumed message, scheduled job, async dispatch)
+- `Scope.PROTOTYPE` - Per injection (shortest, default)
 
 **Scope hierarchy:**
 ```
 SINGLETON (application)
     ↓
-REQUEST (transaction, HTTP request, batch job)
-    ↓
-EVENT (single event handler execution)
+EVENT (one unit of work — sync reach of an inbound stimulus)
     ↓
 PROTOTYPE (per injection)
 ```
 
-**Key distinction:** One REQUEST can process multiple EVENTs (e.g., batch processing, transaction with multiple messages).
+**Unit of work:** The synchronous reach of an inbound stimulus, bounded at every async / transport hop. EVENT is single-frame in `0.x.0` — calling `runInEventScope` while a unit is already open throws `IllegalStateException`. Nestability is a deferred-but-additive future change.
 
-**Cross-scope injection rules:**
-- SINGLETON → SINGLETON: ✓ Direct injection
-- SINGLETON → REQUEST: ✓ **Automatic proxy** (requires interface)
-- SINGLETON → EVENT: ✓ **Automatic proxy** (requires interface)
-- SINGLETON → PROTOTYPE: ✓ Direct injection (new instance each time)
-- REQUEST → SINGLETON: ✓ Direct injection
-- REQUEST → REQUEST: ✓ Direct injection
-- REQUEST → EVENT: ✓ **Automatic proxy** (requires interface)
-- REQUEST → PROTOTYPE: ✓ Direct injection (new instance each time)
-- EVENT → SINGLETON: ✓ Direct injection
-- EVENT → REQUEST: ✓ Direct injection
-- EVENT → EVENT: ✓ Direct injection
-- EVENT → PROTOTYPE: ✓ Direct injection (new instance each time)
+**Cross-scope injection rules (3×3):**
 
-**Proxy generation:** When shorter-lived scoped beans (REQUEST, EVENT) are injected into longer-lived scopes, the annotation processor generates a proxy handler class to avoid reflection on method invocation. The shorter-lived bean must implement an interface for proxy creation.
+| Consumer ↓ / Dependency → | SINGLETON | EVENT     | PROTOTYPE |
+|---------------------------|-----------|-----------|-----------|
+| SINGLETON                 | direct    | **proxy** | direct    |
+| EVENT                     | direct    | direct    | direct    |
+| PROTOTYPE                 | direct    | direct    | direct    |
+
+**Proxy generation:** When an EVENT-scoped bean is injected into a SINGLETON, the annotation processor generates a proxy class so the SINGLETON resolves the current unit's instance on every call. The proxied bean must implement an interface. Resources bind to the current unit only — sharing one across units is a non-goal.
 
 ### Annotation Processing
 
@@ -167,7 +158,7 @@ tiko.event.bus=local    # or kafka
 
 ### Dependency Injection
 - `@Component(scope, name, profiles)` - Mark classes for DI (SOURCE retention)
-  - `scope` - Lifecycle scope (SINGLETON, REQUEST, EVENT, PROTOTYPE)
+  - `scope` - Lifecycle scope (SINGLETON, EVENT, PROTOTYPE)
   - `name` - Optional qualifier
   - `profiles` - Optional active profiles
 - `@Inject` - Mark injection points (RUNTIME retention)
@@ -175,8 +166,7 @@ tiko.event.bus=local    # or kafka
 
 ### Scopes (Scope enum - longest to shortest)
 - `Scope.SINGLETON` - Application lifetime
-- `Scope.REQUEST` - Request/transaction/batch lifecycle (coarse-grained)
-- `Scope.EVENT` - Single event processing lifecycle (fine-grained)
+- `Scope.EVENT` - One unit of work (HTTP request, message, job, async dispatch)
 - `Scope.PROTOTYPE` - New instance per injection (default, shortest)
 
 ### Lifecycle
@@ -215,11 +205,7 @@ non-AutoCloseable `TikoDaemon` that registers a JVM shutdown hook for long-lived
 *before* `@PreDestroy`, so external cleanup (stop an HTTP server, flush a buffer) belongs in an
 `@EventHandler(ApplicationEndingEvent)` subscriber.
 
-**Request Scope Lifecycle:**
-- `RequestStartedEvent(String requestId, Instant timestamp)` - Published on scope entry
-- `RequestEndingEvent(String requestId, Instant timestamp, Duration duration)` - Published on scope exit
-
-**Event Scope Lifecycle:**
+**Unit-of-work (EVENT) Lifecycle:**
 - `EventStartedEvent(String eventId, Instant timestamp)` - Published on scope entry
 - `EventEndingEvent(String eventId, Instant timestamp, Duration duration)` - Published on scope exit
 
@@ -228,17 +214,17 @@ non-AutoCloseable `TikoDaemon` that registers a JVM shutdown hook for long-lived
 @Component(scope = Scope.SINGLETON)
 public class MetricsCollector {
     @EventHandler
-    public void onRequestStarted(RequestStartedEvent event) {
-        metrics.incrementActiveRequests();
-        logger.debug("Request {} started", event.requestId());
+    public void onEventStarted(EventStartedEvent event) {
+        metrics.incrementActiveUnits();
+        logger.debug("Unit {} started", event.eventId());
     }
 
     @EventHandler
-    public void onRequestEnding(RequestEndingEvent event) {
-        metrics.decrementActiveRequests();
+    public void onEventEnding(EventEndingEvent event) {
+        metrics.decrementActiveUnits();
         metrics.recordDuration(event.duration());
-        logger.debug("Request {} completed in {}",
-            event.requestId(), event.duration());
+        logger.debug("Unit {} completed in {}",
+            event.eventId(), event.duration());
     }
 
     @EventHandler
@@ -344,13 +330,13 @@ Compile-time errors should:
 Example:
 ```
 ERROR: UserService.java:15
-REQUEST-scoped bean 'RequestContext' must implement an interface for proxy generation
+EVENT-scoped bean 'RequestContext' must implement an interface for proxy generation
 
   @Inject
   public UserService(RequestContext context) {
                      ^^^^^^^^^^^^^^
 
-When injecting REQUEST-scoped beans into SINGLETON, proxying is required.
+When injecting EVENT-scoped beans into SINGLETON, proxying is required.
 
 Suggested fixes:
 1. Extract interface: interface IRequestContext { }
@@ -502,47 +488,42 @@ public class UserService {
 }
 ```
 
-### REQUEST and EVENT Scopes Together
+### Unit of work — EVENT scope in practice
 ```java
-// REQUEST scope - transaction/batch context
+// EVENT scope - per-unit context (txn, connection, request-id, ...)
 public interface TransactionContext {
     String getTransactionId();
 }
 
-@Component(scope = Scope.REQUEST)
+@Component(scope = Scope.EVENT)
 public class TransactionContextImpl implements TransactionContext {
     private final String txId = UUID.randomUUID().toString();
     public String getTransactionId() { return txId; }
 }
 
-// EVENT scope - single event context
-public interface EventContext {
-    String getEventId();
-}
-
-@Component(scope = Scope.EVENT)
-public class EventContextImpl implements EventContext {
-    private final String eventId = UUID.randomUUID().toString();
-    public String getEventId() { return eventId; }
-}
-
-// Automatic proxy for cross-scope injection
+// Automatic proxy for cross-scope injection: SINGLETON ← EVENT
 @Component(scope = Scope.SINGLETON)
 public class OrderService {
     @Inject
-    public OrderService(TransactionContext txCtx, EventContext evtCtx) {
-        // Both get proxies automatically
+    public OrderService(TransactionContext txCtx) {
+        // Resolved to the current unit's instance on every call.
     }
 }
 
-// Batch processing - one REQUEST, multiple EVENTs
-container.runInRequestScope(() -> {
-    // One transaction for all orders
-    for (Order order : orders) {
-        container.runInEventScope(() -> {
-            // Each order gets its own event context
-            orderService.process(order);
-        });
+// Batch processing — one unit / one transaction with an internal loop.
+// Genuinely independent events each own their own unit and txn (saga/outbox
+// above the DI layer for cross-event consistency).
+container.runInEventScope(() -> {
+    var tx = container.get(TransactionContext.class);
+    tx.begin();
+    try {
+        for (Order order : orders) {
+            orderService.process(order, tx);
+        }
+        tx.commit();
+    } catch (Exception e) {
+        tx.rollback();
+        throw e;
     }
 });
 ```

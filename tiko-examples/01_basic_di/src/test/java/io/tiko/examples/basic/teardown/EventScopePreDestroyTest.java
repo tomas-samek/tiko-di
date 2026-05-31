@@ -49,14 +49,12 @@ class EventScopePreDestroyTest {
     }
 
     @Test
-    void multiple_event_scopes_inside_one_request_each_run_their_own_teardown() {
+    void multiple_event_scopes_each_run_their_own_teardown() {
         Container container = Tiko.create();
         try {
-            container.runInEventScope(() -> {
-                for (int i = 0; i < 3; i++) {
-                    container.runInEventScope(() -> container.get(LifoEventC.class));
-                }
-            });
+            for (int i = 0; i < 3; i++) {
+                container.runInEventScope(() -> container.get(LifoEventC.class));
+            }
         } finally {
             container.shutdown();
         }

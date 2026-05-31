@@ -6,67 +6,57 @@ All annotations live in `io.tiko.annotations.*`.
 
 ## Scopes
 
-Four scopes — longest to shortest lifetime:
+Three scopes — longest to shortest lifetime:
 
-| Scope                | Lifetime                                              | Typical use                              |
-|----------------------|-------------------------------------------------------|------------------------------------------|
-| `Scope.SINGLETON`    | Application                                           | Stateless services, repositories         |
-| `Scope.REQUEST`      | One transaction / HTTP request / batch                | Coarse-grained unit of work              |
-| `Scope.EVENT`        | One event handler execution                           | Fine-grained per-event context           |
-| `Scope.PROTOTYPE`    | One injection (default)                               | New instance every time                  |
+| Scope                | Lifetime                                                                  | Typical use                              |
+|----------------------|---------------------------------------------------------------------------|------------------------------------------|
+| `Scope.SINGLETON`    | Application                                                               | Stateless services, repositories         |
+| `Scope.EVENT`        | One unit of work (HTTP request, consumed message, scheduled job, async)   | Per-unit context, txn, connection        |
+| `Scope.PROTOTYPE`    | One injection (default)                                                   | New instance every time                  |
 
-One `REQUEST` can wrap many `EVENT`s — e.g. a batch transaction that processes a stream of events.
+A **unit of work** is the synchronous reach of an inbound stimulus, bounded at every async / transport hop. EVENT is single-frame in `0.x.0` — calling `runInEventScope` while a unit is already open throws `IllegalStateException`. Nestability is a deferred-but-additive future change.
 
 ### Cross-scope injection
 
-Shorter-lived beans injected into longer-lived scopes are wired through an **auto-generated proxy** that resolves the active scope's instance on every call. The proxied bean must implement an interface (no reflection — the processor emits a typed proxy class).
+An EVENT-scoped bean injected into a SINGLETON is wired through an **auto-generated proxy** that resolves the current unit's instance on every call. The proxied bean must implement an interface (no reflection — the processor emits a typed proxy class).
 
-| Injecting into | Can inject  | Notes                                  |
-|----------------|-------------|----------------------------------------|
-| `SINGLETON`    | `SINGLETON` | Direct injection                       |
-| `SINGLETON`    | `REQUEST`   | Automatic proxy (requires interface)   |
-| `SINGLETON`    | `EVENT`     | Automatic proxy (requires interface)   |
-| `SINGLETON`    | `PROTOTYPE` | New instance each time                 |
-| `REQUEST`      | `SINGLETON` | Direct injection                       |
-| `REQUEST`      | `REQUEST`   | Direct injection                       |
-| `REQUEST`      | `EVENT`     | Automatic proxy (requires interface)   |
-| `REQUEST`      | `PROTOTYPE` | New instance each time                 |
-| `EVENT`        | `SINGLETON` | Direct injection                       |
-| `EVENT`        | `REQUEST`   | Direct injection                       |
-| `EVENT`        | `EVENT`     | Direct injection                       |
-| `EVENT`        | `PROTOTYPE` | New instance each time                 |
+| Consumer ↓ / Dependency → | SINGLETON | EVENT     | PROTOTYPE |
+|---------------------------|-----------|-----------|-----------|
+| `SINGLETON`               | direct    | **proxy** | direct    |
+| `EVENT`                   | direct    | direct    | direct    |
+| `PROTOTYPE`               | direct    | direct    | direct    |
 
-### REQUEST and EVENT scopes together
+Resources bind to the current unit only; sharing one across units is a non-goal.
+
+### Unit of work in practice
+
+A batch that needs one transaction across its items is one unit of work, not many:
 
 ```java
 public interface TransactionContext { String getTransactionId(); }
 
-@Component(scope = Scope.REQUEST)
+@Component(scope = Scope.EVENT)
 public class TransactionContextImpl implements TransactionContext {
     private final String txId = UUID.randomUUID().toString();
     public String getTransactionId() { return txId; }
 }
 
-public interface EventContext { String getEventId(); Instant getTimestamp(); }
-
-@Component(scope = Scope.EVENT)
-public class EventContextImpl implements EventContext {
-    private final String eventId = UUID.randomUUID().toString();
-    private final Instant timestamp = Instant.now();
-    public String getEventId()   { return eventId; }
-    public Instant getTimestamp(){ return timestamp; }
-}
-
-// Batch processing — one REQUEST, many EVENTs
-container.runInRequestScope(() -> {
-    for (Order order : orders) {
-        container.runInEventScope(() -> {
-            orderService.process(order);
-            // Same TransactionContext, different EventContext per iteration
-        });
+container.runInEventScope(() -> {
+    var tx = container.get(TransactionContext.class);
+    tx.begin();
+    try {
+        for (Order order : orders) {
+            process(order, tx);
+        }
+        tx.commit();
+    } catch (Exception e) {
+        tx.rollback();
+        throw e;
     }
 });
 ```
+
+Genuinely independent events — those that need to be retryable, distributed, or re-ordered relative to the batch — each own their own unit of work and their own transaction; cross-event consistency is an outbox/saga concern above the DI layer.
 
 ## Constructor injection
 
@@ -128,7 +118,7 @@ A compile-time leak check warns when a `@Component` holds an `AutoCloseable`-typ
 Supported for compatibility and migration ease. **Prefer the constructor + `AutoCloseable` form** — single source of truth, no risk of multiple `@PreDestroy` methods on one class.
 
 - `@PostConstruct` runs after dependency injection completes. With constructor injection there's rarely a need: deps are already wired by the time the constructor body executes, so init logic belongs in the constructor.
-- `@PreDestroy` runs at scope teardown (`SINGLETON`: on `container.shutdown()`; `REQUEST`/`EVENT`: on scope exit). Hooks fire in reverse-creation (LIFO) order — a bean's dependencies are still available during its cleanup. The corresponding `Ending` lifecycle event is published before any `@PreDestroy` runs.
+- `@PreDestroy` runs at scope teardown (`SINGLETON`: on `container.shutdown()`; `EVENT`: on scope exit). Hooks fire in reverse-creation (LIFO) order — a bean's dependencies are still available during its cleanup. The corresponding `Ending` lifecycle event is published before any `@PreDestroy` runs.
 - If a class declares an explicit `@PreDestroy`, it wins over `AutoCloseable.close()` (no double-cleanup).
 
 ```java

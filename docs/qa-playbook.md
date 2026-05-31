@@ -282,8 +282,8 @@ When a new validation check is added to the processor:
 |---|---|---|
 | `ApplicationStartedEvent` | `Instant timestamp` | Fires AFTER all `@PostConstruct` complete |
 | `ApplicationEndingEvent` | `Instant timestamp`, `Duration uptime` | Fires BEFORE any `@PreDestroy` |
-| `RequestStartedEvent` | `String requestId`, `Instant timestamp` | Fires BEFORE any user `@EventHandler` in scope |
-| `RequestEndingEvent` | `String requestId`, `Instant timestamp`, `Duration duration` | Fires AFTER all user handlers complete (including async drain) |
+| `EventStartedEvent` | `String requestId`, `Instant timestamp` | Fires BEFORE any user `@EventHandler` in scope |
+| `EventEndingEvent` | `String requestId`, `Instant timestamp`, `Duration duration` | Fires AFTER all user handlers complete (including async drain) |
 | `EventStartedEvent` | `String eventId`, `Instant timestamp` | Same pair semantics as Request |
 | `EventEndingEvent` | `String eventId`, `Instant timestamp`, `Duration duration` | Same pair semantics as Request |
 
@@ -330,7 +330,7 @@ Plus:
 
 1. Every annotation in `tiko-api/src/main/java/io/tiko/annotations/` (`@Component`, `@Inject`, `@Named`, `@Produces`, `@PostConstruct`, `@PreDestroy`, `@EventHandler`, `@EventTrigger`, `@EventTriggers`, `@Configuration`, `@Default`, `@Key`, `@TestComponent`, `@Pick`, plus any added later)
 2. Every public type in `tiko-api/` (`Container`, `Provider`, `EventBus`, `Event<T>`, `EventCallback<T>`, `EventTriggerGuard`, `ErrorHandler`, `Scope`, lifecycle events under `io.tiko.events`, `TikoOptions`)
-3. Documented non-annotation behaviors from CLAUDE.md: cross-scope proxying, `container.pick(Class)`, `runInRequestScope`/`runInEventScope` (+ `supplyIn*` variants), `AggregatingContainer`, YAML config layering, `${VAR:default}` interpolation, strict-mode config-fail-at-boot, profile-based selection, `AutoCloseable` lifecycle, `expose = {...}` restrictions, `TikoOptions` builder including custom `ErrorHandler`/`EventExecutor`
+3. Documented non-annotation behaviors from CLAUDE.md: cross-scope proxying, `container.pick(Class)`, `runInEventScope`/`runInEventScope` (+ `supplyIn*` variants), `AggregatingContainer`, YAML config layering, `${VAR:default}` interpolation, strict-mode config-fail-at-boot, profile-based selection, `AutoCloseable` lifecycle, `expose = {...}` restrictions, `TikoOptions` builder including custom `ErrorHandler`/`EventExecutor`
 
 ### Reporting categories
 
