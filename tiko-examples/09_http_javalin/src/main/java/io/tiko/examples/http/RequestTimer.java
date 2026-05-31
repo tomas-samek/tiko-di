@@ -3,8 +3,8 @@ package io.tiko.examples.http;
 import io.tiko.Scope;
 import io.tiko.annotations.Component;
 import io.tiko.annotations.EventHandler;
-import io.tiko.events.RequestEndingEvent;
-import io.tiko.events.RequestStartedEvent;
+import io.tiko.events.EventEndingEvent;
+import io.tiko.events.EventStartedEvent;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * HTTP request — including reads, including 404s — opens and closes a Tiko
  * request scope, and therefore gets per-request observability for free.
  *
- * <p>The framework's {@code RequestStartedEvent.requestId()} is a separate
+ * <p>The framework's {@code EventStartedEvent.requestId()} is a separate
  * identifier from the application's {@link RequestId#value()}. Both are
  * carried in the logs so tests can correlate; in a real app the framework
  * ID is what oncall would search for in distributed traces, and the
@@ -28,15 +28,15 @@ public class RequestTimer {
     private final AtomicInteger endedCount = new AtomicInteger();
 
     @EventHandler
-    public void onRequestStarted(RequestStartedEvent event) {
+    public void onRequestStarted(EventStartedEvent event) {
         startedCount.incrementAndGet();
-        LOG.log(System.Logger.Level.INFO, () -> "[REQ " + event.requestId() + "] started at " + event.timestamp());
+        LOG.log(System.Logger.Level.INFO, () -> "[REQ " + event.eventId() + "] started at " + event.timestamp());
     }
 
     @EventHandler
-    public void onRequestEnding(RequestEndingEvent event) {
+    public void onRequestEnding(EventEndingEvent event) {
         endedCount.incrementAndGet();
-        LOG.log(System.Logger.Level.INFO, () -> "[REQ " + event.requestId() + "] completed in " + event.duration());
+        LOG.log(System.Logger.Level.INFO, () -> "[REQ " + event.eventId() + "] completed in " + event.duration());
     }
 
     public int startedCount() {

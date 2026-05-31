@@ -18,17 +18,17 @@ public final class Main {
 
             System.out.println();
             System.out.println("== single order, valid ==");
-            container.runInRequestScope(
+            container.runInEventScope(
                     () -> container.runInEventScope(() -> bus.publish(new OrderPlaced("A1", "alice", 49.99))));
 
             System.out.println();
             System.out.println("== single order, invalid (guard suppresses shipping) ==");
-            container.runInRequestScope(
+            container.runInEventScope(
                     () -> container.runInEventScope(() -> bus.publish(new OrderPlaced("A2", "alice", 0.0))));
 
             System.out.println();
             System.out.println("== batch (spread fans out into individual orders) ==");
-            container.runInRequestScope(() -> container.runInEventScope(() -> bus.publish(new BatchSubmitted(List.of(
+            container.runInEventScope(() -> container.runInEventScope(() -> bus.publish(new BatchSubmitted(List.of(
                     new OrderPlaced("B1", "bob", 19.50),
                     new OrderPlaced("B2", "bob", 75.00),
                     new OrderPlaced("B3", "bob", 12.00))))));

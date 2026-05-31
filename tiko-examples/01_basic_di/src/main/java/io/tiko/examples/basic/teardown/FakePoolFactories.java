@@ -17,7 +17,7 @@ public class FakePoolFactories {
         return new FakePool("primary");
     }
 
-    @Produces(scope = Scope.REQUEST)
+    @Produces(scope = Scope.EVENT)
     public FakePool requestPool() {
         return new FakePool("request");
     }

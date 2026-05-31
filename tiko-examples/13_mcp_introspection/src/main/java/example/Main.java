@@ -13,7 +13,7 @@ public final class Main {
         try (Container c = Tiko.create(ConfigSources.classpath("config.yaml"))) {
             EventBus bus = c.getEventBus();
             var orderService = c.get(OrderService.class);
-            c.runInRequestScope(() -> c.runInEventScope(() -> {
+            c.runInEventScope(() -> c.runInEventScope(() -> {
                 orderService.save("ord-1", 4200L);
                 bus.publish(new OrderPlaced("ord-1", 4200L));
             }));

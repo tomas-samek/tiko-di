@@ -11,7 +11,7 @@ import java.util.UUID;
  * file in this example that imports both {@code io.javalin} and {@code io.tiko}.
  *
  * <p>Bridge methods are plain straight-line code — they do not call
- * {@code runInRequestScope} themselves; the {@code TikoJavalin.scoped(...)}
+ * {@code runInEventScope} themselves; the {@code TikoJavalin.scoped(...)}
  * decorator wraps the entire delegate invocation at registration time.
  *
  * <p>Not a {@code @Component}: it depends on {@link EventBus}, which Tiko

@@ -166,6 +166,7 @@ public final class ContainerGenerator {
         // Add fields
         containerBuilder.addField(createSingletonStorageField());
         containerBuilder.addField(createEventScopeField());
+        containerBuilder.addField(createUnitFrameOpenField());
         containerBuilder.addField(createEventBusField());
         containerBuilder.addField(createErrorHandlerField());
         containerBuilder.addField(createEventExecutorField());
@@ -296,6 +297,20 @@ public final class ContainerGenerator {
 
         return FieldSpec.builder(threadLocalType, "eventScoped", scopeStorageModifiers())
                 .initializer("$T.withInitial($T::new)", ThreadLocal.class, LinkedHashMap.class)
+                .build();
+    }
+
+    /**
+     * Tracks whether the current thread is inside a {@code runInEventScope}/{@code supplyInEventScope}
+     * frame. Used by the single-frame guard — distinct from {@code eventScoped} (which holds the
+     * scope's bean instances and can accumulate via direct {@code container.get()} calls outside a
+     * frame), so the guard fires only on actual user-level nesting.
+     */
+    private FieldSpec createUnitFrameOpenField() {
+        ParameterizedTypeName threadLocalType =
+                ParameterizedTypeName.get(ClassName.get(ThreadLocal.class), ClassName.get(Boolean.class));
+        return FieldSpec.builder(threadLocalType, "__unitFrameOpen", scopeStorageModifiers())
+                .initializer("$T.withInitial(() -> $T.FALSE)", ThreadLocal.class, Boolean.class)
                 .build();
     }
 
@@ -889,14 +904,15 @@ public final class ContainerGenerator {
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
                 .addParameter(Runnable.class, "task");
-        method.beginControlFlow("if (!eventScoped.get().isEmpty())");
+        method.beginControlFlow("if ($T.TRUE.equals(__unitFrameOpen.get()))", Boolean.class);
         method.addStatement(
                 "throw new $T($S)",
                 IllegalStateException.class,
                 "runInEventScope called while a unit of work is already open. "
                         + "EVENT is single-frame in 0.x.0; nesting is not supported.");
         method.endControlFlow();
-        method.addStatement("$T __eventId = $T.randomUUID().toString()", String.class, UUID.class)
+        method.addStatement("__unitFrameOpen.set($T.TRUE)", Boolean.class)
+                .addStatement("$T __eventId = $T.randomUUID().toString()", String.class, UUID.class)
                 .addStatement("$T __eventStart = $T.now()", Instant.class, Instant.class)
                 .addStatement("eventBus.publish(new $T(__eventId, __eventStart))", EVENT_STARTED)
                 .beginControlFlow("try")
@@ -908,7 +924,9 @@ public final class ContainerGenerator {
                         EVENT_ENDING,
                         Duration.class);
         emitScopedTeardown(method, Scope.EVENT, "eventScoped.get()");
-        method.addStatement("eventScoped.get().clear()").endControlFlow();
+        method.addStatement("eventScoped.get().clear()")
+                .addStatement("__unitFrameOpen.set($T.FALSE)", Boolean.class)
+                .endControlFlow();
         return method.build();
     }
 
@@ -926,14 +944,15 @@ public final class ContainerGenerator {
                 .addTypeVariable(typeVar)
                 .addParameter(supplierType, "supplier")
                 .returns(typeVar);
-        method.beginControlFlow("if (!eventScoped.get().isEmpty())");
+        method.beginControlFlow("if ($T.TRUE.equals(__unitFrameOpen.get()))", Boolean.class);
         method.addStatement(
                 "throw new $T($S)",
                 IllegalStateException.class,
                 "supplyInEventScope called while a unit of work is already open. "
                         + "EVENT is single-frame in 0.x.0; nesting is not supported.");
         method.endControlFlow();
-        method.addStatement("$T __eventId = $T.randomUUID().toString()", String.class, UUID.class)
+        method.addStatement("__unitFrameOpen.set($T.TRUE)", Boolean.class)
+                .addStatement("$T __eventId = $T.randomUUID().toString()", String.class, UUID.class)
                 .addStatement("$T __eventStart = $T.now()", Instant.class, Instant.class)
                 .addStatement("eventBus.publish(new $T(__eventId, __eventStart))", EVENT_STARTED)
                 .beginControlFlow("try")
@@ -945,7 +964,9 @@ public final class ContainerGenerator {
                         EVENT_ENDING,
                         Duration.class);
         emitScopedTeardown(method, Scope.EVENT, "eventScoped.get()");
-        method.addStatement("eventScoped.get().clear()").endControlFlow();
+        method.addStatement("eventScoped.get().clear()")
+                .addStatement("__unitFrameOpen.set($T.FALSE)", Boolean.class)
+                .endControlFlow();
         return method.build();
     }
 

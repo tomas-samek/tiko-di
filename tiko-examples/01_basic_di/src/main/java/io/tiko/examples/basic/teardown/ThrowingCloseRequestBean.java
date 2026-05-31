@@ -8,7 +8,7 @@ import io.tiko.annotations.Component;
  * {@code close()} as the implicit teardown. Used to verify routing of close-failures
  * through the configured {@code ErrorHandler}.
  */
-@Component(scope = Scope.REQUEST)
+@Component(scope = Scope.EVENT)
 public class ThrowingCloseRequestBean implements AutoCloseable {
 
     @Override

@@ -81,8 +81,8 @@ class CoreDiIntegrationTest {
             AuditService audit = container.get(AuditService.class);
             int before = audit.getAuditCount();
 
-            container.runInRequestScope(() -> container.runInEventScope(
-                    () -> container.getEventBus().publish(new MessageCreatedEvent(99L, "content", "tester"))));
+            container.runInEventScope(
+                    () -> container.getEventBus().publish(new MessageCreatedEvent(99L, "content", "tester")));
 
             assertThat(audit.getAuditCount()).isEqualTo(before + 1);
         }
@@ -106,10 +106,10 @@ class CoreDiIntegrationTest {
 
     private static String captureLastAuditEntry(
             Container container, AuditService audit, long msgId, String content, String user) {
-        return container.supplyInRequestScope(() -> container.supplyInEventScope(() -> {
+        return container.supplyInEventScope(() -> {
             container.getEventBus().publish(new MessageCreatedEvent(msgId, content, user));
             return audit.getAuditLog().get(audit.getAuditLog().size() - 1);
-        }));
+        });
     }
 
     private static String requestIdOf(String auditEntry) {

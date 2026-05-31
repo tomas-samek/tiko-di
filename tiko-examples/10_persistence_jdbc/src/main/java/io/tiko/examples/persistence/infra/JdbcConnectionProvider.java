@@ -19,7 +19,7 @@ import javax.sql.DataSource;
  * directly — the Tiko annotation processor generates an auto-proxy that
  * resolves to the current scope's connection on every method call.
  */
-@Component(scope = Scope.REQUEST)
+@Component(scope = Scope.EVENT)
 public class JdbcConnectionProvider {
 
     private final DataSource ds;
@@ -29,7 +29,7 @@ public class JdbcConnectionProvider {
         this.ds = ds;
     }
 
-    @Produces(scope = Scope.REQUEST)
+    @Produces(scope = Scope.EVENT)
     public Connection connection() throws SQLException {
         var c = ds.getConnection();
         c.setAutoCommit(false);

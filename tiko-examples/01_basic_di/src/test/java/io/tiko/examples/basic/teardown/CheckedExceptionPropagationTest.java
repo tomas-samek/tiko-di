@@ -32,7 +32,7 @@ class CheckedExceptionPropagationTest {
         Throwable thrown = null;
         try (Container container = Tiko.create(opts)) {
             try {
-                container.runInRequestScope(() -> container.get(ThrowingCheckedPostConstructBean.class));
+                container.runInEventScope(() -> container.get(ThrowingCheckedPostConstructBean.class));
             } catch (Throwable t) {
                 thrown = t;
             }
@@ -56,7 +56,7 @@ class CheckedExceptionPropagationTest {
         Throwable thrown = null;
         try (Container container = Tiko.create(opts)) {
             try {
-                container.runInRequestScope(() -> container.get(CheckedProducesOutput.class));
+                container.runInEventScope(() -> container.get(CheckedProducesOutput.class));
             } catch (Throwable t) {
                 thrown = t;
             }

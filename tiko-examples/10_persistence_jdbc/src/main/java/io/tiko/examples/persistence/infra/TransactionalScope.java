@@ -19,7 +19,7 @@ public final class TransactionalScope {
     private TransactionalScope() {}
 
     public static <T> T run(Container container, Supplier<T> work) {
-        return container.supplyInRequestScope(() -> {
+        return container.supplyInEventScope(() -> {
             var tx = container.get(TransactionContext.class);
             try {
                 T result = work.get();

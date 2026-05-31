@@ -42,7 +42,7 @@ class LifecycleErrorRoutingTest {
 
         try (Container container = Tiko.create(opts)) {
             assertThatThrownBy(() ->
-                            container.runInRequestScope(() -> container.get(ThrowingPostConstructRequestBean.class)))
+                            container.runInEventScope(() -> container.get(ThrowingPostConstructRequestBean.class)))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessage("intentional-postconstruct");
         }
@@ -60,7 +60,7 @@ class LifecycleErrorRoutingTest {
 
         Container container = Tiko.create(opts);
         try {
-            container.runInRequestScope(() -> {
+            container.runInEventScope(() -> {
                 container.get(LifoRequestA.class);
                 container.get(ThrowingPreDestroyRequestBean.class);
             });
@@ -87,7 +87,7 @@ class LifecycleErrorRoutingTest {
 
         Container container = Tiko.create(opts);
         try {
-            container.runInRequestScope(() -> {
+            container.runInEventScope(() -> {
                 container.get(LifoRequestA.class);
                 container.get(ThrowingCloseRequestBean.class);
             });

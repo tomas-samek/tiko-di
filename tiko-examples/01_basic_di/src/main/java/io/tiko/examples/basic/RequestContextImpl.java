@@ -10,7 +10,7 @@ import java.util.UUID;
  *
  * When injected into SINGLETON scope, a proxy will be generated automatically.
  */
-@Component(scope = Scope.REQUEST)
+@Component(scope = Scope.EVENT)
 public class RequestContextImpl implements RequestContext {
 
     private final String requestId;

@@ -9,7 +9,7 @@ import java.util.UUID;
  * instance with its own UUID. Re-reading {@code value()} during the request
  * returns the same string.
  */
-@Component(scope = Scope.REQUEST)
+@Component(scope = Scope.EVENT)
 public class RequestIdImpl implements RequestId {
 
     private final String value = UUID.randomUUID().toString();

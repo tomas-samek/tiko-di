@@ -7,8 +7,6 @@ import io.tiko.events.ApplicationEndingEvent;
 import io.tiko.events.ApplicationStartedEvent;
 import io.tiko.events.EventEndingEvent;
 import io.tiko.events.EventStartedEvent;
-import io.tiko.events.RequestEndingEvent;
-import io.tiko.events.RequestStartedEvent;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -33,12 +31,12 @@ public class Observability {
     }
 
     @EventHandler
-    public void onRequestStarted(RequestStartedEvent event) {
+    public void onRequestStarted(EventStartedEvent event) {
         requestCount.incrementAndGet();
     }
 
     @EventHandler
-    public void onRequestEnding(RequestEndingEvent event) {
+    public void onRequestEnding(EventEndingEvent event) {
         totalRequestNanos.addAndGet(event.duration().toNanos());
     }
 

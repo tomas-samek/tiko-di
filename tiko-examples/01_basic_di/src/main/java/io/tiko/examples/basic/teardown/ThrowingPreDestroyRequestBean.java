@@ -8,7 +8,7 @@ import io.tiko.annotations.PreDestroy;
  * REQUEST-scoped bean whose {@code @PreDestroy} throws. Used to verify that a
  * failing destroy hook does not skip the rest of the scope's teardown.
  */
-@Component(scope = Scope.REQUEST)
+@Component(scope = Scope.EVENT)
 public class ThrowingPreDestroyRequestBean {
 
     @PreDestroy

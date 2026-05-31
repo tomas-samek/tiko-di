@@ -14,7 +14,7 @@ import java.sql.SQLException;
  * fixture only fires when the test explicitly opens a REQUEST scope and
  * resolves this bean.
  */
-@Component(scope = Scope.REQUEST)
+@Component(scope = Scope.EVENT)
 public class ThrowingCheckedPostConstructBean {
 
     /** Set by the test before resolving this bean. */

@@ -23,7 +23,7 @@ import java.sql.SQLException;
  *
  * <p>The intended commit path is {@code TransactionalScope.run(...)}.
  */
-@Component(scope = Scope.REQUEST)
+@Component(scope = Scope.EVENT)
 public class TransactionContext implements AutoCloseable {
 
     private final Connection connection;

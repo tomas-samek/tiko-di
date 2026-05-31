@@ -9,8 +9,7 @@ import java.lang.annotation.Target;
  * Method-level marker that wraps a {@code @Test} invocation in
  * {@link io.tiko.Container#runInEventScope(Runnable)}.
  *
- * <p>Useful when the test body needs an EVENT-scoped bean to be resolvable. Combine with
- * {@link RequestScopeTest} on the same method to nest an event scope inside a request scope.
+ * <p>Useful when the test body needs an EVENT-scoped bean to be resolvable.
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.METHOD)
