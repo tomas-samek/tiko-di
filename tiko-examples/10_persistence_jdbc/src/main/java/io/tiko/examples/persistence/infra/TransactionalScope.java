@@ -5,7 +5,7 @@ import java.sql.SQLException;
 import java.util.function.Supplier;
 
 /**
- * Opens a Tiko REQUEST scope, resolves the {@link TransactionContext},
+ * Opens a Tiko EVENT scope (unit of work), resolves the {@link TransactionContext},
  * runs the user's work, and commits on success or rolls back on
  * exception. Both the HTTP and batch entry points use this helper — it
  * generalises across transports.

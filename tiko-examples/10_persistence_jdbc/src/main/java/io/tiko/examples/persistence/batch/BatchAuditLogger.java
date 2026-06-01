@@ -2,45 +2,33 @@ package io.tiko.examples.persistence.batch;
 
 import io.tiko.Scope;
 import io.tiko.annotations.Component;
-import io.tiko.annotations.EventHandler;
-import io.tiko.annotations.Inject;
-import io.tiko.events.EventEndingEvent;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Sync subscriber to {@link EventEndingEvent} that records the EVENT-scoped
- * {@link CurrentOrder}'s id on each iteration. Listens at scope end (not
- * start) so the order id set by {@code BatchEntry} during the body has been
- * applied before this read. Proves two things at once:
- * (a) Tiko's auto-proxy works for EVENT-scoped beans injected into SINGLETONs,
- * (b) the batch loop actually opens N distinct EVENT scopes inside one REQUEST.
+ * SINGLETON sink invoked per order during a batch transaction. The batch
+ * driver calls {@link #record(UUID)} explicitly inside the loop — the
+ * recorder is part of the batch's own observability surface, not a Tiko
+ * lifecycle subscriber.
  *
- * <p>Lives in main sources (not test) so the annotation processor wires it
- * like any other subscriber. {@link #captured()} returns a defensive snapshot
- * for tests to assert against.
+ * <p>Under the unified scope model, a batch is one unit of work (one
+ * transaction, one EVENT scope) with an internal loop. There is no
+ * per-iteration EVENT scope to hook into, so observation happens via
+ * direct invocation rather than via {@code EventEndingEvent}. For
+ * genuinely independent events (each its own unit), use the cross-event
+ * outbox/saga pattern above the DI layer.
  */
 @Component(scope = Scope.SINGLETON)
 public class BatchAuditLogger {
 
     private static final System.Logger LOG = System.getLogger("io.tiko.examples.persistence.batch");
 
-    private final CurrentOrder current; // auto-proxied to the current EVENT scope's CurrentOrderContext
     private final List<UUID> seen = new CopyOnWriteArrayList<>();
 
-    @Inject
-    public BatchAuditLogger(CurrentOrder current) {
-        this.current = current;
-    }
-
-    @EventHandler
-    public void onEventEnding(EventEndingEvent event) {
-        UUID id = current.orderId();
-        if (id != null) {
-            seen.add(id);
-            LOG.log(System.Logger.Level.INFO, () -> "[batch-audit] processing order " + id);
-        }
+    public void record(UUID orderId) {
+        seen.add(orderId);
+        LOG.log(System.Logger.Level.INFO, () -> "[batch-audit] processing order " + orderId);
     }
 
     /** Defensive snapshot. */

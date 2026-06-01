@@ -15,7 +15,7 @@ import java.util.UUID;
  * Not a {@code @Component}: it depends on {@link Container} (not
  * DI-injectable). Constructed once in {@link HttpEntry} and held for
  * the server's lifetime; per-request resolution of repositories happens
- * via {@code container.get(...)} inside the open REQUEST scope.
+ * via {@code container.get(...)} inside the open EVENT scope (unit of work).
  */
 public final class OrderHttpRoutes {
 

@@ -7,11 +7,11 @@ import java.sql.Connection;
 import java.sql.SQLException;
 
 /**
- * REQUEST-scoped transaction boundary owner. Wraps the same
- * REQUEST-scoped {@link Connection} (no proxy needed — same scope) and
+ * EVENT-scoped transaction boundary owner. Wraps the same
+ * EVENT-scoped {@link Connection} (no proxy needed — same scope) and
  * exposes {@link #commit()} and {@link #rollback()}.
  *
- * <p>Implements {@link AutoCloseable}: at REQUEST scope teardown, Tiko's
+ * <p>Implements {@link AutoCloseable}: at EVENT scope (unit of work) teardown, Tiko's
  * implicit-AutoCloseable handling invokes {@link #close()}. If neither
  * {@code commit()} nor {@code rollback()} ran, {@code close()} rolls
  * back — the safety net for handler code that forgot to commit. We do

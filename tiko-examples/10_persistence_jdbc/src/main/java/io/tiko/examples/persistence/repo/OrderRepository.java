@@ -16,11 +16,11 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * SINGLETON repository operating on a REQUEST-scoped {@link Connection}.
+ * SINGLETON repository operating on a EVENT-scoped {@link Connection}.
  * The {@code connection} field looks like a captured-at-construction
  * object, but it is a Tiko-generated auto-proxy: every method call
- * resolves to the current REQUEST scope's connection. Calling the
- * repository outside an active REQUEST scope fails with a scope error.
+ * resolves to the current EVENT scope (unit of work)'s connection. Calling the
+ * repository outside an active EVENT scope (unit of work) fails with a scope error.
  */
 @Component(scope = Scope.SINGLETON)
 public class OrderRepository {
