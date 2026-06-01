@@ -32,7 +32,7 @@ class FactoryAutoCloseableTest {
     void request_factory_produced_autocloseable_is_closed_at_scope_exit() {
         Container container = Tiko.create();
         try {
-            container.runInRequestScope(() -> {
+            container.runInEventScope(() -> {
                 FakePool pool = container.get(FakePool.class);
                 assertThat(pool.label()).isEqualTo("request");
             });
@@ -49,7 +49,7 @@ class FactoryAutoCloseableTest {
     void factory_produced_bean_not_touched_in_scope_is_not_closed() {
         Container container = Tiko.create();
         try {
-            container.runInRequestScope(() -> {
+            container.runInEventScope(() -> {
                 // Don't touch the request-scoped FakePool — nothing to close.
             });
         } finally {

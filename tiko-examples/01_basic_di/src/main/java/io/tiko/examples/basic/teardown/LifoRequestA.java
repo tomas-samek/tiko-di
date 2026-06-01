@@ -6,7 +6,7 @@ import io.tiko.annotations.Inject;
 import io.tiko.annotations.PreDestroy;
 
 /** REQUEST-scoped root bean: depends on B (which depends on C). Destroyed first in LIFO. */
-@Component(scope = Scope.REQUEST)
+@Component(scope = Scope.EVENT)
 public class LifoRequestA {
 
     private final LifoRequestB b;

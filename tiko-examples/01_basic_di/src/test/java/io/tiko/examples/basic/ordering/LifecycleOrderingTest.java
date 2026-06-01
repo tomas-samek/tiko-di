@@ -40,19 +40,6 @@ class LifecycleOrderingTest {
     }
 
     @Test
-    void requestStartedFiresBeforeUserHandler() {
-        try (Container container = Tiko.create()) {
-            OrderLog log = container.get(OrderLog.class);
-            container.runInRequestScope(() -> container.getEventBus().publish(new Ping()));
-
-            List<String> snap = log.snapshot();
-            assertThat(snap.indexOf("REQ_START"))
-                    .as("RequestStartedEvent fires before any user handler in the scope")
-                    .isLessThan(snap.indexOf("PING_HANDLED"));
-        }
-    }
-
-    @Test
     void eventStartedFiresBeforeUserHandler() {
         try (Container container = Tiko.create()) {
             OrderLog log = container.get(OrderLog.class);
@@ -62,19 +49,6 @@ class LifecycleOrderingTest {
             assertThat(snap.indexOf("EVT_START"))
                     .as("EventStartedEvent fires before any user handler in the scope")
                     .isLessThan(snap.indexOf("PING_HANDLED"));
-        }
-    }
-
-    @Test
-    void requestEndingFiresAfterSyncHandler() {
-        try (Container container = Tiko.create()) {
-            OrderLog log = container.get(OrderLog.class);
-            container.runInRequestScope(() -> container.getEventBus().publish(new Ping()));
-
-            List<String> snap = log.snapshot();
-            assertThat(snap.indexOf("PING_HANDLED"))
-                    .as("RequestEndingEvent fires after synchronous user handlers complete")
-                    .isLessThan(snap.indexOf("REQ_END"));
         }
     }
 
@@ -97,11 +71,11 @@ class LifecycleOrderingTest {
             OrderLog log = container.get(OrderLog.class);
             AsyncProbe asyncProbe = container.get(AsyncProbe.class);
 
-            container.runInRequestScope(() -> container.getEventBus().publish(new AsyncPing()));
+            container.runInEventScope(() -> container.getEventBus().publish(new AsyncPing()));
 
-            // RequestEnding fired in the scope's finally without awaiting the gated async handler:
+            // EventEnding fired in the scope's finally without awaiting the gated async handler:
             // the scope is a synchronous frame, and async dispatch detaches from it.
-            assertThat(log.snapshot()).contains("REQ_END");
+            assertThat(log.snapshot()).contains("EVT_END");
             assertThat(log.snapshot())
                     .as("async handler is detached — scope exit must not await it")
                     .doesNotContain("ASYNC_HANDLED");

@@ -7,8 +7,6 @@ import io.tiko.events.ApplicationEndingEvent;
 import io.tiko.events.ApplicationStartedEvent;
 import io.tiko.events.EventEndingEvent;
 import io.tiko.events.EventStartedEvent;
-import io.tiko.events.RequestEndingEvent;
-import io.tiko.events.RequestStartedEvent;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -28,16 +26,6 @@ public class LifecycleRecorder {
 
     @EventHandler
     public void onApplicationEnding(ApplicationEndingEvent event) {
-        events.add(event);
-    }
-
-    @EventHandler
-    public void onRequestStarted(RequestStartedEvent event) {
-        events.add(event);
-    }
-
-    @EventHandler
-    public void onRequestEnding(RequestEndingEvent event) {
         events.add(event);
     }
 

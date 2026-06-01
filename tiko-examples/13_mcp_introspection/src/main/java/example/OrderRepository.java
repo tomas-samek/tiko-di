@@ -4,7 +4,7 @@ import io.tiko.Scope;
 import io.tiko.annotations.Component;
 import io.tiko.annotations.Inject;
 
-@Component(scope = Scope.REQUEST)
+@Component(scope = Scope.EVENT)
 public class OrderRepository implements Orders {
 
     private final DbConfig config;

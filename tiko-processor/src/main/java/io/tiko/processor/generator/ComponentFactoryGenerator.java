@@ -316,9 +316,8 @@ public final class ComponentFactoryGenerator {
     private static int scopeLevel(io.tiko.Scope scope) {
         return switch (scope) {
             case SINGLETON -> 0;
-            case REQUEST -> 1;
-            case EVENT -> 2;
-            case PROTOTYPE -> 3;
+            case EVENT -> 1;
+            case PROTOTYPE -> 2;
         };
     }
 }

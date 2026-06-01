@@ -9,7 +9,7 @@ import io.tiko.annotations.PostConstruct;
  * lifecycle hook failures through {@code ErrorHandler} before the original throwable
  * propagates. Lazy by scope, so it does not impact other tests' container startup.
  */
-@Component(scope = Scope.REQUEST)
+@Component(scope = Scope.EVENT)
 public class ThrowingPostConstructRequestBean {
 
     @PostConstruct

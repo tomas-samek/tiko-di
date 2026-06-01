@@ -7,8 +7,6 @@ import io.tiko.events.ApplicationEndingEvent;
 import io.tiko.events.ApplicationStartedEvent;
 import io.tiko.events.EventEndingEvent;
 import io.tiko.events.EventStartedEvent;
-import io.tiko.events.RequestEndingEvent;
-import io.tiko.events.RequestStartedEvent;
 import io.tiko.runtime.Tiko;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
@@ -41,50 +39,6 @@ class LifecycleEventsTest {
                 .orElseThrow();
         assertThat(ending.timestamp()).isNotNull();
         assertThat(ending.uptime()).isGreaterThanOrEqualTo(Duration.ZERO);
-    }
-
-    @Test
-    void requestScope_publishesStartAndEndingWithSameRequestIdAndDuration() {
-        try (Container container = Tiko.create()) {
-            var recorder = container.get(LifecycleRecorder.class);
-            var before = recorder.getEvents().size();
-
-            container.runInRequestScope(() -> {});
-
-            var after =
-                    recorder.getEvents().subList(before, recorder.getEvents().size());
-            var started = after.stream()
-                    .filter(RequestStartedEvent.class::isInstance)
-                    .map(RequestStartedEvent.class::cast)
-                    .findFirst()
-                    .orElseThrow();
-            var ending = after.stream()
-                    .filter(RequestEndingEvent.class::isInstance)
-                    .map(RequestEndingEvent.class::cast)
-                    .findFirst()
-                    .orElseThrow();
-
-            assertThat(started.requestId()).isNotBlank();
-            assertThat(ending.requestId()).isEqualTo(started.requestId());
-            assertThat(after.indexOf(started)).isLessThan(after.indexOf(ending));
-            assertThat(ending.duration()).isGreaterThanOrEqualTo(Duration.ZERO);
-        }
-    }
-
-    @Test
-    void supplyInRequestScope_publishesLifecycleEvents() {
-        try (Container container = Tiko.create()) {
-            var recorder = container.get(LifecycleRecorder.class);
-            var before = recorder.getEvents().size();
-
-            var result = container.supplyInRequestScope(() -> "ok");
-            assertThat(result).isEqualTo("ok");
-
-            var after =
-                    recorder.getEvents().subList(before, recorder.getEvents().size());
-            assertThat(after).hasAtLeastOneElementOfType(RequestStartedEvent.class);
-            assertThat(after).hasAtLeastOneElementOfType(RequestEndingEvent.class);
-        }
     }
 
     @Test
@@ -128,25 +82,6 @@ class LifecycleEventsTest {
                     recorder.getEvents().subList(before, recorder.getEvents().size());
             assertThat(after).hasAtLeastOneElementOfType(EventStartedEvent.class);
             assertThat(after).hasAtLeastOneElementOfType(EventEndingEvent.class);
-        }
-    }
-
-    @Test
-    void nestedRequestAndEventScopes_publishLifecycleEventsInOrder() {
-        try (Container container = Tiko.create()) {
-            var recorder = container.get(LifecycleRecorder.class);
-            var before = recorder.getEvents().size();
-
-            container.runInRequestScope(() -> container.runInEventScope(() -> {}));
-
-            var after =
-                    recorder.getEvents().subList(before, recorder.getEvents().size());
-            // Expected order: RequestStarted, EventStarted, EventEnding, RequestEnding
-            assertThat(after).hasSize(4);
-            assertThat(after.get(0)).isInstanceOf(RequestStartedEvent.class);
-            assertThat(after.get(1)).isInstanceOf(EventStartedEvent.class);
-            assertThat(after.get(2)).isInstanceOf(EventEndingEvent.class);
-            assertThat(after.get(3)).isInstanceOf(RequestEndingEvent.class);
         }
     }
 }

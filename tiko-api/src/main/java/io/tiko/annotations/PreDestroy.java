@@ -15,20 +15,18 @@ import java.lang.annotation.Target;
  *   <li>Not be static</li>
  * </ul>
  *
- * <p>Invoked at scope teardown for all scopes:</p>
+ * <p>Invoked at scope teardown for scoped beans:</p>
  * <ul>
  *   <li>{@code SINGLETON}: during {@code container.shutdown()}.</li>
- *   <li>{@code REQUEST}: at the end of {@code runInRequestScope} /
- *       {@code supplyInRequestScope}.</li>
  *   <li>{@code EVENT}: at the end of {@code runInEventScope} /
  *       {@code supplyInEventScope}.</li>
  * </ul>
  *
  * <p>Hooks fire in reverse-creation (LIFO) order so a bean's dependencies are
  * still available during its cleanup. The corresponding {@code Ending} lifecycle
- * event ({@code ApplicationEndingEvent} / {@code RequestEndingEvent} /
- * {@code EventEndingEvent}) is published <em>before</em> any {@code @PreDestroy}
- * runs. A failing hook is logged but does not skip the rest of teardown.</p>
+ * event ({@code ApplicationEndingEvent} / {@code EventEndingEvent}) is published
+ * <em>before</em> any {@code @PreDestroy} runs. A failing hook is logged but does
+ * not skip the rest of teardown.</p>
  *
  * <p>If the component implements {@link AutoCloseable} and declares no explicit
  * {@code @PreDestroy}, the container treats {@code close()} as an implicit

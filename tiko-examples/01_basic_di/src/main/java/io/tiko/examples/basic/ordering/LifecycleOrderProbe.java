@@ -8,8 +8,6 @@ import io.tiko.annotations.PostConstruct;
 import io.tiko.events.ApplicationStartedEvent;
 import io.tiko.events.EventEndingEvent;
 import io.tiko.events.EventStartedEvent;
-import io.tiko.events.RequestEndingEvent;
-import io.tiko.events.RequestStartedEvent;
 
 /**
  * Records lifecycle-event arrivals and the synchronous user-handler call into the shared
@@ -34,16 +32,6 @@ public class LifecycleOrderProbe {
     @EventHandler
     public void onApplicationStarted(ApplicationStartedEvent e) {
         log.record("APP_STARTED");
-    }
-
-    @EventHandler
-    public void onRequestStarted(RequestStartedEvent e) {
-        log.record("REQ_START");
-    }
-
-    @EventHandler
-    public void onRequestEnding(RequestEndingEvent e) {
-        log.record("REQ_END");
     }
 
     @EventHandler

@@ -3,7 +3,7 @@ package io.tiko.examples.basic.teardown;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.tiko.Container;
-import io.tiko.events.RequestEndingEvent;
+import io.tiko.events.EventEndingEvent;
 import io.tiko.runtime.Tiko;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,7 +20,7 @@ class RequestScopePreDestroyTest {
     void predestroy_fires_for_each_request_scoped_bean() {
         Container container = Tiko.create();
         try {
-            container.runInRequestScope(() -> container.get(LifoRequestA.class));
+            container.runInEventScope(() -> container.get(LifoRequestA.class));
         } finally {
             container.shutdown();
         }
@@ -34,7 +34,7 @@ class RequestScopePreDestroyTest {
     void destroy_order_is_reverse_creation_lifo() {
         Container container = Tiko.create();
         try {
-            container.runInRequestScope(() -> {
+            container.runInEventScope(() -> {
                 // Touching A pulls in B which pulls in C → creation order: C, B, A.
                 container.get(LifoRequestA.class);
             });
@@ -55,10 +55,10 @@ class RequestScopePreDestroyTest {
         AtomicInteger endingEventIndex = new AtomicInteger(-1);
         container
                 .getEventBus()
-                .subscribe(RequestEndingEvent.class, e -> endingEventIndex.set(TeardownRecorder.order.size()));
+                .subscribe(EventEndingEvent.class, e -> endingEventIndex.set(TeardownRecorder.order.size()));
 
         try {
-            container.runInRequestScope(() -> container.get(LifoRequestA.class));
+            container.runInEventScope(() -> container.get(LifoRequestA.class));
         } finally {
             container.shutdown();
         }
@@ -72,7 +72,7 @@ class RequestScopePreDestroyTest {
     void exception_in_predestroy_does_not_skip_other_beans() {
         Container container = Tiko.create();
         try {
-            container.runInRequestScope(() -> {
+            container.runInEventScope(() -> {
                 container.get(LifoRequestA.class);
                 container.get(ThrowingPreDestroyRequestBean.class);
             });
@@ -91,8 +91,8 @@ class RequestScopePreDestroyTest {
         LifoRequestA inFirst;
         LifoRequestA inSecond;
         try {
-            inFirst = container.supplyInRequestScope(() -> container.get(LifoRequestA.class));
-            inSecond = container.supplyInRequestScope(() -> container.get(LifoRequestA.class));
+            inFirst = container.supplyInEventScope(() -> container.get(LifoRequestA.class));
+            inSecond = container.supplyInEventScope(() -> container.get(LifoRequestA.class));
         } finally {
             container.shutdown();
         }

@@ -16,7 +16,7 @@ public final class TeardownRecorder {
 
     public static final List<String> order = Collections.synchronizedList(new ArrayList<>());
 
-    /** Captures the {@code RequestEndingEvent} timestamp index relative to {@link #order}. */
+    /** Captures the {@code EventEndingEvent} timestamp index relative to {@link #order}. */
     public static final AtomicReference<Integer> requestEndingIndex = new AtomicReference<>();
 
     /** Captures the {@code EventEndingEvent} timestamp index relative to {@link #order}. */

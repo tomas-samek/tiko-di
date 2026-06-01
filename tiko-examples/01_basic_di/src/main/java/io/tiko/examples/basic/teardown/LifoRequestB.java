@@ -6,7 +6,7 @@ import io.tiko.annotations.Inject;
 import io.tiko.annotations.PreDestroy;
 
 /** REQUEST-scoped middle bean: depends on C, so C is created before B. */
-@Component(scope = Scope.REQUEST)
+@Component(scope = Scope.EVENT)
 public class LifoRequestB {
 
     private final LifoRequestC c;

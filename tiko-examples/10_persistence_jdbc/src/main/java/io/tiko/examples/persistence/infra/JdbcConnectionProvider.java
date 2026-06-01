@@ -9,7 +9,7 @@ import java.sql.SQLException;
 import javax.sql.DataSource;
 
 /**
- * Produces a REQUEST-scoped {@link Connection}. Each REQUEST scope opens a
+ * Produces a EVENT-scoped {@link Connection}. Each EVENT scope (unit of work) opens a
  * fresh pool connection with {@code autoCommit=false} and returns it on
  * scope teardown (Tiko's implicit-AutoCloseable handling closes the
  * connection, which Hikari intercepts to return it to the pool).
@@ -19,7 +19,7 @@ import javax.sql.DataSource;
  * directly — the Tiko annotation processor generates an auto-proxy that
  * resolves to the current scope's connection on every method call.
  */
-@Component(scope = Scope.REQUEST)
+@Component(scope = Scope.EVENT)
 public class JdbcConnectionProvider {
 
     private final DataSource ds;
@@ -29,7 +29,7 @@ public class JdbcConnectionProvider {
         this.ds = ds;
     }
 
-    @Produces(scope = Scope.REQUEST)
+    @Produces(scope = Scope.EVENT)
     public Connection connection() throws SQLException {
         var c = ds.getConnection();
         c.setAutoCommit(false);

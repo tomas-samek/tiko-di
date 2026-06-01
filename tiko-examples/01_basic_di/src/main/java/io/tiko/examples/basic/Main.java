@@ -12,7 +12,7 @@ import io.tiko.runtime.Tiko;
  * 3. Multiple scopes (SINGLETON, REQUEST, EVENT, PROTOTYPE)
  * 4. Cross-scope injection with automatic proxies
  * 5. Event handling with @EventHandler
- * 6. Lifecycle events (ApplicationStartedEvent, RequestStartedEvent, etc.)
+ * 6. Lifecycle events (ApplicationStartedEvent, EventStartedEvent, etc.)
  * 7. Provider<T> for lazy injection and breaking circular dependencies
  * 8. Event chaining with @EventTrigger and origin tracking
  * 9. Scope hierarchy and cross-scope injection rules
@@ -61,7 +61,7 @@ public class Main {
             System.out.println("-".repeat(70));
 
             // Request 1: Process multiple events
-            container.runInRequestScope(() -> {
+            container.runInEventScope(() -> {
                 System.out.println("\n>>> Request 1: Creating multiple messages");
 
                 // Event 1
@@ -81,7 +81,7 @@ public class Main {
             });
 
             // Request 2: Different request context
-            container.runInRequestScope(() -> {
+            container.runInEventScope(() -> {
                 System.out.println("\n>>> Request 2: Creating another message");
 
                 container.runInEventScope(() -> {
@@ -96,7 +96,7 @@ public class Main {
             System.out.println("-".repeat(70));
             System.out.println("Lifecycle events are automatically published by the container:");
             System.out.println("  - ApplicationStartedEvent (on container start)");
-            System.out.println("  - RequestStartedEvent/RequestEndingEvent (on request scope)");
+            System.out.println("  - EventStartedEvent/EventEndingEvent (on request scope)");
             System.out.println("  - EventStartedEvent/EventEndingEvent (on event scope)");
             System.out.println("  - ApplicationEndingEvent (on container shutdown)");
             System.out.println("\nThese enable metrics, logging, and tracing without cluttering business logic.");
@@ -113,7 +113,7 @@ public class Main {
             System.out.println("\n6. DEMONSTRATING EVENT CHAINING");
             System.out.println("-".repeat(70));
             System.out.println("@EventTrigger enables declarative event workflows:");
-            container.runInRequestScope(() -> container.runInEventScope(() -> {
+            container.runInEventScope(() -> container.runInEventScope(() -> {
                 System.out.println("\n>>> Publishing OrderCreatedEvent...");
                 // With @EventTrigger, this would automatically trigger:
                 // OrderCreatedEvent -> ValidationResult -> PaymentProcessedEvent

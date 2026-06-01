@@ -126,11 +126,11 @@ public final class ScopeValidator {
      * Validates scope hierarchy: can consumerScope inject providerScope?
      *
      * Valid injections:
-     * - Same scope or longer -> shorter (SINGLETON -> REQUEST, REQUEST -> EVENT)
+     * - Same scope or longer -> shorter (SINGLETON -> EVENT)
      * - Any -> PROTOTYPE
      *
      * Invalid:
-     * - Shorter -> longer (REQUEST -> SINGLETON)
+     * - Shorter -> longer (EVENT -> SINGLETON without a proxy)
      */
     private boolean validateScopeHierarchy(
             javax.lang.model.element.Element consumerElement,
@@ -142,8 +142,8 @@ public final class ScopeValidator {
         int consumerLevel = getScopeLevel(consumerScope);
         int providerLevel = getScopeLevel(providerScope);
 
-        // Consumer is same-lived or shorter-lived than the provider (e.g. REQUEST consuming
-        // SINGLETON, EVENT consuming REQUEST): a direct reference is safe, no proxy needed.
+        // Consumer is same-lived or shorter-lived than the provider (e.g. EVENT consuming
+        // SINGLETON): a direct reference is safe, no proxy needed.
         if (consumerLevel >= providerLevel) {
             return true;
         }
@@ -175,14 +175,13 @@ public final class ScopeValidator {
 
     /**
      * Returns the scope level (lower number = longer lifetime).
-     * SINGLETON = 0, REQUEST = 1, EVENT = 2, PROTOTYPE = 3
+     * SINGLETON = 0, EVENT = 1, PROTOTYPE = 2
      */
     private int getScopeLevel(Scope scope) {
         return switch (scope) {
             case SINGLETON -> 0;
-            case REQUEST -> 1;
-            case EVENT -> 2;
-            case PROTOTYPE -> 3;
+            case EVENT -> 1;
+            case PROTOTYPE -> 2;
         };
     }
 

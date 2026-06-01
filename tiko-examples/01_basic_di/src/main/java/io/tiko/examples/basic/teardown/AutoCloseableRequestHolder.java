@@ -3,7 +3,7 @@ package io.tiko.examples.basic.teardown;
 import io.tiko.Scope;
 import io.tiko.annotations.Component;
 
-@Component(scope = Scope.REQUEST)
+@Component(scope = Scope.EVENT)
 public class AutoCloseableRequestHolder implements AutoCloseable {
 
     @Override

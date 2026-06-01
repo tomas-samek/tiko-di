@@ -20,7 +20,7 @@ import javax.lang.model.type.TypeMirror;
 /**
  * Generates proxy classes for cross-scope injection.
  *
- * When a shorter-lived scoped bean (REQUEST, EVENT) is injected into a longer-lived scope,
+ * When an EVENT-scoped bean is injected into a longer-lived (SINGLETON) scope,
  * we generate a proxy that implements the interface and delegates to the current scope instance.
  *
  * Example generated code:
@@ -301,16 +301,14 @@ public final class ProxyGenerator {
 
     /**
      * Generates the call to get the actual instance from the container.
-     * e.g., "container.getCurrentRequestContext()"
+     * e.g., "container.getCurrentEventContext()"
      */
     private String generateGetActualInstanceCall(ComponentModel component) {
         String methodName =
                 switch (component.getScope()) {
-                    case REQUEST -> "getCurrent" + component.getClassName();
                     case EVENT -> "getCurrent" + component.getClassName();
                     default ->
-                        throw new IllegalStateException(
-                                "Proxy only for REQUEST/EVENT scope, got: " + component.getScope());
+                        throw new IllegalStateException("Proxy only for EVENT scope, got: " + component.getScope());
                 };
 
         return "container." + methodName + "()";

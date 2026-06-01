@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
  * Pins #116: {@code @PreDestroy} / {@code AutoCloseable.close()} failures route <em>only</em>
  * through {@code ErrorHandler} — the generated container no longer emits a redundant catch-site
  * WARN log (which had doubled every failure). Asserted on the generated source across all four
- * catch sites (SINGLETON + REQUEST × component {@code @PreDestroy} + factory {@code AutoCloseable}).
+ * catch sites (SINGLETON + EVENT × component {@code @PreDestroy} + factory {@code AutoCloseable}).
  * The bus-defect / drain logs (no {@code ErrorHandler} permit) keep their direct log.
  */
 class ShutdownFailureLoggingTest {
@@ -42,22 +42,22 @@ class ShutdownFailureLoggingTest {
                 "  @PreDestroy public void down() {}",
                 "  @Produces(scope = Scope.SINGLETON) public SRes res() { return new SRes(); }",
                 "}");
-        JavaFileObject requestBean = JavaFileObjects.forSourceLines(
-                "io.example.RequestBean",
+        JavaFileObject eventBean = JavaFileObjects.forSourceLines(
+                "io.example.EventBean",
                 "package io.example;",
                 "import io.tiko.Scope;",
                 "import io.tiko.annotations.Component;",
                 "import io.tiko.annotations.PreDestroy;",
                 "import io.tiko.annotations.Produces;",
-                "@Component(scope = Scope.REQUEST)",
-                "public class RequestBean {",
+                "@Component(scope = Scope.EVENT)",
+                "public class EventBean {",
                 "  @PreDestroy public void down() {}",
-                "  @Produces(scope = Scope.REQUEST) public RRes res() { return new RRes(); }",
+                "  @Produces(scope = Scope.EVENT) public RRes res() { return new RRes(); }",
                 "}");
 
         Compilation c = Compiler.javac()
                 .withProcessors(new TikoAnnotationProcessor())
-                .compile(sRes, rRes, singletonBean, requestBean);
+                .compile(sRes, rRes, singletonBean, eventBean);
         CompilationSubject.assertThat(c).succeeded();
 
         JavaFileObject container = c.generatedSourceFiles().stream()
@@ -66,7 +66,7 @@ class ShutdownFailureLoggingTest {
                 .orElseThrow(() -> new AssertionError("TikoContainerImpl not generated"));
         String content = new String(container.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
 
-        // Routing intact for both hook kinds, across SINGLETON and REQUEST scopes.
+        // Routing intact for both hook kinds, across SINGLETON and EVENT scopes.
         assertThat(content).contains("PreDestroyFailure");
         assertThat(content).contains("AutoCloseFailure");
         // No redundant catch-site log at any of the four sites — the removed logs all read

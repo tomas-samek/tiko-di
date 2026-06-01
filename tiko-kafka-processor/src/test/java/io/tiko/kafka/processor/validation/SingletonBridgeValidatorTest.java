@@ -35,7 +35,7 @@ class SingletonBridgeValidatorTest {
     }
 
     @Test
-    void source_on_request_scope_fails() {
+    void source_on_event_scope_fails() {
         Compilation compilation = Compiler.javac()
                 .withProcessors(new TikoAnnotationProcessor(), new KafkaAnnotationProcessor())
                 .compile(
@@ -47,7 +47,7 @@ class SingletonBridgeValidatorTest {
                                 import io.tiko.annotations.EventTrigger;
                                 import io.tiko.kafka.annotations.KafkaSource;
                                 import io.tiko.Scope;
-                                @Component(scope = Scope.REQUEST)
+                                @Component(scope = Scope.EVENT)
                                 public class OrderBridge {
                                     @KafkaSource(topic = "orders")
                                     @EventTrigger(eventName = "OrderPlaced")

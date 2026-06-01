@@ -22,7 +22,7 @@ public class ThrowingCheckedProducesFactory {
     /** Set by the test before resolving the produced type. */
     public static volatile SQLException thrownInstance = new SQLException("default-checked-produces");
 
-    @Produces(scope = Scope.REQUEST)
+    @Produces(scope = Scope.EVENT)
     public CheckedProducesOutput failingResource() throws SQLException {
         throw thrownInstance;
     }

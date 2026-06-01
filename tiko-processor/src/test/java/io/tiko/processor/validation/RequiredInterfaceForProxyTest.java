@@ -17,24 +17,21 @@ import org.junit.jupiter.params.provider.MethodSource;
 /**
  * Pins the cross-scope proxy interface requirement (#164, #159).
  *
- * <p>CLAUDE.md documents that injecting a shorter-lived (REQUEST/EVENT) bean into a
- * longer-lived consumer is mediated by a generated proxy, "(requires interface)". The
- * proxy implements an interface and resolves the current scope's instance on every call,
- * so a concrete shorter-lived bean cannot be proxied — it must be a compile error rather
- * than a silent direct-injection that breaks scope semantics at runtime.
+ * <p>CLAUDE.md documents that injecting a shorter-lived (EVENT) bean into a longer-lived
+ * consumer is mediated by a generated proxy, "(requires interface)". The proxy implements
+ * an interface and resolves the current scope's instance on every call, so a concrete
+ * shorter-lived bean cannot be proxied — it must be a compile error rather than a silent
+ * direct-injection that breaks scope semantics at runtime.
  *
- * <p>Covers the three proxy directions (SINGLETON&larr;REQUEST, SINGLETON&larr;EVENT,
- * REQUEST&larr;EVENT) in both the negative (no interface &rarr; error) and positive
- * (interface present &rarr; compiles) forms, plus the {@code @Produces}-output equivalent.
+ * <p>Covers the one proxy direction (SINGLETON&larr;EVENT) in both the negative (no
+ * interface &rarr; error) and positive (interface present &rarr; compiles) forms, plus
+ * the {@code @Produces}-output equivalent.
  */
 class RequiredInterfaceForProxyTest {
 
     /** Consumer scope strictly outlives provider scope — the proxy-required directions. */
     static Stream<Arguments> proxyDirections() {
-        return Stream.of(
-                Arguments.of("SINGLETON", "REQUEST"),
-                Arguments.of("SINGLETON", "EVENT"),
-                Arguments.of("REQUEST", "EVENT"));
+        return Stream.of(Arguments.of("SINGLETON", "EVENT"));
     }
 
     @ParameterizedTest(name = "{0} consumer injecting concrete {1} bean fails compilation")
@@ -117,7 +114,7 @@ class RequiredInterfaceForProxyTest {
                 "import io.tiko.annotations.Produces;",
                 "@Component(scope = Scope.SINGLETON)",
                 "public class DepFactory {",
-                "  @Produces(scope = Scope.REQUEST)",
+                "  @Produces(scope = Scope.EVENT)",
                 "  public Dep dep() { return new Dep(); }",
                 "}");
         JavaFileObject svc = JavaFileObjects.forSourceLines(

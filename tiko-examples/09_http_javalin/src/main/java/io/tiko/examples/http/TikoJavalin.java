@@ -10,7 +10,7 @@ import io.tiko.Container;
  * — body parsing, business logic, event publishing, response serialization.
  *
  * <p>Why a helper instead of opening the scope inside each handler: ergonomics.
- * Every route would otherwise need an identical {@code runInRequestScope}
+ * Every route would otherwise need an identical {@code runInEventScope}
  * wrapper, which is exactly the kind of boilerplate middleware exists to
  * eliminate.
  *
@@ -31,7 +31,7 @@ public final class TikoJavalin {
      * its side and applies the user's configured exception handlers.
      */
     public static Handler scoped(Container container, Handler delegate) {
-        return ctx -> container.runInRequestScope(() -> {
+        return ctx -> container.runInEventScope(() -> {
             try {
                 delegate.handle(ctx);
             } catch (Exception e) {

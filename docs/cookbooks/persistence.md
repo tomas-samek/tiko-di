@@ -79,13 +79,13 @@ at container shutdown automatically.
 ## REQUEST-scoped Connection + auto-proxy
 
 ```java
-@Component(scope = Scope.REQUEST)
+@Component(scope = Scope.EVENT)
 public class JdbcConnectionProvider {
     private final DataSource ds;
 
     @Inject JdbcConnectionProvider(DataSource ds) { this.ds = ds; }
 
-    @Produces(scope = Scope.REQUEST)
+    @Produces(scope = Scope.EVENT)
     public Connection connection() throws SQLException {
         var c = ds.getConnection();
         c.setAutoCommit(false);
@@ -125,7 +125,7 @@ asked for a request-scoped resource without an open request.
 Commit/rollback responsibility lives in a tiny REQUEST-scoped bean:
 
 ```java
-@Component(scope = Scope.REQUEST)
+@Component(scope = Scope.EVENT)
 public class TransactionContext implements AutoCloseable {
     private final Connection connection;
     private boolean committed = false;
@@ -152,7 +152,7 @@ The intended commit path is a thin static helper:
 ```java
 public final class TransactionalScope {
     public static <T> T run(Container container, Supplier<T> work) {
-        return container.supplyInRequestScope(() -> {
+        return container.supplyInEventScope(() -> {
             var tx = container.get(TransactionContext.class);
             try {
                 T result = work.get();
@@ -254,8 +254,8 @@ ambient state.
   semantics (H2 covers most basics but not every PG-ism).
 - **No connection-leak diagnostics** beyond what HikariCP gives you out
   of the box. Production setups configure `leakDetectionThreshold`.
-- **No metrics** beyond Tiko's built-in `RequestStartedEvent` /
-  `RequestEndingEvent`. Wire Micrometer or your metrics library of
+- **No metrics** beyond Tiko's built-in `EventStartedEvent` /
+  `EventEndingEvent`. Wire Micrometer or your metrics library of
   choice to those events.
 
 ## Beyond raw JDBC

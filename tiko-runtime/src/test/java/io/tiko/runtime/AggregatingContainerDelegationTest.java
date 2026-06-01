@@ -42,15 +42,11 @@ class AggregatingContainerDelegationTest {
     @Test
     void scopeHelpersRunTheBodyExactlyOnceAndReturnTheValue() {
         try (AggregatingContainer c = newContainer(new LocalEventBus(), ctx -> {})) {
-            AtomicBoolean requestRan = new AtomicBoolean(false);
             AtomicBoolean eventRan = new AtomicBoolean(false);
 
-            c.runInRequestScope(() -> requestRan.set(true));
             c.runInEventScope(() -> eventRan.set(true));
 
-            assertThat(requestRan).isTrue();
             assertThat(eventRan).isTrue();
-            assertThat(c.supplyInRequestScope(() -> "req")).isEqualTo("req");
             assertThat(c.supplyInEventScope(() -> "evt")).isEqualTo("evt");
         }
     }

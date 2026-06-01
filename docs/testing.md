@@ -1,6 +1,6 @@
 # Testing
 
-`tiko-test` is a small JUnit 5 extension that boots a Tiko `Container` around a `@Test` method (or a whole class), resolves test-method parameters out of that container, and gives you a spy `EventBus` for asserting on what was published. It also ships two scope-helper annotations for tests that need to run inside `runInRequestScope` / `runInEventScope`.
+`tiko-test` is a small JUnit 5 extension that boots a Tiko `Container` around a `@Test` method (or a whole class), resolves test-method parameters out of that container, and gives you a spy `EventBus` for asserting on what was published. It also ships two scope-helper annotations for tests that need to run inside `runInEventScope` / `runInEventScope`.
 
 For a runnable example, see [`tiko-examples/12_testing`](../tiko-examples/12_testing).
 
@@ -127,7 +127,7 @@ void awaitAsyncDispatchBlocksUntilHandlersDrain(EventBus bus, RecordingEventBus 
 
 The extension wires the container's executor into the recorder during boot, so this works without any setup. If the executor does not drain inside the timeout a `TimeoutException` is thrown with the active count and queue size — much more informative than a bare `Thread.sleep` that races and flakes.
 
-## `@RequestScopeTest` / `@EventScopeTest` — scope helpers
+## `@EventScopeTest` / `@EventScopeTest` — scope helpers
 
 When a test needs a `REQUEST`- or `EVENT`-scoped bean to be resolvable in the test body, annotate the `@Test` method:
 
@@ -135,16 +135,16 @@ When a test needs a `REQUEST`- or `EVENT`-scoped bean to be resolvable in the te
 @TikoTest
 class RequestScopedRepoTest {
     @Test
-    @RequestScopeTest
+    @EventScopeTest
     void requestScopedRepoResolvableInsideScopeWrapper(AccountRepository repo) {
         assertThat(repo.findCustomerName("alice")).isEqualTo("Customer-alice");
     }
 }
 ```
 
-The extension wraps the invocation in `container.runInRequestScope(...)` (or `runInEventScope`, or both nested with `@RequestScopeTest` + `@EventScopeTest` together). Any throwable from the test body is rethrown unchanged after the scope unwinds — `AssertionError` still fails the test cleanly.
+The extension wraps the invocation in `container.runInEventScope(...)` (or `runInEventScope`, or both nested with `@EventScopeTest` + `@EventScopeTest` together). Any throwable from the test body is rethrown unchanged after the scope unwinds — `AssertionError` still fails the test cleanly.
 
-Parameter resolution happens *before* the scope is entered. A REQUEST-scoped bean cannot be a method parameter on a `@RequestScopeTest` method directly; resolve it inside the test body via `container.get(Type.class)`, or use a proxied interface that already crosses the scope boundary.
+Parameter resolution happens *before* the scope is entered. A REQUEST-scoped bean cannot be a method parameter on a `@EventScopeTest` method directly; resolve it inside the test body via `container.get(Type.class)`, or use a proxied interface that already crosses the scope boundary.
 
 ## `@TestComponent` — compile-time overrides
 

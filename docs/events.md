@@ -53,7 +53,7 @@ These are explicit, not accidents of implementation. A handler that depends on d
 - **Delivery semantics — at-least-once, handlers must be idempotent.** The weaker guarantee wins so handler code is portable across transports. Local delivery is still typically synchronous in-process today, but the contract Tiko promises the handler is the same one Kafka offers. A handler that breaks under redelivery is buggy regardless of transport.
 - **Ordering — per-source FIFO only, no cross-source merge.** Local events preserve publisher order. Future distributed transports preserve their own intra-partition order. A handler subscribed to both sees them in arrival order at the handler — there is no synthesized global ordering.
 - **Backpressure — publishers never block on handler work.** Async handlers run on a bounded executor; `bus.publish(...)` returns once the event is enqueued. Synchronous in-process delivery is the default for handlers without `async = true`, and remains an option per handler — it is not the publisher's responsibility to throttle.
-- **Transactional semantics — request-scope buffering built in, outbox recommended for crash safety.** Events published inside `runInRequestScope` are buffered and only released when the scope exits successfully; on failure they are dropped. Persistence-backed outbox (for crash safety across the JVM boundary) is the consumer's responsibility — Tiko does not own a database.
+- **Transactional semantics — request-scope buffering built in, outbox recommended for crash safety.** Events published inside `runInEventScope` are buffered and only released when the scope exits successfully; on failure they are dropped. Persistence-backed outbox (for crash safety across the JVM boundary) is the consumer's responsibility — Tiko does not own a database.
 - **Error handling — log + isolate by default, per-handler policy configurable.** A throwing handler does not propagate to the publisher and does not break sibling handlers. See [Error handling](#error-handling) below.
 
 ## Error handling
@@ -181,10 +181,8 @@ The container automatically publishes lifecycle events that you can subscribe to
 |-----------------------------|----------------------------------------|
 | `ApplicationStartedEvent`   | After container start                  |
 | `ApplicationEndingEvent`    | Before container shutdown              |
-| `RequestStartedEvent`       | When entering a request scope          |
-| `RequestEndingEvent`        | Before exiting a request scope         |
-| `EventStartedEvent`         | When entering an event scope           |
-| `EventEndingEvent`          | Before exiting an event scope          |
+| `EventStartedEvent`         | When entering a unit of work (EVENT scope)  |
+| `EventEndingEvent`          | Before exiting a unit of work (EVENT scope) |
 
 All are Java records with timestamps and (where relevant) durations.
 
@@ -219,8 +217,8 @@ var routes = daemon.container().get(TicketRoutes.class);
 ```java
 @Component(scope = Scope.SINGLETON)
 public class MetricsCollector {
-    private final AtomicInteger activeRequests = new AtomicInteger(0);
-    private final List<Duration> requestDurations = new CopyOnWriteArrayList<>();
+    private final AtomicInteger activeUnits = new AtomicInteger(0);
+    private final List<Duration> unitDurations = new CopyOnWriteArrayList<>();
 
     @EventHandler
     public void onApplicationStarted(ApplicationStartedEvent event) {
@@ -228,27 +226,27 @@ public class MetricsCollector {
     }
 
     @EventHandler
-    public void onRequestStarted(RequestStartedEvent event) {
-        int active = activeRequests.incrementAndGet();
-        logger.debug("Request {} started, {} active requests", event.requestId(), active);
+    public void onEventStarted(EventStartedEvent event) {
+        int active = activeUnits.incrementAndGet();
+        logger.debug("Unit {} started, {} active units", event.eventId(), active);
     }
 
     @EventHandler
-    public void onRequestEnding(RequestEndingEvent event) {
-        activeRequests.decrementAndGet();
-        requestDurations.add(event.duration());
-        logger.debug("Request {} completed in {}", event.requestId(), event.duration());
+    public void onEventEnding(EventEndingEvent event) {
+        activeUnits.decrementAndGet();
+        unitDurations.add(event.duration());
+        logger.debug("Unit {} completed in {}", event.eventId(), event.duration());
     }
 
     @EventHandler
     public void onApplicationEnding(ApplicationEndingEvent event) {
-        logger.info("Application ran for {}, processed {} requests",
-                event.uptime(), requestDurations.size());
-        double avgMs = requestDurations.stream()
+        logger.info("Application ran for {}, processed {} units",
+                event.uptime(), unitDurations.size());
+        double avgMs = unitDurations.stream()
                 .mapToLong(Duration::toMillis)
                 .average()
                 .orElse(0.0);
-        logger.info("Average request duration: {}ms", avgMs);
+        logger.info("Average unit duration: {}ms", avgMs);
     }
 }
 ```
@@ -265,10 +263,8 @@ public class DistributedTracer {
         this.tracer = tracer;
     }
 
-    @EventHandler public void onRequestStarted(RequestStartedEvent e) { tracer.startSpan("request", e.requestId()); }
-    @EventHandler public void onEventStarted(EventStartedEvent e)     { tracer.startSpan("event", e.eventId()); }
-    @EventHandler public void onEventEnding(EventEndingEvent e)       { tracer.finishSpan(e.eventId(), e.duration()); }
-    @EventHandler public void onRequestEnding(RequestEndingEvent e)   { tracer.finishSpan(e.requestId(), e.duration()); }
+    @EventHandler public void onEventStarted(EventStartedEvent e) { tracer.startSpan("unit", e.eventId()); }
+    @EventHandler public void onEventEnding(EventEndingEvent e)   { tracer.finishSpan(e.eventId(), e.duration()); }
 }
 ```
 
