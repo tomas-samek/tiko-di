@@ -45,14 +45,10 @@ class EventScopeGuardEmissionTest {
         String source = new String(containerSource.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
 
         assertThat(source)
-                .as("runInEventScope guard should be emitted with single-frame message")
+                .as("single-frame guard should be emitted on both runInEventScope and supplyInEventScope")
                 .contains("public void runInEventScope")
+                .contains("supplyInEventScope")
                 .contains("single-frame")
                 .contains("IllegalStateException");
-
-        assertThat(source)
-                .as("supplyInEventScope guard should be emitted with single-frame message")
-                .contains("supplyInEventScope")
-                .contains("single-frame");
     }
 }

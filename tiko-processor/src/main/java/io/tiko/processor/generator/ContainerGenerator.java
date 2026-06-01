@@ -888,10 +888,11 @@ public final class ContainerGenerator {
         method.addStatement("return __existing");
     }
 
-    private static final ClassName EVENT_STARTED = ClassName.get("io.tiko.events", "EventStartedEvent");
-    private static final ClassName EVENT_ENDING = ClassName.get("io.tiko.events", "EventEndingEvent");
-    private static final ClassName APP_STARTED = ClassName.get("io.tiko.events", "ApplicationStartedEvent");
-    private static final ClassName APP_ENDING = ClassName.get("io.tiko.events", "ApplicationEndingEvent");
+    private static final String EVENTS_PACKAGE = "io.tiko.events";
+    private static final ClassName EVENT_STARTED = ClassName.get(EVENTS_PACKAGE, "EventStartedEvent");
+    private static final ClassName EVENT_ENDING = ClassName.get(EVENTS_PACKAGE, "EventEndingEvent");
+    private static final ClassName APP_STARTED = ClassName.get(EVENTS_PACKAGE, "ApplicationStartedEvent");
+    private static final ClassName APP_ENDING = ClassName.get(EVENTS_PACKAGE, "ApplicationEndingEvent");
     private static final ClassName BOUNDED_EXECUTION = ClassName.get("io.tiko.runtime", "BoundedExecution");
     private static final ClassName CONTAINER_SHUT_DOWN = ClassName.get("io.tiko", "ContainerShutDownException");
     private static final ClassName NO_SUCH_COMPONENT = ClassName.get("io.tiko", "NoSuchComponentException");
@@ -1138,7 +1139,7 @@ public final class ContainerGenerator {
         method.addStatement(
                 "$T.getLogger($S).log($T.WARNING, $S, __t)",
                 ClassName.get("java.lang", "System"),
-                "io.tiko.events",
+                EVENTS_PACKAGE,
                 loggerLevel,
                 "ApplicationEndingEvent publish threw");
         method.endControlFlow();
@@ -1154,7 +1155,7 @@ public final class ContainerGenerator {
         method.addStatement(
                 "$T.getLogger($S).log($T.WARNING, $S + inFlightGets.get())",
                 ClassName.get("java.lang", "System"),
-                "io.tiko.events",
+                EVENTS_PACKAGE,
                 loggerLevel,
                 "Container shutdown drain timed out with in-flight get() calls: ");
         method.endControlFlow();
