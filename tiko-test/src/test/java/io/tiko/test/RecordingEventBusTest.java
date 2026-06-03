@@ -90,7 +90,9 @@ class RecordingEventBusTest {
     private static RecordingEventBus newRec() {
         return new RecordingEventBus(new EventBus() {
             @Override
-            public <T> void publish(T event) {}
+            public <T> void publish(T event) {
+                // no-op: test stub
+            }
 
             @Override
             public <T> Subscription subscribe(Class<T> t, EventCallback<T> c) {
@@ -101,7 +103,9 @@ class RecordingEventBusTest {
 
     private static final class NoopSubscription implements Subscription {
         @Override
-        public void unsubscribe() {}
+        public void unsubscribe() {
+            // no-op: test stub
+        }
 
         @Override
         public boolean isActive() {

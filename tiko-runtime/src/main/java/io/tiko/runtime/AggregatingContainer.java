@@ -388,12 +388,15 @@ public final class AggregatingContainer implements Container {
         // The base URL ends with the descriptor file name (e.g. "container.properties" or
         // "test-container.properties"); replace just that trailing segment so siblings
         // (components.txt, configs.txt) resolve regardless of which descriptor is active.
-        String basePath = base.getPath();
-        int lastSlash = basePath.lastIndexOf('/');
-        String siblingPath = (lastSlash >= 0 ? basePath.substring(0, lastSlash + 1) : "") + sibling;
+        // String-level replace preserves jar:file:...!/ segment semantics. We then route
+        // through URI.create().toURL() because the String-based URL constructors are
+        // deprecated in Java 20+.
+        String baseStr = base.toString();
+        int lastSlash = baseStr.lastIndexOf('/');
+        String siblingStr = (lastSlash >= 0 ? baseStr.substring(0, lastSlash + 1) : "") + sibling;
         try {
-            return new URL(base.getProtocol(), base.getHost(), base.getPort(), siblingPath);
-        } catch (java.net.MalformedURLException e) {
+            return java.net.URI.create(siblingStr).toURL();
+        } catch (java.net.MalformedURLException | IllegalArgumentException e) {
             throw new ContainerInitializationException("Failed to derive " + sibling + " URL from " + base, e);
         }
     }

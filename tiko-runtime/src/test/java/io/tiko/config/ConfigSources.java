@@ -53,7 +53,7 @@ public final class ConfigSources {
             }
             return out;
         }
-        if (existing instanceof List<?> el && incoming instanceof List<?> il) {
+        if (existing instanceof List<?> && incoming instanceof List<?> il) {
             return il; // overlay wins for lists, matching tiko-config semantics
         }
         return incoming;

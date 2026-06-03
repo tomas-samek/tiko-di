@@ -27,7 +27,7 @@ public final class JsonKafkaSerializer implements KafkaSerializer {
         try {
             return MAPPER.writeValueAsBytes(value);
         } catch (IOException e) {
-            throw new RuntimeException(
+            throw new IllegalStateException(
                     "failed to serialize " + value.getClass().getName() + " to JSON: " + e.getMessage(), e);
         }
     }
@@ -37,7 +37,7 @@ public final class JsonKafkaSerializer implements KafkaSerializer {
         try {
             return MAPPER.readValue(bytes, type);
         } catch (IOException e) {
-            throw new RuntimeException(
+            throw new IllegalStateException(
                     "failed to deserialize " + type.getSimpleName() + " from JSON: " + e.getMessage(), e);
         }
     }

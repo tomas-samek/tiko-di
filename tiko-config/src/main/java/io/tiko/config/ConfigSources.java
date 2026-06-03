@@ -1,6 +1,7 @@
 package io.tiko.config;
 
 import io.tiko.ConfigSource;
+import io.tiko.ContainerInitializationException;
 import io.tiko.SourceLocation;
 import io.tiko.config.internal.DeepMerge;
 import io.tiko.config.internal.YamlLoader;
@@ -29,11 +30,11 @@ public final class ConfigSources {
                     if (cl == null) cl = ConfigSources.class.getClassLoader();
                     try (InputStream in = cl.getResourceAsStream(resourcePath)) {
                         if (in == null) {
-                            throw new RuntimeException("classpath resource not found: " + resourcePath);
+                            throw new ContainerInitializationException("classpath resource not found: " + resourcePath);
                         }
                         loaded = YamlLoader.load(in, resourcePath);
                     } catch (IOException e) {
-                        throw new RuntimeException("failed to read " + resourcePath, e);
+                        throw new ContainerInitializationException("failed to read " + resourcePath, e);
                     }
                 }
                 return loaded;
@@ -89,7 +90,7 @@ public final class ConfigSources {
                     mergedData = data;
                     mergedLocations = locations;
                 } catch (IOException e) {
-                    throw new RuntimeException("failed to enumerate " + resourcePath, e);
+                    throw new ContainerInitializationException("failed to enumerate " + resourcePath, e);
                 }
             }
 
@@ -117,7 +118,7 @@ public final class ConfigSources {
                     try (InputStream in = Files.newInputStream(path)) {
                         loaded = YamlLoader.load(in, path.toString());
                     } catch (IOException e) {
-                        throw new RuntimeException("failed to read " + path, e);
+                        throw new ContainerInitializationException("failed to read " + path, e);
                     }
                 }
                 return loaded;

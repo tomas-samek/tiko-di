@@ -68,7 +68,7 @@ class YamlLoaderTest {
         var in = new ByteArrayInputStream(malformed.getBytes(StandardCharsets.UTF_8));
 
         ConfigValidationException ex =
-                catchThrowableOfType(() -> YamlLoader.load(in, "broken.yaml"), ConfigValidationException.class);
+                catchThrowableOfType(ConfigValidationException.class, () -> YamlLoader.load(in, "broken.yaml"));
 
         assertThat(ex)
                 .as("malformed YAML must surface as a Tiko config error, not raw SnakeYAML")

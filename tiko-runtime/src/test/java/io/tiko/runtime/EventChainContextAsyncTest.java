@@ -61,7 +61,9 @@ class EventChainContextAsyncTest {
             handlers.computeIfAbsent(type, k -> new CopyOnWriteArrayList<>()).add(cb);
             return new Subscription() {
                 @Override
-                public void unsubscribe() {}
+                public void unsubscribe() {
+                    // no-op: test stub
+                }
 
                 @Override
                 public boolean isActive() {
