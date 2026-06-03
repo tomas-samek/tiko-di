@@ -1,6 +1,7 @@
 package io.tiko.kafka.runtime;
 
 import io.tiko.Container;
+import io.tiko.ContainerInitializationException;
 import io.tiko.ErrorHandler;
 import io.tiko.EventBus;
 import io.tiko.EventCallback;
@@ -130,7 +131,7 @@ public final class KafkaBootstrapSupport {
             Object v = m.invoke(payload);
             return v == null ? null : v.toString();
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
-            throw new RuntimeException("partitionKey '" + accessor + "' could not be resolved at runtime", e);
+            throw new IllegalStateException("partitionKey '" + accessor + "' could not be resolved at runtime", e);
         }
     }
 
@@ -148,7 +149,7 @@ public final class KafkaBootstrapSupport {
             try {
                 return declared.getDeclaredConstructor().newInstance();
             } catch (ReflectiveOperationException e) {
-                throw new RuntimeException(
+                throw new ContainerInitializationException(
                         "@KafkaSource/@KafkaSink serializer "
                                 + declared.getName()
                                 + " could not be instantiated. It must have a public no-arg constructor.",
@@ -157,7 +158,7 @@ public final class KafkaBootstrapSupport {
         }
         KafkaSerializer impl = named.get(config.serializer());
         if (impl == null) {
-            throw new RuntimeException("tiko.kafka.serializer = '"
+            throw new ContainerInitializationException("tiko.kafka.serializer = '"
                     + config.serializer()
                     + "' but no NamedKafkaSerializer with that name was found via ServiceLoader. "
                     + "Known names: "

@@ -71,10 +71,14 @@ public final class StubContainer implements Container {
     }
 
     @Override
-    public void start() {}
+    public void start() {
+        // no-op: test stub
+    }
 
     @Override
-    public void shutdown() {}
+    public void shutdown() {
+        // no-op: test stub
+    }
 
     @Override
     public EventBus getEventBus() {

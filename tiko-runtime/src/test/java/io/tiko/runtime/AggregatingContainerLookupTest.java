@@ -27,7 +27,7 @@ class AggregatingContainerLookupTest {
     void getUnknownTypeThrowsNoSuchComponentCarryingType() {
         try (AggregatingContainer c = newContainer()) {
             NoSuchComponentException ex =
-                    catchThrowableOfType(() -> c.get(String.class), NoSuchComponentException.class);
+                    catchThrowableOfType(NoSuchComponentException.class, () -> c.get(String.class));
             assertThat(ex).isNotNull();
             assertThat(ex.type()).isEqualTo(String.class);
             assertThat(ex.qualifier()).isNull();
@@ -45,7 +45,7 @@ class AggregatingContainerLookupTest {
     void getProviderUnknownNameThrowsNoSuchComponentCarryingQualifier() {
         try (AggregatingContainer c = newContainer()) {
             NoSuchComponentException ex =
-                    catchThrowableOfType(() -> c.getProvider(String.class, "missing"), NoSuchComponentException.class);
+                    catchThrowableOfType(NoSuchComponentException.class, () -> c.getProvider(String.class, "missing"));
             assertThat(ex).isNotNull();
             assertThat(ex.type()).isEqualTo(String.class);
             assertThat(ex.qualifier()).isEqualTo("missing");

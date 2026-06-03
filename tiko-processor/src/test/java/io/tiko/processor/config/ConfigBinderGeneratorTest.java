@@ -173,10 +173,9 @@ class ConfigBinderGeneratorTest {
                 Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(outer, inner);
         com.google.testing.compile.CompilationSubject.assertThat(c).succeeded();
 
-        JavaFileObject nested = c.generatedSourceFiles().stream()
-                .filter(f -> f.getName().contains("EndpointNestedCoercer_"))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("EndpointNestedCoercer_<hash> not generated"));
+        assertThat(c.generatedSourceFiles().stream().anyMatch(f -> f.getName().contains("EndpointNestedCoercer_")))
+                .as("EndpointNestedCoercer_<hash> should be generated")
+                .isTrue();
 
         JavaFileObject outerBinder = c.generatedSourceFiles().stream()
                 .filter(f -> f.getName().contains("AppConfigBinder"))

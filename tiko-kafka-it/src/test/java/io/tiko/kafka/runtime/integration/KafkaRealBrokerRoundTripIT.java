@@ -10,8 +10,8 @@ import io.tiko.runtime.TikoOptions;
 import java.time.Duration;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.kafka.ConfluentKafkaContainer;
 import org.testcontainers.utility.DockerImageName;
 
 /**
@@ -43,7 +43,8 @@ import org.testcontainers.utility.DockerImageName;
 class KafkaRealBrokerRoundTripIT {
 
     @org.testcontainers.junit.jupiter.Container
-    static final KafkaContainer KAFKA = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.7.1"));
+    static final ConfluentKafkaContainer KAFKA =
+            new ConfluentKafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.7.1"));
 
     @Test
     void produced_then_consumed_via_real_broker() {
