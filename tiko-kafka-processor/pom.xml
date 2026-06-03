@@ -6,7 +6,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.tiko</groupId>
+        <groupId>io.github.tomas-samek</groupId>
         <artifactId>tiko-parent</artifactId>
         <version>0.1.0</version>
     </parent>
@@ -28,11 +28,11 @@
 
     <dependencies>
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-api</artifactId>
         </dependency>
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-kafka</artifactId>
         </dependency>
 
@@ -55,12 +55,12 @@
 
         <!-- For compile-testing -->
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-runtime</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-processor</artifactId>
             <scope>test</scope>
         </dependency>

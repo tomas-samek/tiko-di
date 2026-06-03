@@ -6,7 +6,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.tiko.examples</groupId>
+        <groupId>io.github.tomas-samek.examples</groupId>
         <artifactId>04_api_impl</artifactId>
         <version>0.1.0</version>
     </parent>
@@ -18,7 +18,7 @@
     <dependencies>
         <!-- API surface: compile-scope. The app references only interfaces and DTOs from here. -->
         <dependency>
-            <groupId>io.tiko.examples</groupId>
+            <groupId>io.github.tomas-samek.examples</groupId>
             <artifactId>module-api</artifactId>
             <version>${project.version}</version>
         </dependency>
@@ -28,20 +28,20 @@
           the container resolves them via interface dispatch in get(Class) at runtime.
         -->
         <dependency>
-            <groupId>io.tiko.examples</groupId>
+            <groupId>io.github.tomas-samek.examples</groupId>
             <artifactId>module-impl</artifactId>
             <version>${project.version}</version>
             <scope>runtime</scope>
         </dependency>
 
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-api</artifactId>
             <version>${project.version}</version>
         </dependency>
 
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-runtime</artifactId>
             <version>${project.version}</version>
         </dependency>

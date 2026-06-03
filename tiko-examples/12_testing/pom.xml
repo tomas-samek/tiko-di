@@ -6,7 +6,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.tiko.examples</groupId>
+        <groupId>io.github.tomas-samek.examples</groupId>
         <artifactId>tiko-examples</artifactId>
         <version>0.1.0</version>
     </parent>
@@ -20,7 +20,7 @@
     <dependencies>
 
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-api</artifactId>
             <version>${project.version}</version>
         </dependency>
@@ -32,20 +32,20 @@
           which is exactly what FixedClockTest depends on.
         -->
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-processor</artifactId>
             <version>${project.version}</version>
             <scope>provided</scope>
         </dependency>
 
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-runtime</artifactId>
             <version>${project.version}</version>
         </dependency>
 
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-test</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>

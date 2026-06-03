@@ -24,7 +24,7 @@ Add the Tiko BOM to your project's `dependencyManagement` section:
 <dependencyManagement>
     <dependencies>
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-bom</artifactId>
             <version>0.1.0</version>
             <type>pom</type>
@@ -40,20 +40,20 @@ Then add dependencies without specifying versions:
 <dependencies>
     <!-- Core Tiko DI -->
     <dependency>
-        <groupId>io.tiko</groupId>
+        <groupId>io.github.tomas-samek</groupId>
         <artifactId>tiko-api</artifactId>
         <!-- Version managed by BOM -->
     </dependency>
 
     <dependency>
-        <groupId>io.tiko</groupId>
+        <groupId>io.github.tomas-samek</groupId>
         <artifactId>tiko-processor</artifactId>
         <scope>provided</scope>
         <!-- Version managed by BOM -->
     </dependency>
 
     <dependency>
-        <groupId>io.tiko</groupId>
+        <groupId>io.github.tomas-samek</groupId>
         <artifactId>tiko-runtime</artifactId>
         <!-- Version managed by BOM -->
     </dependency>
@@ -109,7 +109,7 @@ The BOM manages versions for:
         <dependencies>
             <!-- Import Tiko BOM -->
             <dependency>
-                <groupId>io.tiko</groupId>
+                <groupId>io.github.tomas-samek</groupId>
                 <artifactId>tiko-bom</artifactId>
                 <version>0.1.0</version>
                 <type>pom</type>
@@ -121,16 +121,16 @@ The BOM manages versions for:
     <dependencies>
         <!-- No versions needed! -->
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-api</artifactId>
         </dependency>
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-processor</artifactId>
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-runtime</artifactId>
         </dependency>
     </dependencies>

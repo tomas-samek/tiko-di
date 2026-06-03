@@ -5,7 +5,7 @@
          http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>io.tiko.examples</groupId>
+        <groupId>io.github.tomas-samek.examples</groupId>
         <artifactId>08_kafka_order_warehouse</artifactId>
         <version>0.1.0</version>
     </parent>
@@ -14,14 +14,14 @@
 
     <dependencies>
         <dependency>
-            <groupId>io.tiko.examples</groupId>
+            <groupId>io.github.tomas-samek.examples</groupId>
             <artifactId>kafka-shared-events</artifactId>
             <version>${project.version}</version>
         </dependency>
-        <dependency><groupId>io.tiko</groupId><artifactId>tiko-api</artifactId></dependency>
-        <dependency><groupId>io.tiko</groupId><artifactId>tiko-runtime</artifactId></dependency>
-        <dependency><groupId>io.tiko</groupId><artifactId>tiko-config</artifactId></dependency>
-        <dependency><groupId>io.tiko</groupId><artifactId>tiko-kafka</artifactId></dependency>
+        <dependency><groupId>io.github.tomas-samek</groupId><artifactId>tiko-api</artifactId></dependency>
+        <dependency><groupId>io.github.tomas-samek</groupId><artifactId>tiko-runtime</artifactId></dependency>
+        <dependency><groupId>io.github.tomas-samek</groupId><artifactId>tiko-config</artifactId></dependency>
+        <dependency><groupId>io.github.tomas-samek</groupId><artifactId>tiko-kafka</artifactId></dependency>
     </dependencies>
 
     <build>
@@ -31,8 +31,8 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
                     <annotationProcessorPaths>
-                        <path><groupId>io.tiko</groupId><artifactId>tiko-processor</artifactId><version>${project.version}</version></path>
-                        <path><groupId>io.tiko</groupId><artifactId>tiko-kafka-processor</artifactId><version>${project.version}</version></path>
+                        <path><groupId>io.github.tomas-samek</groupId><artifactId>tiko-processor</artifactId><version>${project.version}</version></path>
+                        <path><groupId>io.github.tomas-samek</groupId><artifactId>tiko-kafka-processor</artifactId><version>${project.version}</version></path>
                     </annotationProcessorPaths>
                 </configuration>
             </plugin>

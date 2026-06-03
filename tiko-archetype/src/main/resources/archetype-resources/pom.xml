@@ -18,7 +18,7 @@
     <dependencyManagement>
         <dependencies>
             <dependency>
-                <groupId>io.tiko</groupId>
+                <groupId>io.github.tomas-samek</groupId>
                 <artifactId>tiko-bom</artifactId>
                 <version>${tiko.version}</version>
                 <type>pom</type>
@@ -32,11 +32,11 @@
              annotation processor generates code that imports io.tiko.runtime classes
              (e.g. DefaultEventExecutorFactory). -->
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-api</artifactId>
         </dependency>
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-runtime</artifactId>
         </dependency>
 
@@ -45,7 +45,7 @@
         <!-- Typed YAML configuration injection via @Configuration records. -->
         <!--
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-config</artifactId>
         </dependency>
         -->
@@ -53,7 +53,7 @@
         <!-- JUnit 5 testing: @TikoTest, @TestComponent, RecordingEventBus. -->
         <!--
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-test</artifactId>
             <scope>test</scope>
         </dependency>
@@ -63,7 +63,7 @@
              tiko-kafka-processor to <annotationProcessorPaths> below if enabled. -->
         <!--
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-kafka</artifactId>
         </dependency>
         -->
@@ -91,14 +91,14 @@
                     <proc>full</proc>
                     <annotationProcessorPaths>
                         <path>
-                            <groupId>io.tiko</groupId>
+                            <groupId>io.github.tomas-samek</groupId>
                             <artifactId>tiko-processor</artifactId>
                             <version>${tiko.version}</version>
                         </path>
                         <!-- Required if tiko-kafka is enabled above. -->
                         <!--
                         <path>
-                            <groupId>io.tiko</groupId>
+                            <groupId>io.github.tomas-samek</groupId>
                             <artifactId>tiko-kafka-processor</artifactId>
                             <version>${tiko.version}</version>
                         </path>

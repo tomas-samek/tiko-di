@@ -19,7 +19,7 @@ If you are on an older plugin version and cannot upgrade, force processing expli
         <proc>full</proc> <!-- explicit opt-in for JDK 23+ -->
         <annotationProcessorPaths>
             <path>
-                <groupId>io.tiko</groupId>
+                <groupId>io.github.tomas-samek</groupId>
                 <artifactId>tiko-processor</artifactId>
                 <version>0.1.0</version>
             </path>
@@ -32,9 +32,9 @@ If you are on an older plugin version and cannot upgrade, force processing expli
 
 ```groovy
 dependencies {
-    implementation "io.tiko:tiko-api:0.1.0"
-    implementation "io.tiko:tiko-runtime:0.1.0"
-    annotationProcessor "io.tiko:tiko-processor:0.1.0"
+    implementation "io.github.tomas-samek:tiko-api:0.1.0"
+    implementation "io.github.tomas-samek:tiko-runtime:0.1.0"
+    annotationProcessor "io.github.tomas-samek:tiko-processor:0.1.0"
 }
 ```
 

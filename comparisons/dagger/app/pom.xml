@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.tiko.comparisons</groupId>
+        <groupId>io.github.tomas-samek.comparisons</groupId>
         <artifactId>dagger-parent</artifactId>
         <version>0.1.0</version>
     </parent>
@@ -15,12 +15,12 @@
 
     <dependencies>
         <dependency>
-            <groupId>io.tiko.comparisons</groupId>
+            <groupId>io.github.tomas-samek.comparisons</groupId>
             <artifactId>dagger-module-a</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>io.tiko.comparisons</groupId>
+            <groupId>io.github.tomas-samek.comparisons</groupId>
             <artifactId>dagger-module-b</artifactId>
             <version>${project.version}</version>
         </dependency>

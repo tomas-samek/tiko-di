@@ -6,7 +6,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.tiko.examples</groupId>
+        <groupId>io.github.tomas-samek.examples</groupId>
         <artifactId>04_api_impl</artifactId>
         <version>0.1.0</version>
     </parent>
@@ -18,7 +18,7 @@
     <dependencies>
         <!-- tiko-api gives us io.tiko.Event for richer event payloads if/when needed. -->
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-api</artifactId>
             <version>${project.version}</version>
         </dependency>
