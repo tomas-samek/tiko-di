@@ -10,7 +10,7 @@ For a runnable example, see [`tiko-examples/12_testing`](../tiko-examples/12_tes
 
 ```xml
 <dependency>
-    <groupId>io.tiko</groupId>
+    <groupId>io.github.tomas-samek</groupId>
     <artifactId>tiko-test</artifactId>
     <version>0.1.0</version>
     <scope>test</scope>

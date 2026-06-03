@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.tiko</groupId>
+        <groupId>io.github.tomas-samek</groupId>
         <artifactId>tiko-parent</artifactId>
         <version>0.1.0</version>
         <relativePath>../pom.xml</relativePath>
@@ -35,42 +35,42 @@
          output exercised from tiko-runtime) is still attributed correctly. -->
     <dependencies>
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-api</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-processor</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-runtime</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-config</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-test</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-kafka</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-kafka-processor</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-mcp</artifactId>
             <version>${project.version}</version>
         </dependency>

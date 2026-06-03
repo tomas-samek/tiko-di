@@ -68,18 +68,18 @@ Tiko is not yet on Maven Central — publication is tracked as Phase 5. For now,
 ```xml
 <dependencies>
     <dependency>
-        <groupId>io.tiko</groupId>
+        <groupId>io.github.tomas-samek</groupId>
         <artifactId>tiko-api</artifactId>
         <version>0.1.0</version>
     </dependency>
     <dependency>
-        <groupId>io.tiko</groupId>
+        <groupId>io.github.tomas-samek</groupId>
         <artifactId>tiko-runtime</artifactId>
         <version>0.1.0</version>
     </dependency>
     <!-- Optional, only if you use @Configuration -->
     <dependency>
-        <groupId>io.tiko</groupId>
+        <groupId>io.github.tomas-samek</groupId>
         <artifactId>tiko-config</artifactId>
         <version>0.1.0</version>
     </dependency>
@@ -94,7 +94,7 @@ Tiko is not yet on Maven Central — publication is tracked as Phase 5. For now,
             <configuration>
                 <annotationProcessorPaths>
                     <path>
-                        <groupId>io.tiko</groupId>
+                        <groupId>io.github.tomas-samek</groupId>
                         <artifactId>tiko-processor</artifactId>
                         <version>0.1.0</version>
                     </path>

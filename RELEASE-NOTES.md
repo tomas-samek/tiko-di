@@ -83,7 +83,7 @@ cd tiko-di
 mvn clean install
 ```
 
-Artifacts will be available in your local Maven repository under `io.tiko:tiko-*:0.1.0`.
+Artifacts will be available in your local Maven repository under `io.github.tomas-samek:tiko-*:0.1.0`.
 
 For new projects, use the archetype:
 

@@ -14,9 +14,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **No reflection at runtime** - All wiring via generated code
 
 **Project Coordinates:**
-- **Group ID**: `io.tiko`
-- **Artifact ID**: `tiko`
-- **Java Version**: 17+
+- **Maven Group ID**: `io.github.tomas-samek` (Maven Central namespace; verified via GitHub).
+  Java packages are `io.tiko.*` — independent of the Maven groupId and unchanged.
+- **Artifact ID**: `tiko-*` (e.g. `tiko-api`, `tiko-runtime`)
+- **Java Version**: 21+
 
 ## Build System
 

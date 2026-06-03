@@ -6,6 +6,13 @@ Tiko publishes to the **Sonatype Central Portal** (the OSSRH successor) via the
 **manual**: a maintainer triggers a workflow, and artifacts land in Central Portal
 *staging* for inspection before they go public.
 
+## Namespace
+
+Artifacts publish under Maven groupId **`io.github.tomas-samek`** — a GitHub-verified
+namespace on Central Portal (no DNS / domain required; verification ties the namespace
+to the `tomas-samek` GitHub account). Java packages remain `io.tiko.*` and are
+independent of the Maven coordinate.
+
 ## What gets published
 
 The published surface is the parent POM plus everything `tiko-bom` exposes:
@@ -19,22 +26,27 @@ in its `<properties>` (the examples' 13 child modules inherit it from `tiko-exam
 
 ## One-time setup
 
-1. **GPG key.** Generate a key, publish the **public** half to a keyserver Central
+1. **Central Portal namespace.** Sign in at <https://central.sonatype.com>, click
+   *Namespaces* → *Add Namespace*, enter `io.github.tomas-samek`. Central recognises
+   the GitHub-prefix shape and runs OAuth-based verification (no DNS step); confirm
+   the GitHub account match and the namespace flips to *Verified*.
+2. **GPG key.** Generate a key, publish the **public** half to a keyserver Central
    trusts, and keep the private half for CI:
    ```bash
    gpg --full-generate-key
    gpg --keyserver keys.openpgp.org --send-keys <KEY_ID>
    gpg --armor --export-secret-keys <KEY_ID>   # value for the GPG_PRIVATE_KEY secret
    ```
-2. **Central Portal token.** At <https://central.sonatype.com> → *Account* →
-   *Generate User Token*. This yields a username/password pair.
-3. **Repository secrets** (Settings → Secrets and variables → Actions):
+3. **Central Portal token.** At <https://central.sonatype.com> → *Account* →
+   *Generate User Token*. This yields a username/password pair (both are opaque
+   random strings, not your portal login).
+4. **Repository secrets** (Settings → Secrets and variables → Actions):
 
    | Secret             | Value                                            |
    | ------------------ | ------------------------------------------------ |
    | `CENTRAL_USERNAME` | Central Portal token username                    |
    | `CENTRAL_TOKEN`    | Central Portal token password                    |
-   | `GPG_PRIVATE_KEY`  | ASCII-armored secret key (from step 1)           |
+   | `GPG_PRIVATE_KEY`  | ASCII-armored secret key (from step 2)           |
    | `GPG_PASSPHRASE`   | passphrase for that key                          |
 
 ## Cutting a release

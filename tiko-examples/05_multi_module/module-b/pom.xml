@@ -6,7 +6,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.tiko.examples</groupId>
+        <groupId>io.github.tomas-samek.examples</groupId>
         <artifactId>05_multi_module</artifactId>
         <version>0.1.0</version>
     </parent>
@@ -17,25 +17,25 @@
     <dependencies>
         <!-- Module dependency for event types -->
         <dependency>
-            <groupId>io.tiko.examples</groupId>
+            <groupId>io.github.tomas-samek.examples</groupId>
             <artifactId>module-a</artifactId>
             <version>${project.version}</version>
         </dependency>
 
         <!-- Tiko dependencies -->
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-api</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-processor</artifactId>
             <version>${project.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>io.tiko</groupId>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-runtime</artifactId>
             <version>${project.version}</version>
         </dependency>
