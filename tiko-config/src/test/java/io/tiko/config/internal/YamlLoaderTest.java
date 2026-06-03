@@ -1,6 +1,7 @@
 package io.tiko.config.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 import io.tiko.ConfigIssueCode;
@@ -59,6 +60,67 @@ class YamlLoaderTest {
 
         assertThat(loaded.data()).isEmpty();
         assertThat(loaded.locations()).isEmpty();
+    }
+
+    @Test
+    void loadProducesScalarSequence() {
+        String yaml = "ports:\n  - 8080\n  - 8081\n  - 8082\n";
+        YamlLoader.LoadedYaml loaded =
+                YamlLoader.load(new ByteArrayInputStream(yaml.getBytes(StandardCharsets.UTF_8)), "seq.yaml");
+
+        assertThat(loaded.data().get("ports")).isInstanceOf(java.util.List.class);
+        @SuppressWarnings("unchecked")
+        var ports = (java.util.List<Object>) loaded.data().get("ports");
+        assertThat(ports).containsExactly(8080, 8081, 8082);
+    }
+
+    @Test
+    void loadProducesNestedMappingsInsideSequence() {
+        String yaml = "endpoints:\n  - host: a\n    port: 1\n  - host: b\n    port: 2\n";
+        YamlLoader.LoadedYaml loaded =
+                YamlLoader.load(new ByteArrayInputStream(yaml.getBytes(StandardCharsets.UTF_8)), "endpoints.yaml");
+
+        @SuppressWarnings("unchecked")
+        var endpoints = (java.util.List<Object>) loaded.data().get("endpoints");
+        assertThat(endpoints).hasSize(2);
+        @SuppressWarnings("unchecked")
+        var first = (java.util.Map<String, Object>) endpoints.get(0);
+        assertThat(first).containsEntry("host", "a").containsEntry("port", 1);
+    }
+
+    @Test
+    void loadHandlesNestedSequences() {
+        String yaml = "matrix:\n  - [1, 2]\n  - [3, 4]\n";
+        YamlLoader.LoadedYaml loaded =
+                YamlLoader.load(new ByteArrayInputStream(yaml.getBytes(StandardCharsets.UTF_8)), "matrix.yaml");
+
+        @SuppressWarnings("unchecked")
+        var matrix = (java.util.List<Object>) loaded.data().get("matrix");
+        assertThat(matrix).hasSize(2);
+        assertThat(matrix.get(0)).isInstanceOf(java.util.List.class);
+    }
+
+    @Test
+    void loadHandlesNullScalarValue() {
+        // YAML null appears as an unquoted blank or "~"
+        String yaml = "feature:\n  enabled: ~\n";
+        YamlLoader.LoadedYaml loaded =
+                YamlLoader.load(new ByteArrayInputStream(yaml.getBytes(StandardCharsets.UTF_8)), "null.yaml");
+
+        @SuppressWarnings("unchecked")
+        var feature = (java.util.Map<String, Object>) loaded.data().get("feature");
+        assertThat(feature).containsEntry("enabled", null);
+    }
+
+    @Test
+    void nonMappingRootThrowsIllegalArgumentException() {
+        // A bare scalar at the root — YAML accepts it but YamlLoader requires a top-level mapping.
+        String scalarRoot = "just-a-string\n";
+        var in = new ByteArrayInputStream(scalarRoot.getBytes(StandardCharsets.UTF_8));
+
+        assertThatThrownBy(() -> YamlLoader.load(in, "scalar.yaml"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("YAML root must be a mapping");
     }
 
     @Test

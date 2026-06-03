@@ -6,8 +6,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import io.tiko.EventBus;
 import io.tiko.EventCallback;
 import io.tiko.Subscription;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.Test;
 
 class RecordingEventBusTest {
@@ -85,6 +93,119 @@ class RecordingEventBusTest {
         rec.publish(new FooEvent("a"));
         rec.clear();
         assertThat(rec.events()).isEmpty();
+    }
+
+    @Test
+    void subscribeIsForwardedToDelegate() {
+        var subscribeCalls = new java.util.concurrent.atomic.AtomicInteger();
+        EventBus delegate = new EventBus() {
+            @Override
+            public <T> void publish(T event) {
+                // no-op
+            }
+
+            @Override
+            public <T> Subscription subscribe(Class<T> t, EventCallback<T> c) {
+                subscribeCalls.incrementAndGet();
+                return new NoopSubscription();
+            }
+        };
+        var rec = new RecordingEventBus(delegate);
+
+        rec.subscribe(FooEvent.class, e -> {});
+
+        assertThat(subscribeCalls).hasValue(1);
+    }
+
+    @Test
+    void assertPublishedExactlyFailsWithDiagnosticWhenCountWrong() {
+        var rec = newRec();
+        rec.publish(new FooEvent("a"));
+        assertThatThrownBy(() -> rec.assertPublishedExactly(2, FooEvent.class))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("Expected exactly 2")
+                .hasMessageContaining("saw 1");
+    }
+
+    @Test
+    void assertNoneOfPassesWhenAbsent() {
+        var rec = newRec();
+        rec.publish(new BarEvent(1));
+        rec.assertNoneOf(FooEvent.class);
+    }
+
+    @Test
+    void awaitAsyncDispatchWithoutExecutorThrowsIllegalState() {
+        var rec = newRec();
+        assertThatThrownBy(() -> rec.awaitAsyncDispatch(Duration.ofMillis(10)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("setEventExecutor");
+    }
+
+    @Test
+    void awaitAsyncDispatchFallsBackToSleepForNonThreadPoolExecutor() throws TimeoutException {
+        var rec = newRec();
+        // Executors.newSingleThreadExecutor() returns a wrapper, not a ThreadPoolExecutor.
+        ExecutorService exec = Executors.newSingleThreadExecutor();
+        try {
+            rec.setEventExecutor(exec);
+            long start = System.nanoTime();
+            rec.awaitAsyncDispatch(Duration.ofMillis(50));
+            long elapsedMs = (System.nanoTime() - start) / 1_000_000L;
+            // Hit the fallback Math.min(timeout.toMillis(), 1_000L) sleep branch.
+            assertThat(elapsedMs).isGreaterThanOrEqualTo(40L);
+        } finally {
+            exec.shutdownNow();
+        }
+    }
+
+    @Test
+    void awaitAsyncDispatchDrainsThreadPoolExecutor() throws TimeoutException, InterruptedException {
+        var rec = newRec();
+        ThreadPoolExecutor tpe = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
+        try {
+            rec.setEventExecutor(tpe);
+            CountDownLatch started = new CountDownLatch(1);
+            CountDownLatch finish = new CountDownLatch(1);
+            tpe.submit(() -> {
+                started.countDown();
+                try {
+                    finish.await();
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+            started.await();
+            // Release the worker, then await drain.
+            finish.countDown();
+            rec.awaitAsyncDispatch(Duration.ofSeconds(2));
+            assertThat(tpe.getActiveCount()).isZero();
+        } finally {
+            tpe.shutdownNow();
+        }
+    }
+
+    @Test
+    void awaitAsyncDispatchTimesOutWhenExecutorNeverDrains() throws InterruptedException {
+        var rec = newRec();
+        ThreadPoolExecutor tpe = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
+        CountDownLatch hold = new CountDownLatch(1);
+        try {
+            rec.setEventExecutor(tpe);
+            tpe.submit(() -> {
+                try {
+                    hold.await();
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+            assertThatThrownBy(() -> rec.awaitAsyncDispatch(Duration.ofMillis(80)))
+                    .isInstanceOf(TimeoutException.class)
+                    .hasMessageContaining("did not drain");
+        } finally {
+            hold.countDown();
+            tpe.shutdownNow();
+        }
     }
 
     private static RecordingEventBus newRec() {
