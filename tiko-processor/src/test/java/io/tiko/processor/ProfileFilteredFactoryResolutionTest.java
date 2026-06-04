@@ -83,4 +83,79 @@ class ProfileFilteredFactoryResolutionTest {
         Assertions.assertThat(content).contains("getProdGreeter");
         Assertions.assertThat(content).doesNotContain("getDevGreeter");
     }
+
+    /**
+     * Direct-class injection of a profile-inactive component exercises the exact-match
+     * guards in {@code findComponentOrFactory}. Without those guards, the generator would
+     * still emit a {@code container.getDevOnly()} call against a container that excludes
+     * {@code DevOnly}; the build would fail on a missing-method diagnostic in generated
+     * source rather than a clean unresolvable-dependency error.
+     */
+    @Test
+    void injectingProfileInactiveConcreteClassFailsWithCleanUnresolvableError() {
+        JavaFileObject devOnly = JavaFileObjects.forSourceLines(
+                "demo.DevOnly",
+                "package demo;",
+                "import io.tiko.Scope;",
+                "import io.tiko.annotations.Component;",
+                "@Component(scope = Scope.SINGLETON, profiles = {\"dev\"})",
+                "public class DevOnly { public String label() { return \"dev\"; } }");
+        JavaFileObject consumer = JavaFileObjects.forSourceLines(
+                "demo.Consumer",
+                "package demo;",
+                "import io.tiko.Scope;",
+                "import io.tiko.annotations.Component;",
+                "import io.tiko.annotations.Inject;",
+                "@Component(scope = Scope.SINGLETON)",
+                "public class Consumer {",
+                "    @Inject public Consumer(DevOnly d) {}",
+                "}");
+        Compilation c = Compiler.javac()
+                .withProcessors(new TikoAnnotationProcessor())
+                .withOptions("-Atiko.profiles=prod")
+                .compile(devOnly, consumer);
+        assertThat(c).failed();
+        // The diagnostic must come from the validator (clean message about a missing
+        // provider), not from javac choking on generated source that references a
+        // method the container doesn't declare.
+        Assertions.assertThat(c.errors())
+                .anyMatch(d -> d.getMessage(null).contains("DevOnly"))
+                .noneMatch(d -> d.getMessage(null).contains("cannot find symbol"));
+    }
+
+    /**
+     * {@code @Pick} of a profile-inactive component exercises the guard in
+     * {@link io.tiko.processor.util.ProcessorContext#findByImplClass}. Same shape as the
+     * test above but targeting the {@code @Pick} lookup path used by both the factory
+     * and container generators.
+     */
+    @Test
+    void pickingProfileInactiveImplFailsWithCleanError() {
+        JavaFileObject iface = JavaFileObjects.forSourceLines(
+                "demo.Tagger", "package demo;", "public interface Tagger { String tag(); }");
+        JavaFileObject devTagger = JavaFileObjects.forSourceLines(
+                "demo.DevTagger",
+                "package demo;",
+                "import io.tiko.Scope;",
+                "import io.tiko.annotations.Component;",
+                "@Component(scope = Scope.SINGLETON, profiles = {\"dev\"})",
+                "public class DevTagger implements Tagger { public String tag() { return \"dev\"; } }");
+        JavaFileObject consumer = JavaFileObjects.forSourceLines(
+                "demo.Consumer",
+                "package demo;",
+                "import io.tiko.Pick;",
+                "import io.tiko.Scope;",
+                "import io.tiko.annotations.Component;",
+                "import io.tiko.annotations.Inject;",
+                "@Component(scope = Scope.SINGLETON)",
+                "public class Consumer {",
+                "    @Inject public Consumer(@Pick(DevTagger.class) Tagger t) {}",
+                "}");
+        Compilation c = Compiler.javac()
+                .withProcessors(new TikoAnnotationProcessor())
+                .withOptions("-Atiko.profiles=prod")
+                .compile(iface, devTagger, consumer);
+        assertThat(c).failed();
+        Assertions.assertThat(c.errors()).noneMatch(d -> d.getMessage(null).contains("cannot find symbol"));
+    }
 }
