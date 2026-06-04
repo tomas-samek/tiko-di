@@ -314,6 +314,25 @@ Each is opt-in. Uncomment the corresponding block in `pom.xml` to enable.
 
 For logging, Tiko routes through `java.lang.System.Logger` — works with JUL out of the box, or add `slf4j-jdk-platform-logging` + your slf4j backend to route through slf4j.
 
+## MCP topology server
+
+This project ships a `.mcp.json` in the repo root. Any MCP-aware coding agent (Claude Code, Cursor, …) auto-connects to the `tiko-mcp` topology server on open and gets read access to your generated component graph, scopes, event topology, and config schema — straight from the compiled artifacts under `META-INF/tiko/`. No setup beyond running the build once so the metadata is on disk.
+
+The `.mcp.json` invokes the server via **[jbang](https://www.jbang.dev/)**, a small Java-script runner that resolves Maven artifacts on first use. If you don't have jbang yet:
+
+```bash
+# macOS/Linux
+curl -Ls https://sh.jbang.dev | bash -s - app setup
+
+# Windows (PowerShell)
+iex "& { $(iwr -useb https://ps.jbang.dev) } app setup"
+
+# Or via SDKMAN
+sdk install jbang
+```
+
+After that the first agent session downloads the `tiko-mcp` jar from Maven Central and caches it. Subsequent sessions reuse the cache.
+
 ## Where to dig deeper
 
 - Framework README: <https://github.com/tomas-samek/tiko-di/blob/main/README.md>

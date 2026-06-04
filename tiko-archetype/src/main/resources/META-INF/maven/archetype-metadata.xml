@@ -38,14 +38,15 @@
             </includes>
         </fileSet>
 
-        <!-- Top-level project files. `gitignore` is renamed to `.gitignore` by the
-             post-generate Groovy script (META-INF/archetype-post-generate.groovy);
-             the archetype-plugin filters dotfiles out of the bundled archetype jar
-             by default. -->
+        <!-- Top-level project files. `gitignore` and `mcp.json` are renamed to
+             `.gitignore` and `.mcp.json` by the post-generate Groovy script
+             (META-INF/archetype-post-generate.groovy); the archetype-plugin
+             filters dotfiles out of the bundled archetype jar by default. -->
         <fileSet filtered="true" encoding="UTF-8">
             <directory></directory>
             <includes>
                 <include>gitignore</include>
+                <include>mcp.json</include>
                 <include>CLAUDE.md</include>
                 <include>AGENTS.md</include>
             </includes>

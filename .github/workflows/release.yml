@@ -85,11 +85,20 @@ jobs:
         # that are not Maven modules (tiko-bom has no <parent>; the archetype's
         # resource template isn't a reactor module) — sed those surgically so
         # everything is in lockstep before we deploy.
+        #
+        # The archetype's mcp.json template also carries a tiko-mcp coordinate that
+        # must match the released version (it's the version users of the scaffolded
+        # project download from Central). Bumped here on release; deliberately NOT
+        # bumped in the next-snapshot step below — SNAPSHOTS aren't on Central, so
+        # the mcp.json stays pinned to the most recent released version between
+        # releases.
         run: |
           mvn -B versions:set -DnewVersion=${{ inputs.release_version }} -DprocessAllModules=true -DgenerateBackupPoms=false
           sed -i "s|<tiko\.version>[^<]*</tiko\.version>|<tiko.version>${{ inputs.release_version }}</tiko.version>|g" \
               tiko-bom/pom.xml \
               tiko-archetype/src/main/resources/archetype-resources/pom.xml
+          sed -i "s|tiko-mcp:[0-9]\+\.[0-9]\+\.[0-9]\+|tiko-mcp:${{ inputs.release_version }}|g" \
+              tiko-archetype/src/main/resources/archetype-resources/mcp.json
 
       # -Prelease attaches -sources/-javadoc jars (#211) and GPG-signs every artifact
       # (#212); the central-publishing-maven-plugin (#213) bundles the reactor and uploads
