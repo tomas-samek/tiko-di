@@ -108,6 +108,16 @@ Runnable demo of the `tiko-test` JUnit 5 extension: `@TikoTest` boots a containe
 mvn -pl tiko-examples/12_testing -am test
 ```
 
+## 14 — Profile-Based Selection &nbsp;<sub>[`14_profiles/`](./14_profiles)</sub>
+
+`@Component(profiles = {...})` ships two impls of the same interface (`DevGreeter`, `ProdGreeter`) and selects one at build time by activating a profile. Profile selection is a build flag, not a runtime switch — consistent with Tiko's compile-time-DI design. The module wraps the underlying `-Atiko.profiles=...` annotation processor argument in two Maven profiles for ergonomics. See the [module README](./14_profiles) for the activation mechanism and a current limitation on consumer-side injection ([#272](https://github.com/tomas-samek/tiko-di/issues/272)).
+
+```
+mvn -pl tiko-examples/14_profiles -P dev compile
+mvn -pl tiko-examples/14_profiles -P dev exec:java \
+    -Dexec.mainClass=io.tiko.examples.profiles.Main
+```
+
 ---
 
 ## Running the integration tests
