@@ -9,6 +9,7 @@ import com.google.testing.compile.JavaFileObjects;
 import io.tiko.Scope;
 import io.tiko.processor.TikoAnnotationProcessor;
 import io.tiko.processor.model.ComponentModel;
+import io.tiko.processor.model.FactoryMethodModel;
 import java.util.List;
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Messager;
@@ -89,6 +90,35 @@ class ProcessorContextTest {
     }
 
     @Test
+    void lookupMethodsRespectProfileFilterAndConfigurationsAndTestFallback() {
+        LookupProbe.reset();
+        compile(new LookupProbe(), source("demo.Main", "package demo; public class Main {}"));
+        assertThat(LookupProbe.error).as("scenario error").isNull();
+
+        // findByImplClass
+        assertThat(LookupProbe.findByImplClassFactoryMatch).isTrue();
+        assertThat(LookupProbe.findByImplClassFactoryProfileInactiveMisses).isTrue();
+        assertThat(LookupProbe.findByImplClassNoMatchReturnsEmpty).isTrue();
+        // findAllByImplClass with profile filter
+        assertThat(LookupProbe.findAllByImplClassFiltersByProfile).isEqualTo(1);
+        // findComponentOrFactory
+        assertThat(LookupProbe.findComponentOrFactoryResolvesConfiguration).isTrue();
+        assertThat(LookupProbe.findComponentOrFactoryReturnsTestFallback).isTrue();
+        assertThat(LookupProbe.findComponentOrFactoryUnknownKeyReturnsEmpty).isTrue();
+    }
+
+    @Test
+    void registerComponentTwiceEmitsDuplicateError() {
+        DuplicateRegisterProbe.reset();
+        // The probe-side error reporter routes to processingEnv.getMessager(), which surfaces
+        // as a compile diagnostic. Compilation should fail (error severity).
+        Compilation c = compileExpectingFailure(
+                new DuplicateRegisterProbe(), source("demo.Main", "package demo; public class Main {}"));
+        assertThat(DuplicateRegisterProbe.error).as("scenario error").isNull();
+        CompilationSubject.assertThat(c).hadErrorContaining("Duplicate component: demo.A");
+    }
+
+    @Test
     void duplicateProducesReturnTypeRejectsAtRegistration() {
         // End-to-end: two @Produces methods returning the same type with no @Named — the
         // registerFactoryMethod error path emits a "Duplicate factory method" diagnostic.
@@ -155,6 +185,10 @@ class ProcessorContextTest {
         // We don't assert on Compilation status — the probes are passive readers, not the
         // production processor — so we just need them to have run.
         assertThat(c).isNotNull();
+    }
+
+    private static Compilation compileExpectingFailure(AbstractProcessor probe, JavaFileObject src) {
+        return Compiler.javac().withProcessors(probe).compile(src);
     }
 
     @SupportedAnnotationTypes("*")
@@ -290,6 +324,119 @@ class ProcessorContextTest {
         }
     }
 
+    @SupportedAnnotationTypes("*")
+    @SupportedSourceVersion(SourceVersion.RELEASE_21)
+    public static class LookupProbe extends AbstractProcessor {
+
+        static String error;
+        static boolean findByImplClassFactoryMatch;
+        static boolean findByImplClassFactoryProfileInactiveMisses;
+        static boolean findByImplClassNoMatchReturnsEmpty;
+        static int findAllByImplClassFiltersByProfile;
+        static boolean findComponentOrFactoryResolvesConfiguration;
+        static boolean findComponentOrFactoryReturnsTestFallback;
+        static boolean findComponentOrFactoryUnknownKeyReturnsEmpty;
+
+        static void reset() {
+            error = null;
+            findByImplClassFactoryMatch = false;
+            findByImplClassFactoryProfileInactiveMisses = false;
+            findByImplClassNoMatchReturnsEmpty = false;
+            findAllByImplClassFiltersByProfile = -1;
+            findComponentOrFactoryResolvesConfiguration = false;
+            findComponentOrFactoryReturnsTestFallback = false;
+            findComponentOrFactoryUnknownKeyReturnsEmpty = false;
+        }
+
+        @Override
+        public boolean process(java.util.Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
+            if (roundEnv.processingOver()) return false;
+            try {
+                TypeElement main = processingEnv.getElementUtils().getTypeElement("demo.Main");
+
+                // === findByImplClass factory branch ===
+                ProcessorContext ctxFactoryActive = new ProcessorContext(processingEnv, List.of("prod"));
+                ctxFactoryActive.registerFactoryMethod(factory(main, "demo.Conn", "buildConn", List.of("prod")));
+                findByImplClassFactoryMatch =
+                        ctxFactoryActive.findByImplClass("demo.Conn").isPresent();
+                ctxFactoryActive.registerFactoryMethod(factory(main, "demo.OtherConn", "devConn", List.of("dev")));
+                findByImplClassFactoryProfileInactiveMisses =
+                        ctxFactoryActive.findByImplClass("demo.OtherConn").isEmpty();
+                findByImplClassNoMatchReturnsEmpty =
+                        ctxFactoryActive.findByImplClass("demo.NeverRegistered").isEmpty();
+
+                // === findAllByImplClass with profile filter ===
+                // Two components for same impl-class FQN — different qualifiers, disjoint profiles.
+                // (Same impl class can't really exist twice in one classpath, but findAllByImplClass
+                // iterates the map without dedup-by-class, so registering two distinct keys whose
+                // qualified-name matches the queried FQN exercises the filter loop. Use named
+                // components to avoid the registration-collision check.)
+                ProcessorContext ctxAll = new ProcessorContext(processingEnv, List.of("prod"));
+                ctxAll.registerComponent(namedComponent(main, "demo.Same", "prodVariant", List.of("prod")));
+                ctxAll.registerComponent(namedComponent(main, "demo.Same", "devVariant", List.of("dev")));
+                findAllByImplClassFiltersByProfile =
+                        ctxAll.findAllByImplClass("demo.Same").size();
+
+                // === findComponentOrFactory configuration branch ===
+                ProcessorContext ctxCfg = new ProcessorContext(processingEnv, List.of());
+                ctxCfg.registerConfiguration(new io.tiko.processor.config.ConfigurationModel(
+                        main, "demo", "DbConfig", "demo.DbConfig", "db", List.of()));
+                findComponentOrFactoryResolvesConfiguration =
+                        ctxCfg.findComponentOrFactory("demo.DbConfig").isPresent();
+
+                // === findComponentOrFactory testFallback branch ===
+                // Interface impl provided by a @TestComponent only — main lookup should fall back
+                // to the test bean (the only available impl), exercising the `testFallback` path.
+                ProcessorContext ctxFallback = new ProcessorContext(processingEnv, List.of());
+                TypeElement objectTe = processingEnv.getElementUtils().getTypeElement("java.lang.Runnable");
+                ComponentModel testImpl = ComponentModel.builder()
+                        .typeElement(main)
+                        .qualifiedName("demo.TestRunnableImpl")
+                        .className("TestRunnableImpl")
+                        .packageName("demo")
+                        .scope(Scope.SINGLETON)
+                        .constructor(constructorOf(main))
+                        .implementedInterface(objectTe.asType())
+                        .testComponent(true)
+                        .build();
+                ctxFallback.registerComponent(testImpl);
+                findComponentOrFactoryReturnsTestFallback =
+                        ctxFallback.findComponentOrFactory("java.lang.Runnable").isPresent();
+                findComponentOrFactoryUnknownKeyReturnsEmpty =
+                        ctxFallback.findComponentOrFactory("demo.NeverThere").isEmpty();
+            } catch (RuntimeException e) {
+                error = e.toString();
+            }
+            return false;
+        }
+    }
+
+    @SupportedAnnotationTypes("*")
+    @SupportedSourceVersion(SourceVersion.RELEASE_21)
+    public static class DuplicateRegisterProbe extends AbstractProcessor {
+
+        static String error;
+
+        static void reset() {
+            error = null;
+        }
+
+        @Override
+        public boolean process(java.util.Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
+            if (roundEnv.processingOver()) return false;
+            try {
+                ProcessorContext ctx = new ProcessorContext(processingEnv, List.of());
+                TypeElement main = processingEnv.getElementUtils().getTypeElement("demo.Main");
+                ctx.registerComponent(component(main, "demo.A", false));
+                // Second registration with the same key triggers the duplicate-error path.
+                ctx.registerComponent(component(main, "demo.A", false));
+            } catch (RuntimeException e) {
+                error = e.toString();
+            }
+            return false;
+        }
+    }
+
     private static ComponentModel component(TypeElement teForErrorReports, String fqn, boolean isTest) {
         int dot = fqn.lastIndexOf('.');
         return ComponentModel.builder()
@@ -300,6 +447,40 @@ class ProcessorContextTest {
                 .scope(Scope.SINGLETON)
                 .constructor(constructorOf(teForErrorReports))
                 .testComponent(isTest)
+                .build();
+    }
+
+    private static ComponentModel namedComponent(
+            TypeElement teForErrorReports, String fqn, String qualifier, List<String> profiles) {
+        int dot = fqn.lastIndexOf('.');
+        return ComponentModel.builder()
+                .typeElement(teForErrorReports)
+                .qualifiedName(fqn)
+                .className(fqn.substring(dot + 1))
+                .packageName(fqn.substring(0, dot))
+                .scope(Scope.SINGLETON)
+                .constructor(constructorOf(teForErrorReports))
+                .name(qualifier)
+                .profiles(profiles)
+                .build();
+    }
+
+    private static FactoryMethodModel factory(
+            TypeElement declaring, String returnTypeFqn, String methodName, List<String> profiles) {
+        // Pick an arbitrary ExecutableElement off the declaring class to satisfy the builder's
+        // not-null contract. We never invoke the method element through here — it's a marker.
+        var methodEl = (javax.lang.model.element.ExecutableElement) declaring.getEnclosedElements().stream()
+                .filter(e -> e.getKind() == javax.lang.model.element.ElementKind.CONSTRUCTOR)
+                .findFirst()
+                .orElseThrow();
+        return FactoryMethodModel.builder()
+                .methodElement(methodEl)
+                .declaringClass(declaring)
+                .methodName(methodName)
+                .returnType(declaring.asType())
+                .returnTypeName(returnTypeFqn)
+                .scope(Scope.SINGLETON)
+                .profiles(profiles)
                 .build();
     }
 
