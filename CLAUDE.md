@@ -476,6 +476,18 @@ The full discipline lives in two playbooks:
 - [docs/qa-playbook.md](./docs/qa-playbook.md) — surfacing bugs, structured QA passes, issue body template.
 - [docs/issue-fix-playbook.md](./docs/issue-fix-playbook.md) — reading a filed issue without anchoring, four-phase fix workflow, common traps.
 
+### GitHub markdown — `@Annotation` is a mention-harvest hazard
+
+> **Wrap every `@Identifier` in proper backtick code spans when writing GitHub issue, PR, or release bodies.** GitHub `@username` mentions are case-insensitive, and common Java-annotation names map to real dormant accounts — `@Named` resolves to GitHub user `nAmed` (2011-era, zero public activity, almost certainly a username squatted to harvest mentions from any project documenting `jakarta.inject` / `javax.inject`). Same risk applies to `@Component`, `@Pick`, `@Produces`, etc.
+
+How to keep it from happening:
+
+- For `gh release create` / `gh issue create` / `gh pr create`, always use `--notes-file` / `--body-file <path>` with a plain `.md` written by hand. **Do not** use `<<'EOF'` heredoc with escaped backticks (`\`@Named\``) — single-quoted heredoc passes the literal `\` + `` ` `` to the API, breaking the code span and re-exposing the `@`.
+- When crediting humans, write `[name](https://github.com/name)` rather than `[@name](https://github.com/name)`. The `@` in link text doesn't change the link target but does fire a mention notification.
+- After publish, verify with `gh api .../releases/tags/<tag> --jq .body | xxd | grep <annotation>` — the byte immediately before `@` should be `0x60` (backtick) or `0x20` (space inside a code span), never `0x5c` (backslash).
+
+Postmortem of the v0.1.0 release notes that triggered this rule lives in the memory entry `feedback_github_markdown_no_mention_harvest`.
+
 ## Common Patterns
 
 ### Constructor Injection (Preferred)
