@@ -127,6 +127,82 @@ class ProfileFilteredFactoryResolutionTest {
      * test above but targeting the {@code @Pick} lookup path used by both the factory
      * and container generators.
      */
+    /**
+     * #275: two {@code @Produces} methods returning the same type under disjoint profiles
+     * coexist at registration; the active one wins at consumer-side resolution. Previously
+     * the registration-side dedup rejected both, masking the profile design.
+     */
+    @Test
+    void profileDisjointProduceMethodsResolveToActiveVariant() throws Exception {
+        JavaFileObject conn =
+                JavaFileObjects.forSourceLines("demo.Conn", "package demo;", "public interface Conn { String url(); }");
+        JavaFileObject factories = JavaFileObjects.forSourceLines(
+                "demo.ConnFactories",
+                "package demo;",
+                "import io.tiko.Scope;",
+                "import io.tiko.annotations.Component;",
+                "import io.tiko.annotations.Produces;",
+                "@Component(scope = Scope.SINGLETON)",
+                "public class ConnFactories {",
+                "    @Produces(scope = Scope.SINGLETON, profiles = {\"dev\"})",
+                "    public Conn devConn() { return () -> \"jdbc:h2:mem:\"; }",
+                "    @Produces(scope = Scope.SINGLETON, profiles = {\"prod\"})",
+                "    public Conn prodConn() { return () -> \"jdbc:postgres:prod\"; }",
+                "}");
+        JavaFileObject consumer = JavaFileObjects.forSourceLines(
+                "demo.Consumer",
+                "package demo;",
+                "import io.tiko.Scope;",
+                "import io.tiko.annotations.Component;",
+                "import io.tiko.annotations.Inject;",
+                "@Component(scope = Scope.SINGLETON)",
+                "public class Consumer {",
+                "    @Inject public Consumer(Conn c) {}",
+                "}");
+        Compilation c = Compiler.javac()
+                .withProcessors(new TikoAnnotationProcessor())
+                .withOptions("-Atiko.profiles=dev")
+                .compile(conn, factories, consumer);
+        assertThat(c).succeeded();
+
+        JavaFileObject factory = c.generatedSourceFiles().stream()
+                .filter(f -> f.getName().contains("ConsumerFactory"))
+                .findFirst()
+                .orElseThrow();
+        String content = new String(factory.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        // Factory identifier format is <DeclaringClass>_<methodName>.
+        Assertions.assertThat(content)
+                .contains("produce_ConnFactories_devConn")
+                .doesNotContain("produce_ConnFactories_prodConn");
+    }
+
+    /**
+     * #275 reverse: profile-overlapping {@code @Produces} duplicates still error at registration.
+     * A method with no profiles (always-active) overlaps with any other → conflict.
+     */
+    @Test
+    void profileOverlappingProduceMethodsStillError() {
+        JavaFileObject conn =
+                JavaFileObjects.forSourceLines("demo.Conn", "package demo;", "public interface Conn { String url(); }");
+        JavaFileObject factories = JavaFileObjects.forSourceLines(
+                "demo.ConnFactories",
+                "package demo;",
+                "import io.tiko.Scope;",
+                "import io.tiko.annotations.Component;",
+                "import io.tiko.annotations.Produces;",
+                "@Component(scope = Scope.SINGLETON)",
+                "public class ConnFactories {",
+                "    @Produces(scope = Scope.SINGLETON)",
+                "    public Conn alwaysActive() { return () -> \"a\"; }",
+                "    @Produces(scope = Scope.SINGLETON, profiles = {\"dev\"})",
+                "    public Conn dev() { return () -> \"d\"; }",
+                "}");
+        Compilation c =
+                Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(conn, factories);
+        assertThat(c).failed();
+        Assertions.assertThat(c.errors()).anyMatch(d -> d.getMessage(null).contains("overlapping profiles"));
+    }
+
     @Test
     void pickingProfileInactiveImplFailsWithCleanError() {
         JavaFileObject iface = JavaFileObjects.forSourceLines(
