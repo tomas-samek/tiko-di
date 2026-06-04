@@ -1,0 +1,16 @@
+# Deliberately broken configuration used by BrokenConfigMain.
+#
+# DbConfig declares `url` as required (no @Default). This file omits it,
+# so binding fails and Tiko.create() throws ConfigValidationException
+# before the container is constructed — fail-fast at boot, never serving
+# requests against half-bound configuration.
+db:
+  maxConnections: 5
+  connectTimeout: PT3S
+
+app:
+  name: broken-config-demo
+  logLevel: INFO
+  server:
+    host: 0.0.0.0
+    port: 8080
