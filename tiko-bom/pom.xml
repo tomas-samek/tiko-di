@@ -49,6 +49,11 @@
         <assertj.version>3.27.7</assertj.version>
         <mockito.version>5.7.0</mockito.version>
         <mcp-sdk.version>0.18.2</mcp-sdk.version>
+
+        <!-- Release-plugin versions (mirrored from the parent POM; tiko-bom intentionally
+             has no <parent>, so it cannot inherit them). Keep in sync with root pom.xml. -->
+        <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
+        <central-publishing-maven-plugin.version>0.10.0</central-publishing-maven-plugin.version>
     </properties>
 
     <dependencyManagement>
@@ -168,5 +173,50 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <profiles>
+        <!-- Mirrors the `release` profile in the root pom.xml. tiko-bom has no <parent>, so the
+             release-time plugin bindings (GPG signing + Central Portal upload) must be declared
+             directly here, otherwise the default maven-deploy-plugin runs and fails on the
+             missing <distributionManagement>. Keep this block in sync with the root profile. -->
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>${maven-gpg-plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                                <configuration>
+                                    <gpgArguments>
+                                        <arg>--pinentry-mode</arg>
+                                        <arg>loopback</arg>
+                                    </gpgArguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>${central-publishing-maven-plugin.version}</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>central</publishingServerId>
+                            <autoPublish>false</autoPublish>
+                            <deploymentName>tiko-${project.version}</deploymentName>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>
