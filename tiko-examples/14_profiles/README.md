@@ -3,10 +3,12 @@
 `@Component(profiles = {...})` lets you ship multiple impls of the same interface and pick
 one at build time by activating a profile.
 
-This module ships a `Greeter` interface with two impls:
+This module ships a `Greeter` interface with two impls and one consumer:
 
 - `DevGreeter` — `@Component(profiles = {"dev"})`
 - `ProdGreeter` — `@Component(profiles = {"prod"})`
+- `GreetingService` — `@Component`, injects `Greeter` via constructor. Forces the
+  processor to pick exactly one provider at build time.
 
 ## How activation works
 
@@ -20,12 +22,12 @@ conditional bean factories, no runtime ambiguity-resolution.
 This module's `pom.xml` wraps the flag in two Maven profiles for ergonomics:
 
 ```bash
-# dev — only DevGreeter in the generated container
+# dev — DevGreeter is the only Greeter in the generated container
 mvn -pl tiko-examples/14_profiles -P dev compile
 mvn -pl tiko-examples/14_profiles -P dev exec:java \
     -Dexec.mainClass=io.tiko.examples.profiles.Main
 
-# prod — only ProdGreeter in the generated container
+# prod — ProdGreeter is the only Greeter in the generated container
 mvn -pl tiko-examples/14_profiles -P prod compile
 mvn -pl tiko-examples/14_profiles -P prod exec:java \
     -Dexec.mainClass=io.tiko.examples.profiles.Main
@@ -41,24 +43,25 @@ mvn -pl tiko-examples/14_profiles -Dtiko.profile=dev compile
 
 ```
 === Profile-selected Greeter impl ===
-Bound impl: DevGreeter
-Greet:      [dev] hi world — verbose dev greeting (debug build)
+Welcome:    [dev] hi world — verbose dev greeting (debug build)
 ```
 
-Build with `-P prod` and the bound impl becomes `ProdGreeter`. The container only
-sees the impl matching the active profile — the other never lands in generated code.
+Build with `-P prod` and the message becomes `Hello, world.` from `ProdGreeter`. The
+container only sees the impl matching the active profile — the other never lands in
+generated code.
 
 ## With no profile selected
 
-If you skip `-P` entirely, **both** impls land in the container — `@Component`
-without a matching active profile and without any active profiles set is treated
-as always-active. The container then picks one of the two (currently the first
-encountered) for direct `container.get(Greeter.class)` lookups. The demo still
-runs, but the selection isn't meaningful.
+If you skip `-P` entirely, **both** impls remain visible to the processor. Because
+`GreetingService` injects a single `Greeter` and neither impl carries `@Named` /
+`@Pick`, the build fails with a clear compile-time diagnostic:
 
-> **Current limitation:** constructor injection of a profile-keyed type from another
-> `@Component` consumer doesn't yet honor profile filtering — the factory generation
-> uses the unfiltered component list when resolving the inject target, while the
-> container itself correctly excludes profile-mismatched impls. Tracked in
-> [#272](https://github.com/tomas-samek/tiko-di/issues/272). For now, demonstrate
-> profile selection via direct `container.get(Greeter.class)` only.
+```
+ERROR: Multiple unnamed providers for type demo.Greeter: DevGreeter, ProdGreeter
+  Suggested fixes:
+  1. Add @Named("...") to each and use container.get(Greeter.class, "name")
+  2. Keep one provider unnamed as the default and give the others @Component(name = "...")
+```
+
+Pick a profile, or qualify the consumers explicitly — same trade-off as in any DI
+framework, decided at build time rather than runtime.

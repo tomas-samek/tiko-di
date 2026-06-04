@@ -19,10 +19,9 @@ import io.tiko.runtime.Tiko;
 public class Main {
     public static void main(String[] args) {
         try (Container container = Tiko.create()) {
-            Greeter greeter = container.get(Greeter.class);
+            GreetingService service = container.get(GreetingService.class);
             System.out.println("=== Profile-selected Greeter impl ===");
-            System.out.println("Bound impl: " + greeter.getClass().getSimpleName());
-            System.out.println("Greet:      " + greeter.greet("world"));
+            System.out.println("Welcome:    " + service.welcome("world"));
         }
     }
 }
