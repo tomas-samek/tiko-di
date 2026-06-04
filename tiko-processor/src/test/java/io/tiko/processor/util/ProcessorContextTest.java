@@ -47,9 +47,10 @@ class ProcessorContextTest {
         //   - FixturesOnly is appended (it comes from the standalone-test-component loop, which
         //     runs after the main loop, so it's last)
         assertThat(ShadowProbe.resultKeys)
-                .containsExactlyInAnyOrder("demo.A", "demo.ShadowB", "demo.C", "demo.FixturesOnly");
-        assertThat(ShadowProbe.resultKeys).doesNotContain("demo.B");
-        assertThat(ShadowProbe.resultKeys).last().isEqualTo("demo.FixturesOnly");
+                .containsExactlyInAnyOrder("demo.A", "demo.ShadowB", "demo.C", "demo.FixturesOnly")
+                .doesNotContain("demo.B")
+                .last()
+                .isEqualTo("demo.FixturesOnly");
 
         // Trivial accessors covered while we have a context handy.
         assertThat(ShadowProbe.activeProfilesEmpty).isTrue();

@@ -66,8 +66,7 @@ class ProfileFilteredFactoryResolutionTest {
                 .findFirst()
                 .orElseThrow();
         String content = new String(factory.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        Assertions.assertThat(content).contains("getDevGreeter");
-        Assertions.assertThat(content).doesNotContain("getProdGreeter");
+        Assertions.assertThat(content).contains("getDevGreeter").doesNotContain("getProdGreeter");
     }
 
     @Test
@@ -80,8 +79,7 @@ class ProfileFilteredFactoryResolutionTest {
                 .findFirst()
                 .orElseThrow();
         String content = new String(factory.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        Assertions.assertThat(content).contains("getProdGreeter");
-        Assertions.assertThat(content).doesNotContain("getDevGreeter");
+        Assertions.assertThat(content).contains("getProdGreeter").doesNotContain("getDevGreeter");
     }
 
     /**
