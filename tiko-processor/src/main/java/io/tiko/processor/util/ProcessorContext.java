@@ -180,15 +180,20 @@ public final class ProcessorContext {
      * name. This is the {@code @Pick(X.class)} lookup: identity is the impl class
      * itself, ignoring any {@code @Component(name = ...)} or {@code @Produces(name = ...)}
      * qualifier — those are name-keyed, this is class-keyed.
+     *
+     * <p>Skips providers whose declared profile is not active in the current build. A
+     * {@code @Pick} that names a profile-inactive impl is treated as unresolvable here,
+     * which surfaces as a normal "no provider for X" diagnostic instead of generating a
+     * reference the container will never declare (see #272).
      */
     public Optional<Object> findByImplClass(String implFqn) {
         for (ComponentModel c : components.values()) {
-            if (c.getQualifiedName().equals(implFqn)) {
+            if (c.getQualifiedName().equals(implFqn) && isProfileActive(c.getProfiles())) {
                 return Optional.of(c);
             }
         }
         for (FactoryMethodModel f : factoryMethods.values()) {
-            if (f.getReturnTypeName().equals(implFqn)) {
+            if (f.getReturnTypeName().equals(implFqn) && isProfileActive(f.getProfiles())) {
                 return Optional.of(f);
             }
         }
@@ -200,16 +205,19 @@ public final class ProcessorContext {
      * Used by the {@code @Pick} validator to detect ambiguous {@code @Produces} targets:
      * if two factory methods return the same type, {@code @Pick(That.class)} cannot
      * disambiguate them and the user must use {@code @Named} instead.
+     *
+     * <p>Profile-inactive providers are filtered out — the validator only flags ambiguity
+     * that's real for the current build (see #272).
      */
     public List<Object> findAllByImplClass(String implFqn) {
         List<Object> matches = new ArrayList<>();
         for (ComponentModel c : components.values()) {
-            if (c.getQualifiedName().equals(implFqn)) {
+            if (c.getQualifiedName().equals(implFqn) && isProfileActive(c.getProfiles())) {
                 matches.add(c);
             }
         }
         for (FactoryMethodModel f : factoryMethods.values()) {
-            if (f.getReturnTypeName().equals(implFqn)) {
+            if (f.getReturnTypeName().equals(implFqn) && isProfileActive(f.getProfiles())) {
                 matches.add(f);
             }
         }
@@ -220,14 +228,29 @@ public final class ProcessorContext {
      * Looks up a component or factory by its key (typeName or typeName#qualifier).
      * Also matches {@code @Configuration} records, which are injected as SINGLETON beans
      * by the runtime after config binding.
+     *
+     * <p>Profile-aware: providers whose {@code @Component(profiles = {...})} /
+     * {@code @Produces(profiles = {...})} don't match the current active-profile set are
+     * skipped. {@link AmbiguityValidator} already filters by active profile when checking
+     * uniqueness; this method has to follow the same rule or the generator picks a
+     * provider the container itself won't include (see #272).
      */
     public Optional<Object> findComponentOrFactory(String key) {
-        // First try exact match
+        // First try exact match — but only if the matched provider is active under the
+        // current profile set. A profile-inactive component reached via exact-key lookup
+        // would still emit a getXxx() call in the generated factory that the container
+        // never declares.
         if (components.containsKey(key)) {
-            return Optional.of(components.get(key));
+            ComponentModel exact = components.get(key);
+            if (isProfileActive(exact.getProfiles())) {
+                return Optional.of(exact);
+            }
         }
         if (factoryMethods.containsKey(key)) {
-            return Optional.of(factoryMethods.get(key));
+            FactoryMethodModel exact = factoryMethods.get(key);
+            if (isProfileActive(exact.getProfiles())) {
+                return Optional.of(exact);
+            }
         }
 
         // @Configuration records are bound by the runtime and registered as SINGLETON beans;
@@ -249,6 +272,11 @@ public final class ProcessorContext {
         // AmbiguityValidator + getActiveTestContainerComponents().
         ComponentModel testFallback = null;
         for (ComponentModel component : components.values()) {
+            // Skip components whose declared profile is not active — otherwise a build with
+            // -Atiko.profiles=dev would pick a ProdGreeter that the container then excludes.
+            if (!isProfileActive(component.getProfiles())) {
+                continue;
+            }
             // Check if component implements the requested interface
             if (component.getImplementedInterface().isPresent()) {
                 String interfaceName =
