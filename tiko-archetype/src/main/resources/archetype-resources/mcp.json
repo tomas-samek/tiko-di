@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "tiko": {
+      "command": "jbang",
+      "args": [
+        "run",
+        "io.github.tomas-samek:tiko-mcp:0.1.0",
+        "."
+      ]
+    }
+  }
+}

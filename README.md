@@ -143,7 +143,9 @@ module (closed-source service, sensitive jars), add
 `-Atiko.topology.bundle=false` to the annotation processor args.
 
 See [`tiko-examples/13_mcp_introspection`](./tiko-examples/13_mcp_introspection)
-for a runnable demo.
+for a runnable demo. Projects scaffolded from `tiko-archetype` ship a
+ready-to-use `.mcp.json` (jbang-resolved) — MCP-aware agents auto-connect
+on open with no setup beyond installing jbang.
 
 ## Annotations at a glance
 
