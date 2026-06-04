@@ -110,7 +110,7 @@ mvn -pl tiko-examples/12_testing -am test
 
 ## 14 — Profile-Based Selection &nbsp;<sub>[`14_profiles/`](./14_profiles)</sub>
 
-`@Component(profiles = {...})` ships two impls of the same interface (`DevGreeter`, `ProdGreeter`) and a `GreetingService` consumer that injects `Greeter` via constructor. Activate a profile to pick exactly one impl at build time. Profile selection is a build flag, not a runtime switch — consistent with Tiko's compile-time-DI design. The module wraps the underlying `-Atiko.profiles=...` annotation processor argument in two Maven profiles for ergonomics. Skip the profile to see a clean compile-time ambiguity error.
+`@Component(profiles = {...})` ships two impls of the same interface (`DevGreeter`, `ProdGreeter`) and a `GreetingService` consumer that injects `Greeter` via constructor. Activate a profile to pick exactly one impl at build time. Profile selection is a build flag, not a runtime switch — consistent with Tiko's compile-time-DI design. The module wraps the underlying `-Atiko.profiles=...` annotation processor argument in two Maven profiles for ergonomics; `dev` is the default, `mvn -P prod` swaps it.
 
 ```
 mvn -pl tiko-examples/14_profiles -P dev compile

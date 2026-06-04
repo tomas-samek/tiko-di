@@ -59,8 +59,15 @@
     </build>
 
     <profiles>
+        <!-- `dev` is the default profile so the reactor build is green without any explicit
+             -P flag. Maven deactivates an `activeByDefault` profile whenever any other profile
+             is explicitly activated, so `mvn -P prod` cleanly swaps in `prod` without needing
+             `-P !dev`. -->
         <profile>
             <id>dev</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
             <properties>
                 <tiko.profile>dev</tiko.profile>
             </properties>

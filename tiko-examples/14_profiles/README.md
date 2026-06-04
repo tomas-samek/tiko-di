@@ -50,11 +50,21 @@ Build with `-P prod` and the message becomes `Hello, world.` from `ProdGreeter`.
 container only sees the impl matching the active profile — the other never lands in
 generated code.
 
-## With no profile selected
+## Defaults and the "no profile" case
 
-If you skip `-P` entirely, **both** impls remain visible to the processor. Because
-`GreetingService` injects a single `Greeter` and neither impl carries `@Named` /
-`@Pick`, the build fails with a clear compile-time diagnostic:
+This module declares `dev` as `<activeByDefault>true</activeByDefault>` so the reactor
+build is green without any `-P` flag — running plain `mvn compile` selects `DevGreeter`.
+Maven deactivates the default whenever any other profile is explicitly activated, so
+`mvn -P prod` swaps cleanly to `ProdGreeter` without needing `-P !dev`.
+
+To see what happens when no profile is selected at all — both impls visible, no
+`@Named` to disambiguate — explicitly disable the default:
+
+```bash
+mvn -pl tiko-examples/14_profiles -P !dev compile
+```
+
+The build then fails with a clear compile-time diagnostic:
 
 ```
 ERROR: Multiple unnamed providers for type demo.Greeter: DevGreeter, ProdGreeter
@@ -63,5 +73,5 @@ ERROR: Multiple unnamed providers for type demo.Greeter: DevGreeter, ProdGreeter
   2. Keep one provider unnamed as the default and give the others @Component(name = "...")
 ```
 
-Pick a profile, or qualify the consumers explicitly — same trade-off as in any DI
-framework, decided at build time rather than runtime.
+This is the same trade-off as in any DI framework — qualify or constrain — decided
+at build time rather than runtime.
