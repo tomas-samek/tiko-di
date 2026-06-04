@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.tomas-samek.examples</groupId>
+        <artifactId>tiko-examples</artifactId>
+        <version>0.2.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>14_profiles</artifactId>
+    <packaging>jar</packaging>
+    <name>14 - Profile-Based Selection Example</name>
+    <description>Demonstrates @Component(profiles=...) — compile-time selection of one of several impls keyed by profile</description>
+
+    <properties>
+        <!-- The active tiko profile, fed to the annotation processor via -Atiko.profiles=...
+             below. Set by the `dev` / `prod` Maven profile blocks at the bottom of this pom,
+             or override directly with `mvn -Dtiko.profile=dev compile`. Default empty value
+             causes the processor to include BOTH DevGreeter and ProdGreeter and fail with an
+             ambiguity error — a deliberate demo of the "pick a profile" requirement. -->
+        <tiko.profile></tiko.profile>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.github.tomas-samek</groupId>
+            <artifactId>tiko-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.github.tomas-samek</groupId>
+            <artifactId>tiko-processor</artifactId>
+            <version>${project.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.github.tomas-samek</groupId>
+            <artifactId>tiko-runtime</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <compilerArgs>
+                        <arg>-Atiko.profiles=${tiko.profile}</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <profile>
+            <id>dev</id>
+            <properties>
+                <tiko.profile>dev</tiko.profile>
+            </properties>
+        </profile>
+        <profile>
+            <id>prod</id>
+            <properties>
+                <tiko.profile>prod</tiko.profile>
+            </properties>
+        </profile>
+    </profiles>
+</project>

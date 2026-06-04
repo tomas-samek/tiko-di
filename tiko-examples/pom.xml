@@ -31,6 +31,7 @@
         <module>11_custom_logger</module>
         <module>12_testing</module>
         <module>13_mcp_introspection</module>
+        <module>14_profiles</module>
     </modules>
 
     <properties>
