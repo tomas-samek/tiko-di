@@ -22,6 +22,13 @@ mvn -pl tiko-examples/02_config exec:java \
     -Dexec.mainClass=io.tiko.examples.config.Main
 ```
 
+The same module ships a companion `BrokenConfigMain` that loads a YAML missing the required `db.url` field. `Tiko.create(...)` throws `ConfigValidationException` before the container is constructed — fail-fast at boot beats serving requests against half-bound configuration.
+
+```
+mvn -pl tiko-examples/02_config exec:java \
+    -Dexec.mainClass=io.tiko.examples.config.BrokenConfigMain
+```
+
 ## 03 — Events &nbsp;<sub>[`03_events/`](./03_events)</sub>
 
 Lifecycle observability via `ApplicationStarted/Ending` + `Request/EventStarted/Ending` events, plus declarative event chains with `@EventTrigger` (return-as-payload, guards, `spread = true`) and full origin tracking through the `Event<?>` wrapper. `async = true` triggers are shown in example 07.
