@@ -1,7 +1,7 @@
 name: Release to Maven Central
 
-# Manually triggered: cuts a release of the version currently in the POMs to the
-# Sonatype Central Portal.
+# Manually triggered. Cuts a release of the supplied `release_version` to the
+# Sonatype Central Portal, then bumps main to the supplied `next_snapshot`.
 #
 # Required repository secrets (Settings > Secrets and variables > Actions):
 #   CENTRAL_USERNAME / CENTRAL_TOKEN  Central Portal user token
@@ -9,6 +9,10 @@ name: Release to Maven Central
 #   GPG_PRIVATE_KEY                   ASCII-armored secret key:
 #                                     gpg --armor --export-secret-keys <KEY_ID>
 #   GPG_PASSPHRASE                    passphrase for that key.
+#   RELEASE_PUSH_TOKEN                Personal Access Token with `repo` scope, owned
+#                                     by an account that can push to protected main.
+#                                     Used to push the release commit/tag and the
+#                                     next-snapshot commit. See docs/releasing.md.
 #
 # The signing PUBLIC key must also be published to a keyserver (e.g. keys.openpgp.org)
 # so Central can verify the signatures.
@@ -20,12 +24,15 @@ name: Release to Maven Central
 on:
   workflow_dispatch:
     inputs:
-      reason:
-        description: "Why this release is being cut (recorded in the run log)"
-        required: false
-        default: "manual release"
+      release_version:
+        description: "Release version to cut (semver MAJOR.MINOR.PATCH, no -SNAPSHOT). E.g. 0.2.0"
+        required: true
+      next_snapshot:
+        description: "Next development version (semver MAJOR.MINOR.PATCH-SNAPSHOT). E.g. 0.3.0-SNAPSHOT"
+        required: true
 
 permissions:
+  # Default GITHUB_TOKEN stays read-only; push is done via RELEASE_PUSH_TOKEN below.
   contents: read
 
 jobs:
@@ -33,7 +40,31 @@ jobs:
     name: Build, sign, and upload to Central Portal staging
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Validate version inputs
+        run: |
+          if [[ ! "${{ inputs.release_version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::release_version must be semver MAJOR.MINOR.PATCH (got: ${{ inputs.release_version }})"
+            exit 1
+          fi
+          if [[ ! "${{ inputs.next_snapshot }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+-SNAPSHOT$ ]]; then
+            echo "::error::next_snapshot must be semver MAJOR.MINOR.PATCH-SNAPSHOT (got: ${{ inputs.next_snapshot }})"
+            exit 1
+          fi
+
+      - name: Checkout main with push-capable token
+        uses: actions/checkout@v4
+        with:
+          # RELEASE_PUSH_TOKEN is a PAT (or fine-grained token) owned by an account
+          # that can push to protected main. The default GITHUB_TOKEN won't work
+          # if branch protection is enabled.
+          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
+          fetch-depth: 0   # need full history for git tag/push
+
+      - name: Configure git as github-actions[bot]
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
@@ -47,14 +78,61 @@ jobs:
           server-password: MAVEN_CENTRAL_TOKEN
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
           gpg-passphrase: MAVEN_GPG_PASSPHRASE
+
+      - name: Set release version in all poms
+        # versions:set walks every module (reactor + sub-modules) but leaves inline
+        # <tiko.version> properties untouched. Two such properties exist in places
+        # that are not Maven modules (tiko-bom has no <parent>; the archetype's
+        # resource template isn't a reactor module) — sed those surgically so
+        # everything is in lockstep before we deploy.
+        run: |
+          mvn -B versions:set -DnewVersion=${{ inputs.release_version }} -DprocessAllModules=true -DgenerateBackupPoms=false
+          sed -i "s|<tiko\.version>[^<]*</tiko\.version>|<tiko.version>${{ inputs.release_version }}</tiko.version>|g" \
+              tiko-bom/pom.xml \
+              tiko-archetype/src/main/resources/archetype-resources/pom.xml
+
       # -Prelease attaches -sources/-javadoc jars (#211) and GPG-signs every artifact
       # (#212); the central-publishing-maven-plugin (#213) bundles the reactor and uploads
       # it to Central Portal staging. Tests are skipped: the released commit is already
       # green on main via the CI workflow, and skipping avoids requiring Docker (the Kafka
       # integration tests) on the release runner.
+      #
+      # IMPORTANT: this step runs against the *in-runner* poms (release_version), but
+      # main still has the previous SNAPSHOT until the commit step below succeeds. If
+      # deploy fails, we abort without polluting main.
       - name: Deploy to Central Portal (staging)
         run: mvn -B -Prelease -DskipTests deploy
         env:
           MAVEN_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
           MAVEN_CENTRAL_TOKEN: ${{ secrets.CENTRAL_TOKEN }}
           MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: Commit + tag release version
+        # Only reached when deploy succeeded. Commit the release-version poms, tag at
+        # this commit, then bump to next snapshot. Push the whole pair at the end so
+        # if any single push fails, manual recovery is "git push" from the workflow
+        # checkout (or from a re-checkout of the same SHAs).
+        run: |
+          git add -A
+          git commit -m "release: ${{ inputs.release_version }}"
+          git tag -a "v${{ inputs.release_version }}" -m "Tiko DI ${{ inputs.release_version }}"
+
+      - name: Set next snapshot version in all poms
+        run: |
+          mvn -B versions:set -DnewVersion=${{ inputs.next_snapshot }} -DprocessAllModules=true -DgenerateBackupPoms=false
+          sed -i "s|<tiko\.version>[^<]*</tiko\.version>|<tiko.version>${{ inputs.next_snapshot }}</tiko.version>|g" \
+              tiko-bom/pom.xml \
+              tiko-archetype/src/main/resources/archetype-resources/pom.xml
+
+      - name: Commit next snapshot
+        run: |
+          git add -A
+          git commit -m "chore: prepare ${{ inputs.next_snapshot }}"
+
+      - name: Push release commit, tag, and next-snapshot commit
+        # Done in one step so a transient push failure leaves nothing partially
+        # propagated. Order doesn't matter: tag points at the release commit which
+        # is already an ancestor of the next-snapshot commit.
+        run: |
+          git push origin HEAD:main
+          git push origin "v${{ inputs.release_version }}"
