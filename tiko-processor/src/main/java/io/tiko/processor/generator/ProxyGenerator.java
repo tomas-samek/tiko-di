@@ -7,14 +7,10 @@ import io.tiko.processor.util.GeneratorAnnotations;
 import io.tiko.processor.util.ProcessorContext;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 
 /**
@@ -221,46 +217,8 @@ public final class ProxyGenerator {
         return methods;
     }
 
-    /**
-     * Walks the interface and all its superinterfaces, collecting abstract methods
-     * (excluding {@code static} and {@code default}). Deduplicates by a signature
-     * key (name plus erasure of parameter types) so that a method re-declared in a
-     * subinterface doesn't appear twice.
-     */
     private List<ExecutableElement> collectAbstractMethods(TypeElement interfaceElement) {
-        LinkedHashMap<String, ExecutableElement> bySig = new LinkedHashMap<>();
-        collectInto(interfaceElement, bySig);
-        return new ArrayList<>(bySig.values());
-    }
-
-    private void collectInto(TypeElement interfaceElement, LinkedHashMap<String, ExecutableElement> sink) {
-        for (Element enclosed : interfaceElement.getEnclosedElements()) {
-            if (enclosed instanceof ExecutableElement method) {
-                if (method.getModifiers().contains(Modifier.STATIC)
-                        || method.getModifiers().contains(Modifier.DEFAULT)) {
-                    continue;
-                }
-                sink.putIfAbsent(signatureKey(method), method);
-            }
-        }
-        for (TypeMirror superInterface : interfaceElement.getInterfaces()) {
-            if (superInterface.getKind() != TypeKind.DECLARED) continue;
-            var superElement = ((DeclaredType) superInterface).asElement();
-            if (superElement instanceof TypeElement parent) {
-                collectInto(parent, sink);
-            }
-        }
-    }
-
-    private String signatureKey(ExecutableElement method) {
-        var sb = new StringBuilder(method.getSimpleName().toString()).append('(');
-        boolean first = true;
-        for (var param : method.getParameters()) {
-            if (!first) sb.append(',');
-            first = false;
-            sb.append(context.getTypeUtils().erasure(param.asType()).toString());
-        }
-        return sb.append(')').toString();
+        return io.tiko.processor.util.AbstractInterfaceMethods.collect(interfaceElement, context.getTypeUtils());
     }
 
     private MethodSpec createFactoryDelegatingMethod(ExecutableElement method, String delegateCall) {
