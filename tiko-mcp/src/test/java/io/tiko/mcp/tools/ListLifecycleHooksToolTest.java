@@ -124,8 +124,9 @@ class ListLifecycleHooksToolTest {
                  "components":[],"factoryMethods":[],"eventHandlers":[],"eventTriggers":[],"configurations":[]}
                 """);
         var tool = new ListLifecycleHooksTool(store);
+        var args = Map.<String, Object>of("phase", "WHENEVER");
 
-        assertThatThrownBy(() -> tool.execute(Map.of("phase", "WHENEVER")))
+        assertThatThrownBy(() -> tool.execute(args))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Invalid phase: WHENEVER");
     }

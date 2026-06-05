@@ -27,6 +27,7 @@ public final class ListLifecycleHooksTool {
 
     public static final String NAME = "list_lifecycle_hooks";
 
+    private static final String PHASE_KEY = "phase";
     private static final String PHASE_POST_CONSTRUCT = "POST_CONSTRUCT";
     private static final String PHASE_PRE_DESTROY = "PRE_DESTROY";
 
@@ -37,7 +38,7 @@ public final class ListLifecycleHooksTool {
     }
 
     public Map<String, Object> execute(Map<String, Object> args) {
-        var phaseFilter = ToolArgs.strOrNull(args.get("phase"));
+        var phaseFilter = ToolArgs.strOrNull(args.get(PHASE_KEY));
         if (phaseFilter != null
                 && !PHASE_POST_CONSTRUCT.equals(phaseFilter)
                 && !PHASE_PRE_DESTROY.equals(phaseFilter)) {
@@ -63,7 +64,7 @@ public final class ListLifecycleHooksTool {
 
         // Stable order: by componentFqn, then by phase (POST_CONSTRUCT before PRE_DESTROY).
         hooks.sort(Comparator.<Map<String, Object>, String>comparing(h -> (String) h.get("componentFqn"))
-                .thenComparing(h -> phaseOrder((String) h.get("phase"))));
+                .thenComparing(h -> phaseOrder((String) h.get(PHASE_KEY))));
 
         var out = new LinkedHashMap<String, Object>();
         out.put("hooks", hooks);
@@ -74,7 +75,7 @@ public final class ListLifecycleHooksTool {
         var e = new LinkedHashMap<String, Object>();
         e.put("componentFqn", componentFqn);
         e.put("method", method);
-        e.put("phase", phase);
+        e.put(PHASE_KEY, phase);
         return e;
     }
 
