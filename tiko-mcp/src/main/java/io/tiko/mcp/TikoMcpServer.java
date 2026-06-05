@@ -4,6 +4,7 @@ import io.tiko.mcp.tools.ExplainProxyTool;
 import io.tiko.mcp.tools.ExplainWiringTool;
 import io.tiko.mcp.tools.FindDependentsTool;
 import io.tiko.mcp.tools.GetConfigSchemaTool;
+import io.tiko.mcp.tools.GetGeneratedArtifactTool;
 import io.tiko.mcp.tools.ListComponentsTool;
 import io.tiko.mcp.tools.ListEventsTool;
 import io.tiko.mcp.tools.ListLifecycleHooksTool;
@@ -62,6 +63,7 @@ public final class TikoMcpServer {
         var listLifecycleHooks = new ListLifecycleHooksTool(store);
         var topologyOverview = new TopologyOverviewTool(store);
         var explainProxy = new ExplainProxyTool(store);
+        var getGeneratedArtifact = new GetGeneratedArtifactTool(store);
 
         var registrations = List.of(
                 new ToolRegistration(ListComponentsTool.NAME, "List Tiko components", """
@@ -137,7 +139,16 @@ public final class TikoMcpServer {
                         {"type":"object","properties":{
                            "componentFqn":{"type":"string"}},
                          "required":["componentFqn"]}""",
-                        explainProxy::execute));
+                        explainProxy::execute),
+                new ToolRegistration(
+                        GetGeneratedArtifactTool.NAME,
+                        "Get path + summary (no contents) of a generated source for a given kind/component",
+                        """
+                        {"type":"object","properties":{
+                           "kind":{"type":"string","enum":["FACTORY","PROXY","CONTAINER","EVENT_REGISTRY","CONFIG_BINDER"]},
+                           "componentFqn":{"type":"string"}},
+                         "required":["kind"]}""",
+                        getGeneratedArtifact::execute));
 
         new McpStdioBridge(registrations).run();
     }
