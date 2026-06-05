@@ -32,6 +32,7 @@
         <module>12_testing</module>
         <module>13_mcp_introspection</module>
         <module>14_profiles</module>
+        <module>15_quickstart</module>
     </modules>
 
     <properties>
