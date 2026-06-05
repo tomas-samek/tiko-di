@@ -9,21 +9,59 @@
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=tomas-samek_tiko-di&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=tomas-samek_tiko-di)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=tomas-samek_tiko-di&metric=coverage)](https://sonarcloud.io/summary/new_code?id=tomas-samek_tiko-di)
 
-**Status: Alpha — Phase 1 & 2 complete, Phase 3/4 in progress.** Suitable for early-adopter experimentation. See [docs/roadmap.md](./docs/roadmap.md) for what ships today and what's next.
+**Status: 0.1.0 on Maven Central.** Suitable for early-adopter experimentation. See [docs/roadmap.md](./docs/roadmap.md) for what ships today and what's next.
 
-## Why Tiko?
+## What Tiko is
 
-Tiko combines compile-time validation with a small surface area, and treats the event bus as a first-class part of the container — the same `@EventHandler` and `@EventTrigger` code is designed to work against either in-memory or distributed buses.
+A **compile-time orchestrator** with an integrated event model and full compile-time validation.
 
-**Measured cold start: 202 ms** on a small four-singleton workload — +16 ms over Dagger 2, ~330 ms faster than Spring Boot, comparable to a no-DI baseline. Eight side-by-side framework comparisons under [`comparisons/`](./comparisons/README.md) (`mvn` to reproduce).
+> Tiko orchestrates, it doesn't bundle — direct access, compile-time safe, nothing wrapped.
+
+The container, the scopes, the event bus, and the wiring graph ship as the framework. HTTP servers, databases, caches, template engines, security libraries, and any other library — you bring directly, and tiko orchestrates the seam via `@Produces`. Nothing is wrapped or rewritten on the library side; nothing is re-invented on the framework side.
 
 For the longer pitch — design principles, three-layer architecture, event-pipeline trade-offs — see [docs/VISION.md](./docs/VISION.md).
 
-### Three principles
+## The three buckets
 
-1. **Compile-time over runtime.** What can be validated at build, is. Missing deps, circular deps, scope violations, ambiguous providers — all caught by `javac`, not at startup. No `ApplicationContext` to query, no classpath scan at startup, no "bean not found" surprises in production.
-2. **Explicit over implicit.** Services declare what they provide and require. Wiring is generated from declarations, not inferred from annotations scattered across the classpath. The build produces a topology you can read.
-3. **Proportional over total.** DI where it solves a real problem (alternative implementations, test doubles, lifecycle, cross-cutting concerns). Plain `new`, static methods, and records where it doesn't. Not every utility needs to be a bean.
+Every concern in a tiko-built service lands in exactly one bucket. Classify, then write code.
+
+### Core — what tiko ships
+
+DI container, scopes (`SINGLETON` / `EVENT` / `PROTOTYPE`), event bus, `@EventHandler` + `@EventTrigger`, compile-time validation, lifecycle hooks (`@PostConstruct`, `@PreDestroy`, `ApplicationStartedEvent`, `ApplicationEndingEvent`), `@Configuration` typed records.
+
+### Plug in — you bring the library; tiko orchestrates the seam
+
+HTTP (Javalin, Jetty, Spark, Vert.x), DataSource (HikariCP, Agroal), schema migrations (Flyway, Liquibase), caching (Caffeine), templates (FreeMarker, Pebble), security (JWT / OAuth via the library of your choice), schedulers, retries, any SDK client. Pattern: declare a factory method annotated `@Produces`, return the library's value, consume as a constructor parameter. No wrapper, no adapter layer, no annotation-driven dispatch.
+
+### Open design questions
+
+Async generalisation, scheduling-as-tick-event, retry-as-event-loop — the small set of unresolved questions about extending the event model itself. An honest scope note, not a deferral promise.
+
+## What you plug in
+
+Lookup-table answer to "does tiko support X?":
+
+| Need | Pattern | Recipe in |
+|---|---|---|
+| HTTP layer | `@Produces Javalin` (or your choice) + plain route methods | `tiko-build` skill, example `15_quickstart` |
+| Postgres / MySQL | `@Produces DataSource` returning `HikariDataSource` | `tiko-build` skill, example `15_quickstart` |
+| Schema migrations | `@EventHandler(ApplicationStartedEvent)` calling `Flyway.migrate()` | `tiko-build` skill, example `15_quickstart` |
+| Kafka | `@KafkaSource` / `@KafkaSink` — tiko-native module with compile-time validation | `tiko-kafka`, example `08_kafka_order_warehouse` |
+| In-process cache | `@Produces Cache<K,V>` (Caffeine) | `tiko-build` skill |
+| Templates | `@Produces freemarker.template.Configuration` (or Pebble, Mustache) | `tiko-build` skill |
+| Security | Javalin `before` handler + `Context` attributes (open-design caveat in skill §6) | `tiko-build` skill §6 |
+| Scheduling | `@EventHandler` on a `Tick` event published by a small scheduler thread | `tiko-build` skill §4.2 |
+| Async work | `@EventHandler(async = true)` for event-shaped work; `CompletableFuture` / virtual threads for ad-hoc | `tiko-build` skill §4.3 |
+| Retry | Small utility wrapper — visible code, no AOP | `tiko-build` skill §4.4 |
+| Configuration | Typed `@Configuration` records | `tiko-config`, example `02_config` |
+| Metrics / tracing | Plug in your library; expose via routes on your HTTP layer | — |
+
+## Start building
+
+- **New service?** Read [`.ai-skills/tiko-build/SKILL.md`](./.ai-skills/tiko-build/SKILL.md) — decision tree, `@Produces` cookbook, anti-pattern redirect table so an agent reaches for the tiko-native primitive.
+- **Long-form prose?** [`docs/orchestrator-model.md`](./docs/orchestrator-model.md).
+- **Reference shape?** [`tiko-examples/15_quickstart`](./tiko-examples/15_quickstart) — the canonical small service the skill cites.
+- **Scaffold a fresh project?** Maven archetype — see [Scaffold a new project](#scaffold-a-new-project-archetype) below.
 
 ## Quick example
 
@@ -63,7 +101,7 @@ The annotation processor validates all dependencies at compile-time and generate
 
 ## Installation
 
-Tiko is not yet on Maven Central — publication is tracked as Phase 5. For now, build from source (see [Building from source](#building-from-source)) and the artifacts will be available in your local Maven repository.
+Tiko ships to Maven Central as of 0.1.0 — pull the artifacts directly:
 
 ```xml
 <dependencies>
@@ -113,10 +151,9 @@ The fastest way to start a fresh project — generates a runnable single-module 
 
 ```bash
 mvn archetype:generate \
-    -DarchetypeGroupId=io.tiko \
+    -DarchetypeGroupId=io.github.tomas-samek \
     -DarchetypeArtifactId=tiko-archetype \
     -DarchetypeVersion=0.1.0 \
-    -DarchetypeCatalog=local \
     -DgroupId=com.example \
     -DartifactId=my-app \
     -DinteractiveMode=false
@@ -125,9 +162,7 @@ cd my-app
 mvn exec:java   # prints: Hello, world!
 ```
 
-`-DarchetypeCatalog=local` is required until Tiko publishes to Maven Central. Build the parent project once with `mvn install` to populate your local catalog.
-
-The generated project ships with AI-context files for the major coding agents — `CLAUDE.md` (canonical), `AGENTS.md`, `.cursor/rules/tiko.md`, `.github/copilot-instructions.md`, `.junie/guidelines.md`, and `.ai-skills/SKILL.md`. Each tool-specific file points at `CLAUDE.md` as the source of truth, so edit one file when conventions change.
+The generated project ships with AI-context files for the major coding agents — `CLAUDE.md` (canonical), `AGENTS.md`, `.cursor/rules/tiko.md`, `.github/copilot-instructions.md`, `.junie/guidelines.md`, `.ai-skills/SKILL.md`, and `.ai-skills/tiko-build/SKILL.md` (the orchestrator-model skill — decision tree + `@Produces` cookbook + anti-pattern redirects). Each tool-specific file points at the canonical sources, so edit one file when conventions change.
 
 ### AI-agent topology server (MCP)
 
@@ -160,11 +195,11 @@ on open with no setup beyond installing jbang.
 | `@EventHandler(async, eventType)`   | Subscribe to events (sync by default, opt-in async)                      | [events.md](./docs/events.md) |
 | `@EventTrigger(eventName, ...)`     | Declarative event chains — return-as-payload, guards, spread, async      | [events.md](./docs/events.md#event-chains-with-eventtrigger) |
 
-Scopes: `SINGLETON` > `REQUEST` > `EVENT` > `PROTOTYPE` (longest to shortest lifetime). Shorter-lived beans injected into longer-lived scopes are automatically proxied — see [docs/di-and-scopes.md](./docs/di-and-scopes.md#cross-scope-injection).
+Scopes: `SINGLETON` > `EVENT` > `PROTOTYPE` (longest to shortest lifetime). Shorter-lived beans injected into longer-lived scopes are automatically proxied — see [docs/di-and-scopes.md](./docs/di-and-scopes.md#cross-scope-injection).
 
 ## Runnable examples
 
-Twelve worked examples ship under [`tiko-examples/`](./tiko-examples/README.md), each a self-contained Maven project:
+Fifteen worked examples ship under [`tiko-examples/`](./tiko-examples/README.md), each a self-contained Maven project:
 
 | #  | Module                                                              | Demonstrates                                                                                            |
 |----|---------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------|
@@ -176,10 +211,13 @@ Twelve worked examples ship under [`tiko-examples/`](./tiko-examples/README.md),
 | 06 | [`06_config_multi_module`](./tiko-examples/06_config_multi_module)  | Module-baked `META-INF/tiko/defaults.yaml` discovery + user override                                    |
 | 07 | [`07_async_start`](./tiko-examples/07_async_start)                  | `@EventHandler(async = true)` on `ApplicationStartedEvent` — keep slow warmup off the critical path     |
 | 08 | [`08_kafka_order_warehouse`](./tiko-examples/08_kafka_order_warehouse) | Cross-JVM Kafka demo — `@KafkaSource` / `@KafkaSink`, shared event class, Testcontainers e2e         |
-| 09 | [`09_http_javalin`](./tiko-examples/09_http_javalin)                | `TikoJavalin.scoped` middleware opens a REQUEST scope per route; sync request→response independent of the bus |
-| 10 | [`10_persistence_jdbc`](./tiko-examples/10_persistence_jdbc)        | Persistence cookbook — REQUEST-scoped JDBC transactions across HTTP and batch flows ([docs](./docs/cookbooks/persistence.md)) |
+| 09 | [`09_http_javalin`](./tiko-examples/09_http_javalin)                | `TikoJavalin.scoped` middleware opens an EVENT scope per route; sync request→response independent of the bus |
+| 10 | [`10_persistence_jdbc`](./tiko-examples/10_persistence_jdbc)        | Persistence cookbook — EVENT-scoped JDBC transactions across HTTP and batch flows ([docs](./docs/cookbooks/persistence.md)) |
 | 11 | [`11_custom_logger`](./tiko-examples/11_custom_logger)              | Routing framework logs through slf4j + logback via `System.LoggerFinder`                                |
 | 12 | [`12_testing`](./tiko-examples/12_testing)                          | `@TikoTest` JUnit 5 extension — parameter resolution, `RecordingEventBus` assertions, scope helpers, `awaitAsyncDispatch` |
+| 13 | [`13_mcp_introspection`](./tiko-examples/13_mcp_introspection)      | Runnable demo of the `tiko-mcp` topology server reading a built project's `META-INF/tiko/` artifacts |
+| 14 | [`14_profiles`](./tiko-examples/14_profiles)                        | `@Component(profiles = "...")` — dev/prod implementation switching with default-profile resolution |
+| 15 | [`15_quickstart`](./tiko-examples/15_quickstart)                    | **Orchestrator-model reference app** — HikariCP + Javalin + event-driven handler the `tiko-build` skill cites |
 
 ## Measured cold-start
 
