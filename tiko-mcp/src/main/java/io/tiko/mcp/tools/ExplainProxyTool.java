@@ -24,6 +24,11 @@ public final class ExplainProxyTool {
 
     public static final String NAME = "explain_proxy";
 
+    private static final String KEY_COMPONENT_FQN = "componentFqn";
+    private static final String KEY_INTERFACE = "interface";
+    private static final String KEY_PROXIED_METHODS = "proxiedMethods";
+    private static final String KEY_REASON = "reason";
+
     private final TopologyStore store;
 
     public ExplainProxyTool(TopologyStore store) {
@@ -31,7 +36,7 @@ public final class ExplainProxyTool {
     }
 
     public Map<String, Object> execute(Map<String, Object> args) {
-        var fqn = ToolArgs.required(args, "componentFqn");
+        var fqn = ToolArgs.required(args, KEY_COMPONENT_FQN);
         for (var c : store.components()) {
             if (!fqn.equals(c.get("qualifiedName"))) {
                 continue;
@@ -39,15 +44,15 @@ public final class ExplainProxyTool {
             return projectComponent(c);
         }
         var out = new LinkedHashMap<String, Object>();
-        out.put("componentFqn", fqn);
+        out.put(KEY_COMPONENT_FQN, fqn);
         out.put("found", false);
-        out.put("reason", "Component not found in topology");
+        out.put(KEY_REASON, "Component not found in topology");
         return out;
     }
 
     private static Map<String, Object> projectComponent(Map<String, Object> c) {
         var out = new LinkedHashMap<String, Object>();
-        out.put("componentFqn", c.get("qualifiedName"));
+        out.put(KEY_COMPONENT_FQN, c.get("qualifiedName"));
         if (!Boolean.TRUE.equals(c.get("requiresProxy"))) {
             out.put("proxied", false);
             return out;
@@ -57,15 +62,15 @@ public final class ExplainProxyTool {
         if (proxy instanceof Map) {
             @SuppressWarnings("unchecked")
             var p = (Map<String, Object>) proxy;
-            out.put("interface", p.get("interface"));
-            out.put("proxiedMethods", p.getOrDefault("proxiedMethods", List.of()));
-            out.put("reason", p.get("reason"));
+            out.put(KEY_INTERFACE, p.get(KEY_INTERFACE));
+            out.put(KEY_PROXIED_METHODS, p.getOrDefault(KEY_PROXIED_METHODS, List.of()));
+            out.put(KEY_REASON, p.get(KEY_REASON));
         } else {
             // Older topology snapshots may have requiresProxy=true without the proxy
             // detail block. Surface that honestly rather than fabricating fields.
-            out.put("interface", null);
-            out.put("proxiedMethods", List.of());
-            out.put("reason", null);
+            out.put(KEY_INTERFACE, null);
+            out.put(KEY_PROXIED_METHODS, List.of());
+            out.put(KEY_REASON, null);
         }
         return out;
     }

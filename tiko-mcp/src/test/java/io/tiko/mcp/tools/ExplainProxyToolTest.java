@@ -54,9 +54,11 @@ class ExplainProxyToolTest {
         var tool = new ExplainProxyTool(store);
         var out = tool.execute(Map.of("componentFqn", "x.OrderService"));
 
-        assertThat(out).containsEntry("componentFqn", "x.OrderService").containsEntry("proxied", false);
         // No interface / proxiedMethods / reason keys when not proxied — definite-not-proxied beats fabricated nulls.
-        assertThat(out).doesNotContainKeys("interface", "proxiedMethods", "reason");
+        assertThat(out)
+                .containsEntry("componentFqn", "x.OrderService")
+                .containsEntry("proxied", false)
+                .doesNotContainKeys("interface", "proxiedMethods", "reason");
     }
 
     @Test
