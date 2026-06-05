@@ -9,6 +9,7 @@ import io.tiko.mcp.tools.ListLifecycleHooksTool;
 import io.tiko.mcp.tools.ListProfileConflictsTool;
 import io.tiko.mcp.tools.ListWiringErrorsTool;
 import io.tiko.mcp.tools.ReloadTool;
+import io.tiko.mcp.tools.TopologyOverviewTool;
 import io.tiko.mcp.tools.TraceEventFlowTool;
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
@@ -58,6 +59,7 @@ public final class TikoMcpServer {
         var traceEventFlow = new TraceEventFlowTool(store);
         var listProfileConflicts = new ListProfileConflictsTool(store);
         var listLifecycleHooks = new ListLifecycleHooksTool(store);
+        var topologyOverview = new TopologyOverviewTool(store);
 
         var registrations = List.of(
                 new ToolRegistration(ListComponentsTool.NAME, "List Tiko components", """
@@ -120,7 +122,12 @@ public final class TikoMcpServer {
                         """
                         {"type":"object","properties":{
                            "phase":{"type":"string","enum":["POST_CONSTRUCT","PRE_DESTROY"]}}}""",
-                        listLifecycleHooks::execute));
+                        listLifecycleHooks::execute),
+                new ToolRegistration(
+                        TopologyOverviewTool.NAME,
+                        "Orientation snapshot: totals, scopes, conflict flag, suggested next queries",
+                        "{\"type\":\"object\",\"properties\":{}}",
+                        topologyOverview::execute));
 
         new McpStdioBridge(registrations).run();
     }
