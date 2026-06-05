@@ -24,6 +24,13 @@ public final class ListComponentsTool {
         var scope = ToolArgs.strOrNull(args.get("scope"));
         var iface = ToolArgs.strOrNull(args.get("interface"));
         var profile = ToolArgs.strOrNull(args.get("profile"));
+        // Per docs/mcp-design.md (corollary 1): an unfiltered bulk dump of every component
+        // on a real codebase is the kind of response per-partes serving exists to prevent.
+        // At least one filter — scope / interface / profile — is required (#278).
+        if (scope == null && iface == null && profile == null) {
+            throw new IllegalArgumentException("At least one filter required: scope, interface, or profile."
+                    + " Use topology_overview for codebase-wide counts.");
+        }
 
         var components = new ArrayList<Map<String, Object>>();
         for (var c : store.components()) {
