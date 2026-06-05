@@ -133,6 +133,15 @@ public final class TopologyStore {
         return loadedAt;
     }
 
+    /**
+     * The project root the store was loaded from. Exposed so tools that need to resolve
+     * companion artifacts (e.g. generated-source files under {@code target/}, see #148)
+     * can walk the same root without each constructing it independently.
+     */
+    public Path projectRoot() {
+        return projectRoot;
+    }
+
     public List<Map<String, Object>> components() {
         return components;
     }
