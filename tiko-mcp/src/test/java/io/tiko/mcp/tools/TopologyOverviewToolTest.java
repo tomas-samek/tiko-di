@@ -31,7 +31,7 @@ class TopologyOverviewToolTest {
                 .containsEntry("eventTriggers", 0)
                 .containsEntry("configurations", 0)
                 .containsEntry("wiringErrors", 0);
-        assertThat(out.get("hasProfileConflicts")).isEqualTo(false);
+        assertThat(out).containsEntry("hasProfileConflicts", false);
         assertThat(out.get("loadedAt")).isInstanceOf(String.class);
 
         @SuppressWarnings("unchecked")
@@ -119,7 +119,7 @@ class TopologyOverviewToolTest {
         var tool = new TopologyOverviewTool(store);
         var out = tool.execute(Map.of());
 
-        assertThat(out.get("hasProfileConflicts")).isEqualTo(true);
+        assertThat(out).containsEntry("hasProfileConflicts", true);
 
         @SuppressWarnings("unchecked")
         var suggested = (List<String>) out.get("suggestedNextQueries");
@@ -145,7 +145,7 @@ class TopologyOverviewToolTest {
         @SuppressWarnings("unchecked")
         var suggested = (List<String>) out.get("suggestedNextQueries");
         assertThat(suggested).first().isEqualTo("list_wiring_errors");
-        assertThat(out.get("hasProfileConflicts")).isEqualTo(true);
+        assertThat(out).containsEntry("hasProfileConflicts", true);
     }
 
     private TopologyStore storeWith(Path root, String topologyJson) throws Exception {

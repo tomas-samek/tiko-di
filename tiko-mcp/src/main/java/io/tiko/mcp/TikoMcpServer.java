@@ -126,8 +126,7 @@ public final class TikoMcpServer {
                 new ToolRegistration(
                         TopologyOverviewTool.NAME,
                         "Orientation snapshot: totals, scopes, conflict flag, suggested next queries",
-                        """
-                        {"type":"object","properties":{}}""",
+                        "{\"type\":\"object\",\"properties\":{}}",
                         topologyOverview::execute));
 
         new McpStdioBridge(registrations).run();

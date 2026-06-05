@@ -24,6 +24,12 @@ public final class TopologyOverviewTool {
 
     public static final String NAME = "topology_overview";
 
+    private static final String QUERY_LIST_COMPONENTS = ListComponentsTool.NAME;
+    private static final String QUERY_LIST_EVENTS = ListEventsTool.NAME;
+    private static final String QUERY_LIST_LIFECYCLE_HOOKS = ListLifecycleHooksTool.NAME;
+    private static final String QUERY_LIST_WIRING_ERRORS = ListWiringErrorsTool.NAME;
+    private static final String QUERY_LIST_PROFILE_CONFLICTS = ListProfileConflictsTool.NAME;
+
     private final TopologyStore store;
     private final ListProfileConflictsTool profileConflicts;
 
@@ -32,6 +38,7 @@ public final class TopologyOverviewTool {
         this.profileConflicts = new ListProfileConflictsTool(store);
     }
 
+    @SuppressWarnings("unused") // args param is required by the McpStdioBridge tool-registration contract
     public Map<String, Object> execute(Map<String, Object> args) {
         var out = new LinkedHashMap<String, Object>();
         out.put("loadedAt", store.loadedAt().toString());
@@ -87,11 +94,11 @@ public final class TopologyOverviewTool {
      */
     private static List<String> suggestedNextQueries(int wiringErrorsCount, boolean hasProfileConflicts) {
         if (wiringErrorsCount > 0) {
-            return List.of("list_wiring_errors", "list_components", "list_lifecycle_hooks");
+            return List.of(QUERY_LIST_WIRING_ERRORS, QUERY_LIST_COMPONENTS, QUERY_LIST_LIFECYCLE_HOOKS);
         }
         if (hasProfileConflicts) {
-            return List.of("list_profile_conflicts", "list_components", "list_lifecycle_hooks");
+            return List.of(QUERY_LIST_PROFILE_CONFLICTS, QUERY_LIST_COMPONENTS, QUERY_LIST_LIFECYCLE_HOOKS);
         }
-        return List.of("list_components", "list_events", "list_lifecycle_hooks");
+        return List.of(QUERY_LIST_COMPONENTS, QUERY_LIST_EVENTS, QUERY_LIST_LIFECYCLE_HOOKS);
     }
 }
