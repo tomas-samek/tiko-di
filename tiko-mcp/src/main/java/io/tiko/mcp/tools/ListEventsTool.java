@@ -25,6 +25,13 @@ public final class ListEventsTool {
     public Map<String, Object> execute(Map<String, Object> args) {
         String filter =
                 args.get("eventType") == null ? null : args.get("eventType").toString();
+        // Per docs/mcp-design.md (corollary 1): require eventType filter so a fresh agent
+        // doesn't accidentally pay for every event handler / trigger in the topology (#278).
+        // Use topology_overview for codebase-wide counts.
+        if (filter == null || filter.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "eventType filter required." + " Use topology_overview for codebase-wide event counts.");
+        }
 
         // Join handlers and triggers on the trigger-method return-type FQN — the actual
         // event identity. `eventName` is a user-chosen label and may not match the FQN

@@ -33,8 +33,8 @@ class ListEventsToolTest {
         var tool = new ListEventsTool(store);
 
         @SuppressWarnings("unchecked")
-        List<Map<String, Object>> events =
-                (List<Map<String, Object>>) tool.execute(Map.of()).get("events");
+        List<Map<String, Object>> events = (List<Map<String, Object>>)
+                tool.execute(Map.of("eventType", "io.example.OrderPlaced")).get("events");
         assertThat(events).hasSize(1);
         Map<String, Object> e = events.get(0);
         assertThat(e.get("eventType")).isEqualTo("io.example.OrderPlaced");
@@ -63,6 +63,21 @@ class ListEventsToolTest {
                 tool.execute(Map.of("eventType", "io.example.A")).get("events");
         assertThat(events).hasSize(1);
         assertThat(events.get(0).get("eventType")).isEqualTo("io.example.A");
+    }
+
+    @Test
+    void bareCallWithoutEventTypeThrows(@TempDir Path root) throws Exception {
+        // Per #278: bare call would dump every event in the topology.
+        var store = storeWith(root, """
+                {"schemaVersion":1, "module":"m",
+                 "components":[], "factoryMethods":[], "configurations":[],
+                 "eventHandlers":[], "eventTriggers":[]}
+                """);
+        var tool = new ListEventsTool(store);
+        var args = Map.<String, Object>of();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> tool.execute(args))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("eventType");
     }
 
     private TopologyStore storeWith(Path root, String topologyJson) throws Exception {

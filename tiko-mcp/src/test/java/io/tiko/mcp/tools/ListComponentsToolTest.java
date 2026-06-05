@@ -14,21 +14,20 @@ import org.junit.jupiter.api.io.TempDir;
 class ListComponentsToolTest {
 
     @Test
-    void noFilterReturnsAll(@TempDir Path root) throws Exception {
+    void bareCallWithoutFilterThrows(@TempDir Path root) throws Exception {
+        // Per #278: an unfiltered bulk dump would defeat the per-partes principle.
         var store = storeWith(root, """
                 {"schemaVersion":1, "module":"m",
                  "components":[
-                   {"qualifiedName":"io.example.A","scope":"SINGLETON","interfaces":[]},
-                   {"qualifiedName":"io.example.B","scope":"REQUEST","interfaces":["io.example.IB"]}
+                   {"qualifiedName":"io.example.A","scope":"SINGLETON","interfaces":[]}
                  ],
                  "factoryMethods":[], "eventHandlers":[], "eventTriggers":[], "configurations":[]}
                 """);
         var tool = new ListComponentsTool(store);
-
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> result =
-                (List<Map<String, Object>>) tool.execute(Map.of()).get("components");
-        assertThat(result).hasSize(2);
+        var args = Map.<String, Object>of();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> tool.execute(args))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("At least one filter");
     }
 
     @Test
@@ -107,8 +106,8 @@ class ListComponentsToolTest {
         var tool = new ListComponentsTool(store);
 
         @SuppressWarnings("unchecked")
-        List<Map<String, Object>> result =
-                (List<Map<String, Object>>) tool.execute(Map.of()).get("components");
+        List<Map<String, Object>> result = (List<Map<String, Object>>)
+                tool.execute(Map.of("scope", "SINGLETON")).get("components");
 
         assertThat(result).hasSize(2);
         assertThat(result).anySatisfy(c -> {

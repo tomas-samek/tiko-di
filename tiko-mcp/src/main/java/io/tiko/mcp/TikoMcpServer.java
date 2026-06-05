@@ -66,14 +66,24 @@ public final class TikoMcpServer {
         var getGeneratedArtifact = new GetGeneratedArtifactTool(store);
 
         var registrations = List.of(
-                new ToolRegistration(ListComponentsTool.NAME, "List Tiko components", """
+                new ToolRegistration(
+                        ListComponentsTool.NAME,
+                        "List Tiko components matching a filter (at least one filter required)",
+                        """
                         {"type":"object","properties":{
-                           "scope":{"type":"string","enum":["SINGLETON","REQUEST","EVENT","PROTOTYPE"]},
+                           "scope":{"type":"string","enum":["SINGLETON","EVENT","PROTOTYPE"]},
                            "interface":{"type":"string"},
-                           "profile":{"type":"string"}}}""", listComponents::execute),
-                new ToolRegistration(ListEventsTool.NAME, "List Tiko events", """
+                           "profile":{"type":"string"}},
+                         "anyOf":[{"required":["scope"]},{"required":["interface"]},{"required":["profile"]}]}""",
+                        listComponents::execute),
+                new ToolRegistration(
+                        ListEventsTool.NAME,
+                        "List handlers and triggers for a given event type",
+                        """
                         {"type":"object","properties":{
-                           "eventType":{"type":"string"}}}""", listEvents::execute),
+                           "eventType":{"type":"string"}},
+                         "required":["eventType"]}""",
+                        listEvents::execute),
                 new ToolRegistration(
                         GetConfigSchemaTool.NAME, "Get @Configuration JSON schema", """
                         {"type":"object","properties":{
