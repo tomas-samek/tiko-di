@@ -122,12 +122,6 @@ class ProfileFilteredFactoryResolutionTest {
     }
 
     /**
-     * {@code @Pick} of a profile-inactive component exercises the guard in
-     * {@link io.tiko.processor.util.ProcessorContext#findByImplClass}. Same shape as the
-     * test above but targeting the {@code @Pick} lookup path used by both the factory
-     * and container generators.
-     */
-    /**
      * #275: two {@code @Produces} methods returning the same type under disjoint profiles
      * coexist at registration; the active one wins at consumer-side resolution. Previously
      * the registration-side dedup rejected both, masking the profile design.
@@ -203,6 +197,12 @@ class ProfileFilteredFactoryResolutionTest {
         Assertions.assertThat(c.errors()).anyMatch(d -> d.getMessage(null).contains("overlapping profiles"));
     }
 
+    /**
+     * {@code @Pick} of a profile-inactive component exercises the guard in
+     * {@link io.tiko.processor.util.ProcessorContext#findByImplClass}. Same shape as the
+     * direct-class injection test above but targeting the {@code @Pick} lookup path used
+     * by both the factory and container generators.
+     */
     @Test
     void pickingProfileInactiveImplFailsWithCleanError() {
         JavaFileObject iface = JavaFileObjects.forSourceLines(
