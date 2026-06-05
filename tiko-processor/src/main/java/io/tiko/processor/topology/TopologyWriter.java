@@ -85,6 +85,7 @@ public final class TopologyWriter {
             jw.endArray();
             jw.field("isTestComponent").value(c.isTestComponent());
             jw.field("requiresProxy").value(c.requiresProxy());
+            writeProxyDetail(jw, c);
             jw.field("exposeSelf").value(c.isExposeSelf());
             jw.field("exposeTypes").array();
             for (TypeMirror t : c.getExposeTypes()) {
@@ -274,6 +275,35 @@ public final class TopologyWriter {
         writeMethodNameArray(jw, "postConstruct", postConstruct);
         writeMethodNameArray(jw, "preDestroy", preDestroy);
         jw.field("autoCloseable").value(autoCloseable);
+        jw.endObject();
+    }
+
+    /**
+     * Writes the {@code proxy: { interface, proxiedMethods, reason }} block when a
+     * component needs a generated cross-scope proxy (see {@link io.tiko.processor.generator.ProxyGenerator}
+     * and #146). Skipped otherwise — only proxied components carry it, keeping the per-entry
+     * footprint small.
+     *
+     * <p>Today the only proxy trigger is "longer-lived consumer needs shorter-lived bean",
+     * which post-#226 collapses to {@code SINGLETON_INJECTS_EVENT}. New triggers would
+     * be additive enum values; readers must tolerate unknown strings.
+     */
+    private void writeProxyDetail(JsonWriter jw, ComponentModel c) {
+        if (!c.requiresProxy() || c.getImplementedInterface().isEmpty()) {
+            return;
+        }
+        var ifaceMirror = c.getImplementedInterface().orElseThrow();
+        var ifaceFqn = ifaceMirror.toString();
+        var ifaceElement = context.getElementUtils().getTypeElement(ifaceFqn);
+        jw.field("proxy").object();
+        jw.field("interface").value(ifaceFqn);
+        if (ifaceElement != null) {
+            var methods = io.tiko.processor.util.AbstractInterfaceMethods.collect(ifaceElement, context.getTypeUtils());
+            writeMethodNameArray(jw, "proxiedMethods", methods);
+        } else {
+            jw.field("proxiedMethods").array().endArray();
+        }
+        jw.field("reason").value("SINGLETON_INJECTS_EVENT");
         jw.endObject();
     }
 

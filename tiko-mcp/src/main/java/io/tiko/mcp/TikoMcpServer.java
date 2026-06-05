@@ -1,5 +1,6 @@
 package io.tiko.mcp;
 
+import io.tiko.mcp.tools.ExplainProxyTool;
 import io.tiko.mcp.tools.ExplainWiringTool;
 import io.tiko.mcp.tools.FindDependentsTool;
 import io.tiko.mcp.tools.GetConfigSchemaTool;
@@ -60,6 +61,7 @@ public final class TikoMcpServer {
         var listProfileConflicts = new ListProfileConflictsTool(store);
         var listLifecycleHooks = new ListLifecycleHooksTool(store);
         var topologyOverview = new TopologyOverviewTool(store);
+        var explainProxy = new ExplainProxyTool(store);
 
         var registrations = List.of(
                 new ToolRegistration(ListComponentsTool.NAME, "List Tiko components", """
@@ -127,7 +129,15 @@ public final class TikoMcpServer {
                         TopologyOverviewTool.NAME,
                         "Orientation snapshot: totals, scopes, conflict flag, suggested next queries",
                         "{\"type\":\"object\",\"properties\":{}}",
-                        topologyOverview::execute));
+                        topologyOverview::execute),
+                new ToolRegistration(
+                        ExplainProxyTool.NAME,
+                        "Explain the cross-scope proxy on a component (interface, proxied methods, reason)",
+                        """
+                        {"type":"object","properties":{
+                           "componentFqn":{"type":"string"}},
+                         "required":["componentFqn"]}""",
+                        explainProxy::execute));
 
         new McpStdioBridge(registrations).run();
     }
