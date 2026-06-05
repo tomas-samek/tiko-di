@@ -3,6 +3,13 @@
 This project uses [Tiko DI](https://github.com/tomas-samek/tiko-di) — a
 compile-time dependency injection framework for Java 21+.
 
+## Building a service on this scaffold?
+
+Read [`.ai-skills/tiko-build/SKILL.md`](./.ai-skills/tiko-build/SKILL.md)
+first — decision tree, `@Produces` cookbook, anti-pattern redirects. The
+skill is the procedure for building with the framework; the files below
+are the reference.
+
 ## Read this first
 
 The canonical conventions live in [`CLAUDE.md`](./CLAUDE.md) at the project

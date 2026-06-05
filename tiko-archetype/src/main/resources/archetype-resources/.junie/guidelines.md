@@ -4,6 +4,10 @@ This project uses Tiko DI — a compile-time DI framework for Java 21+. The
 canonical rules live in [`CLAUDE.md`](../CLAUDE.md); read it before
 generating code. The bullets below are a refresher.
 
+For building a new service or extending this one, also read
+[`.ai-skills/tiko-build/SKILL.md`](../.ai-skills/tiko-build/SKILL.md) —
+decision tree, `@Produces` cookbook, anti-pattern redirects.
+
 ## Rules
 
 - Constructor injection only — `@Inject` on the constructor.
