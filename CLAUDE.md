@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **Building a service on Tiko?** Read
+> [`.ai-skills/tiko-build/SKILL.md`](./.ai-skills/tiko-build/SKILL.md)
+> first. It's the operational distillation of
+> [`docs/orchestrator-model.md`](./docs/orchestrator-model.md) — the
+> decision tree, `@Produces` cookbook, and anti-pattern redirects that
+> stop agents from searching for "tiko's equivalent of Spring's X". This
+> CLAUDE.md is the repo-development reference; the skill is for **building
+> with** the framework.
+
 ## Project Overview
 
 **Tiko DI** is a modern, compile-time dependency injection framework for Java 21+ with event-driven architecture.

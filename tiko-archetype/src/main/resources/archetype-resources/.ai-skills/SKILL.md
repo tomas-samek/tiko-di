@@ -2,6 +2,14 @@
 
 This project uses **tiko-di**, a compile-time dependency injection framework for Java 21+.
 
+## Building a new service or extending this one?
+
+Read [`tiko-build/SKILL.md`](./tiko-build/SKILL.md) first. It's the
+operational distillation of the orchestrator-model doc: the decision tree
+for Core / Plug in / Open, the `@Produces` cookbook table, and the
+anti-pattern redirect table so you reach for the tiko-native primitive
+instead of searching for a Spring equivalent.
+
 ## Where to find framework documentation
 
 - README: https://github.com/tomas-samek/tiko-di/blob/main/README.md

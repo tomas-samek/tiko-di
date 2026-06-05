@@ -2,6 +2,10 @@
 
 This project uses **tiko-di**, a compile-time dependency injection framework for Java 21+.
 
+## Building a new service or extending this one?
+
+Read [`.ai-skills/tiko-build/SKILL.md`](../../.ai-skills/tiko-build/SKILL.md) first — the decision tree, `@Produces` cookbook, and anti-pattern redirects that stop you from searching for "tiko's equivalent of Spring's X".
+
 ## Where to find framework documentation
 
 - README: https://github.com/tomas-samek/tiko-di/blob/main/README.md

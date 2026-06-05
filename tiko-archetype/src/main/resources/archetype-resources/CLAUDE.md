@@ -5,6 +5,12 @@ a compile-time dependency injection framework for Java 21+. All wiring
 is validated and generated at build time; the runtime container does
 zero reflection and zero classpath scanning.
 
+> **Building a service on this scaffold?** Read
+> [`.ai-skills/tiko-build/SKILL.md`](./.ai-skills/tiko-build/SKILL.md)
+> first — decision tree, `@Produces` cookbook, anti-pattern redirects.
+> This `CLAUDE.md` is a framework reference; the skill is the procedure
+> for building with it.
+
 The first half of this file is a Tiko DI reference. The second half
 (["About this project"](#about-this-project)) is a template for the
 project's own documentation — fill it in as the project grows.
