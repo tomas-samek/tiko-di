@@ -5,6 +5,7 @@ import io.tiko.mcp.tools.FindDependentsTool;
 import io.tiko.mcp.tools.GetConfigSchemaTool;
 import io.tiko.mcp.tools.ListComponentsTool;
 import io.tiko.mcp.tools.ListEventsTool;
+import io.tiko.mcp.tools.ListLifecycleHooksTool;
 import io.tiko.mcp.tools.ListProfileConflictsTool;
 import io.tiko.mcp.tools.ListWiringErrorsTool;
 import io.tiko.mcp.tools.ReloadTool;
@@ -56,6 +57,7 @@ public final class TikoMcpServer {
         var findDependents = new FindDependentsTool(store);
         var traceEventFlow = new TraceEventFlowTool(store);
         var listProfileConflicts = new ListProfileConflictsTool(store);
+        var listLifecycleHooks = new ListLifecycleHooksTool(store);
 
         var registrations = List.of(
                 new ToolRegistration(ListComponentsTool.NAME, "List Tiko components", """
@@ -111,7 +113,14 @@ public final class TikoMcpServer {
                         "List components implementing the same type under disjoint profiles",
                         """
                         {"type":"object","properties":{}}""",
-                        listProfileConflicts::execute));
+                        listProfileConflicts::execute),
+                new ToolRegistration(
+                        ListLifecycleHooksTool.NAME,
+                        "List @PostConstruct / @PreDestroy methods across components",
+                        """
+                        {"type":"object","properties":{
+                           "phase":{"type":"string","enum":["POST_CONSTRUCT","PRE_DESTROY"]}}}""",
+                        listLifecycleHooks::execute));
 
         new McpStdioBridge(registrations).run();
     }
