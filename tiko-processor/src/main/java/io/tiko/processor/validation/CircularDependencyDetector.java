@@ -91,7 +91,10 @@ public final class CircularDependencyDetector {
     }
 
     /**
-     * Gets dependencies for a component or factory by key.
+     * Gets dependencies for a component or factory by key. When two {@code @Produces}
+     * methods register at the same key under disjoint profiles (#275), this picks the
+     * first registered variant — cycle topology is structural and shared shape is the
+     * common case; profile-specific cycles get caught when the relevant build runs.
      */
     private List<DependencyModel> getDependencies(String componentKey) {
         // Check components first
@@ -101,9 +104,9 @@ public final class CircularDependencyDetector {
         }
 
         // Check factory methods
-        FactoryMethodModel factory = context.getFactoryMethods().get(componentKey);
-        if (factory != null) {
-            return factory.getDependencies();
+        List<FactoryMethodModel> factories = context.getFactoryMethodsByKey(componentKey);
+        if (!factories.isEmpty()) {
+            return factories.get(0).getDependencies();
         }
 
         return List.of();

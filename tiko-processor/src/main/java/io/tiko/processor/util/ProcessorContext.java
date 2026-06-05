@@ -36,7 +36,12 @@ public final class ProcessorContext {
 
     // Discovered components and factories
     private final Map<String, ComponentModel> components = new HashMap<>();
-    private final Map<String, FactoryMethodModel> factoryMethods = new HashMap<>();
+    // Factory methods grouped by their {@code returnTypeName (#name)} key. The map is one-to-many
+    // because two {@code @Produces} methods returning the same type can coexist as long as their
+    // {@code profiles = {...}} sets do not overlap (see #275). Lookups iterate the per-key list
+    // and pick the profile-active one; {@code registerFactoryMethod} guards against truly
+    // overlapping additions.
+    private final Map<String, List<FactoryMethodModel>> factoryMethods = new HashMap<>();
     private final List<EventHandlerModel> eventHandlers = new ArrayList<>();
     private final List<ConfigurationModel> configurations = new ArrayList<>();
 
@@ -131,23 +136,53 @@ public final class ProcessorContext {
 
     public void registerFactoryMethod(FactoryMethodModel factory) {
         String key = factory.getComponentKey();
-        if (factoryMethods.containsKey(key)) {
-            errorReporter.error(
-                    ErrorReporter.KIND_BAD_PRODUCES,
-                    factory.getMethodElement(),
-                    "Duplicate factory method: " + key + " is already registered",
-                    "Give one of the @Produces methods a unique @Produces(name = \"...\")",
-                    "Remove the duplicate @Produces method");
+        List<FactoryMethodModel> existing = factoryMethods.computeIfAbsent(key, k -> new ArrayList<>());
+        // Two @Produces methods returning the same type can coexist when their profile sets are
+        // disjoint — only one is ever active in a given build. Reject only when the profile sets
+        // overlap (i.e. some build activation would include both).
+        for (FactoryMethodModel other : existing) {
+            if (profilesOverlap(factory.getProfiles(), other.getProfiles())) {
+                errorReporter.error(
+                        ErrorReporter.KIND_BAD_PRODUCES,
+                        factory.getMethodElement(),
+                        "Duplicate factory method: " + key + " is already registered with overlapping profiles",
+                        "Give one of the @Produces methods a unique @Produces(name = \"...\")",
+                        "Restrict the @Produces(profiles = {...}) so the methods don't both apply at build time",
+                        "Remove the duplicate @Produces method");
+                return;
+            }
         }
         if (components.containsKey(key)) {
-            errorReporter.error(
-                    ErrorReporter.KIND_BAD_PRODUCES,
-                    factory.getMethodElement(),
-                    "Factory method produces type " + key + " which is already provided by a @Component",
-                    "Give the @Produces method or the @Component a distinct name qualifier",
-                    "Remove either the @Produces method or the conflicting @Component");
+            ComponentModel colliding = components.get(key);
+            if (profilesOverlap(factory.getProfiles(), colliding.getProfiles())) {
+                errorReporter.error(
+                        ErrorReporter.KIND_BAD_PRODUCES,
+                        factory.getMethodElement(),
+                        "Factory method produces type " + key + " which is already provided by a @Component",
+                        "Give the @Produces method or the @Component a distinct name qualifier",
+                        "Restrict the profiles so the @Produces and @Component don't both apply at build time",
+                        "Remove either the @Produces method or the conflicting @Component");
+                return;
+            }
         }
-        factoryMethods.put(key, factory);
+        existing.add(factory);
+    }
+
+    /**
+     * Returns {@code true} when the two profile sets share at least one possible activation —
+     * i.e. some build flag would make both providers active. An empty set means "no profile
+     * declared = always active", so it overlaps with anything.
+     */
+    private static boolean profilesOverlap(List<String> a, List<String> b) {
+        if (a.isEmpty() || b.isEmpty()) {
+            return true;
+        }
+        for (String p : a) {
+            if (b.contains(p)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public void registerEventHandler(EventHandlerModel eventHandler) {
@@ -158,8 +193,22 @@ public final class ProcessorContext {
         return Map.copyOf(components);
     }
 
-    public Map<String, FactoryMethodModel> getFactoryMethods() {
-        return Map.copyOf(factoryMethods);
+    /**
+     * Flat snapshot of every registered factory method, across all profile-disjoint
+     * variants stored under shared keys (see {@link #registerFactoryMethod} and #275).
+     */
+    public List<FactoryMethodModel> getFactoryMethods() {
+        return factoryMethods.values().stream().flatMap(List::stream).toList();
+    }
+
+    /**
+     * Returns the registered factory methods for the given key as a snapshot. When two
+     * {@code @Produces} methods returning the same type live behind disjoint profiles,
+     * the list contains both — callers that need the build-active one should filter via
+     * {@link #isProfileActive}.
+     */
+    public List<FactoryMethodModel> getFactoryMethodsByKey(String key) {
+        return List.copyOf(factoryMethods.getOrDefault(key, List.of()));
     }
 
     public List<EventHandlerModel> getEventHandlers() {
@@ -192,9 +241,11 @@ public final class ProcessorContext {
                 return Optional.of(c);
             }
         }
-        for (FactoryMethodModel f : factoryMethods.values()) {
-            if (f.getReturnTypeName().equals(implFqn) && isProfileActive(f.getProfiles())) {
-                return Optional.of(f);
+        for (List<FactoryMethodModel> fs : factoryMethods.values()) {
+            for (FactoryMethodModel f : fs) {
+                if (f.getReturnTypeName().equals(implFqn) && isProfileActive(f.getProfiles())) {
+                    return Optional.of(f);
+                }
             }
         }
         return Optional.empty();
@@ -216,9 +267,11 @@ public final class ProcessorContext {
                 matches.add(c);
             }
         }
-        for (FactoryMethodModel f : factoryMethods.values()) {
-            if (f.getReturnTypeName().equals(implFqn) && isProfileActive(f.getProfiles())) {
-                matches.add(f);
+        for (List<FactoryMethodModel> fs : factoryMethods.values()) {
+            for (FactoryMethodModel f : fs) {
+                if (f.getReturnTypeName().equals(implFqn) && isProfileActive(f.getProfiles())) {
+                    matches.add(f);
+                }
             }
         }
         return matches;
@@ -247,9 +300,10 @@ public final class ProcessorContext {
             }
         }
         if (factoryMethods.containsKey(key)) {
-            FactoryMethodModel exact = factoryMethods.get(key);
-            if (isProfileActive(exact.getProfiles())) {
-                return Optional.of(exact);
+            for (FactoryMethodModel exact : factoryMethods.get(key)) {
+                if (isProfileActive(exact.getProfiles())) {
+                    return Optional.of(exact);
+                }
             }
         }
 
@@ -333,6 +387,7 @@ public final class ProcessorContext {
      */
     public List<FactoryMethodModel> getActiveFactoryMethods() {
         return factoryMethods.values().stream()
+                .flatMap(List::stream)
                 .filter(f -> isProfileActive(f.getProfiles()))
                 .toList();
     }
