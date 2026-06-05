@@ -54,8 +54,7 @@ public final class GetGeneratedArtifactTool {
         var componentFqn = ToolArgs.strOrNull(args.get(KEY_COMPONENT_FQN));
 
         return switch (kind) {
-            case KIND_FACTORY ->
-                resolveComponentArtifact(kind, componentFqn, simpleName -> simpleName + "Factory.java", null);
+            case KIND_FACTORY -> resolveFactory(componentFqn);
             case KIND_PROXY -> resolveProxy(componentFqn);
             case KIND_CONFIG_BINDER -> resolveConfigBinder(componentFqn);
             case KIND_CONTAINER -> resolveSingular(kind, "TikoContainerImpl_");
@@ -68,23 +67,14 @@ public final class GetGeneratedArtifactTool {
 
     // === Component-keyed kinds =========================================================
 
-    private Map<String, Object> resolveComponentArtifact(
-            String kind,
-            String componentFqn,
-            java.util.function.Function<String, String> filenameFor,
-            String skipReason) {
+    private Map<String, Object> resolveFactory(String componentFqn) {
         if (componentFqn == null) {
-            throw new IllegalArgumentException(KEY_COMPONENT_FQN + " is required for kind " + kind);
+            throw new IllegalArgumentException(KEY_COMPONENT_FQN + " is required for kind " + KIND_FACTORY);
         }
-        var component = findComponent(componentFqn);
-        if (component.isEmpty()) {
-            return notFound(kind, componentFqn, "Component not found in topology");
+        if (findComponent(componentFqn).isEmpty()) {
+            return notFound(KIND_FACTORY, componentFqn, "Component not found in topology");
         }
-        if (skipReason != null) {
-            return notFound(kind, componentFqn, skipReason);
-        }
-        var simpleName = simpleName(componentFqn);
-        return locate(kind, filenameFor.apply(simpleName), "io/tiko/generated", componentFqn);
+        return locate(KIND_FACTORY, simpleName(componentFqn) + "Factory.java", "io/tiko/generated", componentFqn);
     }
 
     private Map<String, Object> resolveProxy(String componentFqn) {

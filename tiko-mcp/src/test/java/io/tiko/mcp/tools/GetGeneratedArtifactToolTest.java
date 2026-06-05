@@ -181,6 +181,65 @@ class GetGeneratedArtifactToolTest {
     }
 
     @Test
+    void proxyKindMissingComponentFqnThrows(@TempDir Path root) throws Exception {
+        var tool = new GetGeneratedArtifactTool(emptyStore(root));
+        var args = Map.<String, Object>of("kind", "PROXY");
+        assertThatThrownBy(() -> tool.execute(args))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("componentFqn");
+    }
+
+    @Test
+    void proxyKindUnknownComponentReturnsNotFound(@TempDir Path root) throws Exception {
+        var tool = new GetGeneratedArtifactTool(emptyStore(root));
+        var out = tool.execute(Map.of("kind", "PROXY", "componentFqn", "x.NeverRegistered"));
+        assertThat(out).containsEntry("exists", false);
+        assertThat(out.get("reason").toString()).contains("Component not found");
+    }
+
+    @Test
+    void configBinderKindMissingComponentFqnThrows(@TempDir Path root) throws Exception {
+        var tool = new GetGeneratedArtifactTool(emptyStore(root));
+        var args = Map.<String, Object>of("kind", "CONFIG_BINDER");
+        assertThatThrownBy(() -> tool.execute(args))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("componentFqn");
+    }
+
+    @Test
+    void configBinderKindUnknownConfigurationReturnsNotFound(@TempDir Path root) throws Exception {
+        var tool = new GetGeneratedArtifactTool(emptyStore(root));
+        var out = tool.execute(Map.of("kind", "CONFIG_BINDER", "componentFqn", "x.NeverRegistered"));
+        assertThat(out).containsEntry("exists", false);
+        assertThat(out.get("reason").toString()).contains("Configuration not found");
+    }
+
+    @Test
+    void containerKindReturnsStructuredNotFoundWhenNoContainerOnDisk(@TempDir Path root) throws Exception {
+        // Topology says a container exists but generated-sources/ is empty.
+        writeTopology(root, """
+                {"schemaVersion":1,"module":"TikoContainerImpl_abc",
+                 "components":[],"factoryMethods":[],"eventHandlers":[],"eventTriggers":[],"configurations":[]}
+                """);
+        var tool = new GetGeneratedArtifactTool(TopologyStore.loadFrom(root));
+        var out = tool.execute(Map.of("kind", "CONTAINER"));
+        assertThat(out).containsEntry("exists", false).containsEntry("kind", "CONTAINER");
+        assertThat(out.get("reason").toString()).contains("TikoContainerImpl_*.java");
+    }
+
+    @Test
+    void eventRegistryKindReturnsStructuredNotFoundWhenAbsent(@TempDir Path root) throws Exception {
+        writeTopology(root, """
+                {"schemaVersion":1,"module":"TikoContainerImpl_abc",
+                 "components":[],"factoryMethods":[],"eventHandlers":[],"eventTriggers":[],"configurations":[]}
+                """);
+        var tool = new GetGeneratedArtifactTool(TopologyStore.loadFrom(root));
+        var out = tool.execute(Map.of("kind", "EVENT_REGISTRY"));
+        assertThat(out).containsEntry("exists", false);
+        assertThat(out.get("reason").toString()).contains("EventRegistry_*.java");
+    }
+
+    @Test
     void missingComponentFqnForComponentKeyedKindThrows(@TempDir Path root) throws Exception {
         writeTopology(root, """
                 {"schemaVersion":1,"module":"m",
@@ -192,6 +251,14 @@ class GetGeneratedArtifactToolTest {
         assertThatThrownBy(() -> tool.execute(args))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("componentFqn");
+    }
+
+    private TopologyStore emptyStore(Path root) throws Exception {
+        writeTopology(root, """
+                {"schemaVersion":1,"module":"m",
+                 "components":[],"factoryMethods":[],"eventHandlers":[],"eventTriggers":[],"configurations":[]}
+                """);
+        return TopologyStore.loadFrom(root);
     }
 
     private void writeTopology(Path root, String json) throws Exception {
