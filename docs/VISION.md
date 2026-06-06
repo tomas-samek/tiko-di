@@ -8,10 +8,19 @@
 
 Tiko is a **compile-time service orchestrator for the JVM**.
 
+> Tiko orchestrates, it doesn't bundle — direct access, compile-time safe,
+> nothing wrapped.
+
 You declare your services and their contracts. Tiko wires them, validates the
 topology at build time, and stays out of your business logic.
 
 If it builds, it runs.
+
+The agent-facing distillation of this vision lives at
+[`.ai-skills/tiko-build/SKILL.md`](../.ai-skills/tiko-build/SKILL.md);
+the long-form recipe doc at
+[`docs/orchestrator-model.md`](./orchestrator-model.md) is the canonical
+cookbook for building on top.
 
 ---
 
@@ -70,6 +79,51 @@ alternatives, instantiate it directly in its parent service's constructor.
 Tiko engages at service boundaries — that's where DI earns its complexity
 budget. Inside a service, write whatever Java feels right. Tiko does not
 reach in.
+
+---
+
+## Three buckets — Core, Plug in, Open
+
+Every concern in a tiko-built service lands in one of three buckets. The
+split is the operational consequence of the principles above, and the
+shape the README is now organized around.
+
+### Core (what tiko ships)
+
+The container, the scopes (`SINGLETON` / `EVENT` / `PROTOTYPE`), the event
+bus, `@EventHandler` and `@EventTrigger`, compile-time validation,
+lifecycle hooks, `@Configuration` typed records. This is the surface tiko
+owns end-to-end.
+
+### Plug in (you bring the library; tiko orchestrates the seam)
+
+HTTP servers, databases, caches, template engines, security libraries,
+schedulers, retry helpers, any SDK client. Pattern: declare a factory
+method annotated `@Produces`, return the library's value, consume it as a
+constructor parameter. No wrapper, no adapter layer, no annotation-driven
+dispatch.
+
+The default answer to "does tiko support X?" is **Plug in via `@Produces`**.
+Tiko owns the seam; it does not own the library surface. This is what the
+"backbone, not a framework" line means in practice — when a Spring user
+reaches for `@RestController` or `@Transactional`, the tiko-native answer
+is a factory and an explicit demarcation, both visible code.
+
+The full redirect table is in
+[`.ai-skills/tiko-build/SKILL.md`](../.ai-skills/tiko-build/SKILL.md); the
+worked recipes are in
+[`docs/orchestrator-model.md`](./orchestrator-model.md); the reference app
+that the cookbook cites is
+[`tiko-examples/15_quickstart`](../tiko-examples/15_quickstart).
+
+### Open design questions
+
+Async generalisation, scheduling-as-tick-event, retry-as-event-loop — the
+small set of unresolved questions about extending the event model itself.
+An honest scope note, not a deferral promise: these are where tiko's
+position isn't yet earned by observation, and where a contributor's
+opinion would land in a real discussion rather than against a settled
+default.
 
 ---
 
@@ -165,10 +219,13 @@ credibility comes from naming them.
   The API surface is uniform across transports because the publisher-side
   semantics are uniform.
 
-- **Transactional semantics — request-scope buffering built in, outbox
-  recommended, `@TransactionalEventListener` equivalent out of scope.**
-  Events published inside `runInRequestScope` are buffered and only
-  released when the scope exits successfully; on failure they are dropped.
+- **Transactional semantics — event-scope buffering built in, outbox
+  recommended, no implicit phase coupling between transactions and event
+  delivery.** Events published inside `runInEventScope` are buffered and
+  only released when the scope exits successfully; on failure they are
+  dropped. The `@TransactionalEventListener` reflex is replaced by an
+  explicit `eventBus.publish(...)` after the write completes — see the
+  redirect in [`docs/orchestrator-model.md` §4.1](./orchestrator-model.md).
   Persistence-backed outbox (for crash safety across the JVM boundary) is
   the consumer's responsibility — Tiko does not own a database, so it does
   not own the durable record.
@@ -254,20 +311,23 @@ can mentally project Tiko's approach into their own work.
 
 ## Roadmap notes (not commitments)
 
-Today (alpha, Phase 1 + Phase 2 closed): core DI, four-scope lifecycle,
+Today (0.1.0 on Maven Central): core DI, three-scope lifecycle,
 multi-module aggregation, `@Configuration` records with typed YAML binding +
 source anchors, in-memory event bus with handler isolation + bounded async
 executor + graceful drain, `@EventTrigger` chains with origin tracking,
 Kafka transport behind a universal `TransportBootstrap` SPI, `System.Logger`
 for internal logging.
 
-- **Active work:** Phase 3 (onboarding & tooling — AI-aware archetype,
-  `tiko-test` JUnit 5 module, machine-readable topology + MCP server),
-  Phase 4 (runtime hardening — structured `RuntimeException` subtypes,
-  framework-managed JVM shutdown hook).
-- **Next:** Phase 5 (publish to Maven Central — pulled early so a lean,
-  validated core ships before the heavier feature work, rather than being
-  held until last), Phase 6 (MCP enrichment — deeper introspection of the
+- **Shipped recently:** Phase 3 (onboarding & tooling — AI-aware
+  archetype, `tiko-test` JUnit 5 module, machine-readable topology +
+  thirteen-tool MCP server), Phase 4 (runtime hardening — structured
+  `RuntimeException` subtypes, framework-managed JVM shutdown hook),
+  Phase 5 (Maven Central — POM metadata, GPG signing, sources/javadoc
+  jars, CI deploy).
+- **Active work:** the "Public framing reset" milestone (orchestrator
+  vocabulary lock, agent-readable skill, README rewrite around the three
+  buckets, benchmark of skill effectiveness across coding agents).
+- **Next:** Phase 6 (MCP enrichment — deeper introspection of the
   compile-time graph), Phase 7 (first-party resiliency layer — timeouts,
   retries, backpressure, executor pool knobs, DLQ; supersedes the prior
   plan to cover this via a cookbook), Phase 8 (RabbitMQ + JMS transports
@@ -278,26 +338,37 @@ for internal logging.
   observability hooks (metrics, tracing), GraalVM native-image support, AOP
   / interceptors. None of these have a concrete driver yet; they will earn a
   milestone if and when one appears.
+- **Explicitly Plug in — not a tiko-shipped feature:** the HTTP layer
+  (Javalin, Jetty, Spark, Vert.x via `@Produces` — see
+  `tiko-examples/09_http_javalin` and `tiko-examples/15_quickstart`), the
+  persistence layer (HikariCP / jOOQ / Flyway via `@Produces` and
+  `@EventHandler(ApplicationStartedEvent)` — see
+  `tiko-examples/10_persistence_jdbc`, `tiko-examples/15_quickstart`, and
+  `docs/cookbooks/persistence.md`), security (open-design caveat in
+  `docs/orchestrator-model.md` §6), schedulers, retries, caches, template
+  engines.
 - **Explicitly out of scope:** distributed orchestration across processes
-  (use a service mesh), web framework / HTTP layer (use Javalin, Helidon,
-  whatever — see `tiko-examples/09_http_javalin`), persistence layer (use
-  JDBC, jOOQ, whatever — see `tiko-examples/10_persistence_jdbc` +
-  `docs/cookbooks/persistence.md`).
+  — use a service mesh.
 
 ---
 
 ## Tagline candidates
 
+**Locked one-line pitch** (verbatim across README, skill,
+archetype agent-config — see
+[`docs/orchestrator-vocabulary.md`](./orchestrator-vocabulary.md)):
+
+> *"Tiko orchestrates, it doesn't bundle — direct access, compile-time safe,
+> nothing wrapped."*
+
+Older candidates kept here as historical context — pick from these if a
+launch post needs a different tone, but the locked pitch is what
+propagates between artifacts so agents see the same words everywhere:
+
 > *"Tiko is a compile-time service orchestrator for the JVM. Declare your
 > services and their contracts; Tiko wires them, validates the topology,
 > and stays out of your business logic."*
 
-Shorter:
-
 > *"Tiko: compile-time wired services for the JVM. If it builds, it runs."*
 
-Pithiest:
-
 > *"A backbone, not a framework."*
-
-(Pick one based on tone of the launch post.)
