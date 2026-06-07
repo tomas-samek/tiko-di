@@ -31,3 +31,14 @@ first. It's the operational distillation of
 canonical small-service shape the skill cites. Every `@Produces`
 factory and `@EventHandler` in it maps to a named recipe in the long
 doc.
+
+## Extending the cookbook
+
+When the canonical recipes don't cover the library a user wants to
+integrate, read
+[`.ai-skills/tiko-cookbook-extension/SKILL.md`](./.ai-skills/tiko-cookbook-extension/SKILL.md) —
+the procedural skill for adding a new recipe. **Load-bearing rule: ask,
+don't fabricate.** A wrong recipe locks an opinionated bad default into
+the project's apparent conventions; honest "I don't know which X you
+want here" beats invented X. Long-form companion:
+[`docs/cookbook-extension.md`](./docs/cookbook-extension.md).

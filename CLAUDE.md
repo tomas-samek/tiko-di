@@ -10,6 +10,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > stop agents from searching for "tiko's equivalent of Spring's X". This
 > CLAUDE.md is the repo-development reference; the skill is for **building
 > with** the framework.
+>
+> **Adding a new cookbook recipe?** Read
+> [`.ai-skills/tiko-cookbook-extension/SKILL.md`](./.ai-skills/tiko-cookbook-extension/SKILL.md) —
+> the procedural skill for extending the `tiko-build` cookbook when an
+> integration the canonical recipes don't cover comes up. **Load-bearing
+> rule: ask, don't fabricate.** Long-form companion:
+> [`docs/cookbook-extension.md`](./docs/cookbook-extension.md).
 
 ## Project Overview
 

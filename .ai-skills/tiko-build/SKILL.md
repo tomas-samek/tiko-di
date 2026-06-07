@@ -121,3 +121,13 @@ Full anti-pattern prose with code samples is in
   skill names a canonical choice; swap freely if the project already has one.
 - Anything outside the orchestrator model. For framework internals, read
   the source.
+
+## Need a recipe the cookbook doesn't have?
+
+If the user's library isn't in the table above, read
+[`../tiko-cookbook-extension/SKILL.md`](../tiko-cookbook-extension/SKILL.md) —
+the procedural skill for adding a new recipe. **Don't invent a recipe.**
+The load-bearing rule of that sibling skill is *ask, don't fabricate*;
+asking the user which `@Produces` signature, which version, which
+lifecycle is always cheaper than baking a wrong default into the
+project's apparent conventions.

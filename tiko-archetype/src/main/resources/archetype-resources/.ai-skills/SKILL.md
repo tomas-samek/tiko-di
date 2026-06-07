@@ -10,6 +10,12 @@ for Core / Plug in / Open, the `@Produces` cookbook table, and the
 anti-pattern redirect table so you reach for the tiko-native primitive
 instead of searching for a Spring equivalent.
 
+## Hit a library the cookbook doesn't cover?
+
+Read [`tiko-cookbook-extension/SKILL.md`](./tiko-cookbook-extension/SKILL.md) —
+the procedural skill for adding a new recipe to the cookbook.
+Load-bearing rule: **ask, don't fabricate.**
+
 ## Where to find framework documentation
 
 - README: https://github.com/tomas-samek/tiko-di/blob/main/README.md
