@@ -42,3 +42,14 @@ don't fabricate.** A wrong recipe locks an opinionated bad default into
 the project's apparent conventions; honest "I don't know which X you
 want here" beats invented X. Long-form companion:
 [`docs/cookbook-extension.md`](./docs/cookbook-extension.md).
+
+## Cutting a release
+
+If you're driving a Maven Central release of tiko-di, read
+[`.ai-skills/tiko-release/SKILL.md`](./.ai-skills/tiko-release/SKILL.md) —
+pre-flight checks, the two version inputs to confirm with the user, the
+Sonatype Portal manual Publish gate, post-publish verification, common
+traps from prior releases. **Load-bearing rule: never pick
+`release_version` or `next_snapshot` silently.** Long-form companion:
+[`docs/release-skill.md`](./docs/release-skill.md). Comprehensive
+reference: [`docs/releasing.md`](./docs/releasing.md).
