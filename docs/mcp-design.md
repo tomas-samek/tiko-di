@@ -88,3 +88,13 @@ Before opening an issue for a new MCP tool, the proposal has to answer:
 
 If the proposal is "expose X data the agent might find useful", that's the
 wrong frame — start from the agent's question and work back.
+
+## Sibling agent-facing surface
+
+The MCP topology server is one of two agent-facing surfaces in tiko. The
+other is the [tiko-build cookbook](./orchestrator-model.md) and its
+[extension procedure](./cookbook-extension.md). Both follow the same
+spirit: ask narrowly, don't dump; let the agent (and the user) reach for
+the next question instead of drowning in everything-at-once. A tool that
+violates the per-partes principle here belongs nowhere; a recipe written
+without asking the user belongs in no cookbook.

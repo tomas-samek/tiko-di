@@ -6,6 +6,10 @@ This project uses **tiko-di**, a compile-time dependency injection framework for
 
 Read [`.ai-skills/tiko-build/SKILL.md`](../../.ai-skills/tiko-build/SKILL.md) first — the decision tree, `@Produces` cookbook, and anti-pattern redirects that stop you from searching for "tiko's equivalent of Spring's X".
 
+## Hit a library the cookbook doesn't cover?
+
+Read [`.ai-skills/tiko-cookbook-extension/SKILL.md`](../../.ai-skills/tiko-cookbook-extension/SKILL.md) — the procedural skill for adding a new recipe. Load-bearing rule: **ask, don't fabricate.**
+
 ## Where to find framework documentation
 
 - README: https://github.com/tomas-samek/tiko-di/blob/main/README.md

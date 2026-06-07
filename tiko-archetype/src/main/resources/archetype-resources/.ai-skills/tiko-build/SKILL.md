@@ -119,3 +119,13 @@ doc (linked at the top).
 - Choosing between libraries (Javalin vs Spark, HikariCP vs Agroal). This
   skill names a canonical choice; swap freely if your project already has one.
 - Framework internals — read the tiko-di source.
+
+## Need a recipe the cookbook doesn't have?
+
+If the user's library isn't in the table above, read
+[`../tiko-cookbook-extension/SKILL.md`](../tiko-cookbook-extension/SKILL.md) —
+the procedural skill for adding a new recipe. **Don't invent a recipe.**
+The load-bearing rule of that sibling skill is *ask, don't fabricate*;
+asking the user which `@Produces` signature, which version, which
+lifecycle is always cheaper than baking a wrong default into the
+project's apparent conventions.

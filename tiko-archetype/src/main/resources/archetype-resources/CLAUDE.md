@@ -10,6 +10,11 @@ zero reflection and zero classpath scanning.
 > first — decision tree, `@Produces` cookbook, anti-pattern redirects.
 > This `CLAUDE.md` is a framework reference; the skill is the procedure
 > for building with it.
+>
+> **Hit a library the cookbook doesn't cover?** Read
+> [`.ai-skills/tiko-cookbook-extension/SKILL.md`](./.ai-skills/tiko-cookbook-extension/SKILL.md) —
+> the procedural skill for adding a new recipe. Load-bearing rule:
+> **ask, don't fabricate.**
 
 The first half of this file is a Tiko DI reference. The second half
 (["About this project"](#about-this-project)) is a template for the

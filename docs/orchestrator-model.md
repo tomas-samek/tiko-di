@@ -530,3 +530,13 @@ a single feature-shape request from one codebase.
 Do not invent an `@TikoTransactional` or a `@TikoScheduled` to fill the
 shape. The point of the orchestrator model is that the bundled-features
 shape isn't the one we're building toward.
+
+## Adding a recipe the cookbook doesn't have
+
+If your concern *does* fit the Plug-in bucket but the library you want
+isn't in §3 above — that's the cookbook growing, not the framework
+changing. See [`docs/cookbook-extension.md`](./cookbook-extension.md) for
+the procedure, and the agent-facing operational version at
+[`.ai-skills/tiko-cookbook-extension/SKILL.md`](../.ai-skills/tiko-cookbook-extension/SKILL.md).
+Load-bearing rule: **ask, don't fabricate.** A wrong recipe locks an
+opinionated bad default into the project's apparent conventions.
