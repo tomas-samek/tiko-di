@@ -6,7 +6,7 @@
 
     <groupId>io.github.tomas-samek</groupId>
     <artifactId>tiko-parent</artifactId>
-    <version>0.2.2</version>
+    <version>0.3.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Tiko DI</name>
