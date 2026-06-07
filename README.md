@@ -62,6 +62,7 @@ Lookup-table answer to "does tiko support X?":
 - **Long-form prose?** [`docs/orchestrator-model.md`](./docs/orchestrator-model.md).
 - **Reference shape?** [`tiko-examples/15_quickstart`](./tiko-examples/15_quickstart) — the canonical small service the skill cites.
 - **Scaffold a fresh project?** Maven archetype — see [Scaffold a new project](#scaffold-a-new-project-archetype) below.
+- **Library not in the cookbook?** Read [`.ai-skills/tiko-cookbook-extension/SKILL.md`](./.ai-skills/tiko-cookbook-extension/SKILL.md) — the procedural skill for adding a new recipe. Load-bearing rule: **ask, don't fabricate.**
 
 ## Quick example
 
