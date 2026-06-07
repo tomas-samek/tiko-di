@@ -85,6 +85,16 @@
                 <version>${tiko.version}</version>
             </dependency>
             <dependency>
+                <groupId>io.github.tomas-samek</groupId>
+                <artifactId>tiko-kafka</artifactId>
+                <version>${tiko.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.tomas-samek</groupId>
+                <artifactId>tiko-kafka-processor</artifactId>
+                <version>${tiko.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>io.modelcontextprotocol.sdk</groupId>
                 <artifactId>mcp</artifactId>
                 <version>${mcp-sdk.version}</version>
