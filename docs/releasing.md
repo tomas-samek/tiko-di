@@ -19,7 +19,7 @@ The published surface is the parent POM plus everything `tiko-bom` exposes:
 
 | Published                                                                 | Not published (`skipPublishing=true`)                          |
 | ------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `tiko-parent`, `tiko-bom`, `tiko-api`, `tiko-runtime`, `tiko-processor`, `tiko-config`, `tiko-mcp`, `tiko-test` | `tiko-kafka`, `tiko-kafka-processor`, `tiko-kafka-it`, `tiko-examples` (+ children), `tiko-archetype`, `tiko-coverage` |
+| `tiko-parent`, `tiko-bom`, `tiko-api`, `tiko-runtime`, `tiko-processor`, `tiko-config`, `tiko-mcp`, `tiko-test`, `tiko-archetype` | `tiko-kafka`, `tiko-kafka-processor`, `tiko-kafka-it`, `tiko-examples` (+ children), `tiko-coverage` |
 
 Exclusion is per module: each non-published module sets `<skipPublishing>true</skipPublishing>`
 in its `<properties>` (the examples' 13 child modules inherit it from `tiko-examples`).
@@ -81,7 +81,7 @@ release → next-snapshot dance — you only supply two version strings.
    which builds with `-Prelease` (attaches `-sources`/`-javadoc`, GPG-signs every
    artifact) and uploads the bundle to Central Portal **staging**.
 3. Open <https://central.sonatype.com> → *Deployments*. Verify the staged deployment
-   contains exactly the eight artifacts listed above — and **nothing else** — then
+   contains exactly the nine artifacts listed above — and **nothing else** — then
    click **Publish**. (`autoPublish=false` is deliberate: this is the human gate.)
 4. Artifacts appear on Central a short while after publishing. The GitHub Actions
    workflow run finished some seconds after the staging upload; it does not block on
