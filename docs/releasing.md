@@ -1,5 +1,15 @@
 # Releasing Tiko to Maven Central
 
+> **Driving the release yourself or with an agent's help?** The procedural
+> companion to this reference is [`.ai-skills/tiko-release/SKILL.md`](../.ai-skills/tiko-release/SKILL.md) —
+> pre-flight checks, the two version inputs to confirm, the Sonatype
+> Portal manual gate, post-publish verification, common traps from
+> prior releases. Load-bearing rule: never pick `release_version` or
+> `next_snapshot` silently. Long-form framing:
+> [`docs/release-skill.md`](./release-skill.md). This file (`releasing.md`)
+> remains the comprehensive *what is published and how it's wired*
+> reference.
+
 Tiko publishes to the **Sonatype Central Portal** (the OSSRH successor) via the
 `central-publishing-maven-plugin`. Everything release-specific lives behind the
 `release` Maven profile, so day-to-day `mvn install` is unaffected. The publish is

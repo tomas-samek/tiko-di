@@ -17,6 +17,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > integration the canonical recipes don't cover comes up. **Load-bearing
 > rule: ask, don't fabricate.** Long-form companion:
 > [`docs/cookbook-extension.md`](./docs/cookbook-extension.md).
+>
+> **Cutting a release of tiko-di?** Read
+> [`.ai-skills/tiko-release/SKILL.md`](./.ai-skills/tiko-release/SKILL.md) —
+> pre-flight checks, the two version inputs to ask the user about,
+> the Sonatype Portal manual gate, common traps. **Load-bearing rule:
+> never pick `release_version` or `next_snapshot` silently.** Long-form
+> companion: [`docs/release-skill.md`](./docs/release-skill.md).
+> Comprehensive reference: [`docs/releasing.md`](./docs/releasing.md).
 
 ## Project Overview
 
