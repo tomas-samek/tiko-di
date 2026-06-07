@@ -24,6 +24,14 @@ The published surface is the parent POM plus everything `tiko-bom` exposes:
 Exclusion is per module: each non-published module sets `<skipPublishing>true</skipPublishing>`
 in its `<properties>` (the examples' 13 child modules inherit it from `tiko-examples`).
 
+**When moving a module from "Not published" to "Published"** (dropping its
+`skipPublishing=true`), add the matching `<dependency>` entry under
+`tiko-bom/pom.xml`'s `<dependencyManagement>` in the same PR. Otherwise
+consumers who import `tiko-bom` will have to specify a `<version>` on the
+newly-published artifact, which defeats the BOM's purpose. The exception is
+`tiko-archetype`: archetypes resolve via `-DarchetypeVersion=…`, not as
+`<dependency>` blocks, and need no BOM entry.
+
 ## One-time setup
 
 1. **Central Portal namespace.** Sign in at <https://central.sonatype.com>, click
