@@ -12,7 +12,7 @@
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <tiko.version>0.3.0-SNAPSHOT</tiko.version>
+        <tiko.version>0.2.0</tiko.version>
     </properties>
 
     <dependencyManagement>
