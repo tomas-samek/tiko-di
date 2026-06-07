@@ -24,9 +24,6 @@
         <!-- Jackson lives under a relocated package after shading; keep the un-relocated
              scope to compile so source code uses the standard package names. -->
         <jackson.relocate.target>io.tiko.kafka.internal.jackson</jackson.relocate.target>
-        <!-- Kafka transport is a Phase 6 deliverable, not part of the 0.x core release — keep it out
-             of the Central Portal bundle. -->
-        <skipPublishing>true</skipPublishing>
     </properties>
 
     <dependencies>
@@ -109,6 +106,17 @@
                                     <shadedPattern>${jackson.relocate.target}</shadedPattern>
                                 </relocation>
                             </relocations>
+                            <transformers>
+                                <!-- Concatenates every bundled dep's META-INF/NOTICE so attribution
+                                     requirements from each Apache 2.0 dep survive the shading.
+                                     Without this, only the last-shaded NOTICE survives the file
+                                     collision and the others' attributions are lost — a violation
+                                     of Apache 2.0 §4(d). Same pattern as tiko-mcp (#294). -->
+                                <transformer
+                                    implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer">
+                                    <projectName>Tiko Kafka</projectName>
+                                </transformer>
+                            </transformers>
                         </configuration>
                     </execution>
                 </executions>
