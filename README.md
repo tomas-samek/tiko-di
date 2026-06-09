@@ -9,7 +9,7 @@
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=tomas-samek_tiko-di&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=tomas-samek_tiko-di)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=tomas-samek_tiko-di&metric=coverage)](https://sonarcloud.io/summary/new_code?id=tomas-samek_tiko-di)
 
-**Status: 0.1.0 on Maven Central.** Suitable for early-adopter experimentation. See [docs/roadmap.md](./docs/roadmap.md) for what ships today and what's next.
+**Status: 0.2.2 on Maven Central.** Suitable for early-adopter experimentation. See [docs/roadmap.md](./docs/roadmap.md) for what ships today and what's next.
 
 **Benchmarked for AI-friendliness** → [llm-framework-benchmark](https://github.com/tomas-samek/llm-framework-benchmark): on an external-oracle-graded build task (a Kafka → H2 → merged-notification service), a coding agent reached an **86% median** building on tiko *despite tiko being absent from the model's training data* — carried by tiko's in-repo affordances (machine-readable guidance + an MCP topology server) rather than prior familiarity. Early results (Claude Opus 4.8, n=5); see the benchmark for the full picture and caveats.
 
@@ -104,25 +104,25 @@ The annotation processor validates all dependencies at compile-time and generate
 
 ## Installation
 
-Tiko ships to Maven Central as of 0.1.0 — pull the artifacts directly:
+Tiko ships to Maven Central — pull the artifacts directly:
 
 ```xml
 <dependencies>
     <dependency>
         <groupId>io.github.tomas-samek</groupId>
         <artifactId>tiko-api</artifactId>
-        <version>0.1.0</version>
+        <version>0.2.2</version>
     </dependency>
     <dependency>
         <groupId>io.github.tomas-samek</groupId>
         <artifactId>tiko-runtime</artifactId>
-        <version>0.1.0</version>
+        <version>0.2.2</version>
     </dependency>
     <!-- Optional, only if you use @Configuration -->
     <dependency>
         <groupId>io.github.tomas-samek</groupId>
         <artifactId>tiko-config</artifactId>
-        <version>0.1.0</version>
+        <version>0.2.2</version>
     </dependency>
 </dependencies>
 
@@ -137,7 +137,7 @@ Tiko ships to Maven Central as of 0.1.0 — pull the artifacts directly:
                     <path>
                         <groupId>io.github.tomas-samek</groupId>
                         <artifactId>tiko-processor</artifactId>
-                        <version>0.1.0</version>
+                        <version>0.2.2</version>
                     </path>
                 </annotationProcessorPaths>
             </configuration>
@@ -156,7 +156,7 @@ The fastest way to start a fresh project — generates a runnable single-module 
 mvn archetype:generate \
     -DarchetypeGroupId=io.github.tomas-samek \
     -DarchetypeArtifactId=tiko-archetype \
-    -DarchetypeVersion=0.1.0 \
+    -DarchetypeVersion=0.2.2 \
     -DgroupId=com.example \
     -DartifactId=my-app \
     -DinteractiveMode=false
