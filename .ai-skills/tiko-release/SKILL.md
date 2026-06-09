@@ -1,6 +1,6 @@
 ---
 name: tiko-release
-description: Use when cutting a release of tiko-di to Maven Central. Procedural skill — pre-flight checks, two version inputs to ask the user about, workflow dispatch, the Sonatype Portal manual gate, post-publish verification, GitHub Release notes, common traps from prior releases.
+description: Use when cutting a release of tiko-di to Maven Central. Procedural skill — pre-flight checks, two version inputs to ask the user about, workflow dispatch, the Sonatype Portal manual gate, post-publish verification, the README/install-doc version-pin bump, GitHub Release notes, common traps from prior releases.
 ---
 
 # tiko-release
@@ -242,7 +242,53 @@ Run in background; you'll be notified on completion. The poll cadence
 is 2 minutes — long enough to keep the cache warm, short enough to
 react when sync lands.
 
-## Step 6 — GitHub Release notes
+## Step 6 — bump the README + install-doc version pins
+
+The release workflow sets every **POM** to the new version, but it does
+**not** touch the prose docs. These advertise the install coordinate as
+literal text and go stale silently — exactly what left the README saying
+`Status: 0.1.0` while Central was already at `0.2.2` across three releases
+(fixed in `#316`). Do this once Step 5 confirms the version resolves on
+`repo1.maven.org`, so the docs never advertise a coordinate that isn't
+downloadable yet.
+
+Spots to bump to `<X.Y.Z>`:
+
+- `README.md` — the `**Status: <ver> on Maven Central.**` line.
+- `README.md` — the `tiko-bom` `<version>` in the `## Installation`
+  BOM-import snippet. This is now the **single** place the module and
+  annotation-processor versions resolve from (`#316`), so the dep blocks
+  and the `annotationProcessorPaths` path carry no version — don't
+  re-add one.
+- `README.md` — `-DarchetypeVersion=<ver>` in the archetype scaffold
+  command.
+- `docs/jdk-23-setup.md` — the Maven `<version>`, the three Gradle
+  coordinates, and the plain-`javac` jar names (still explicit pins, not
+  BOM-managed).
+
+Then sweep for stragglers (substitute the *prior* version):
+
+```bash
+grep -n "<prior X.Y.Z>" README.md docs/jdk-23-setup.md
+```
+
+**Do not** bump version strings in point-in-time records — they pin an
+old version on purpose: `docs/skill-benchmark/*`, `docs/release-process.md`,
+`docs/release-skill.md`, `docs/superpowers/plans/*`. Only the live install
+docs move.
+
+Commit on a branch and PR (never edit `main` directly):
+
+```bash
+git checkout -b docs/bump-<X.Y.Z>
+git commit -am "docs(readme): bump version pins to <X.Y.Z>"
+```
+
+The canonical verification is Step 8 below — a fresh-`m2` `mvn compile`
+against the copy-pasted snippet proves the bumped coordinate actually
+resolves before the PR merges.
+
+## Step 7 — GitHub Release notes
 
 Once Central is live, draft the release notes:
 
@@ -279,7 +325,7 @@ Once Central is live, draft the release notes:
    Any line in output = a mention-harvest hazard slipped through; fix
    immediately by editing the release body.
 
-## Step 7 — validate from an external-user POV (optional but recommended)
+## Step 8 — validate from an external-user POV (optional but recommended)
 
 If a skill-benchmark cell exists (e.g. `docs/skill-benchmark/runs/.../`),
 update its `tiko.version` to `<X.Y.Z>` and run `mvn compile` against a
