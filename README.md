@@ -11,6 +11,8 @@
 
 **Status: 0.1.0 on Maven Central.** Suitable for early-adopter experimentation. See [docs/roadmap.md](./docs/roadmap.md) for what ships today and what's next.
 
+**Benchmarked for AI-friendliness** → [llm-framework-benchmark](https://github.com/tomas-samek/llm-framework-benchmark): on an external-oracle-graded build task (a Kafka → H2 → merged-notification service), a coding agent reached an **86% median** building on tiko *despite tiko being absent from the model's training data* — carried by tiko's in-repo affordances (machine-readable guidance + an MCP topology server) rather than prior familiarity. Early results (Claude Opus 4.8, n=5); see the benchmark for the full picture and caveats.
+
 ## What Tiko is
 
 A **compile-time orchestrator** with an integrated event model and full compile-time validation.
