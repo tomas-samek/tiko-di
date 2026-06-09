@@ -134,13 +134,20 @@ public final class TypeUtil {
         List<? extends TypeMirror> interfaces = typeElement.getInterfaces();
         for (TypeMirror iface : interfaces) {
             String name = getQualifiedName(iface);
-            if (isLifecycleInterface(name)) continue;
+            if (isLifecycleMarkerInterface(name)) continue;
             return Optional.of(iface);
         }
         return Optional.empty();
     }
 
-    private static boolean isLifecycleInterface(String qualifiedName) {
+    /**
+     * Whether the given fully-qualified interface name is a JDK lifecycle marker
+     * ({@code java.lang.AutoCloseable} / {@code java.io.Closeable}) — a cleanup
+     * convention, not a service contract a caller dispatches against. Shared by
+     * {@link #getFirstInterface(TypeElement)} (proxy/interface keying) and the
+     * container's routable-type computation so the two never disagree (#301).
+     */
+    public static boolean isLifecycleMarkerInterface(String qualifiedName) {
         return "java.lang.AutoCloseable".equals(qualifiedName) || "java.io.Closeable".equals(qualifiedName);
     }
 
