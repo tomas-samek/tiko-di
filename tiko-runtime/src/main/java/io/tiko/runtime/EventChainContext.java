@@ -44,6 +44,21 @@ public final class EventChainContext {
     }
 
     /**
+     * Last-resort logging for an {@code Error} thrown by an async {@code @EventHandler}.
+     * Called exclusively from generated {@code EventRegistry} code. {@code CompletableFuture}
+     * captures the {@code Error} into the future rather than letting it surface on the executor
+     * thread, so without this it would vanish entirely. Kept out of {@code ErrorHandler}
+     * (consistent with the sync path, which routes only {@code Exception}); the point is purely
+     * to make the {@code Error} observable. Kept here so the generated source never directly
+     * imports a logging framework.
+     *
+     * @param error the {@code Error} thrown by the user's async handler
+     */
+    public static void logUnhandledAsyncError(Throwable error) {
+        System.getLogger("io.tiko.events").log(System.Logger.Level.ERROR, "Async @EventHandler threw an Error", error);
+    }
+
+    /**
      * Wraps {@code payload} in an {@link Event}, chaining its origin to the wrapper currently
      * being delivered on this thread (if any).
      */
