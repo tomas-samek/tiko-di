@@ -9,6 +9,7 @@ import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
 import io.tiko.processor.util.GeneratorAnnotations;
 import io.tiko.processor.util.ProcessorContext;
+import io.tiko.processor.util.TypeUtil;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
@@ -1578,17 +1579,28 @@ public final class ContainerGenerator {
     private List<TypeName> effectiveRoutableTypes(ComponentModel component) {
         TypeName componentType = ClassName.get(component.getTypeElement());
         List<TypeName> keys = new ArrayList<>();
+        // Implicit interfaces are filtered for JDK lifecycle markers (AutoCloseable/Closeable):
+        // they are cleanup conventions, not service contracts, so they must not become dispatch
+        // keys (#301). An explicit expose = {...} list is honored verbatim — if the user names a
+        // marker there, that is a deliberate opt-in.
+        boolean filterMarkers = !component.isExposeRestricted();
         List<? extends javax.lang.model.type.TypeMirror> declared = component.isExposeRestricted()
                 ? component.getExposeTypes()
                 : component.getTypeElement().getInterfaces();
         for (javax.lang.model.type.TypeMirror iface : declared) {
             TypeName n = TypeName.get(iface);
+            if (filterMarkers && isLifecycleMarker(n)) continue;
             if (!keys.contains(n)) keys.add(n);
         }
         if (component.isExposeSelf() && !keys.contains(componentType)) {
             keys.add(componentType);
         }
         return keys;
+    }
+
+    /** True if {@code n} is a JDK lifecycle marker interface; delegates to the shared TypeUtil predicate. */
+    private static boolean isLifecycleMarker(TypeName n) {
+        return n instanceof ClassName cn && TypeUtil.isLifecycleMarkerInterface(cn.canonicalName());
     }
 
     /**
