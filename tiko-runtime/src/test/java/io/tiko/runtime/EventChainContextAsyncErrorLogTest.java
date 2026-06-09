@@ -28,10 +28,10 @@ class EventChainContextAsyncErrorLogTest {
         assertThat(CapturingLoggerFinder.RECORDS)
                 .filteredOn(r -> "io.tiko.events".equals(r.loggerName()))
                 .singleElement()
-                .satisfies(record -> {
-                    assertThat(record.level()).isEqualTo(System.Logger.Level.ERROR);
-                    assertThat(record.thrown()).isSameAs(boom);
-                    assertThat(record.message()).contains("Async @EventHandler threw an Error");
+                .satisfies(entry -> {
+                    assertThat(entry.level()).isEqualTo(System.Logger.Level.ERROR);
+                    assertThat(entry.thrown()).isSameAs(boom);
+                    assertThat(entry.message()).contains("Async @EventHandler threw an Error");
                 });
     }
 }
