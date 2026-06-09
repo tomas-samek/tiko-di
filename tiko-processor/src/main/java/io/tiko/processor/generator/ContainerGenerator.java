@@ -1451,9 +1451,13 @@ public final class ContainerGenerator {
         }
 
         // Same for factory-produced beans — both named and unnamed are visible to getAll.
+        // Exact-match the produced type (not isAssignableFrom): a super-type lookup such as
+        // getAll(Object.class) must not fire every producer and eagerly invoke throwing or
+        // EVENT-scoped factories (#303). This mirrors the component arms above and the unnamed
+        // get(Class) factory routing, both of which key on `type == ProducedType.class`.
         for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
             TypeName producedType = TypeName.get(factory.getReturnType());
-            method.beginControlFlow("if (type.isAssignableFrom($T.class))", producedType);
+            method.beginControlFlow("if (type == $T.class)", producedType);
             method.addStatement("__result.add(type.cast($L()))", factoryGetterName(factory));
             method.endControlFlow();
         }
