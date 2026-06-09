@@ -1381,13 +1381,16 @@ public final class ContainerGenerator {
             TypeName producedType = TypeName.get(factory.getReturnType());
             String factoryName = factory.getName();
 
+            // Exact-match the produced type, consistent with get(Class) and getAll (#304). The
+            // name gate already disambiguates producers; widening the type with isAssignableFrom
+            // additionally let a broad requested type (e.g. get(Object.class, "primary")) collide
+            // first-match-wins across distinct named producers. Interface-keyed lookup still works
+            // when the @Produces method declares the interface return type — same as get(Class).
             if (first) {
-                method.beginControlFlow(
-                        "if ($S.equals(name) && type.isAssignableFrom($T.class))", factoryName, producedType);
+                method.beginControlFlow("if ($S.equals(name) && type == $T.class)", factoryName, producedType);
                 first = false;
             } else {
-                method.nextControlFlow(
-                        "else if ($S.equals(name) && type.isAssignableFrom($T.class))", factoryName, producedType);
+                method.nextControlFlow("else if ($S.equals(name) && type == $T.class)", factoryName, producedType);
             }
             method.addStatement("return (T) $L()", factoryGetterName(factory));
         }
