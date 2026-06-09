@@ -104,25 +104,34 @@ The annotation processor validates all dependencies at compile-time and generate
 
 ## Installation
 
-Tiko ships to Maven Central — pull the artifacts directly:
+Tiko ships to Maven Central. Import the BOM once — then declare the artifacts (and the annotation-processor path) without restating the version:
 
 ```xml
+<dependencyManagement>
+    <dependencies>
+        <dependency>
+            <groupId>io.github.tomas-samek</groupId>
+            <artifactId>tiko-bom</artifactId>
+            <version>0.2.2</version>
+            <type>pom</type>
+            <scope>import</scope>
+        </dependency>
+    </dependencies>
+</dependencyManagement>
+
 <dependencies>
     <dependency>
         <groupId>io.github.tomas-samek</groupId>
         <artifactId>tiko-api</artifactId>
-        <version>0.2.2</version>
     </dependency>
     <dependency>
         <groupId>io.github.tomas-samek</groupId>
         <artifactId>tiko-runtime</artifactId>
-        <version>0.2.2</version>
     </dependency>
     <!-- Optional, only if you use @Configuration -->
     <dependency>
         <groupId>io.github.tomas-samek</groupId>
         <artifactId>tiko-config</artifactId>
-        <version>0.2.2</version>
     </dependency>
 </dependencies>
 
@@ -137,7 +146,6 @@ Tiko ships to Maven Central — pull the artifacts directly:
                     <path>
                         <groupId>io.github.tomas-samek</groupId>
                         <artifactId>tiko-processor</artifactId>
-                        <version>0.2.2</version>
                     </path>
                 </annotationProcessorPaths>
             </configuration>
@@ -145,6 +153,8 @@ Tiko ships to Maven Central — pull the artifacts directly:
     </plugins>
 </build>
 ```
+
+The `tiko-bom` import is the single place the version lives; `maven-compiler-plugin` ≥ 3.12.0 resolves the `annotationProcessorPaths` version from it too (3.13.0 pinned above for JDK 23+ — see the note below). The BOM also manages the optional `tiko-kafka` / `tiko-mcp` / `tiko-test` modules.
 
 > **On JDK 23+?** `javac` no longer runs annotation processing implicitly — the snippet above is already correct (it requires `maven-compiler-plugin` ≥ 3.13.0). For Gradle, plain `javac`, and the legacy `<proc>full</proc>` opt-in, see [docs/jdk-23-setup.md](./docs/jdk-23-setup.md).
 
