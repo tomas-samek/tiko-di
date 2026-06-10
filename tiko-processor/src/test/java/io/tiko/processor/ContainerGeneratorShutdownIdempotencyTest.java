@@ -45,7 +45,8 @@ class ContainerGeneratorShutdownIdempotencyTest {
 
         assertThat(content).contains("stopped.set(true)");
         assertThat(content).contains("inFlightGets.get()");
-        assertThat(content).contains("Thread.onSpinWait()");
+        // Bounded, parked poll — busy-spin against a magic 10s deadline was replaced in #305.
+        assertThat(content).contains("LockSupport.parkNanos");
 
         // stopped.set(true) and the drain loop must come before the PreDestroy iteration.
         // We use the bypass-set as a stable marker for "PreDestroy phase begins".

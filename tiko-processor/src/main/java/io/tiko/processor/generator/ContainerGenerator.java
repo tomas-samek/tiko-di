@@ -1128,7 +1128,9 @@ public final class ContainerGenerator {
      * <ol>
      *   <li>CAS shutdownInvoked false → true. If already true, return immediately.</li>
      *   <li>Publish ApplicationEndingEvent. get() still works so handlers can read state.</li>
-     *   <li>Set stopped, drain in-flight gets (10s timeout, spin-wait).</li>
+     *   <li>Set stopped, drain in-flight gets — bounded by the configured
+     *       {@code shutdownTimeout} (same knob as the Phase 5 executor drain), parking
+     *       between polls instead of busy-spinning (#305).</li>
      *   <li>Run @PreDestroy on each SINGLETON. Thread-local bypass lets PreDestroy
      *       methods call container.get(...) without tripping the gate.</li>
      *   <li>Shut down the framework-owned event executor (#43 logic, unchanged).</li>
@@ -1171,11 +1173,15 @@ public final class ContainerGenerator {
         method.endControlFlow();
         method.endControlFlow();
 
-        method.addComment("Phase 3: gate new get() calls and drain in-flight ones");
+        method.addComment("Phase 3: gate new get() calls and drain in-flight ones. Lookups register in");
+        method.addComment("inFlightGets BEFORE reading the stopped gate (#305), so once this thread observes");
+        method.addComment("inFlightGets == 0 after stopped.set(true), every later lookup is rejected — none");
+        method.addComment("can run against the singletons Phase 4 tears down. The wait is bounded by the");
+        method.addComment("configured shutdownTimeout and parks 1ms between polls instead of busy-spinning.");
         method.addStatement("stopped.set(true)");
-        method.addStatement("long __deadlineNanos = $T.nanoTime() + $T.SECONDS.toNanos(10)", System.class, timeUnit);
+        method.addStatement("long __deadlineNanos = $T.nanoTime() + this.shutdownTimeout.toNanos()", System.class);
         method.beginControlFlow("while (inFlightGets.get() > 0 && $T.nanoTime() < __deadlineNanos)", System.class);
-        method.addStatement("$T.onSpinWait()", Thread.class);
+        method.addStatement("$T.parkNanos(1_000_000L)", ClassName.get("java.util.concurrent.locks", "LockSupport"));
         method.endControlFlow();
         method.beginControlFlow("if (inFlightGets.get() > 0)");
         method.addStatement(
@@ -1239,6 +1245,27 @@ public final class ContainerGenerator {
     }
 
     /**
+     * Emits the shared entry sequence of every lookup head ({@code get(Class)},
+     * {@code get(Class, String)}, {@code getAll(Class)}): register in {@code inFlightGets},
+     * open the {@code try} whose {@code finally} deregisters, then read the post-shutdown
+     * gate (#47) inside it.
+     *
+     * <p>Ordering is load-bearing (#305): incrementing BEFORE reading {@code stopped} means
+     * a lookup is either visible to shutdown's drain loop (it incremented before the loop
+     * observed zero) or it reads the gate after {@code stopped.set(true)} and is rejected.
+     * Check-then-increment had a window where a caller passed the gate unregistered and ran
+     * against singletons Phase 4 was tearing down. {@code @PreDestroy} methods on the
+     * shutdown thread still bypass via the thread-local.
+     */
+    private void emitLookupEntry(MethodSpec.Builder method) {
+        method.addStatement("inFlightGets.incrementAndGet()");
+        method.beginControlFlow("try");
+        method.beginControlFlow("if (stopped.get() && !inShutdownThread.get())");
+        method.addStatement("throw new $T()", CONTAINER_SHUT_DOWN);
+        method.endControlFlow();
+    }
+
+    /**
      * Creates get(Class) method.
      */
     private MethodSpec createGetMethod() {
@@ -1255,14 +1282,7 @@ public final class ContainerGenerator {
                 .addParameter(classType, "type")
                 .returns(typeVar);
 
-        // Post-shutdown gate (#47). PreDestroy methods on the shutdown thread bypass via the thread-local.
-        method.beginControlFlow("if (stopped.get() && !inShutdownThread.get())");
-        method.addStatement("throw new $T()", CONTAINER_SHUT_DOWN);
-        method.endControlFlow();
-
-        // Drain barrier (#47): mark this get() as in-flight so shutdown() can wait for it.
-        method.addStatement("inFlightGets.incrementAndGet()");
-        method.beginControlFlow("try");
+        emitLookupEntry(method);
 
         // Runtime override consulted first on the lookup type (#128) — applies to any
         // routable key (interface or concrete class), so override(Interface.class, mock)
@@ -1353,12 +1373,7 @@ public final class ContainerGenerator {
                 .addParameter(String.class, "name")
                 .returns(typeVar);
 
-        // Post-shutdown gate (#47).
-        method.beginControlFlow("if (stopped.get() && !inShutdownThread.get())");
-        method.addStatement("throw new $T()", CONTAINER_SHUT_DOWN);
-        method.endControlFlow();
-        method.addStatement("inFlightGets.incrementAndGet()");
-        method.beginControlFlow("try");
+        emitLookupEntry(method);
 
         // Runtime override consulted first on the lookup (type, name) pair (#128) — the
         // fast-path for the literal key the caller passed. Placed after the post-shutdown
@@ -1454,13 +1469,7 @@ public final class ContainerGenerator {
                 .addParameter(classType, "type")
                 .returns(listType);
 
-        // Post-shutdown gate, mirrors get(Class).
-        method.beginControlFlow("if (stopped.get() && !inShutdownThread.get())");
-        method.addStatement("throw new $T()", CONTAINER_SHUT_DOWN);
-        method.endControlFlow();
-
-        method.addStatement("inFlightGets.incrementAndGet()");
-        method.beginControlFlow("try");
+        emitLookupEntry(method);
         method.addStatement("$T<T> __result = new $T<>()", List.class, ArrayList.class);
 
         // One effective-routable-type check per component. Honours @Component(expose = {…})
