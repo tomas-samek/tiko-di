@@ -1,5 +1,6 @@
 package io.tiko.kafka.processor.generator;
 
+import com.palantir.javapoet.AnnotationSpec;
 import com.palantir.javapoet.ClassName;
 import com.palantir.javapoet.JavaFile;
 import com.palantir.javapoet.MethodSpec;
@@ -33,6 +34,7 @@ public final class KafkaTransportBootstrapGenerator {
     private static final String GENERATED_PACKAGE = "io.tiko.generated";
     private static final String CLASS_NAME = "KafkaTransportBootstrap";
 
+    private static final ClassName GENERATED = ClassName.get("javax.annotation.processing", "Generated");
     private static final ClassName TRANSPORT_BOOTSTRAP = ClassName.get("io.tiko", "TransportBootstrap");
     private static final ClassName CONTAINER = ClassName.get("io.tiko", "Container");
     private static final ClassName KAFKA_BOOTSTRAP_SUPPORT =
@@ -51,7 +53,13 @@ public final class KafkaTransportBootstrapGenerator {
     public void generate(List<KafkaSourceDescriptor> sources, List<KafkaSinkDescriptor> sinks) throws IOException {
         if (sources.isEmpty() && sinks.isEmpty()) return;
 
+        // Inline @Generated rather than tiko-processor's GeneratorAnnotations helper:
+        // this module deliberately has no compile dependency on tiko-processor (the two
+        // processors run side-by-side on the user's annotation-processor path).
         TypeSpec.Builder cls = TypeSpec.classBuilder(CLASS_NAME)
+                .addAnnotation(AnnotationSpec.builder(GENERATED)
+                        .addMember("value", "$S", KafkaTransportBootstrapGenerator.class.getName())
+                        .build())
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                 .addSuperinterface(TRANSPORT_BOOTSTRAP)
                 .addField(KAFKA_BOOTSTRAP_SUPPORT, "support", Modifier.PRIVATE)
@@ -78,10 +86,17 @@ public final class KafkaTransportBootstrapGenerator {
     }
 
     private MethodSpec buildStartMethod(List<KafkaSourceDescriptor> sources, List<KafkaSinkDescriptor> sinks) {
+        // Idempotency guard (#307): TransportBootstrap documents that a second start() has no
+        // effect. Without it, re-starting replaced a live support with a fresh one — new
+        // producer + consumer threads — while the old one kept running, unreachable and never
+        // shut down. Mirrors the null-guard shutdown() already has.
         return MethodSpec.methodBuilder("start")
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
                 .addParameter(CONTAINER, "container")
+                .beginControlFlow("if (this.support != null)")
+                .addStatement("return")
+                .endControlFlow()
                 .addStatement("this.support = new $T(container, sources(), sinks())", KAFKA_BOOTSTRAP_SUPPORT)
                 .addStatement("this.support.start()")
                 .build();
