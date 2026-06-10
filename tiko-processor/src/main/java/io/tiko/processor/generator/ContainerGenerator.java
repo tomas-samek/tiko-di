@@ -617,9 +617,7 @@ public final class ContainerGenerator {
         // unchecked and no class token can express it, so the suppression the dispatchers
         // already carry is applied here too (#309). PROTOTYPE has no cast.
         if (factory.getScope() != Scope.PROTOTYPE) {
-            method.addAnnotation(AnnotationSpec.builder(SuppressWarnings.class)
-                    .addMember("value", "$S", "unchecked")
-                    .build());
+            method.addAnnotation(SUPPRESS_UNCHECKED);
         }
 
         switch (factory.getScope()) {
@@ -938,6 +936,11 @@ public final class ContainerGenerator {
     /** {@code Supplier<?>} — the type of a single-lookup override read (#309). */
     private static final TypeName SUPPLIER_WILDCARD = ParameterizedTypeName.get(
             ClassName.get(java.util.function.Supplier.class), WildcardTypeName.subtypeOf(Object.class));
+
+    /** Shared {@code @SuppressWarnings("unchecked")} spec for dispatchers and scoped produce getters (#309). */
+    private static final AnnotationSpec SUPPRESS_UNCHECKED = AnnotationSpec.builder(SuppressWarnings.class)
+            .addMember("value", "$S", "unchecked")
+            .build();
 
     /**
      * Creates runInEventScope method.
@@ -1311,9 +1314,7 @@ public final class ContainerGenerator {
         MethodSpec.Builder method = MethodSpec.methodBuilder("get")
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
-                .addAnnotation(AnnotationSpec.builder(SuppressWarnings.class)
-                        .addMember("value", "$S", "unchecked")
-                        .build())
+                .addAnnotation(SUPPRESS_UNCHECKED)
                 .addTypeVariable(typeVar)
                 .addParameter(classType, "type")
                 .returns(typeVar);
@@ -1403,9 +1404,7 @@ public final class ContainerGenerator {
         MethodSpec.Builder method = MethodSpec.methodBuilder("get")
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
-                .addAnnotation(AnnotationSpec.builder(SuppressWarnings.class)
-                        .addMember("value", "$S", "unchecked")
-                        .build())
+                .addAnnotation(SUPPRESS_UNCHECKED)
                 .addTypeVariable(typeVar)
                 .addParameter(classType, "type")
                 .addParameter(String.class, "name")
