@@ -5,7 +5,8 @@ package io.tiko;
  * is the source of the error: a bean that was never registered, a container that failed to boot, a
  * lookup after shutdown. Callers can {@code catch (TikoException)} to handle any such failure at a
  * boundary, or catch a concrete subtype ({@link NoSuchComponentException},
- * {@link ContainerInitializationException}, {@link ContainerShutDownException}) for a specific case.
+ * {@link ContainerInitializationException}, {@link ContainerShutDownException},
+ * {@link NoActiveEventScopeException}) for a specific case.
  *
  * <p>This is the thrown-side counterpart to the observer-side {@link ErrorContext}: both are sealed,
  * so the set of framework failure kinds is closed and adding one is a deliberate, compile-time-loud
@@ -14,7 +15,10 @@ package io.tiko;
  * see their original type.
  */
 public abstract sealed class TikoException extends RuntimeException
-        permits NoSuchComponentException, ContainerInitializationException, ContainerShutDownException {
+        permits NoSuchComponentException,
+                ContainerInitializationException,
+                ContainerShutDownException,
+                NoActiveEventScopeException {
 
     protected TikoException(String message) {
         super(message);
