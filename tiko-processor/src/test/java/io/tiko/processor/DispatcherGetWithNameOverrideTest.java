@@ -29,9 +29,11 @@ class DispatcherGetWithNameOverrideTest {
                 .orElseThrow();
         var content = new String(container.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
 
+        // Single lookup + class-token cast (#309): one getOverride read, no hasOverride pre-check.
         org.assertj.core.api.Assertions.assertThat(content)
                 .contains("public <T> T get(Class<T> type, String name)")
-                .contains("options.hasOverride(type, name)")
-                .contains("options.getOverride(type, name).get()");
+                .contains("Supplier<?> __override = options.getOverride(type, name)")
+                .contains("return type.cast(__override.get())")
+                .doesNotContain("options.hasOverride");
     }
 }

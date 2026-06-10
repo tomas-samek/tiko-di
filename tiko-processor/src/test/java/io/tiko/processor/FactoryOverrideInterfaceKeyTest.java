@@ -41,9 +41,10 @@ class FactoryOverrideInterfaceKeyTest {
 
         // The factory must consult override under Gateway.class (the param's declared type),
         // not just HttpGateway.class. The factory reaches options via the package-private
-        // accessor on the generated TikoContainerImpl_<hash>.
+        // accessor on the generated TikoContainerImpl_<hash>. resolveOverride does one map
+        // lookup and falls back to the production getter (#309).
         org.assertj.core.api.Assertions.assertThat(content)
-                .contains("options().hasOverride(Gateway.class)")
-                .contains("options().getOverride(Gateway.class).get()");
+                .contains("options().resolveOverride(Gateway.class, () ->")
+                .doesNotContain("hasOverride");
     }
 }

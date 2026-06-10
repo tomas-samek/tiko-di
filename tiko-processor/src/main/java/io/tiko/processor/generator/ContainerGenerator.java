@@ -612,6 +612,14 @@ public final class ContainerGenerator {
                 .addModifiers(Modifier.PUBLIC)
                 .returns(returnType);
 
+        // SINGLETON/EVENT getters cast the scope map's Object back to the produced type.
+        // For a parameterized @Produces return type (e.g. List<String>) that cast is
+        // unchecked and no class token can express it, so the suppression the dispatchers
+        // already carry is applied here too (#309). PROTOTYPE has no cast.
+        if (factory.getScope() != Scope.PROTOTYPE) {
+            method.addAnnotation(SUPPRESS_UNCHECKED);
+        }
+
         switch (factory.getScope()) {
             case SINGLETON ->
                 method.addStatement(
@@ -924,6 +932,15 @@ public final class ContainerGenerator {
     private static final ClassName CONTAINER_SHUT_DOWN = ClassName.get("io.tiko", "ContainerShutDownException");
     private static final ClassName NO_SUCH_COMPONENT = ClassName.get("io.tiko", "NoSuchComponentException");
     private static final ClassName NO_ACTIVE_EVENT_SCOPE = ClassName.get("io.tiko", "NoActiveEventScopeException");
+
+    /** {@code Supplier<?>} — the type of a single-lookup override read (#309). */
+    private static final TypeName SUPPLIER_WILDCARD = ParameterizedTypeName.get(
+            ClassName.get(java.util.function.Supplier.class), WildcardTypeName.subtypeOf(Object.class));
+
+    /** Shared {@code @SuppressWarnings("unchecked")} spec for dispatchers and scoped produce getters (#309). */
+    private static final AnnotationSpec SUPPRESS_UNCHECKED = AnnotationSpec.builder(SuppressWarnings.class)
+            .addMember("value", "$S", "unchecked")
+            .build();
 
     /**
      * Creates runInEventScope method.
@@ -1297,9 +1314,7 @@ public final class ContainerGenerator {
         MethodSpec.Builder method = MethodSpec.methodBuilder("get")
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
-                .addAnnotation(AnnotationSpec.builder(SuppressWarnings.class)
-                        .addMember("value", "$S", "unchecked")
-                        .build())
+                .addAnnotation(SUPPRESS_UNCHECKED)
                 .addTypeVariable(typeVar)
                 .addParameter(classType, "type")
                 .returns(typeVar);
@@ -1311,8 +1326,10 @@ public final class ContainerGenerator {
         // wins regardless of whether the caller asks for the interface or the impl.
         // Placed after the post-shutdown gate and in-flight counter so overrides are a
         // wiring mechanism, not a lifecycle bypass — a closed container still refuses.
-        method.beginControlFlow("if (options.hasOverride(type))");
-        method.addStatement("return (T) options.getOverride(type).get()");
+        // Single lookup + class-token cast (#309): getOverride returns null when absent.
+        method.addStatement("$T __override = options.getOverride(type)", SUPPLIER_WILDCARD);
+        method.beginControlFlow("if (__override != null)");
+        method.addStatement("return type.cast(__override.get())");
         method.endControlFlow();
 
         // Check config singletons first — config records take precedence over DI components
@@ -1387,9 +1404,7 @@ public final class ContainerGenerator {
         MethodSpec.Builder method = MethodSpec.methodBuilder("get")
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
-                .addAnnotation(AnnotationSpec.builder(SuppressWarnings.class)
-                        .addMember("value", "$S", "unchecked")
-                        .build())
+                .addAnnotation(SUPPRESS_UNCHECKED)
                 .addTypeVariable(typeVar)
                 .addParameter(classType, "type")
                 .addParameter(String.class, "name")
@@ -1403,8 +1418,10 @@ public final class ContainerGenerator {
         // bypass — a closed container still refuses. The per-arm override checks below
         // remain in place: they catch cases where the caller looks up Impl.class with
         // name X but the override was registered under Interface.class with name X.
-        method.beginControlFlow("if (options.hasOverride(type, name))");
-        method.addStatement("return (T) options.getOverride(type, name).get()");
+        // Single lookup + class-token cast (#309): getOverride returns null when absent.
+        method.addStatement("$T __override = options.getOverride(type, name)", SUPPLIER_WILDCARD);
+        method.beginControlFlow("if (__override != null)");
+        method.addStatement("return type.cast(__override.get())");
         method.endControlFlow();
 
         List<ComponentModel> named =
@@ -1430,8 +1447,13 @@ public final class ContainerGenerator {
                 } else {
                     method.nextControlFlow("else if ($S.equals(name) && type == $T.class)", componentName, key);
                 }
-                method.beginControlFlow("if (options.hasOverride($T.class, $S))", key, componentName);
-                method.addStatement("return (T) options.getOverride($T.class, $S).get()", key, componentName);
+                method.addStatement(
+                        "$T __namedOverride = options.getOverride($T.class, $S)",
+                        SUPPLIER_WILDCARD,
+                        key,
+                        componentName);
+                method.beginControlFlow("if (__namedOverride != null)");
+                method.addStatement("return type.cast(__namedOverride.get())");
                 method.endControlFlow();
                 method.addStatement("return (T) $L()", getterName);
             }

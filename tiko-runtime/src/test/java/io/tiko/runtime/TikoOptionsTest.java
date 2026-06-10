@@ -187,6 +187,38 @@ class TikoOptionsTest {
     }
 
     @Test
+    void resolveOverrideReturnsRegisteredValue() {
+        TikoOptions opts =
+                TikoOptions.builder().override(String.class, () -> "override").build();
+        assertThat(opts.resolveOverride(String.class, () -> "fallback")).isEqualTo("override");
+    }
+
+    @Test
+    void resolveOverrideFallsBackWhenAbsent() {
+        TikoOptions opts = TikoOptions.builder().build();
+        assertThat(opts.resolveOverride(String.class, () -> "fallback")).isEqualTo("fallback");
+    }
+
+    @Test
+    void resolveOverrideHonoursNamedKey() {
+        TikoOptions opts = TikoOptions.builder()
+                .override(String.class, "primary", () -> "primary-impl")
+                .build();
+        assertThat(opts.resolveOverride(String.class, "primary", () -> "fallback"))
+                .isEqualTo("primary-impl");
+        // unnamed and named are distinct keys — the unnamed lookup falls back
+        assertThat(opts.resolveOverride(String.class, () -> "fallback")).isEqualTo("fallback");
+    }
+
+    @Test
+    void resolveOverrideRejectsNullName() {
+        TikoOptions opts = TikoOptions.builder().build();
+        assertThatNullPointerException()
+                .isThrownBy(() -> opts.resolveOverride(String.class, null, () -> "fallback"))
+                .withMessageContaining("name");
+    }
+
+    @Test
     void internalAddOverrideAddsToImmutableOptions() {
         TikoOptions opts = TikoOptions.builder().build();
         java.util.function.Supplier<String> sup = () -> "shadowed";

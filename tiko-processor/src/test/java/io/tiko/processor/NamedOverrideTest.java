@@ -32,8 +32,10 @@ class NamedOverrideTest {
         var content = new String(f.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
 
         // JavaPoet imports the type — short form `DataSource.class` (not `demo.DataSource.class`).
+        // Single lookup + class-token cast (#309): one getOverride read per arm, no hasOverride.
         org.assertj.core.api.Assertions.assertThat(content)
-                .contains("options.hasOverride(DataSource.class, \"primary\")")
-                .contains("options.getOverride(DataSource.class, \"primary\").get()");
+                .contains("options.getOverride(DataSource.class, \"primary\")")
+                .contains("return type.cast(__namedOverride.get())")
+                .doesNotContain("options.hasOverride");
     }
 }
