@@ -1213,8 +1213,8 @@ public final class ContainerGenerator {
         List<ShutdownTarget> shutdownTargets = topoSortShutdownTargets();
 
         // The whole phase — bypass set + try/finally — is skipped when no target has a
-        // destroy hook: the bypass thread-local only exists so @PreDestroy bodies can call
-        // get(), and an empty try { } finally { } is dead weight in every hook-less module (#308).
+        // destroy hook: the bypass thread-local only exists so PreDestroy bodies can call
+        // get(), and an empty try/finally pair is dead weight in every hook-less module (#308).
         boolean hasDestroyWork = shutdownTargets.stream().anyMatch(target -> switch (target) {
             case ShutdownTarget.Component(var component) -> component.hasDestroyHook();
             case ShutdownTarget.Factory(var factory) -> factory.isAutoCloseable();
