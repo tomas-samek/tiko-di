@@ -52,9 +52,7 @@ class ShutdownDrainBarrierEmissionTest {
         assertThat(source)
                 .as("drain deadline derives from the configured shutdownTimeout, not a magic constant")
                 .contains("System.nanoTime() + this.shutdownTimeout.toNanos()")
-                .doesNotContain("TimeUnit.SECONDS.toNanos(10)");
-
-        assertThat(source)
+                .doesNotContain("TimeUnit.SECONDS.toNanos(10)")
                 .as("drain loop parks between polls instead of busy-spinning a core")
                 .contains("LockSupport.parkNanos")
                 .doesNotContain("Thread.onSpinWait()");
