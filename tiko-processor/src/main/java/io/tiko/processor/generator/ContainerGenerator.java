@@ -906,9 +906,12 @@ public final class ContainerGenerator {
      */
     private static void emitUnitFrameGuard(MethodSpec.Builder method, String storageKey) {
         method.beginControlFlow("if (!$T.TRUE.equals(__unitFrameOpen.get()))", Boolean.class);
-        method.addStatement("throw new $T($S)", NO_ACTIVE_EVENT_SCOPE, storageKey);
+        method.addStatement(THROW_TYPE_WITH_MESSAGE, NO_ACTIVE_EVENT_SCOPE, storageKey);
         method.endControlFlow();
     }
+
+    /** JavaPoet statement format for {@code throw new <Type>("<literal>")} guards. */
+    private static final String THROW_TYPE_WITH_MESSAGE = "throw new $T($S)";
 
     private static final String EVENTS_PACKAGE = "io.tiko.events";
     private static final ClassName EVENT_STARTED = ClassName.get(EVENTS_PACKAGE, "EventStartedEvent");
@@ -930,7 +933,7 @@ public final class ContainerGenerator {
                 .addParameter(Runnable.class, "task");
         method.beginControlFlow("if ($T.TRUE.equals(__unitFrameOpen.get()))", Boolean.class);
         method.addStatement(
-                "throw new $T($S)",
+                THROW_TYPE_WITH_MESSAGE,
                 IllegalStateException.class,
                 "runInEventScope called while a unit of work is already open. "
                         + "EVENT is single-frame in 0.x.0; nesting is not supported.");
@@ -970,7 +973,7 @@ public final class ContainerGenerator {
                 .returns(typeVar);
         method.beginControlFlow("if ($T.TRUE.equals(__unitFrameOpen.get()))", Boolean.class);
         method.addStatement(
-                "throw new $T($S)",
+                THROW_TYPE_WITH_MESSAGE,
                 IllegalStateException.class,
                 "supplyInEventScope called while a unit of work is already open. "
                         + "EVENT is single-frame in 0.x.0; nesting is not supported.");
