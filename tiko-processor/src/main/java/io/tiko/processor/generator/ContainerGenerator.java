@@ -303,9 +303,9 @@ public final class ContainerGenerator {
 
     /**
      * Tracks whether the current thread is inside a {@code runInEventScope}/{@code supplyInEventScope}
-     * frame. Used by the single-frame guard — distinct from {@code eventScoped} (which holds the
-     * scope's bean instances and can accumulate via direct {@code container.get()} calls outside a
-     * frame), so the guard fires only on actual user-level nesting.
+     * frame. Used by the single-frame nesting guard in those methods, and by the resolution
+     * guard in every EVENT-scoped getter (#302) — an EVENT bean may only materialize while a
+     * frame is open, so the frame's teardown is guaranteed to drain it.
      */
     private FieldSpec createUnitFrameOpenField() {
         ParameterizedTypeName threadLocalType =
@@ -862,9 +862,17 @@ public final class ContainerGenerator {
      * {@code get(Class, String)}) and at factory call sites for direct dependencies
      * and {@code Provider} lambdas. By the time this helper runs, the caller has
      * already decided to invoke the production factory — see issue #128.
+     *
+     * <p>Resolution is guarded on an open unit-of-work frame (#302): teardown only runs
+     * inside {@code runInEventScope}/{@code supplyInEventScope} {@code finally} blocks, so
+     * an instance materialized outside a frame would never be drained — it would leak, or
+     * hand stale per-unit data to the next unit scheduled on the same pooled thread. All
+     * EVENT resolution paths (component getter, {@code getCurrent*} proxy delegate,
+     * {@code produce_*} factory getter) funnel through this guard.
      */
     private void emitScopedGetOrCreate(
             MethodSpec.Builder method, TypeName returnType, String mapExpr, String storageKey, String createExpr) {
+        emitUnitFrameGuard(method, storageKey);
         method.addStatement("$T __existing = ($T) $L.get($S)", returnType, returnType, mapExpr, storageKey);
         method.beginControlFlow("if (__existing == null)");
         method.addStatement("__existing = $L", createExpr);
@@ -881,6 +889,7 @@ public final class ContainerGenerator {
      */
     private void emitScopedGetOrCreateNoOverride(
             MethodSpec.Builder method, TypeName returnType, String mapExpr, String storageKey, String createExpr) {
+        emitUnitFrameGuard(method, storageKey);
         method.addStatement("$T __existing = ($T) $L.get($S)", returnType, returnType, mapExpr, storageKey);
         method.beginControlFlow("if (__existing == null)");
         method.addStatement("__existing = $L", createExpr);
@@ -888,6 +897,21 @@ public final class ContainerGenerator {
         method.endControlFlow();
         method.addStatement("return __existing");
     }
+
+    /**
+     * Emits the unit-of-work frame check shared by every EVENT-scoped getter (#302):
+     * resolving an EVENT bean while {@code __unitFrameOpen} is false throws
+     * {@link io.tiko.NoActiveEventScopeException} instead of storing an instance the
+     * frame teardown will never see.
+     */
+    private static void emitUnitFrameGuard(MethodSpec.Builder method, String storageKey) {
+        method.beginControlFlow("if (!$T.TRUE.equals(__unitFrameOpen.get()))", Boolean.class);
+        method.addStatement(THROW_TYPE_WITH_MESSAGE, NO_ACTIVE_EVENT_SCOPE, storageKey);
+        method.endControlFlow();
+    }
+
+    /** JavaPoet statement format for {@code throw new <Type>("<literal>")} guards. */
+    private static final String THROW_TYPE_WITH_MESSAGE = "throw new $T($S)";
 
     private static final String EVENTS_PACKAGE = "io.tiko.events";
     private static final ClassName EVENT_STARTED = ClassName.get(EVENTS_PACKAGE, "EventStartedEvent");
@@ -897,6 +921,7 @@ public final class ContainerGenerator {
     private static final ClassName BOUNDED_EXECUTION = ClassName.get("io.tiko.runtime", "BoundedExecution");
     private static final ClassName CONTAINER_SHUT_DOWN = ClassName.get("io.tiko", "ContainerShutDownException");
     private static final ClassName NO_SUCH_COMPONENT = ClassName.get("io.tiko", "NoSuchComponentException");
+    private static final ClassName NO_ACTIVE_EVENT_SCOPE = ClassName.get("io.tiko", "NoActiveEventScopeException");
 
     /**
      * Creates runInEventScope method.
@@ -908,7 +933,7 @@ public final class ContainerGenerator {
                 .addParameter(Runnable.class, "task");
         method.beginControlFlow("if ($T.TRUE.equals(__unitFrameOpen.get()))", Boolean.class);
         method.addStatement(
-                "throw new $T($S)",
+                THROW_TYPE_WITH_MESSAGE,
                 IllegalStateException.class,
                 "runInEventScope called while a unit of work is already open. "
                         + "EVENT is single-frame in 0.x.0; nesting is not supported.");
@@ -948,7 +973,7 @@ public final class ContainerGenerator {
                 .returns(typeVar);
         method.beginControlFlow("if ($T.TRUE.equals(__unitFrameOpen.get()))", Boolean.class);
         method.addStatement(
-                "throw new $T($S)",
+                THROW_TYPE_WITH_MESSAGE,
                 IllegalStateException.class,
                 "supplyInEventScope called while a unit of work is already open. "
                         + "EVENT is single-frame in 0.x.0; nesting is not supported.");

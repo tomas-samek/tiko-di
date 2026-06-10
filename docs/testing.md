@@ -136,15 +136,16 @@ When a test needs a `REQUEST`- or `EVENT`-scoped bean to be resolvable in the te
 class RequestScopedRepoTest {
     @Test
     @EventScopeTest
-    void requestScopedRepoResolvableInsideScopeWrapper(AccountRepository repo) {
+    void requestScopedRepoResolvableInsideScopeWrapper(Container container) {
+        var repo = container.get(AccountRepository.class);
         assertThat(repo.findCustomerName("alice")).isEqualTo("Customer-alice");
     }
 }
 ```
 
-The extension wraps the invocation in `container.runInEventScope(...)` (or `runInEventScope`, or both nested with `@EventScopeTest` + `@EventScopeTest` together). Any throwable from the test body is rethrown unchanged after the scope unwinds — `AssertionError` still fails the test cleanly.
+The extension wraps the invocation in `container.runInEventScope(...)`. Any throwable from the test body is rethrown unchanged after the scope unwinds — `AssertionError` still fails the test cleanly.
 
-Parameter resolution happens *before* the scope is entered. A REQUEST-scoped bean cannot be a method parameter on a `@EventScopeTest` method directly; resolve it inside the test body via `container.get(Type.class)`, or use a proxied interface that already crosses the scope boundary.
+Parameter resolution happens *before* the scope is entered. An EVENT-scoped bean cannot be a method parameter on a `@EventScopeTest` method directly — the resolution attempt throws `NoActiveEventScopeException` because no unit of work is open yet. Resolve it inside the test body via `container.get(Type.class)`, or use a proxied interface that already crosses the scope boundary.
 
 ## `@TestComponent` — compile-time overrides
 

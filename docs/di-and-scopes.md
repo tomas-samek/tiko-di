@@ -16,6 +16,8 @@ Three scopes — longest to shortest lifetime:
 
 A **unit of work** is the synchronous reach of an inbound stimulus, bounded at every async / transport hop. EVENT is single-frame in `0.x.0` — calling `runInEventScope` while a unit is already open throws `IllegalStateException`. Nestability is a deferred-but-additive future change.
 
+EVENT-scoped beans only resolve while a unit of work is open. Resolving one outside a frame — via `container.get(...)`, `getAll(...)`, or a method call on a proxy held by a SINGLETON — throws `NoActiveEventScopeException` instead of silently materializing an instance that no teardown would ever drain.
+
 ### Cross-scope injection
 
 An EVENT-scoped bean injected into a SINGLETON is wired through an **auto-generated proxy** that resolves the current unit's instance on every call. The proxied bean must implement an interface (no reflection — the processor emits a typed proxy class).
