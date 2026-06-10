@@ -40,9 +40,10 @@ class FactoryProviderOverrideTest {
                 .orElseThrow();
         var content = new String(factory.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
 
-        // Provider's lambda body must consult container.options().hasOverride(Gateway.class).
+        // Provider's lambda body consults the override at call time via a single
+        // resolveOverride lookup keyed on the inner type (#309).
         org.assertj.core.api.Assertions.assertThat(content)
-                .contains("options().hasOverride(Gateway.class)")
-                .contains("options().getOverride(Gateway.class).get()");
+                .contains("options().resolveOverride(Gateway.class, () ->")
+                .doesNotContain("hasOverride");
     }
 }

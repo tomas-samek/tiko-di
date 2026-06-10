@@ -121,6 +121,27 @@ public final class TikoOptions {
     }
 
     /**
+     * Resolves the override registered for {@code type} with a single map lookup, falling
+     * back to {@code fallback} when none is registered (#309). The result routes through
+     * the class token, so call sites — chiefly generated factory injection sites — carry
+     * no unchecked cast. Same key and precedence as {@link #getOverride(Class)}.
+     */
+    public <T> T resolveOverride(Class<T> type, java.util.function.Supplier<? extends T> fallback) {
+        var override = overrides.get(new OverrideKey(type, ""));
+        return override != null ? type.cast(override.get()) : fallback.get();
+    }
+
+    /**
+     * Named-qualifier variant of {@link #resolveOverride(Class, java.util.function.Supplier)} —
+     * single lookup on the {@code (type, name)} key, falling back when none is registered.
+     */
+    public <T> T resolveOverride(Class<T> type, String name, java.util.function.Supplier<? extends T> fallback) {
+        Objects.requireNonNull(name, "name");
+        var override = overrides.get(new OverrideKey(type, name));
+        return override != null ? type.cast(override.get()) : fallback.get();
+    }
+
+    /**
      * Package-private entry point used by {@link AggregatingContainer} to register
      * shadow-declared overrides AFTER {@link Builder#build()} has been called.
      * User code cannot reach this method; it is the only mutation surface on
