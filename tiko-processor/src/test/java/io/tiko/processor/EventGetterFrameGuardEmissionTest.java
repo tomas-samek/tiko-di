@@ -35,6 +35,29 @@ class EventGetterFrameGuardEmissionTest {
                 "@Component(scope = Scope.EVENT)",
                 "public class MyEventBeanImpl {",
                 "}");
+        // Proxied EVENT component (interface + SINGLETON consumer): after #308, getCurrent*
+        // is only emitted for proxied components, so this trio keeps that getter shape covered.
+        JavaFileObject reqCtx = JavaFileObjects.forSourceLines(
+                "demo.ReqCtx", "package demo;", "public interface ReqCtx {", "  String id();", "}");
+        JavaFileObject reqCtxImpl = JavaFileObjects.forSourceLines(
+                "demo.ReqCtxImpl",
+                "package demo;",
+                "import io.tiko.Scope;",
+                "import io.tiko.annotations.Component;",
+                "@Component(scope = Scope.EVENT)",
+                "public class ReqCtxImpl implements ReqCtx {",
+                "  public String id() { return \"x\"; }",
+                "}");
+        JavaFileObject holder = JavaFileObjects.forSourceLines(
+                "demo.Holder",
+                "package demo;",
+                "import io.tiko.Scope;",
+                "import io.tiko.annotations.Component;",
+                "import io.tiko.annotations.Inject;",
+                "@Component(scope = Scope.SINGLETON)",
+                "public class Holder {",
+                "  @Inject public Holder(ReqCtx ctx) {}",
+                "}");
         JavaFileObject factory = JavaFileObjects.forSourceLines(
                 "demo.SessionTokenFactory",
                 "package demo;",
@@ -49,8 +72,9 @@ class EventGetterFrameGuardEmissionTest {
                 "  }",
                 "}");
 
-        Compilation c =
-                Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(eventBean, factory);
+        Compilation c = Compiler.javac()
+                .withProcessors(new TikoAnnotationProcessor())
+                .compile(eventBean, reqCtx, reqCtxImpl, holder, factory);
 
         CompilationSubject.assertThat(c).succeeded();
 
@@ -64,12 +88,13 @@ class EventGetterFrameGuardEmissionTest {
         assertThat(source)
                 .as("EVENT-scoped getters must guard against resolution outside a unit-of-work frame")
                 .contains("getMyEventBeanImpl")
-                .contains("getCurrentMyEventBeanImpl")
+                .contains("getCurrentReqCtxImpl")
                 .contains("produce_SessionTokenFactory_sessionToken")
                 .contains("NoActiveEventScopeException");
 
-        // One guard per EVENT-scoped getter: getMyEventBeanImpl, getCurrentMyEventBeanImpl,
-        // and produce_SessionTokenFactory_sessionToken.
+        // One guard per EVENT-scoped getter shape: the plain getter (getMyEventBeanImpl), the
+        // proxy delegate (getCurrentReqCtxImpl — ReqCtxImpl's plain getter returns the proxy
+        // field and needs no guard), and the factory getter (produce_..._sessionToken).
         assertThat(countOccurrences(source, "throw new NoActiveEventScopeException"))
                 .as("each EVENT-scoped getter carries its own frame guard")
                 .isEqualTo(3);

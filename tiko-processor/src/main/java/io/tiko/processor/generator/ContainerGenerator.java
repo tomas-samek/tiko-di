@@ -195,6 +195,7 @@ public final class ContainerGenerator {
         // Add scope management methods
         containerBuilder.addMethod(createRunInEventScopeMethod());
         containerBuilder.addMethod(createSupplyInEventScopeMethod());
+        containerBuilder.addMethod(createCloseEventScopeMethod());
 
         // Add lifecycle methods
         containerBuilder.addMethod(createStartMethod());
@@ -581,8 +582,9 @@ public final class ContainerGenerator {
         for (ComponentModel component : activeComponents()) {
             methods.add(createComponentGetter(component));
 
-            // If EVENT scoped, also create getCurrentXxx method for proxies
-            if (component.getScope() == Scope.EVENT) {
+            // getCurrentXxx exists solely as the proxy's delegate target; for non-proxied
+            // EVENT components it would be a dead byte-identical twin of the plain getter (#308).
+            if (component.getScope() == Scope.EVENT && component.requiresProxy()) {
                 methods.add(createCurrentScopedGetter(component));
             }
         }
@@ -950,10 +952,7 @@ public final class ContainerGenerator {
                         "eventBus.publish(new $T(__eventId, __eventEnd, $T.between(__eventStart, __eventEnd)))",
                         EVENT_ENDING,
                         Duration.class);
-        emitScopedTeardown(method, Scope.EVENT, "eventScoped.get()");
-        method.addStatement("eventScoped.get().clear()")
-                .addStatement("__unitFrameOpen.set($T.FALSE)", Boolean.class)
-                .endControlFlow();
+        method.addStatement("__closeEventScope()").endControlFlow();
         return method.build();
     }
 
@@ -990,10 +989,23 @@ public final class ContainerGenerator {
                         "eventBus.publish(new $T(__eventId, __eventEnd, $T.between(__eventStart, __eventEnd)))",
                         EVENT_ENDING,
                         Duration.class);
+        method.addStatement("__closeEventScope()").endControlFlow();
+        return method.build();
+    }
+
+    /**
+     * Creates the private {@code __closeEventScope()} helper that both
+     * {@code runInEventScope} and {@code supplyInEventScope} call from their
+     * {@code finally} blocks: the destroy-hook walk, the scope-map clear, and the
+     * frame-flag reset. Emitted once so the ~70-line teardown chain is not duplicated
+     * verbatim in each scope method (#308).
+     */
+    private MethodSpec createCloseEventScopeMethod() {
+        MethodSpec.Builder method =
+                MethodSpec.methodBuilder("__closeEventScope").addModifiers(Modifier.PRIVATE);
         emitScopedTeardown(method, Scope.EVENT, "eventScoped.get()");
-        method.addStatement("eventScoped.get().clear()")
-                .addStatement("__unitFrameOpen.set($T.FALSE)", Boolean.class)
-                .endControlFlow();
+        method.addStatement("eventScoped.get().clear()");
+        method.addStatement("__unitFrameOpen.set($T.FALSE)", Boolean.class);
         return method.build();
     }
 
@@ -1192,12 +1204,6 @@ public final class ContainerGenerator {
                 "Container shutdown drain timed out with in-flight get() calls: ");
         method.endControlFlow();
 
-        method.addComment("Phase 4: @PreDestroy on SINGLETON components, reverse-creation (LIFO) order. "
-                + "Thread-local bypass so they can call get(). Each hook is isolated so one failure "
-                + "does not skip the rest.");
-        method.addStatement("inShutdownThread.set($T.TRUE)", Boolean.class);
-        method.beginControlFlow("try");
-
         // Unified topo-sort across SINGLETON @Component beans AND SINGLETON @Produces factory
         // beans, ordered so deps come BEFORE dependents. Reverse iteration then destroys
         // dependents first — true LIFO of the dep graph (#151, #189). Crossing kinds matters:
@@ -1206,25 +1212,41 @@ public final class ContainerGenerator {
         // the interleaving required for the latter direction.
         List<ShutdownTarget> shutdownTargets = topoSortShutdownTargets();
 
-        for (int i = shutdownTargets.size() - 1; i >= 0; i--) {
-            ShutdownTarget target = shutdownTargets.get(i);
-            switch (target) {
-                case ShutdownTarget.Component(var component) -> {
-                    if (component.hasDestroyHook()) {
-                        emitComponentDestroy(method, component);
+        // The whole phase — bypass set + try/finally — is skipped when no target has a
+        // destroy hook: the bypass thread-local only exists so @PreDestroy bodies can call
+        // get(), and an empty try { } finally { } is dead weight in every hook-less module (#308).
+        boolean hasDestroyWork = shutdownTargets.stream().anyMatch(target -> switch (target) {
+            case ShutdownTarget.Component(var component) -> component.hasDestroyHook();
+            case ShutdownTarget.Factory(var factory) -> factory.isAutoCloseable();
+        });
+
+        if (hasDestroyWork) {
+            method.addComment("Phase 4: @PreDestroy on SINGLETON components, reverse-creation (LIFO) order. "
+                    + "Thread-local bypass so they can call get(). Each hook is isolated so one failure "
+                    + "does not skip the rest.");
+            method.addStatement("inShutdownThread.set($T.TRUE)", Boolean.class);
+            method.beginControlFlow("try");
+
+            for (int i = shutdownTargets.size() - 1; i >= 0; i--) {
+                ShutdownTarget target = shutdownTargets.get(i);
+                switch (target) {
+                    case ShutdownTarget.Component(var component) -> {
+                        if (component.hasDestroyHook()) {
+                            emitComponentDestroy(method, component);
+                        }
                     }
-                }
-                case ShutdownTarget.Factory(var factory) -> {
-                    if (factory.isAutoCloseable()) {
-                        emitFactoryDestroy(method, factory);
+                    case ShutdownTarget.Factory(var factory) -> {
+                        if (factory.isAutoCloseable()) {
+                            emitFactoryDestroy(method, factory);
+                        }
                     }
                 }
             }
-        }
 
-        method.nextControlFlow("finally");
-        method.addStatement("inShutdownThread.remove()");
-        method.endControlFlow();
+            method.nextControlFlow("finally");
+            method.addStatement("inShutdownThread.remove()");
+            method.endControlFlow();
+        }
 
         method.addComment(
                 "Phase 5: shut down framework-owned event executor (#43); user-supplied executors are not touched");
