@@ -10,17 +10,27 @@ import java.util.concurrent.Executors;
 import java.util.function.Supplier;
 
 /**
- * Minimal no-op container used only by unit tests in tiko-runtime (no annotation processor
- * runs here, so there is no generated TikoContainerImpl).
+ * Minimal container used only by unit tests in tiko-runtime (no annotation processor
+ * runs here, so there is no generated TikoContainerImpl). Resolves exactly one type —
+ * the {@link StubService} interface, mimicking a generated container's routable-types
+ * dispatch and override consultation — and rejects everything else, so lookup-miss
+ * tests stay misses.
  *
- * <p>Registered via {@code src/test/resources/META-INF/tiko/container.properties}.
+ * <p>Registered via {@code src/test/resources/META-INF/tiko/container.properties};
+ * its {@code components.txt} is intentionally empty.
  */
 public final class StubContainer implements Container {
+
+    /** The instance returned for interface-keyed {@link StubService} lookups (#335). */
+    static final StubService STUB_SERVICE = new StubService() {};
 
     // Stored so getEventBus() returns whatever Tiko.createInternal handed in (decorated or not).
     // EventBusDecoratorTest depends on this round-trip: the test wraps the raw LocalEventBus
     // via TikoOptions.eventBusDecorator and asserts the container exposes the wrapper.
     private final EventBus eventBus;
+
+    // Consulted before own resolution, mirroring the generated get(Class) head.
+    private final TikoOptions options;
 
     // Tiko.createSingleModuleContainer + AggregatingContainer.processContainerResource
     // both reflectively look up the canonical 6-arg constructor (TikoOptions is the
@@ -33,10 +43,18 @@ public final class StubContainer implements Container {
             java.time.Duration shutdownTimeout,
             TikoOptions options) {
         this.eventBus = eventBus;
+        this.options = options;
     }
 
     @Override
     public <T> T get(Class<T> type) {
+        var override = options == null ? null : options.getOverride(type);
+        if (override != null) {
+            return type.cast(override.get());
+        }
+        if (type == StubService.class) {
+            return type.cast(STUB_SERVICE);
+        }
         throw new UnsupportedOperationException("stub");
     }
 
@@ -52,6 +70,9 @@ public final class StubContainer implements Container {
 
     @Override
     public <T> Provider<T> getProvider(Class<T> type) {
+        if (type == StubService.class || (options != null && options.getOverride(type) != null)) {
+            return () -> get(type);
+        }
         throw new UnsupportedOperationException("stub");
     }
 
