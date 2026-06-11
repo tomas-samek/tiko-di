@@ -154,6 +154,13 @@ public final class EventRegistryGenerator {
                 .addParameter(containerClass, "container")
                 .addParameter(eventClass, "event");
 
+        // Subscriptions are never released from the bus, and per-component getters carry no
+        // stopped gate — so the dispatcher drops the delivery once shutdown has gated the
+        // container, or it would run handlers on destroyed singletons (#337).
+        method.beginControlFlow("if (container.__isStopped())");
+        method.addStatement("return");
+        method.endControlFlow();
+
         // Build the wrapper for this delivery and run the handler under it. Generated code
         // uses an explicit try/finally rather than EventChainContext.runWith so we don't
         // have to introduce a lambda — keeps the generated source readable.

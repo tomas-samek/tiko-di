@@ -201,6 +201,7 @@ public final class ContainerGenerator {
         // Add lifecycle methods
         containerBuilder.addMethod(createStartMethod());
         containerBuilder.addMethod(createShutdownMethod());
+        containerBuilder.addMethod(createIsStoppedMethod());
 
         // Add Provider methods
         containerBuilder.addMethod(createGetProviderMethod());
@@ -1033,6 +1034,20 @@ public final class ContainerGenerator {
                         "Unit-of-work lifecycle publish threw")
                 .endControlFlow();
         return method.build();
+    }
+
+    /**
+     * Creates the package-visible {@code __isStopped()} accessor read by the generated
+     * event registry's dispatchers (#337). Plain {@code stopped.get()} — deliberately
+     * without the {@code inShutdownThread} bypass the lookup gate has: that bypass exists
+     * so {@code @PreDestroy} hooks can resolve beans during teardown, but handler dispatch
+     * during/after Phase 4 would run on already-destroyed singletons.
+     */
+    private MethodSpec createIsStoppedMethod() {
+        return MethodSpec.methodBuilder("__isStopped")
+                .returns(boolean.class)
+                .addStatement("return stopped.get()")
+                .build();
     }
 
     /**
