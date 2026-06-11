@@ -195,6 +195,7 @@ public final class ContainerGenerator {
         // Add scope management methods
         containerBuilder.addMethod(createRunInEventScopeMethod());
         containerBuilder.addMethod(createSupplyInEventScopeMethod());
+        containerBuilder.addMethod(createPublishUnitLifecycleMethod());
         containerBuilder.addMethod(createCloseEventScopeMethod());
 
         // Add lifecycle methods
@@ -957,13 +958,13 @@ public final class ContainerGenerator {
         method.addStatement("__unitFrameOpen.set($T.TRUE)", Boolean.class)
                 .addStatement("$T __eventId = $T.randomUUID().toString()", String.class, UUID.class)
                 .addStatement("$T __eventStart = $T.now()", Instant.class, Instant.class)
-                .addStatement("eventBus.publish(new $T(__eventId, __eventStart))", EVENT_STARTED)
+                .addStatement("__publishUnitLifecycle(new $T(__eventId, __eventStart))", EVENT_STARTED)
                 .beginControlFlow("try")
                 .addStatement("task.run()")
                 .nextControlFlow("finally")
                 .addStatement("$T __eventEnd = $T.now()", Instant.class, Instant.class)
                 .addStatement(
-                        "eventBus.publish(new $T(__eventId, __eventEnd, $T.between(__eventStart, __eventEnd)))",
+                        "__publishUnitLifecycle(new $T(__eventId, __eventEnd, $T.between(__eventStart, __eventEnd)))",
                         EVENT_ENDING,
                         Duration.class);
         method.addStatement("__closeEventScope()").endControlFlow();
@@ -994,16 +995,43 @@ public final class ContainerGenerator {
         method.addStatement("__unitFrameOpen.set($T.TRUE)", Boolean.class)
                 .addStatement("$T __eventId = $T.randomUUID().toString()", String.class, UUID.class)
                 .addStatement("$T __eventStart = $T.now()", Instant.class, Instant.class)
-                .addStatement("eventBus.publish(new $T(__eventId, __eventStart))", EVENT_STARTED)
+                .addStatement("__publishUnitLifecycle(new $T(__eventId, __eventStart))", EVENT_STARTED)
                 .beginControlFlow("try")
                 .addStatement("return supplier.get()")
                 .nextControlFlow("finally")
                 .addStatement("$T __eventEnd = $T.now()", Instant.class, Instant.class)
                 .addStatement(
-                        "eventBus.publish(new $T(__eventId, __eventEnd, $T.between(__eventStart, __eventEnd)))",
+                        "__publishUnitLifecycle(new $T(__eventId, __eventEnd, $T.between(__eventStart, __eventEnd)))",
                         EVENT_ENDING,
                         Duration.class);
         method.addStatement("__closeEventScope()").endControlFlow();
+        return method.build();
+    }
+
+    /**
+     * Creates the private {@code __publishUnitLifecycle(Object)} helper that both scope
+     * methods use for their {@code EventStartedEvent}/{@code EventEndingEvent} publishes.
+     * Isolates {@code Throwable} — a throwing publish (user bus decorator, or an
+     * {@code Error} escaping a sync handler) must never skip {@code __closeEventScope()}
+     * or leave {@code __unitFrameOpen} stuck on the thread (#336). Mirrors the isolation
+     * the {@code ApplicationStarted}/{@code ApplicationEnding} publishes already have.
+     */
+    private MethodSpec createPublishUnitLifecycleMethod() {
+        ClassName loggerLevel = ClassName.get("java.lang", "System", "Logger", "Level");
+        MethodSpec.Builder method = MethodSpec.methodBuilder("__publishUnitLifecycle")
+                .addModifiers(Modifier.PRIVATE)
+                .addParameter(Object.class, "event");
+        method.beginControlFlow("try")
+                .addStatement("eventBus.publish(event)")
+                .nextControlFlow("catch ($T __t)", Throwable.class)
+                .addComment("Bus/handler defect; the unit-of-work bracket must stay intact (#336)")
+                .addStatement(
+                        "$T.getLogger($S).log($T.WARNING, $S, __t)",
+                        ClassName.get("java.lang", "System"),
+                        EVENTS_PACKAGE,
+                        loggerLevel,
+                        "Unit-of-work lifecycle publish threw")
+                .endControlFlow();
         return method.build();
     }
 
