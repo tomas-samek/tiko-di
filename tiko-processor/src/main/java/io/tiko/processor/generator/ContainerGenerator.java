@@ -1699,6 +1699,12 @@ public final class ContainerGenerator {
                 : component.getTypeElement().getInterfaces();
         for (javax.lang.model.type.TypeMirror iface : declared) {
             TypeName n = TypeName.get(iface);
+            // Class literals are erased: a parameterized interface (Repo<User>) must route
+            // as its raw type — emitting type arguments into `$T.class` is a parse error
+            // in the generated dispatch arms (#330; @Produces counterpart was #327).
+            if (n instanceof ParameterizedTypeName p) {
+                n = p.rawType();
+            }
             if (filterMarkers && isLifecycleMarker(n)) continue;
             if (!keys.contains(n)) keys.add(n);
         }
