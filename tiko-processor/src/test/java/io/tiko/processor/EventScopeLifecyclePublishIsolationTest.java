@@ -51,11 +51,9 @@ class EventScopeLifecyclePublishIsolationTest {
                 .as("scope-bracket lifecycle publishes must go through the Throwable-isolating helper")
                 .contains("__publishUnitLifecycle(new EventStartedEvent")
                 .contains("__publishUnitLifecycle(new EventEndingEvent")
-                .contains("private void __publishUnitLifecycle");
-        assertThat(source)
+                .contains("private void __publishUnitLifecycle")
                 .as("the helper must isolate Throwable, not just Exception")
-                .contains("catch (Throwable");
-        assertThat(source)
+                .contains("catch (Throwable")
                 .as("the scope bracket must not publish lifecycle events on the bus directly")
                 .doesNotContain("eventBus.publish(new EventStartedEvent")
                 .doesNotContain("eventBus.publish(new EventEndingEvent");
