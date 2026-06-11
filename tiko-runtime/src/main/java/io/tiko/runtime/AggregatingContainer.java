@@ -406,10 +406,20 @@ public final class AggregatingContainer implements Container {
         Container ccfg = configToContainer.get(type);
         if (ccfg != null) return ccfg.get(type);
         Container container = componentToContainerMap.get(type);
-        if (container == null) {
-            throw new NoSuchComponentException(type);
+        if (container != null) {
+            return container.get(type);
         }
-        return container.get(type);
+        // The fast-path map is keyed by concrete component classes only (components.txt),
+        // so interface keys, @Produces return types, and TikoOptions overrides are invisible
+        // to it — fall back to delegating like get(Class, String) does (#335).
+        for (Container moduleContainer : moduleContainers) {
+            try {
+                return moduleContainer.get(type);
+            } catch (UnsupportedOperationException | NoSuchComponentException e) {
+                // Try next container
+            }
+        }
+        throw new NoSuchComponentException(type);
     }
 
     @Override
@@ -441,10 +451,18 @@ public final class AggregatingContainer implements Container {
     @Override
     public <T> Provider<T> getProvider(Class<T> type) {
         Container container = componentToContainerMap.get(type);
-        if (container == null) {
-            throw new NoSuchComponentException(type);
+        if (container != null) {
+            return container.getProvider(type);
         }
-        return container.getProvider(type);
+        // Same fallback as get(Class): the map can't see interface keys or overrides (#335).
+        for (Container moduleContainer : moduleContainers) {
+            try {
+                return moduleContainer.getProvider(type);
+            } catch (UnsupportedOperationException | NoSuchComponentException e) {
+                // Try next container
+            }
+        }
+        throw new NoSuchComponentException(type);
     }
 
     @Override
