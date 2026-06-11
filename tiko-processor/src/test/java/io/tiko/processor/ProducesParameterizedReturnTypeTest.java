@@ -62,13 +62,14 @@ class ProducesParameterizedReturnTypeTest {
         assertThat(c).succeeded();
 
         var content = generatedContainer(c);
-        // Raw-type class literals: legal Java and the tokens a caller actually passes.
+        // Raw-type class literals (legal Java, the tokens a caller actually passes):
         // List.class is dispatched in get(Class) + getAll(Class); Map.class (named) in
-        // get(Class, String) + getAll(Class).
-        Assertions.assertThat(content).contains("type == List.class");
-        Assertions.assertThat(content).contains("type == Map.class");
-        // The illegal parameterized class literals must never be emitted.
-        Assertions.assertThat(content).doesNotContain("List<String>.class");
-        Assertions.assertThat(content).doesNotContain("Map<String, Integer>.class");
+        // get(Class, String) + getAll(Class). The illegal parameterized class literals
+        // must never be emitted.
+        Assertions.assertThat(content)
+                .contains("type == List.class")
+                .contains("type == Map.class")
+                .doesNotContain("List<String>.class")
+                .doesNotContain("Map<String, Integer>.class");
     }
 }
