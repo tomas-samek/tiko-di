@@ -23,6 +23,17 @@ class CircularDependencyDetectorTest {
 
     /** A SINGLETON {@code @Component} 'name' with one {@code @Inject} constructor param ({@code ctorParams}). */
     private static JavaFileObject bean(String name, String ctorParams) {
+        return implBean(name, "", ctorParams);
+    }
+
+    /** A plain empty interface 'name'. */
+    private static JavaFileObject iface(String name) {
+        return JavaFileObjects.forSourceLines("demo." + name, "package demo;", "public interface " + name + " {}");
+    }
+
+    /** Like {@link #bean} but implementing {@code ifaceName} (empty string for none). */
+    private static JavaFileObject implBean(String name, String ifaceName, String ctorParams) {
+        String implementsClause = ifaceName.isEmpty() ? "" : " implements " + ifaceName;
         return JavaFileObjects.forSourceLines(
                 "demo." + name,
                 "package demo;",
@@ -30,7 +41,7 @@ class CircularDependencyDetectorTest {
                 "import io.tiko.annotations.Component;",
                 "import io.tiko.annotations.Inject;",
                 "@Component(scope = Scope.SINGLETON)",
-                "public class " + name + " {",
+                "public class " + name + implementsClause + " {",
                 "  @Inject public " + name + "(" + ctorParams + ") {}",
                 "}");
     }
@@ -70,6 +81,32 @@ class CircularDependencyDetectorTest {
     @Test
     void unrelatedComponentsCompile() {
         Compilation c = compile(bean("A", ""), bean("B", ""));
+
+        CompilationSubject.assertThat(c).succeeded();
+    }
+
+    @Test
+    void cycleThroughInterfaceFailsWithFullPath() {
+        // A -> IB (implemented by B) -> A : the interface edge must land on B, not dead-end (#329).
+        Compilation c = compile(bean("A", "IB b"), iface("IB"), implBean("B", "IB", "A a"));
+
+        CompilationSubject.assertThat(c).failed();
+        CompilationSubject.assertThat(c).hadErrorContaining("demo.A -> demo.B -> demo.A");
+    }
+
+    @Test
+    void cycleThroughTwoInterfacesFailsWithCyclePath() {
+        // Both edges interface-typed: A implements IA injects IB; B implements IB injects IA.
+        Compilation c = compile(iface("IA"), iface("IB"), implBean("A", "IA", "IB b"), implBean("B", "IB", "IA a"));
+
+        CompilationSubject.assertThat(c).failed();
+        // Either rotation of the 2-cycle contains this edge.
+        CompilationSubject.assertThat(c).hadErrorContaining("demo.B -> demo.A");
+    }
+
+    @Test
+    void acyclicGraphThroughInterfaceCompiles() {
+        Compilation c = compile(bean("A", "IB b"), iface("IB"), implBean("B", "IB", ""));
 
         CompilationSubject.assertThat(c).succeeded();
     }
