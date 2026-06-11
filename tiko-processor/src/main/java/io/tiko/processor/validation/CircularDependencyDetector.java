@@ -58,23 +58,25 @@ public final class CircularDependencyDetector {
      * intact — the earlier copy-on-recurse logic discarded it and surfaced only the root node.
      */
     private List<String> findCycle(String key, Set<String> visiting, List<String> path) {
-        // Back-edge to a node already on the current path: close the cycle from its first
-        // occurrence to the end, then repeat the node so the rendered path reads A -> B -> A.
-        if (visiting.contains(key)) {
-            List<String> cycle = new ArrayList<>(path.subList(path.indexOf(key), path.size()));
-            cycle.add(key);
-            return cycle;
-        }
-
-        // Missing dependency is reported by DependencyGraphValidator, not here.
-        if (context.findComponentOrFactory(key).isEmpty()) {
+        // Resolve interface- or qualifier-typed edges to the provider's own key so they land on
+        // the same node as direct edges — an exact-key walk dead-ends at the alias (#329).
+        String canonical = resolveToProviderKey(key);
+        if (canonical == null) {
             return List.of();
         }
 
-        visiting.add(key);
-        path.add(key);
+        // Back-edge to a node already on the current path: close the cycle from its first
+        // occurrence to the end, then repeat the node so the rendered path reads A -> B -> A.
+        if (visiting.contains(canonical)) {
+            List<String> cycle = new ArrayList<>(path.subList(path.indexOf(canonical), path.size()));
+            cycle.add(canonical);
+            return cycle;
+        }
 
-        for (DependencyModel dependency : getDependencies(key)) {
+        visiting.add(canonical);
+        path.add(canonical);
+
+        for (DependencyModel dependency : getDependencies(canonical)) {
             // Provider<T> breaks cycles - skip
             if (dependency.isProvider()) {
                 continue;
@@ -85,9 +87,25 @@ public final class CircularDependencyDetector {
             }
         }
 
-        visiting.remove(key);
+        visiting.remove(canonical);
         path.remove(path.size() - 1);
         return List.of();
+    }
+
+    /**
+     * Resolves a dependency key to the providing component's or factory's own registration key.
+     * Returns {@code null} for a missing dependency (reported by DependencyGraphValidator, not
+     * here) and for runtime-bound {@code @Configuration} records — leaves for cycle purposes.
+     */
+    private String resolveToProviderKey(String key) {
+        Object provider = context.findComponentOrFactory(key).orElse(null);
+        if (provider instanceof ComponentModel component) {
+            return component.getComponentKey();
+        }
+        if (provider instanceof FactoryMethodModel factory) {
+            return factory.getComponentKey();
+        }
+        return null;
     }
 
     /**
