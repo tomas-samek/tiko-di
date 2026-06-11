@@ -613,13 +613,10 @@ public final class ContainerGenerator {
                 .returns(returnType);
 
         // SINGLETON/EVENT getters cast the scope map's Object back to the produced type.
-        // For a parameterized @Produces return type (e.g. List<String>) that cast is
-        // unchecked and no class token can express it, so the suppression the dispatchers
-        // already carry is applied here too (#309). PROTOTYPE has no cast.
-        if (factory.getScope() != Scope.PROTOTYPE) {
-            method.addAnnotation(SUPPRESS_UNCHECKED);
-        }
-
+        // That cast is checked: generic return types are rejected up front by
+        // ProducesSignatureValidator (#327), so the produced type is always a concrete,
+        // non-generic type and no unchecked suppression is needed here. (The get/getAll
+        // dispatchers still suppress — their casts are to the type variable T.)
         switch (factory.getScope()) {
             case SINGLETON ->
                 method.addStatement(
@@ -763,18 +760,6 @@ public final class ContainerGenerator {
 
     private static String factoryGetterName(FactoryMethodModel factory) {
         return "produce_" + factory.getFactoryIdentifier();
-    }
-
-    /**
-     * Returns the {@link TypeName} usable in a {@code .class} literal for {@code type}.
-     * A class literal requires the raw type — {@code List<String>.class} is not legal
-     * Java, only {@code List.class} is. Erasure means a single {@code List.class} token
-     * exists at runtime regardless of the type argument, and that is exactly the token a
-     * caller passes to {@code get(List.class)}. So a {@code @Produces} method declaring a
-     * parameterized return type dispatches on its raw class token (#327).
-     */
-    private static TypeName classLiteralType(TypeName type) {
-        return type instanceof ParameterizedTypeName parameterized ? parameterized.rawType() : type;
     }
 
     private static String simpleClassName(String qualifiedName) {
@@ -1380,7 +1365,7 @@ public final class ContainerGenerator {
         // Unnamed factory-produced components (named ones are only reachable via get(Class, String))
         for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
             if (factory.getName() != null && !factory.getName().isEmpty()) continue;
-            TypeName producedType = classLiteralType(TypeName.get(factory.getReturnType()));
+            TypeName producedType = TypeName.get(factory.getReturnType());
 
             if (first) {
                 method.beginControlFlow("if (type == $T.class)", producedType);
@@ -1474,7 +1459,7 @@ public final class ContainerGenerator {
         // Named factory-produced components
         for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
             if (factory.getName() == null || factory.getName().isEmpty()) continue;
-            TypeName producedType = classLiteralType(TypeName.get(factory.getReturnType()));
+            TypeName producedType = TypeName.get(factory.getReturnType());
             String factoryName = factory.getName();
 
             // Exact-match the produced type, consistent with get(Class) and getAll (#304). The
@@ -1549,7 +1534,7 @@ public final class ContainerGenerator {
         // EVENT-scoped factories (#303). This mirrors the component arms above and the unnamed
         // get(Class) factory routing, both of which key on `type == ProducedType.class`.
         for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
-            TypeName producedType = classLiteralType(TypeName.get(factory.getReturnType()));
+            TypeName producedType = TypeName.get(factory.getReturnType());
             method.beginControlFlow("if (type == $T.class)", producedType);
             method.addStatement("__result.add(type.cast($L()))", factoryGetterName(factory));
             method.endControlFlow();
