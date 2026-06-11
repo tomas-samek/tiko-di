@@ -12,15 +12,20 @@ import javax.tools.JavaFileObject;
 import org.junit.jupiter.api.Test;
 
 /**
- * Pins the uniform unchecked-cast suppression policy from #309. SINGLETON and EVENT
- * {@code produce_*} getters cast the scope map's Object back to the produced type, so they
- * carry the same {@code @SuppressWarnings("unchecked")} the dispatchers do. PROTOTYPE
- * getters perform no cast and stay unannotated.
+ * Pins the {@code produce_*} getter suppression policy after #327 narrowed it. Generic
+ * {@code @Produces} return types are now rejected up front by {@code ProducesSignatureValidator},
+ * so the produced type is always concrete and the SINGLETON/EVENT getters' cast of the scope
+ * map's Object back to that type is <em>checked</em> — no {@code @SuppressWarnings("unchecked")}
+ * is emitted on any produce getter, regardless of scope. (The get/getAll dispatchers still
+ * suppress, because their casts are to the type variable {@code T}; that is covered elsewhere.)
+ *
+ * <p>This reverses the uniform-suppression policy #309 introduced: that policy existed only to
+ * cover the parameterized-producer cast, which #327 eliminated at the source.
  */
 class ProduceGetterUncheckedSuppressionTest {
 
     @Test
-    void scopedProduceGettersCarrySuppressionPrototypeDoesNot() throws IOException {
+    void produceGettersCarryNoSuppressionForConcreteTypes() throws IOException {
         JavaFileObject factory = JavaFileObjects.forSourceLines(
                 "demo.Producers",
                 "package demo;",
@@ -51,10 +56,12 @@ class ProduceGetterUncheckedSuppressionTest {
                 new String(container.openInputStream().readAllBytes(), StandardCharsets.UTF_8).replaceAll("\\s", "");
 
         assertThat(normalized)
-                .as("SINGLETON produce getter carries the suppression")
-                .contains("@SuppressWarnings(\"unchecked\")publicStringWriterproduce_Producers_labels()")
-                .as("EVENT produce getter carries the suppression")
-                .contains("@SuppressWarnings(\"unchecked\")publicStringBuilderproduce_Producers_token()")
+                .as("SINGLETON produce getter casts to a concrete type — checked, no suppression")
+                .doesNotContain("@SuppressWarnings(\"unchecked\")publicStringWriterproduce_Producers_labels()")
+                .contains("publicStringWriterproduce_Producers_labels()")
+                .as("EVENT produce getter casts to a concrete type — checked, no suppression")
+                .doesNotContain("@SuppressWarnings(\"unchecked\")publicStringBuilderproduce_Producers_token()")
+                .contains("publicStringBuilderproduce_Producers_token()")
                 .as("PROTOTYPE produce getter has no cast, so no suppression")
                 .doesNotContain("@SuppressWarnings(\"unchecked\")publicThreadproduce_Producers_worker()")
                 .contains("publicThreadproduce_Producers_worker()");

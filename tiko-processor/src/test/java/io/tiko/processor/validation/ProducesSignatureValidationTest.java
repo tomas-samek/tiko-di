@@ -117,6 +117,83 @@ class ProducesSignatureValidationTest {
     }
 
     @Test
+    void parameterizedProducesFailsCleanly() {
+        JavaFileObject factory = JavaFileObjects.forSourceLines(
+                "io.example.Factory",
+                "package io.example;",
+                "import java.util.List;",
+                "import io.tiko.Scope;",
+                "import io.tiko.annotations.Component;",
+                "import io.tiko.annotations.Produces;",
+                "@Component(scope = Scope.SINGLETON)",
+                "public class Factory {",
+                "  @Produces(scope = Scope.SINGLETON)",
+                "  public List<String> labels() { return List.of(); }",
+                "}");
+
+        Compilation c = compile(factory);
+
+        CompilationSubject.assertThat(c).failed();
+        CompilationSubject.assertThat(c).hadErrorContaining("must return a non-generic type");
+        CompilationSubject.assertThat(c).hadErrorContaining("interface MyParamList extends List<MyEntity>");
+        // The fix replaces the lenient codegen path that emitted illegal 'List<String>.class':
+        // validation now fails before codegen, so no leaked generated-source javac errors (#327).
+        assertThat(c.errors().stream().noneMatch(d -> d.getMessage(null).contains("<identifier> expected")))
+                .as("validation must fail before codegen — no leaked generated-source javac errors")
+                .isTrue();
+    }
+
+    @Test
+    void rawGenericProducesFailsCleanly() {
+        JavaFileObject factory = JavaFileObjects.forSourceLines(
+                "io.example.Factory",
+                "package io.example;",
+                "import java.util.List;",
+                "import io.tiko.Scope;",
+                "import io.tiko.annotations.Component;",
+                "import io.tiko.annotations.Produces;",
+                "@Component(scope = Scope.SINGLETON)",
+                "public class Factory {",
+                "  @Produces(scope = Scope.SINGLETON)",
+                "  @SuppressWarnings(\"rawtypes\")",
+                "  public List labels() { return List.of(); }",
+                "}");
+
+        Compilation c = compile(factory);
+
+        CompilationSubject.assertThat(c).failed();
+        CompilationSubject.assertThat(c).hadErrorContaining("must return a non-generic type");
+    }
+
+    @Test
+    void namedInterfaceOverParameterizedTypeCompiles() {
+        // The prescribed workaround: a named interface fixing the type arguments has its own
+        // distinct FQN key, so it routes unambiguously (#327).
+        JavaFileObject entity = JavaFileObjects.forSourceLines(
+                "io.example.MyEntity", "package io.example;", "public class MyEntity {}");
+        JavaFileObject paramList = JavaFileObjects.forSourceLines(
+                "io.example.MyParamList",
+                "package io.example;",
+                "import java.util.List;",
+                "public interface MyParamList extends List<MyEntity> {}");
+        JavaFileObject factory = JavaFileObjects.forSourceLines(
+                "io.example.Factory",
+                "package io.example;",
+                "import io.tiko.Scope;",
+                "import io.tiko.annotations.Component;",
+                "import io.tiko.annotations.Produces;",
+                "@Component(scope = Scope.SINGLETON)",
+                "public class Factory {",
+                "  @Produces(scope = Scope.SINGLETON)",
+                "  public MyParamList labels() { return null; }",
+                "}");
+
+        Compilation c = compile(entity, paramList, factory);
+
+        CompilationSubject.assertThat(c).succeeded();
+    }
+
+    @Test
     void publicObjectReturningProducesCompiles() {
         JavaFileObject thing =
                 JavaFileObjects.forSourceLines("io.example.Thing", "package io.example;", "public class Thing {}");

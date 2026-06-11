@@ -5,7 +5,10 @@ import io.tiko.processor.util.ErrorReporter;
 import io.tiko.processor.util.ProcessorContext;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeKind;
+import javax.lang.model.type.TypeMirror;
 
 /**
  * Validates that {@code @Produces} method signatures are ones the code generator can
@@ -19,6 +22,11 @@ import javax.lang.model.type.TypeKind;
  * <ul>
  *   <li>{@code void} return — a factory must produce an instance.
  *   <li>primitive return — dependency injection resolves reference types.
+ *   <li>generic return — Tiko wires by exact type and a generic type erases to its raw
+ *       class ({@code List<String>} and {@code List<Integer>} collapse to one key), so it
+ *       cannot be resolved unambiguously; emitting {@code List<String>.class} in the
+ *       dispatcher is also not legal Java. The fix is a named interface that fixes the type
+ *       arguments — {@code interface MyParamList extends List<MyEntity> {}} (#327).
  *   <li>non-{@code public} — the generated container invokes it from {@code io.tiko.generated}.
  *   <li>{@code abstract} — there is no body to produce an instance from.
  * </ul>
@@ -64,6 +72,18 @@ public final class ProducesSignatureValidator {
                     "Wrap the value in a small holder type and produce that");
             return false;
         }
+        if (isGenericType(factory.getReturnType())) {
+            report(
+                    method,
+                    "@Produces method '" + fqn + "' must return a non-generic type, not '" + factory.getReturnType()
+                            + "'. Tiko wires by exact type and a generic type erases to its raw class"
+                            + " (List<String> and List<Integer> collapse to the same key), so it cannot be"
+                            + " resolved unambiguously.",
+                    "Declare a named interface that fixes the type arguments and return that, e.g."
+                            + " 'interface MyParamList extends List<MyEntity> {}' then '@Produces MyParamList'",
+                    "If you only need a single value, return its element type directly instead of a collection");
+            return false;
+        }
         if (method.getModifiers().contains(Modifier.ABSTRACT)) {
             report(
                     method,
@@ -81,6 +101,21 @@ public final class ProducesSignatureValidator {
             return false;
         }
         return true;
+    }
+
+    /**
+     * True when {@code type} is a generic type — its declaring element has type parameters.
+     * This catches both the parameterized form ({@code List<String>}) and the raw form
+     * ({@code List}): both key on the same erased FQN and are unresolvable by Tiko's
+     * exact-type wiring. A named interface that <em>extends</em> a parameterized type
+     * (e.g. {@code interface MyParamList extends List<MyEntity> {}}) declares no type
+     * parameters of its own, so it is allowed — that is the intended workaround (#327).
+     * Arrays and other non-declared types are never generic here.
+     */
+    private static boolean isGenericType(TypeMirror type) {
+        return type instanceof DeclaredType declared
+                && declared.asElement() instanceof TypeElement element
+                && !element.getTypeParameters().isEmpty();
     }
 
     private void report(ExecutableElement method, String problem, String... suggestedFixes) {

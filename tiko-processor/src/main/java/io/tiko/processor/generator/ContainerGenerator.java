@@ -613,13 +613,10 @@ public final class ContainerGenerator {
                 .returns(returnType);
 
         // SINGLETON/EVENT getters cast the scope map's Object back to the produced type.
-        // For a parameterized @Produces return type (e.g. List<String>) that cast is
-        // unchecked and no class token can express it, so the suppression the dispatchers
-        // already carry is applied here too (#309). PROTOTYPE has no cast.
-        if (factory.getScope() != Scope.PROTOTYPE) {
-            method.addAnnotation(SUPPRESS_UNCHECKED);
-        }
-
+        // That cast is checked: generic return types are rejected up front by
+        // ProducesSignatureValidator (#327), so the produced type is always a concrete,
+        // non-generic type and no unchecked suppression is needed here. (The get/getAll
+        // dispatchers still suppress — their casts are to the type variable T.)
         switch (factory.getScope()) {
             case SINGLETON ->
                 method.addStatement(
