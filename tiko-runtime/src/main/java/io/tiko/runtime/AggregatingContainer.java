@@ -8,6 +8,8 @@ import io.tiko.NoSuchComponentException;
 import io.tiko.Provider;
 import io.tiko.events.ApplicationEndingEvent;
 import io.tiko.events.ApplicationStartedEvent;
+import io.tiko.events.EventEndingEvent;
+import io.tiko.events.EventStartedEvent;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.lang.reflect.Constructor;
@@ -496,12 +498,58 @@ public final class AggregatingContainer implements Container {
 
     @Override
     public void runInEventScope(Runnable task) {
-        runNested(moduleContainers.iterator(), task, Container::runInEventScope);
+        runNested(moduleContainers.iterator(), wrapWithUnitLifecycle(task), Container::runInEventScope);
     }
 
     @Override
     public <T> T supplyInEventScope(Supplier<T> supplier) {
-        return supplyNested(moduleContainers.iterator(), supplier, Container::supplyInEventScope);
+        return supplyNested(
+                moduleContainers.iterator(), wrapWithUnitLifecycle(supplier), Container::supplyInEventScope);
+    }
+
+    /**
+     * Wraps the unit's task with exactly one {@link EventStartedEvent}/{@link EventEndingEvent}
+     * pair (#339). Per-module containers are constructed with {@code publishLifecycleEvents=false}
+     * so their scope brackets stay silent; the aggregator publishes once, inside the innermost
+     * frame — every module frame is open during both publishes, and the ending event still
+     * precedes the modules' EVENT-bean teardown, matching single-module semantics.
+     */
+    private Runnable wrapWithUnitLifecycle(Runnable task) {
+        Supplier<Void> wrapped = wrapWithUnitLifecycle(() -> {
+            task.run();
+            return null;
+        });
+        return wrapped::get;
+    }
+
+    /** Supplier counterpart of {@link #wrapWithUnitLifecycle(Runnable)} (#339). */
+    private <T> Supplier<T> wrapWithUnitLifecycle(Supplier<T> supplier) {
+        return () -> {
+            String eventId = UUID.randomUUID().toString();
+            Instant start = Instant.now();
+            publishUnitLifecycle(new EventStartedEvent(eventId, start));
+            try {
+                return supplier.get();
+            } finally {
+                Instant end = Instant.now();
+                publishUnitLifecycle(new EventEndingEvent(eventId, end, Duration.between(start, end)));
+            }
+        };
+    }
+
+    /**
+     * Publishes a unit-of-work lifecycle event, isolating {@code Exception} so a failing
+     * publish does not abort the unit (#336 parallel). Unlike the generated brackets, the
+     * aggregator holds no per-thread frame state of its own — all teardown lives in the
+     * module frames' {@code finally} blocks — so a propagating {@code Error} cannot poison
+     * anything and is deliberately let through.
+     */
+    private void publishUnitLifecycle(Object event) {
+        try {
+            sharedEventBus.publish(event);
+        } catch (Exception e) {
+            LoggerHolder.LOG.log(System.Logger.Level.WARNING, "Unit-of-work lifecycle publish threw", e);
+        }
     }
 
     /**
