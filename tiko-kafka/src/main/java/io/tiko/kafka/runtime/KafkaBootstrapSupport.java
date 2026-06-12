@@ -118,11 +118,34 @@ public final class KafkaBootstrapSupport {
                 Object payload = sink.dispatcher().dispatch(container, event);
                 byte[] bytes = serializer.serialize(payload);
                 String key = sink.partitionKey().isEmpty() ? null : resolvePartitionKey(payload, sink.partitionKey());
-                producer.send(new ProducerRecord<>(sink.topic(), null, key, bytes, new RecordHeaders()));
+                // The send callback surfaces broker-side failures (record-too-large, topic
+                // authorization, delivery timeout) that never throw synchronously — without
+                // it the rejection is silent egress loss (#342).
+                producer.send(
+                        new ProducerRecord<>(sink.topic(), null, key, bytes, new RecordHeaders()), (md, failure) -> {
+                            if (failure != null) {
+                                routeEgressError(errorHandler, new KafkaEgressError(sink.topic(), event, failure));
+                            }
+                        });
             } catch (Exception ex) {
-                errorHandler.onError(new KafkaEgressError(sink.topic(), event, ex));
+                routeEgressError(errorHandler, new KafkaEgressError(sink.topic(), event, ex));
             }
         };
+    }
+
+    /**
+     * Routes an egress error without letting a throwing ErrorHandler propagate — the send
+     * callback runs on the producer's I/O thread, which must never die on user code.
+     */
+    private static void routeEgressError(ErrorHandler errorHandler, KafkaEgressError error) {
+        try {
+            errorHandler.onError(error);
+        } catch (Exception handlerFailure) {
+            LoggerHolder.LOG.log(
+                    System.Logger.Level.WARNING,
+                    "ErrorHandler threw while handling a Kafka egress error",
+                    handlerFailure);
+        }
     }
 
     private static String resolvePartitionKey(Object payload, String accessor) {
@@ -181,5 +204,10 @@ public final class KafkaBootstrapSupport {
      */
     private static ErrorHandler resolveErrorHandler(Container container) {
         return container.getErrorHandler();
+    }
+
+    /** Lazy holder: defers System.LoggerFinder resolution until the first failure path runs. */
+    private static final class LoggerHolder {
+        static final System.Logger LOG = System.getLogger("io.tiko.kafka");
     }
 }

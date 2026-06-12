@@ -152,15 +152,19 @@ public final class FakeKafkaBroker {
         }
 
         @Override
-        public Future<RecordMetadata> send(ProducerRecord<String, byte[]> record) {
-            broker.capture(record);
+        public Future<RecordMetadata> send(
+                ProducerRecord<String, byte[]> producerRecord, org.apache.kafka.clients.producer.Callback callback) {
+            broker.capture(producerRecord);
             RecordMetadata md = new RecordMetadata(
-                    new TopicPartition(record.topic(), 0),
-                    broker.recordsFor(record.topic()).size() - 1L,
+                    new TopicPartition(producerRecord.topic(), 0),
+                    broker.recordsFor(producerRecord.topic()).size() - 1L,
                     0,
                     System.currentTimeMillis(),
                     0,
-                    record.value() == null ? 0 : record.value().length);
+                    producerRecord.value() == null ? 0 : producerRecord.value().length);
+            if (callback != null) {
+                callback.onCompletion(md, null);
+            }
             return CompletableFuture.completedFuture(md);
         }
 
