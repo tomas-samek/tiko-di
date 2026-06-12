@@ -7,7 +7,6 @@ import io.tiko.processor.model.FactoryMethodModel;
 import io.tiko.processor.model.WiringError;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -15,6 +14,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
@@ -34,14 +34,17 @@ public final class ProcessorContext {
     private final Messager messager;
     private final ErrorReporter errorReporter;
 
-    // Discovered components and factories
-    private final Map<String, ComponentModel> components = new HashMap<>();
+    // Discovered components and factories. Sorted maps (#334): generated members, dispatch
+    // arms, and teardown walks iterate these, so hash-arbitrary order reshuffled the whole
+    // generated container whenever one component was added — and silently re-decided
+    // first-match precedence between same-predicate dispatch arms.
+    private final Map<String, ComponentModel> components = new TreeMap<>();
     // Factory methods grouped by their {@code returnTypeName (#name)} key. The map is one-to-many
     // because two {@code @Produces} methods returning the same type can coexist as long as their
     // {@code profiles = {...}} sets do not overlap (see #275). Lookups iterate the per-key list
     // and pick the profile-active one; {@code registerFactoryMethod} guards against truly
     // overlapping additions.
-    private final Map<String, List<FactoryMethodModel>> factoryMethods = new HashMap<>();
+    private final Map<String, List<FactoryMethodModel>> factoryMethods = new TreeMap<>();
     private final List<EventHandlerModel> eventHandlers = new ArrayList<>();
     private final List<ConfigurationModel> configurations = new ArrayList<>();
 
@@ -212,7 +215,15 @@ public final class ProcessorContext {
     }
 
     public List<EventHandlerModel> getEventHandlers() {
-        return List.copyOf(eventHandlers);
+        // Sorted view (#334): the registry's dispatcher names, HANDLER_INFO indexes, and
+        // subscription order all follow this list — element visitation order tracks source
+        // order, which must not leak into generated output.
+        return eventHandlers.stream()
+                .sorted(java.util.Comparator.comparing((EventHandlerModel h) ->
+                                h.getDeclaringClass().getQualifiedName().toString())
+                        .thenComparing(EventHandlerModel::getMethodName)
+                        .thenComparing(EventHandlerModel::getEventTypeName))
+                .toList();
     }
 
     public void registerConfiguration(ConfigurationModel cfg) {
@@ -220,7 +231,10 @@ public final class ProcessorContext {
     }
 
     public List<ConfigurationModel> getConfigurations() {
-        return List.copyOf(configurations);
+        // Sorted view (#334) — same reproducibility rule as components and factories.
+        return configurations.stream()
+                .sorted(java.util.Comparator.comparing(ConfigurationModel::qualifiedName))
+                .toList();
     }
 
     /**
