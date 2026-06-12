@@ -86,14 +86,24 @@ tiko/
 ├── tiko-processor/        # Compile-time annotation processor
 ├── tiko-runtime/          # Runtime container — `Tiko` bootstrap, `TikoContainerImpl`,
 │                          # `AggregatingContainer`, `LocalEventBus`, `DefaultErrorHandler`
-└── tiko-config/           # YAML-backed @Configuration injection (optional)
+├── tiko-config/           # YAML-backed @Configuration injection (optional)
+├── tiko-kafka/            # Kafka transport runtime — consumer runners, producer client,
+│                          # `KafkaBootstrapSupport`, `FakeKafkaBroker` test support
+├── tiko-kafka-processor/  # Compile-time processor for @KafkaSource / @KafkaSink bridges
+├── tiko-kafka-it/         # Real-broker integration tests (Testcontainers; needs Docker)
+├── tiko-test/             # @TikoTest JUnit extension, RecordingEventBus, @TestComponent
+├── tiko-mcp/              # MCP introspection server over topology.json / wiring-errors.json
+├── tiko-archetype/        # Maven archetype for new Tiko services
+├── tiko-bom/              # Bill of materials (no parent — excluded from spotless aggregate)
+├── tiko-coverage/         # JaCoCo aggregate module for Sonar
+└── tiko-examples/         # Numbered example apps 01–15 (also serve as behavioral tests)
 ```
 
 Event abstractions (`EventBus`, `@EventHandler`, `@EventTrigger`, `Event<T>`, etc.) live
 in **tiko-api**; the in-memory implementation is in `tiko-runtime`. There is no separate
 `tiko-event-api` / `tiko-event-local` split.
 
-### Module Dependencies
+### Module Dependencies (core chain)
 
 ```
 tiko-api (no dependencies)
@@ -104,6 +114,10 @@ tiko-runtime (depends on tiko-api)
   ↑
 tiko-config (depends on tiko-api, snakeyaml)
 ```
+
+The Kafka pair mirrors the core split: `tiko-kafka` is the runtime (depends on
+tiko-api + kafka-clients), `tiko-kafka-processor` the compile-time half. `tiko-test`
+depends on tiko-runtime and JUnit 5.
 
 ## Core Architecture
 
@@ -172,10 +186,12 @@ public class OrderService {
 }
 ```
 
-Configuration determines implementation:
-```properties
-tiko.event.bus=local    # or kafka
-```
+The local in-memory bus is the default. The Kafka transport is opt-in via the
+`tiko-kafka` + `tiko-kafka-processor` modules: `@KafkaSource` / `@KafkaSink` annotations
+generate a `KafkaTransportBootstrap` that `Tiko.create()` discovers through the
+`TransportBootstrap` ServiceLoader SPI. There is **no** `tiko.event.bus` property —
+transport selection is dependency + annotation driven, not a config switch. Broker
+settings live under `tiko.kafka.*` (see `tiko-kafka`'s `defaults.yaml`).
 
 ## Core Annotations (tiko-api)
 
@@ -186,7 +202,7 @@ tiko.event.bus=local    # or kafka
   - `scope` - Lifecycle scope (SINGLETON, EVENT, PROTOTYPE)
   - `name` - Optional qualifier
   - `profiles` - Optional active profiles
-- `@Inject` - Mark injection points (RUNTIME retention)
+- `@Inject` - Mark injection points (SOURCE retention)
 - `@Named("qualifier")` - Disambiguate implementations at injection point
 
 ### Scopes (Scope enum - longest to shortest)
@@ -202,8 +218,8 @@ tiko.event.bus=local    # or kafka
 - `@Produces(scope, name, profiles)` - Factory method within component classes
 
 ### Event System
-- `@EventHandler(async, eventType)` - Mark method as event handler (RUNTIME retention)
-- `@EventTrigger(eventName, async, spread, guard)` - Declaratively trigger events after handler completes (RUNTIME retention)
+- `@EventHandler(async, eventType)` - Mark method as event handler (SOURCE retention)
+- `@EventTrigger(eventName, async, spread, guard)` - Declaratively trigger events after handler completes (SOURCE retention)
 - `@EventTriggers(value)` - Container for multiple @EventTrigger annotations
 - `EventTriggerGuard` - Interface for conditional event triggering
 - `Event<T>` - Event wrapper for origin tracking and event chain traversal
@@ -213,7 +229,10 @@ tiko.event.bus=local    # or kafka
 - `Container` - Main DI container interface
 - `Provider<T>` - Lazy dependency resolution
 - `EventBus` - Event publishing/subscribing
-- `Tiko` - Factory for creating containers
+
+The `Tiko` bootstrap (`Tiko.create()` / `Tiko.daemon()`) is a concrete class in
+**tiko-runtime** (`io.tiko.runtime.Tiko`), not a tiko-api interface — apps need the
+runtime artifact on the classpath to boot.
 
 ### Lifecycle Events (io.tiko.events)
 
@@ -402,14 +421,20 @@ Suggested fixes:
 
 ### Logging in Framework Code
 
-- All framework output goes through `java.util.logging.Logger`. Never
-  `System.err.println` or `e.printStackTrace()` in framework or generated code.
+- All framework output goes through `System.Logger` (`System.getLogger(...)`) — the
+  JDK platform logging facade, so `Tiko.create()` works with zero logging-binding
+  dependencies (default routing is JUL; users bridge to slf4j/log4j2 via a
+  `LoggerFinder` on their classpath). Never `System.err.println` or
+  `e.printStackTrace()` in framework or generated code, and never depend on a
+  logging framework directly.
 - Default namespace: `io.tiko.events`, or a per-subsystem name like
-  `io.tiko.config`.
-- Use the lazy-holder pattern to defer `LogManager` init cost on cold start:
+  `io.tiko.config` / `io.tiko.kafka`.
+- Use the lazy-holder pattern to defer `LoggerFinder` resolution off the cold-start
+  path; route every log call in the class through the holder (no inline
+  `System.getLogger(...)` next to a declared holder):
   ```java
   private static final class LoggerHolder {
-      static final Logger LOG = Logger.getLogger("io.tiko.events");
+      static final System.Logger LOG = System.getLogger("io.tiko.events");
   }
   ```
 - Annotation processor failures format their stack via
@@ -530,12 +555,18 @@ public class UserService {
 // EVENT scope - per-unit context (txn, connection, request-id, ...)
 public interface TransactionContext {
     String getTransactionId();
+    void begin();
+    void commit();
+    void rollback();
 }
 
 @Component(scope = Scope.EVENT)
 public class TransactionContextImpl implements TransactionContext {
     private final String txId = UUID.randomUUID().toString();
     public String getTransactionId() { return txId; }
+    public void begin() { /* open the unit's transaction */ }
+    public void commit() { /* commit it */ }
+    public void rollback() { /* roll it back */ }
 }
 
 // Automatic proxy for cross-scope injection: SINGLETON ← EVENT
@@ -545,6 +576,8 @@ public class OrderService {
     public OrderService(TransactionContext txCtx) {
         // Resolved to the current unit's instance on every call.
     }
+
+    public void process(Order order, TransactionContext tx) { /* domain work */ }
 }
 
 // Batch processing — one unit / one transaction with an internal loop.

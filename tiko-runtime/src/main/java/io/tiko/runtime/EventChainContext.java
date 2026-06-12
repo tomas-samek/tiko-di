@@ -29,6 +29,11 @@ public final class EventChainContext {
 
     private static final ThreadLocal<Event<?>> CURRENT = new ThreadLocal<>();
 
+    /** Lazy holder: defers System.LoggerFinder resolution until the first failure path runs. */
+    private static final class LoggerHolder {
+        static final System.Logger LOG = System.getLogger("io.tiko.events");
+    }
+
     private EventChainContext() {}
 
     /**
@@ -40,7 +45,7 @@ public final class EventChainContext {
      * @param inner the exception thrown by the user's ErrorHandler implementation
      */
     public static void logErrorHandlerFailure(Throwable inner) {
-        System.getLogger("io.tiko.events").log(System.Logger.Level.ERROR, "ErrorHandler.onError threw", inner);
+        LoggerHolder.LOG.log(System.Logger.Level.ERROR, "ErrorHandler.onError threw", inner);
     }
 
     /**
@@ -55,7 +60,7 @@ public final class EventChainContext {
      * @param error the {@code Error} thrown by the user's async handler
      */
     public static void logUnhandledAsyncError(Throwable error) {
-        System.getLogger("io.tiko.events").log(System.Logger.Level.ERROR, "Async @EventHandler threw an Error", error);
+        LoggerHolder.LOG.log(System.Logger.Level.ERROR, "Async @EventHandler threw an Error", error);
     }
 
     /**
