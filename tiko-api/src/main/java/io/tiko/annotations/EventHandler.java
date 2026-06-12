@@ -64,7 +64,8 @@ import java.lang.annotation.Target;
  * }</pre>
  *
  * <p><strong>Error handling:</strong> If a handler throws, the exception is routed
- * to the configured {@link io.tiko.ErrorHandler} (default: slf4j WARN). It does not
+ * to the configured {@link io.tiko.ErrorHandler} (default: logs at WARNING via
+ * {@code System.Logger}). It does not
  * propagate to the publisher and does not prevent other handlers from running.
  * Async handler exceptions are routed identically.
  *

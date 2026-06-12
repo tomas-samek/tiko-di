@@ -92,7 +92,9 @@ import java.lang.annotation.Target;
  *     <li><b>Parameters</b> - Can have dependencies injected (just like constructor injection).</li>
  *     <li><b>Scope</b> - Specified via the {@code scope} parameter (defaults to PROTOTYPE).</li>
  *     <li><b>Lifecycle</b> - Products created by factory methods do NOT have {@code @PostConstruct}
- *         or {@code @PreDestroy} called automatically (initialize in the factory method itself).</li>
+ *         or {@code @PreDestroy} called automatically (initialize in the factory method itself).
+ *         Products implementing {@link AutoCloseable} ARE closed automatically when their scope
+ *         tears down — do not close them again from your own shutdown hooks.</li>
  * </ul>
  *
  * <h2>When to Use Each Pattern</h2>
@@ -207,7 +209,7 @@ import java.lang.annotation.Target;
  *     <li>Scan all {@link Component} classes for {@code @Produces} methods</li>
  *     <li>Validate return types and parameter dependencies</li>
  *     <li>Generate container code that calls the factory method when the product is requested</li>
- *     <li>Handle scope management (singleton caching, request/event scope storage, etc.)</li>
+ *     <li>Handle scope management (singleton caching, EVENT scope storage, etc.)</li>
  * </ol>
  *
  * @see Component
@@ -226,8 +228,8 @@ public @interface Produces {
      * <p>Determines how long instances live and when they're created:</p>
      * <ul>
      *     <li>{@link Scope#SINGLETON SINGLETON} - One instance for the entire application</li>
-     *     <li>{@link Scope#REQUEST REQUEST} - One instance per request/transaction</li>
-     *     <li>{@link Scope#EVENT EVENT} - One instance per event processing</li>
+     *     <li>{@link Scope#EVENT EVENT} - One instance per unit of work (HTTP request,
+     *         consumed message, scheduled job, async dispatch)</li>
      *     <li>{@link Scope#PROTOTYPE PROTOTYPE} - New instance every time (default)</li>
      * </ul>
      *

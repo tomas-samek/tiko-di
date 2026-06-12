@@ -7,7 +7,7 @@ package io.tiko;
  * <ul>
  *   <li>Breaking circular dependencies</li>
  *   <li>Lazy initialization</li>
- *   <li>Injecting request-scoped beans into singleton beans</li>
+ *   <li>Injecting EVENT-scoped beans into singleton beans</li>
  *   <li>Obtaining multiple instances of prototype-scoped beans</li>
  * </ul>
  *
@@ -24,7 +24,7 @@ package io.tiko;
  *     }
  *
  *     public void processRequest() {
- *         // Lazily resolve request-scoped bean
+ *         // Lazily resolve the current unit's EVENT-scoped bean
  *         RequestContext context = contextProvider.get();
  *         // Use context...
  *     }

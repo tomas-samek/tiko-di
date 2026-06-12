@@ -14,11 +14,11 @@ package io.tiko;
  *       handler outcomes, use {@code @EventTrigger} with an {@code EventTriggerGuard};
  *       do not throw exceptions from event handlers as a control-flow signal.</li>
  *   <li>Implementations should be fast and non-throwing. An exception thrown <em>from</em>
- *       {@code onError} is caught by the framework, logged at ERROR via slf4j, and
+ *       {@code onError} is caught by the framework, logged at ERROR via {@code System.Logger}, and
  *       suppressed — preventing handler-of-handler recursion.</li>
  * </ul>
  *
- * <p>The default implementation logs at WARN via slf4j. Override via
+ * <p>The default implementation logs at WARNING via {@code System.Logger}. Override via
  * {@code TikoOptions.errorHandler(...)}.
  */
 @FunctionalInterface
