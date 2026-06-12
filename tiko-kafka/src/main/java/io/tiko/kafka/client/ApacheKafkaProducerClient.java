@@ -37,8 +37,8 @@ public final class ApacheKafkaProducerClient implements KafkaProducerClient {
     }
 
     @Override
-    public Future<RecordMetadata> send(ProducerRecord<String, byte[]> record, Callback callback) {
-        return producer.send(record, callback);
+    public Future<RecordMetadata> send(ProducerRecord<String, byte[]> producerRecord, Callback callback) {
+        return producer.send(producerRecord, callback);
     }
 
     @Override

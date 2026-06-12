@@ -34,7 +34,7 @@ class KafkaEgressAsyncFailureTest {
     /** Producer whose broker always rejects asynchronously, via the callback. */
     private static final class AsyncFailingProducerClient implements KafkaProducerClient {
         @Override
-        public Future<RecordMetadata> send(ProducerRecord<String, byte[]> record, Callback callback) {
+        public Future<RecordMetadata> send(ProducerRecord<String, byte[]> producerRecord, Callback callback) {
             RuntimeException rejection = new RuntimeException("broker rejected: record too large");
             if (callback != null) {
                 callback.onCompletion(null, rejection);

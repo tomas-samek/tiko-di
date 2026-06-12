@@ -22,11 +22,11 @@ public interface KafkaProducerClient extends AutoCloseable {
      * authorization, delivery timeout) — the bootstrap routes such failures to
      * {@code KafkaEgressError} (#342). {@code callback} may be {@code null}.
      */
-    Future<RecordMetadata> send(ProducerRecord<String, byte[]> record, Callback callback);
+    Future<RecordMetadata> send(ProducerRecord<String, byte[]> producerRecord, Callback callback);
 
     /** Fire-and-forget variant of {@link #send(ProducerRecord, Callback)}. */
-    default Future<RecordMetadata> send(ProducerRecord<String, byte[]> record) {
-        return send(record, null);
+    default Future<RecordMetadata> send(ProducerRecord<String, byte[]> producerRecord) {
+        return send(producerRecord, null);
     }
 
     /** Release client resources. Idempotent. */
