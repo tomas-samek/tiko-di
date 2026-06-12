@@ -166,6 +166,7 @@ public final class ContainerGenerator {
 
         // Add fields
         containerBuilder.addField(createSingletonStorageField());
+        containerBuilder.addField(createSingletonLockField());
         containerBuilder.addField(createEventScopeField());
         containerBuilder.addField(createUnitFrameOpenField());
         containerBuilder.addField(createEventBusField());
@@ -197,6 +198,7 @@ public final class ContainerGenerator {
         containerBuilder.addMethod(createSupplyInEventScopeMethod());
         containerBuilder.addMethod(createPublishUnitLifecycleMethod());
         containerBuilder.addMethod(createCloseEventScopeMethod());
+        containerBuilder.addMethod(createGetOrCreateSingletonMethod());
 
         // Add lifecycle methods
         containerBuilder.addMethod(createStartMethod());
@@ -395,6 +397,19 @@ public final class ContainerGenerator {
                         Modifier.PRIVATE,
                         Modifier.FINAL)
                 .initializer("new $T(false)", ClassName.get("java.util.concurrent.atomic", "AtomicBoolean"))
+                .build();
+    }
+
+    /**
+     * Field: Object singletonLock — reentrant monitor for singleton creation (#338).
+     * {@code __getOrCreateSingleton} synchronizes on it instead of running factories
+     * inside a {@code ConcurrentHashMap} mapping function, so dependency chains can
+     * create nested singletons on the same thread without tripping CHM's
+     * recursive-update detection when chain keys share a hash bin.
+     */
+    private FieldSpec createSingletonLockField() {
+        return FieldSpec.builder(Object.class, "singletonLock", Modifier.PRIVATE, Modifier.FINAL)
+                .initializer("new $T()", Object.class)
                 .build();
     }
 
@@ -622,7 +637,7 @@ public final class ContainerGenerator {
         switch (factory.getScope()) {
             case SINGLETON ->
                 method.addStatement(
-                        "return ($T) singletons.computeIfAbsent($S, k -> $L)", returnType, storageKey, callExpr);
+                        "return ($T) __getOrCreateSingleton($S, () -> $L)", returnType, storageKey, callExpr);
             case EVENT ->
                 emitScopedGetOrCreateNoOverride(method, returnType, "eventScoped.get()", storageKey, callExpr);
             case PROTOTYPE -> method.addStatement("return $L", callExpr);
@@ -802,7 +817,7 @@ public final class ContainerGenerator {
                     method.addStatement("return $L", proxyFieldName);
                 } else {
                     method.addStatement(
-                            "return ($1T) singletons.computeIfAbsent($2S, k -> $3L.create())",
+                            "return ($1T) __getOrCreateSingleton($2S, () -> $3L.create())",
                             returnType,
                             storageKey,
                             factoryFieldName);
@@ -858,13 +873,14 @@ public final class ContainerGenerator {
      * dependents last, which is exactly what scope teardown's reverse iteration
      * relies on for LIFO destruction.
      *
-     * <p>This is intentionally different from the SINGLETON case above, which
-     * uses {@code singletons.computeIfAbsent(...)}: {@code singletons} is a
-     * {@link java.util.concurrent.ConcurrentHashMap} (chosen for thread safety,
-     * since SINGLETON beans are reachable from any thread) and tolerates
-     * recursive update on different keys in practice. SWAPPING THIS HELPER TO
-     * {@code computeIfAbsent} TO MATCH SINGLETON WILL BREAK any EVENT
-     * dependency chain — see closed issue #100 for the analysis.
+     * <p>This is intentionally different from the SINGLETON case above, which routes
+     * through {@code __getOrCreateSingleton}: {@code singletons} is a
+     * {@link java.util.concurrent.ConcurrentHashMap} (chosen for thread safety, since
+     * SINGLETON beans are reachable from any thread), so its creation path needs the
+     * reentrant lock-then-put shape instead — nested {@code computeIfAbsent} on CHM
+     * throws {@code IllegalStateException("Recursive update")} when chain keys share a
+     * bin (#338). The EVENT map here is per-thread, so the plain get/put pair suffices;
+     * see closed issue #100 for the original analysis.
      *
      * <p>Per-component getters are pure factory caches: the override consultation
      * happens upstream at the dispatcher heads ({@code get(Class)},
@@ -883,11 +899,11 @@ public final class ContainerGenerator {
             MethodSpec.Builder method, TypeName returnType, String mapExpr, String storageKey, String createExpr) {
         emitUnitFrameGuard(method, storageKey);
         method.addStatement("$T __existing = ($T) $L.get($S)", returnType, returnType, mapExpr, storageKey);
-        method.beginControlFlow("if (__existing == null)");
+        method.beginControlFlow(IF_EXISTING_NULL);
         method.addStatement("__existing = $L", createExpr);
         method.addStatement("$L.put($S, __existing)", mapExpr, storageKey);
         method.endControlFlow();
-        method.addStatement("return __existing");
+        method.addStatement(RETURN_EXISTING);
     }
 
     /**
@@ -900,11 +916,11 @@ public final class ContainerGenerator {
             MethodSpec.Builder method, TypeName returnType, String mapExpr, String storageKey, String createExpr) {
         emitUnitFrameGuard(method, storageKey);
         method.addStatement("$T __existing = ($T) $L.get($S)", returnType, returnType, mapExpr, storageKey);
-        method.beginControlFlow("if (__existing == null)");
+        method.beginControlFlow(IF_EXISTING_NULL);
         method.addStatement("__existing = $L", createExpr);
         method.addStatement("$L.put($S, __existing)", mapExpr, storageKey);
         method.endControlFlow();
-        method.addStatement("return __existing");
+        method.addStatement(RETURN_EXISTING);
     }
 
     /**
@@ -929,6 +945,11 @@ public final class ContainerGenerator {
     private static final ClassName APP_ENDING = ClassName.get(EVENTS_PACKAGE, "ApplicationEndingEvent");
     private static final ClassName BOUNDED_EXECUTION = ClassName.get("io.tiko.runtime", "BoundedExecution");
     private static final ClassName CONTAINER_SHUT_DOWN = ClassName.get("io.tiko", "ContainerShutDownException");
+    /** Shared get-or-create statement fragments (S1192) — used by scoped and singleton emission. */
+    private static final String IF_EXISTING_NULL = "if (__existing == null)";
+
+    private static final String RETURN_EXISTING = "return __existing";
+
     private static final ClassName NO_SUCH_COMPONENT = ClassName.get("io.tiko", "NoSuchComponentException");
     private static final ClassName NO_ACTIVE_EVENT_SCOPE = ClassName.get("io.tiko", "NoActiveEventScopeException");
 
@@ -1033,6 +1054,38 @@ public final class ContainerGenerator {
                         loggerLevel,
                         "Unit-of-work lifecycle publish threw")
                 .endControlFlow();
+        return method.build();
+    }
+
+    /**
+     * Creates the private {@code __getOrCreateSingleton(String, Supplier)} helper every
+     * SINGLETON getter routes through (#338). Double-checked: lock-free fast path for the
+     * created case, then a reentrant {@code synchronized} block for creation — the factory
+     * runs <em>outside</em> any {@code ConcurrentHashMap} mapping function, so a factory
+     * resolving further singletons re-enters the same monitor instead of nesting
+     * {@code computeIfAbsent} calls (which throw {@code IllegalStateException("Recursive
+     * update")} whenever two chain keys share a hash bin).
+     */
+    private MethodSpec createGetOrCreateSingletonMethod() {
+        ParameterizedTypeName supplierOfObject = ParameterizedTypeName.get(
+                ClassName.get(java.util.function.Supplier.class), ClassName.get(Object.class));
+        MethodSpec.Builder method = MethodSpec.methodBuilder("__getOrCreateSingleton")
+                .addModifiers(Modifier.PRIVATE)
+                .returns(Object.class)
+                .addParameter(String.class, "key")
+                .addParameter(supplierOfObject, "factory");
+        method.addStatement("$T __existing = singletons.get(key)", Object.class);
+        method.beginControlFlow("if (__existing != null)");
+        method.addStatement(RETURN_EXISTING);
+        method.endControlFlow();
+        method.beginControlFlow("synchronized (singletonLock)");
+        method.addStatement("__existing = singletons.get(key)");
+        method.beginControlFlow(IF_EXISTING_NULL);
+        method.addStatement("__existing = factory.get()");
+        method.addStatement("singletons.put(key, __existing)");
+        method.endControlFlow();
+        method.addStatement(RETURN_EXISTING);
+        method.endControlFlow();
         return method.build();
     }
 
