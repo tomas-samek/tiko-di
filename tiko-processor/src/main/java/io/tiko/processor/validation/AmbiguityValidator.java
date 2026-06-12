@@ -29,10 +29,9 @@ public final class AmbiguityValidator {
 
     public boolean validate() {
         Map<String, List<ProviderInfo>> providersByType = new LinkedHashMap<>();
+        Map<String, List<ProviderInfo>> namedProvidersByTypeAndName = new LinkedHashMap<>();
 
         for (ComponentModel component : context.getActiveComponents()) {
-            if (component.getName().isPresent()) continue;
-
             String kindLabel = component.isTestComponent() ? "@TestComponent" : "@Component";
             ProviderInfo info = new ProviderInfo(
                     component.getTypeElement(),
@@ -41,6 +40,23 @@ public final class AmbiguityValidator {
                     component.isTestComponent(),
                     component.getComponentKey(),
                     component);
+
+            if (component.getName().isPresent()) {
+                // Named providers never collide with unnamed dispatch — but two ACTIVE
+                // providers claiming the same (type, name) pair emit identical
+                // get(Class, String) arms, leaving the winner to emission order (#332).
+                // @TestComponent stays out: test-side substitution is intentional.
+                if (!component.isTestComponent()) {
+                    String name = component.getName().orElseThrow();
+                    var declared = component.isExposeRestricted()
+                            ? component.getExposeTypes()
+                            : component.getTypeElement().getInterfaces();
+                    for (var iface : declared) {
+                        register(namedProvidersByTypeAndName, iface.toString() + "#" + name, info);
+                    }
+                }
+                continue;
+            }
 
             // Register the component under every type it is actually routable as — so two
             // unnamed beans listing the same interface in @Component(expose = {…}), or
@@ -64,10 +80,14 @@ public final class AmbiguityValidator {
 
         for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
             String name = factory.getName();
-            if (name != null && !name.isEmpty()) continue;
-
             ProviderInfo info = new ProviderInfo(
                     factory.getMethodElement(), factory.getFactoryIdentifier(), "@Produces", false, null, null);
+
+            if (name != null && !name.isEmpty()) {
+                register(namedProvidersByTypeAndName, factory.getReturnTypeName() + "#" + name, info);
+                continue;
+            }
+
             register(providersByType, factory.getReturnTypeName(), info);
         }
 
@@ -115,6 +135,22 @@ public final class AmbiguityValidator {
             }
 
             reportAmbiguity(entry.getKey(), providers);
+            valid = false;
+        }
+
+        // Named duplicates fire unconditionally — unlike unnamed ambiguity there is no
+        // "qualified consumer" escape, because runtime get(type, name) / pick() lookups
+        // are invisible to the processor and a qualifier exists to be unique per type.
+        for (Map.Entry<String, List<ProviderInfo>> entry : namedProvidersByTypeAndName.entrySet()) {
+            List<ProviderInfo> providers = entry.getValue();
+            if (providers.size() <= 1) continue;
+
+            String qualifier = entry.getKey().substring(entry.getKey().indexOf('#') + 1);
+            ProviderInfo first = providers.get(0);
+            for (int i = 1; i < providers.size(); i++) {
+                context.getErrorReporter()
+                        .duplicateQualifier(providers.get(i).element, qualifier, first.label + " (" + first.kind + ")");
+            }
             valid = false;
         }
         return valid;
