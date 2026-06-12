@@ -11,7 +11,7 @@ import java.util.Optional;
  * Wrapper for events that tracks the full event origin chain.
  *
  * <p>This class is used internally by the framework to track event lineage when
- * using {@link EventTrigger}. User code typically works with unwrapped event
+ * using {@link io.tiko.annotations.EventTrigger}. User code typically works with unwrapped event
  * payloads, but can access the Event wrapper for tracing and debugging.</p>
  *
  * <p><strong>Event Chains:</strong> When an {@code @EventHandler} method with

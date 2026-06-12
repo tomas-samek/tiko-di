@@ -38,7 +38,7 @@ public interface Container extends AutoCloseable {
      * @param type the class of the component to retrieve
      * @param <T>  the type of the component
      * @return an instance of the component
-     * @throws IllegalArgumentException if no component of the specified type exists
+     * @throws NoSuchComponentException if no component of the specified type exists
      */
     <T> T get(Class<T> type);
 
@@ -49,7 +49,7 @@ public interface Container extends AutoCloseable {
      * @param name the qualifier name
      * @param <T>  the type of the component
      * @return an instance of the component
-     * @throws IllegalArgumentException if no component with the specified type and name exists
+     * @throws NoSuchComponentException if no component with the specified type and name exists
      */
     <T> T get(Class<T> type, String name);
 

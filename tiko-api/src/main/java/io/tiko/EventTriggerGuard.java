@@ -3,7 +3,7 @@ package io.tiko;
 /**
  * Guard interface for conditionally triggering events.
  *
- * <p>Guards are used with {@link EventTrigger} to prevent event triggering
+ * <p>Guards are used with {@link io.tiko.annotations.EventTrigger} to prevent event triggering
  * based on specific conditions. This allows declarative control flow in
  * event chains.</p>
  *

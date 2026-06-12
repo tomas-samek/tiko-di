@@ -46,7 +46,7 @@ import java.lang.annotation.Target;
  * }</pre>
  * <p>Event-handler dispatch is independent of {@link #expose()} /
  * {@link #exposeSelf()} — those control the public {@code container.get(Class)} routing,
- * not framework wiring. Use SINGLETON scope: REQUEST/EVENT-scoped hidden beans would
+ * not framework wiring. Use SINGLETON scope: EVENT-scoped hidden beans would
  * only exist while their scope is active, and PROTOTYPE has no canonical instance to
  * subscribe.</p>
  */
@@ -59,9 +59,10 @@ public @interface Component {
      * <p>
      * Determines when and how instances are created:
      * <ul>
-     *   <li>{@link Scope#SINGLETON} - One instance per container</li>
+     *   <li>{@link Scope#SINGLETON} - One instance per container (application lifetime)</li>
+     *   <li>{@link Scope#EVENT} - One instance per unit of work (HTTP request, consumed
+     *       message, scheduled job, async dispatch)</li>
      *   <li>{@link Scope#PROTOTYPE} - New instance per injection (default)</li>
-     *   <li>{@link Scope#REQUEST} - One instance per request/event scope</li>
      * </ul>
      *
      * @return the component scope

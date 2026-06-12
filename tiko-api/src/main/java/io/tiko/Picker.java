@@ -18,7 +18,7 @@ import java.util.Optional;
  *       class-based qualifier. Declarative; the choice is visible in the
  *       constructor signature.</li>
  *   <li><b>{@code @Named("primary") Interface i}</b> — compile-time-known,
- *       string-based qualifier. Used to disambiguate multiple {@link annotations.Produces}
+ *       string-based qualifier. Used to disambiguate multiple {@link io.tiko.annotations.Produces}
  *       factory methods returning the same type.</li>
  *   <li><b>{@code Picker<Interface>}</b> — runtime queries: the impl class or
  *       name is computed at runtime (e.g., from configuration), or you need to
@@ -63,7 +63,7 @@ public interface Picker<T> {
 
     /**
      * Returns every registered implementation assignable to {@code T}, in declaration
-     * order. Includes both named and unnamed components and {@link annotations.Produces}
+     * order. Includes both named and unnamed components and {@link io.tiko.annotations.Produces}
      * factory outputs. Returns an empty list if no impls exist.
      */
     List<T> list();
