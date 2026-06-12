@@ -29,7 +29,9 @@ class YamlLoaderTest {
         assertThat(loaded.data()).containsKeys("db", "app");
         @SuppressWarnings("unchecked")
         var dbMap = (java.util.Map<String, Object>) loaded.data().get("db");
-        assertThat(dbMap).containsEntry("url", "jdbc:postgres://localhost").containsEntry("poolSize", 10);
+        // Scalars arrive as literal text since #343 — the binder's coercers parse them
+        // against the record component's declared type.
+        assertThat(dbMap).containsEntry("url", "jdbc:postgres://localhost").containsEntry("poolSize", "10");
     }
 
     @Test
@@ -71,7 +73,7 @@ class YamlLoaderTest {
         assertThat(loaded.data().get("ports")).isInstanceOf(java.util.List.class);
         @SuppressWarnings("unchecked")
         var ports = (java.util.List<Object>) loaded.data().get("ports");
-        assertThat(ports).containsExactly(8080, 8081, 8082);
+        assertThat(ports).containsExactly("8080", "8081", "8082");
     }
 
     @Test
@@ -85,7 +87,7 @@ class YamlLoaderTest {
         assertThat(endpoints).hasSize(2);
         @SuppressWarnings("unchecked")
         var first = (java.util.Map<String, Object>) endpoints.get(0);
-        assertThat(first).containsEntry("host", "a").containsEntry("port", 1);
+        assertThat(first).containsEntry("host", "a").containsEntry("port", "1");
     }
 
     @Test

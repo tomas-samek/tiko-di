@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
@@ -122,19 +123,27 @@ public final class YamlLoader {
     }
 
     /**
-     * Parse a scalar through SnakeYAML's default resolver so int/bool/etc. coercion
-     * happens at YAML-load time exactly as the previous {@code yaml.load(...)} path
-     * delivered them to the binder. Without this, every scalar would arrive as a
-     * String and downstream coercers would have to re-parse.
+     * Returns the scalar's literal text — binding is schema-aware (#343): the record
+     * component declares the target type and every coercer parses from text (the same
+     * path {@code @Default} string values already take), so YAML 1.1 implicit typing
+     * only ever loses information. The previous re-parse through {@code yaml.load}
+     * turned {@code NO} into {@code Boolean.FALSE}, {@code 0644} into octal 420 and
+     * {@code 1:30} into sexagesimal 90 — and, because {@link ScalarNode#getValue()}
+     * strips quote style, corrupted explicitly quoted strings too.
+     *
+     * <p>Only plain (unquoted) {@code null} / {@code Null} / {@code NULL} / {@code ~} /
+     * empty scalars keep YAML's null semantics; a quoted "null" is the literal string.
      */
     private static Object parseScalar(ScalarNode scalar) {
-        // SnakeYAML's SafeConstructor handles scalar parsing internally when going through
-        // load(), but the compose() path returns raw Nodes. Re-run a tiny Yaml.load() on
-        // just the scalar's text to reuse the same coercion rules.
-        var opts = new LoaderOptions();
-        opts.setAllowDuplicateKeys(false);
-        var yaml = new Yaml(new SafeConstructor(opts));
-        return yaml.load(scalar.getValue());
+        String text = scalar.getValue();
+        if (scalar.getScalarStyle() == DumperOptions.ScalarStyle.PLAIN && isYamlNull(text)) {
+            return null;
+        }
+        return text;
+    }
+
+    private static boolean isYamlNull(String text) {
+        return text.isEmpty() || text.equals("~") || text.equals("null") || text.equals("Null") || text.equals("NULL");
     }
 
     private static ConfigValidationException malformedYaml(String sourceLabel, MarkedYAMLException e) {
