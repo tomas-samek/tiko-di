@@ -116,8 +116,8 @@ class KafkaRunnerFailureHandlingTest {
         TopicPartition p0 = new TopicPartition("t2", 0);
         TopicPartition p1 = new TopicPartition("t2", 1);
         Map<TopicPartition, List<ConsumerRecord<String, byte[]>>> batch = new LinkedHashMap<>();
-        batch.put(p0, List.of(record("t2", 0, 0, "poison")));
-        batch.put(p1, List.of(record("t2", 1, 0, "ok")));
+        batch.put(p0, List.of(consumerRecord("t2", 0, 0, "poison")));
+        batch.put(p1, List.of(consumerRecord("t2", 1, 0, "ok")));
         StubClient client = new StubClient(new ArrayList<>(List.of(new ConsumerRecords<>(batch))));
         List<ErrorContext> errors = new CopyOnWriteArrayList<>();
         List<Object> received = new CopyOnWriteArrayList<>();
@@ -150,8 +150,8 @@ class KafkaRunnerFailureHandlingTest {
         // broker would after a rebalance) and commit 2 succeeds.
         StubClient client =
                 new StubClient(new ArrayList<>(List.of(
-                        new ConsumerRecords<>(Map.of(p0, List.of(record("t3", 0, 0, "ok")))),
-                        new ConsumerRecords<>(Map.of(p0, List.of(record("t3", 0, 0, "ok"))))))) {
+                        new ConsumerRecords<>(Map.of(p0, List.of(consumerRecord("t3", 0, 0, "ok")))),
+                        new ConsumerRecords<>(Map.of(p0, List.of(consumerRecord("t3", 0, 0, "ok"))))))) {
                     private int commitCalls;
 
                     @Override
@@ -186,7 +186,8 @@ class KafkaRunnerFailureHandlingTest {
         assertThat(errors).isNotEmpty();
     }
 
-    private static ConsumerRecord<String, byte[]> record(String topic, int partition, long offset, String payload) {
+    private static ConsumerRecord<String, byte[]> consumerRecord(
+            String topic, int partition, long offset, String payload) {
         return new ConsumerRecord<>(topic, partition, offset, null, payload.getBytes(StandardCharsets.UTF_8));
     }
 
