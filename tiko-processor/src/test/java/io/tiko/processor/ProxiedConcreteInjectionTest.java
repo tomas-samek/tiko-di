@@ -55,30 +55,22 @@ class ProxiedConcreteInjectionTest {
         return Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(sources);
     }
 
-    @Test
-    void singletonInjectingProxiedBeanByConcreteClassFailsWithLocatedDiagnostic() {
-        Compilation c = compile(iface(), proxiedEventBean(), consumer("SINGLETON", "CtxImpl ctx"));
+    static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments> concreteInjectionShapes() {
+        return java.util.stream.Stream.of(
+                org.junit.jupiter.params.provider.Arguments.of(
+                        "SINGLETON consumer, direct", "SINGLETON", "CtxImpl ctx"),
+                org.junit.jupiter.params.provider.Arguments.of("EVENT consumer, direct", "EVENT", "CtxImpl ctx"),
+                org.junit.jupiter.params.provider.Arguments.of(
+                        "SINGLETON consumer, Provider-wrapped", "SINGLETON", "io.tiko.Provider<CtxImpl> ctx"));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.MethodSource("concreteInjectionShapes")
+    void concreteTypedInjectionOfProxiedBeanFailsWithLocatedDiagnostic(String name, String scope, String ctorParam) {
+        Compilation c = compile(iface(), proxiedEventBean(), consumer(scope, ctorParam));
 
         CompilationSubject.assertThat(c).failed();
         CompilationSubject.assertThat(c).hadErrorContaining("CtxImpl");
-        CompilationSubject.assertThat(c).hadErrorContaining("ICtx");
-        CompilationSubject.assertThat(c).hadErrorContaining("Suggested fixes");
-    }
-
-    @Test
-    void eventConsumerInjectingProxiedBeanByConcreteClassFailsWithLocatedDiagnostic() {
-        Compilation c = compile(iface(), proxiedEventBean(), consumer("EVENT", "CtxImpl ctx"));
-
-        CompilationSubject.assertThat(c).failed();
-        CompilationSubject.assertThat(c).hadErrorContaining("ICtx");
-        CompilationSubject.assertThat(c).hadErrorContaining("Suggested fixes");
-    }
-
-    @Test
-    void providerOfConcreteProxiedBeanFailsWithLocatedDiagnostic() {
-        Compilation c = compile(iface(), proxiedEventBean(), consumer("SINGLETON", "io.tiko.Provider<CtxImpl> ctx"));
-
-        CompilationSubject.assertThat(c).failed();
         CompilationSubject.assertThat(c).hadErrorContaining("ICtx");
         CompilationSubject.assertThat(c).hadErrorContaining("Suggested fixes");
     }

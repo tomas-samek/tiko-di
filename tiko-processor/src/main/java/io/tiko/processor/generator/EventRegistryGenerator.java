@@ -126,6 +126,13 @@ public final class EventRegistryGenerator {
         return method.build();
     }
 
+    /** True when the handler's declaring component is a proxied EVENT bean (#331). */
+    private boolean isProxiedComponent(EventHandlerModel handler) {
+        String fqn = handler.getDeclaringClass().getQualifiedName().toString();
+        return context.getComponents().values().stream()
+                .anyMatch(c -> c.getQualifiedName().equals(fqn) && c.requiresProxy());
+    }
+
     /**
      * The per-handler helper. Centralises chain-context bookkeeping and trigger logic so
      * the lambdas in {@code registerHandlers} stay one-liners.
@@ -135,13 +142,6 @@ public final class EventRegistryGenerator {
      * exceptional completion to the container's {@link io.tiko.ErrorHandler} via
      * {@code whenComplete}. Sync handlers keep the original inline try/catch behaviour.
      */
-    /** True when the handler's declaring component is a proxied EVENT bean (#331). */
-    private boolean isProxiedComponent(EventHandlerModel handler) {
-        String fqn = handler.getDeclaringClass().getQualifiedName().toString();
-        return context.getComponents().values().stream()
-                .anyMatch(c -> c.getQualifiedName().equals(fqn) && c.requiresProxy());
-    }
-
     private MethodSpec createDispatcherMethod(EventHandlerModel handler, int index) {
         ClassName containerClass = ClassName.get(GENERATED_PACKAGE, context.getContainerClassName());
         ClassName eventClass = ClassName.bestGuess(handler.getEventTypeName());
