@@ -58,6 +58,38 @@ class ContainerGeneratorLifecycleEventGateTest {
         assertThat(publishPos).isGreaterThan(gatePos);
     }
 
+    @Test
+    void runInEventScopeGatesUnitLifecyclePublishes() throws IOException {
+        assertUnitLifecyclePublishesGated("public void runInEventScope");
+    }
+
+    @Test
+    void supplyInEventScopeGatesUnitLifecyclePublishes() throws IOException {
+        assertUnitLifecyclePublishesGated("public <T> T supplyInEventScope");
+    }
+
+    /**
+     * #339: per-module containers under an AggregatingContainer are constructed with
+     * {@code publishLifecycleEvents=false}; their unit-of-work brackets must not publish
+     * their own EventStarted/EventEnding pair — the aggregator publishes exactly one.
+     */
+    private void assertUnitLifecyclePublishesGated(String methodSignature) throws IOException {
+        String content = generateContainerSource();
+
+        int methodPos = content.indexOf(methodSignature);
+        assertThat(methodPos).as("scope method present").isPositive();
+
+        int startedGate = content.indexOf("if (publishLifecycleEvents)", methodPos);
+        int startedPublish = content.indexOf("__publishUnitLifecycle(new EventStartedEvent", methodPos);
+        assertThat(startedGate).as("gate before EventStartedEvent publish").isPositive();
+        assertThat(startedPublish).isGreaterThan(startedGate);
+
+        int endingGate = content.indexOf("if (publishLifecycleEvents)", startedPublish);
+        int endingPublish = content.indexOf("__publishUnitLifecycle(new EventEndingEvent", startedPublish);
+        assertThat(endingGate).as("gate before EventEndingEvent publish").isPositive();
+        assertThat(endingPublish).isGreaterThan(endingGate);
+    }
+
     private String generateContainerSource() throws IOException {
         JavaFileObject src = JavaFileObjects.forSourceLines(
                 "io.example.MyService",

@@ -6,8 +6,12 @@ import io.tiko.Container;
 import io.tiko.EventBus;
 import io.tiko.events.ApplicationEndingEvent;
 import io.tiko.events.ApplicationStartedEvent;
+import io.tiko.events.EventEndingEvent;
+import io.tiko.events.EventStartedEvent;
 import io.tiko.runtime.AggregatingContainer;
 import io.tiko.runtime.LocalEventBus;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
@@ -59,6 +63,50 @@ class MultiModuleLifecycleEventsTest {
                 .as("ApplicationEndingEvent must fire exactly once across module-a and module-b "
                         + "(N=2 modules) and across two shutdown() calls")
                 .isEqualTo(1);
+    }
+
+    @Test
+    void unitOfWorkPublishesExactlyOneLifecyclePairAcrossModules() {
+        // #339: one runInEventScope must publish ONE EventStarted/EventEnding pair with one
+        // eventId — not one pair per nested module frame (N=2 modules here).
+        EventBus eventBus = newLocalEventBus();
+        List<EventStartedEvent> started = new CopyOnWriteArrayList<>();
+        List<EventEndingEvent> ending = new CopyOnWriteArrayList<>();
+        eventBus.subscribe(EventStartedEvent.class, started::add);
+        eventBus.subscribe(EventEndingEvent.class, ending::add);
+
+        Container container = new AggregatingContainer(eventBus, ctx -> {}, null);
+        try {
+            container.start();
+            container.runInEventScope(() -> {});
+        } finally {
+            container.shutdown();
+        }
+
+        assertThat(started).hasSize(1);
+        assertThat(ending).hasSize(1);
+        assertThat(ending.get(0).eventId()).isEqualTo(started.get(0).eventId());
+    }
+
+    @Test
+    void supplyInEventScopePublishesExactlyOneLifecyclePairAcrossModules() {
+        EventBus eventBus = newLocalEventBus();
+        List<EventStartedEvent> started = new CopyOnWriteArrayList<>();
+        List<EventEndingEvent> ending = new CopyOnWriteArrayList<>();
+        eventBus.subscribe(EventStartedEvent.class, started::add);
+        eventBus.subscribe(EventEndingEvent.class, ending::add);
+
+        Container container = new AggregatingContainer(eventBus, ctx -> {}, null);
+        try {
+            container.start();
+            assertThat(container.supplyInEventScope(() -> "value")).isEqualTo("value");
+        } finally {
+            container.shutdown();
+        }
+
+        assertThat(started).hasSize(1);
+        assertThat(ending).hasSize(1);
+        assertThat(ending.get(0).eventId()).isEqualTo(started.get(0).eventId());
     }
 
     private EventBus newLocalEventBus() {

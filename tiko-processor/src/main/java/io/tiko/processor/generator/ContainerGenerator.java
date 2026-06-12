@@ -979,16 +979,13 @@ public final class ContainerGenerator {
         method.endControlFlow();
         method.addStatement("__unitFrameOpen.set($T.TRUE)", Boolean.class)
                 .addStatement("$T __eventId = $T.randomUUID().toString()", String.class, UUID.class)
-                .addStatement("$T __eventStart = $T.now()", Instant.class, Instant.class)
-                .addStatement("__publishUnitLifecycle(new $T(__eventId, __eventStart))", EVENT_STARTED)
-                .beginControlFlow("try")
+                .addStatement("$T __eventStart = $T.now()", Instant.class, Instant.class);
+        emitGatedUnitStartedPublish(method);
+        method.beginControlFlow("try")
                 .addStatement("task.run()")
                 .nextControlFlow("finally")
-                .addStatement("$T __eventEnd = $T.now()", Instant.class, Instant.class)
-                .addStatement(
-                        "__publishUnitLifecycle(new $T(__eventId, __eventEnd, $T.between(__eventStart, __eventEnd)))",
-                        EVENT_ENDING,
-                        Duration.class);
+                .addStatement("$T __eventEnd = $T.now()", Instant.class, Instant.class);
+        emitGatedUnitEndingPublish(method);
         method.addStatement("__closeEventScope()").endControlFlow();
         return method.build();
     }
@@ -1016,18 +1013,38 @@ public final class ContainerGenerator {
         method.endControlFlow();
         method.addStatement("__unitFrameOpen.set($T.TRUE)", Boolean.class)
                 .addStatement("$T __eventId = $T.randomUUID().toString()", String.class, UUID.class)
-                .addStatement("$T __eventStart = $T.now()", Instant.class, Instant.class)
-                .addStatement("__publishUnitLifecycle(new $T(__eventId, __eventStart))", EVENT_STARTED)
-                .beginControlFlow("try")
+                .addStatement("$T __eventStart = $T.now()", Instant.class, Instant.class);
+        emitGatedUnitStartedPublish(method);
+        method.beginControlFlow("try")
                 .addStatement("return supplier.get()")
                 .nextControlFlow("finally")
-                .addStatement("$T __eventEnd = $T.now()", Instant.class, Instant.class)
-                .addStatement(
-                        "__publishUnitLifecycle(new $T(__eventId, __eventEnd, $T.between(__eventStart, __eventEnd)))",
-                        EVENT_ENDING,
-                        Duration.class);
+                .addStatement("$T __eventEnd = $T.now()", Instant.class, Instant.class);
+        emitGatedUnitEndingPublish(method);
         method.addStatement("__closeEventScope()").endControlFlow();
         return method.build();
+    }
+
+    /**
+     * Emits the {@code publishLifecycleEvents}-gated EventStartedEvent publish shared by
+     * both scope brackets (#339): per-module containers under an AggregatingContainer are
+     * constructed with the flag off, so one unit of work yields exactly one pair —
+     * published by the aggregator inside the innermost frame — instead of one pair per
+     * nested module frame.
+     */
+    private void emitGatedUnitStartedPublish(MethodSpec.Builder method) {
+        method.beginControlFlow("if (publishLifecycleEvents)");
+        method.addStatement("__publishUnitLifecycle(new $T(__eventId, __eventStart))", EVENT_STARTED);
+        method.endControlFlow();
+    }
+
+    /** EventEndingEvent counterpart of {@link #emitGatedUnitStartedPublish} (#339). */
+    private void emitGatedUnitEndingPublish(MethodSpec.Builder method) {
+        method.beginControlFlow("if (publishLifecycleEvents)");
+        method.addStatement(
+                "__publishUnitLifecycle(new $T(__eventId, __eventEnd, $T.between(__eventStart, __eventEnd)))",
+                EVENT_ENDING,
+                Duration.class);
+        method.endControlFlow();
     }
 
     /**
