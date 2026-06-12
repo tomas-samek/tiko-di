@@ -948,6 +948,9 @@ public final class ContainerGenerator {
     /** Shared get-or-create statement fragments (S1192) — used by scoped and singleton emission. */
     private static final String IF_EXISTING_NULL = "if (__existing == null)";
 
+    /** Lifecycle-publish gate shared by start/shutdown and both scope brackets (#45, #339). */
+    private static final String IF_PUBLISH_LIFECYCLE = "if (publishLifecycleEvents)";
+
     private static final String RETURN_EXISTING = "return __existing";
 
     private static final ClassName NO_SUCH_COMPONENT = ClassName.get("io.tiko", "NoSuchComponentException");
@@ -1032,14 +1035,14 @@ public final class ContainerGenerator {
      * nested module frame.
      */
     private void emitGatedUnitStartedPublish(MethodSpec.Builder method) {
-        method.beginControlFlow("if (publishLifecycleEvents)");
+        method.beginControlFlow(IF_PUBLISH_LIFECYCLE);
         method.addStatement("__publishUnitLifecycle(new $T(__eventId, __eventStart))", EVENT_STARTED);
         method.endControlFlow();
     }
 
     /** EventEndingEvent counterpart of {@link #emitGatedUnitStartedPublish} (#339). */
     private void emitGatedUnitEndingPublish(MethodSpec.Builder method) {
-        method.beginControlFlow("if (publishLifecycleEvents)");
+        method.beginControlFlow(IF_PUBLISH_LIFECYCLE);
         method.addStatement(
                 "__publishUnitLifecycle(new $T(__eventId, __eventEnd, $T.between(__eventStart, __eventEnd)))",
                 EVENT_ENDING,
@@ -1252,7 +1255,7 @@ public final class ContainerGenerator {
         }
 
         method.addStatement("this.startedAt = $T.now()", Instant.class);
-        method.beginControlFlow("if (publishLifecycleEvents)");
+        method.beginControlFlow(IF_PUBLISH_LIFECYCLE);
         method.addStatement("eventBus.publish(new $T(this.startedAt))", APP_STARTED);
         method.endControlFlow();
 
@@ -1298,7 +1301,7 @@ public final class ContainerGenerator {
                 Duration.class,
                 Duration.class,
                 Duration.class);
-        method.beginControlFlow("if (publishLifecycleEvents)");
+        method.beginControlFlow(IF_PUBLISH_LIFECYCLE);
         method.beginControlFlow("try");
         method.addStatement("eventBus.publish(new $T(__endTimestamp, __uptime))", APP_ENDING);
         method.nextControlFlow("catch ($T __t)", Throwable.class);

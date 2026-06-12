@@ -538,15 +538,17 @@ public final class AggregatingContainer implements Container {
     }
 
     /**
-     * Publishes a unit-of-work lifecycle event, isolating {@code Throwable} so a failing
-     * publish can never abort the unit or skip module-frame teardown — same isolation the
-     * generated brackets give their publishes (#336).
+     * Publishes a unit-of-work lifecycle event, isolating {@code Exception} so a failing
+     * publish does not abort the unit (#336 parallel). Unlike the generated brackets, the
+     * aggregator holds no per-thread frame state of its own — all teardown lives in the
+     * module frames' {@code finally} blocks — so a propagating {@code Error} cannot poison
+     * anything and is deliberately let through.
      */
     private void publishUnitLifecycle(Object event) {
         try {
             sharedEventBus.publish(event);
-        } catch (Throwable t) {
-            LoggerHolder.LOG.log(System.Logger.Level.WARNING, "Unit-of-work lifecycle publish threw", t);
+        } catch (Exception e) {
+            LoggerHolder.LOG.log(System.Logger.Level.WARNING, "Unit-of-work lifecycle publish threw", e);
         }
     }
 
