@@ -33,7 +33,8 @@ public final class ScopeValidator {
         boolean valid = true;
 
         for (DependencyModel dependency : component.getDependencies()) {
-            if (!validateDependency(component, dependency)) {
+            if (!validateDependencyOf(
+                    component.getTypeElement(), component.getScope(), component.getClassName(), dependency)) {
                 valid = false;
             }
         }
@@ -47,8 +48,9 @@ public final class ScopeValidator {
     public boolean validate(FactoryMethodModel factory) {
         boolean valid = true;
 
+        String consumerName = factory.getDeclaringClass().getSimpleName() + "." + factory.getMethodName();
         for (DependencyModel dependency : factory.getDependencies()) {
-            if (!validateFactoryDependency(factory, dependency)) {
+            if (!validateDependencyOf(factory.getMethodElement(), factory.getScope(), consumerName, dependency)) {
                 valid = false;
             }
         }
@@ -57,15 +59,25 @@ public final class ScopeValidator {
     }
 
     /**
-     * Validates a single dependency of a component.
+     * Validates a single injection point — shared by component and factory consumers,
+     * which differ only in how the consumer element, scope, and display name are derived.
      */
-    private boolean validateDependency(ComponentModel consumer, DependencyModel dependency) {
+    private boolean validateDependencyOf(
+            javax.lang.model.element.Element consumerElement,
+            Scope consumerScope,
+            String consumerName,
+            DependencyModel dependency) {
+        // Checked before the Provider escape: Provider<ConcreteProxiedBean> is just as
+        // unreceivable as a direct concrete injection (#331).
+        if (!validateProxiedConcreteInjection(consumerElement, dependency)) {
+            return false;
+        }
+
         // Provider<T> is always valid (lazy resolution)
         if (dependency.isProvider()) {
             return true;
         }
 
-        // Find the component or factory that provides this dependency
         String depKey = dependency.getDependencyKey();
         Optional<Object> provider = context.findComponentOrFactory(depKey);
 
@@ -82,44 +94,7 @@ public final class ScopeValidator {
         }
 
         return validateScopeHierarchy(
-                consumer.getTypeElement(),
-                consumer.getScope(),
-                consumer.getClassName(),
-                providerScope,
-                dependency.getTypeName(),
-                provider.get());
-    }
-
-    /**
-     * Validates a single dependency of a factory method.
-     */
-    private boolean validateFactoryDependency(FactoryMethodModel factory, DependencyModel dependency) {
-        // Provider<T> is always valid
-        if (dependency.isProvider()) {
-            return true;
-        }
-
-        String depKey = dependency.getDependencyKey();
-        Optional<Object> provider = context.findComponentOrFactory(depKey);
-
-        if (provider.isEmpty()) {
-            return true;
-        }
-
-        Scope providerScope = getScope(provider.get());
-
-        // PROTOTYPE can be injected anywhere
-        if (providerScope == Scope.PROTOTYPE) {
-            return true;
-        }
-
-        return validateScopeHierarchy(
-                factory.getMethodElement(),
-                factory.getScope(),
-                factory.getDeclaringClass().getSimpleName() + "." + factory.getMethodName(),
-                providerScope,
-                dependency.getTypeName(),
-                provider.get());
+                consumerElement, consumerScope, consumerName, providerScope, dependency.getTypeName(), provider.get());
     }
 
     /**
@@ -170,6 +145,30 @@ public final class ScopeValidator {
             }
         }
 
+        return true;
+    }
+
+    /**
+     * A proxied EVENT bean can only be received through its interface — the generated
+     * proxy implements the interface, not the concrete class — so an injection point
+     * typed by the concrete class (directly or as {@code Provider<Concrete>}) can never
+     * be satisfied; without this check the mismatch surfaced as a raw javac inference
+     * error inside generated factories (#331).
+     */
+    private boolean validateProxiedConcreteInjection(
+            javax.lang.model.element.Element consumerElement, DependencyModel dependency) {
+        String depKey = dependency.getDependencyKey();
+        String typePart = depKey.contains("#") ? depKey.substring(0, depKey.indexOf('#')) : depKey;
+        if (context.findComponentOrFactory(depKey).orElse(null) instanceof ComponentModel component
+                && component.requiresProxy()
+                && component.getQualifiedName().equals(typePart)) {
+            context.getErrorReporter()
+                    .proxiedConcreteInjection(
+                            consumerElement,
+                            component.getClassName(),
+                            component.getImplementedInterface().orElseThrow().toString());
+            return false;
+        }
         return true;
     }
 
