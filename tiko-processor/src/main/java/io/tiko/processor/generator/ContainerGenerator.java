@@ -7,6 +7,7 @@ import io.tiko.Scope;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
+import io.tiko.processor.util.CodeLiterals;
 import io.tiko.processor.util.GeneratorAnnotations;
 import io.tiko.processor.util.ProcessorContext;
 import io.tiko.processor.util.TypeUtil;
@@ -760,7 +761,7 @@ public final class ContainerGenerator {
             // are no-arg and cannot take a qualifier (#242).
             call = dependency
                     .getQualifier()
-                    .map(q -> "get(" + typeName + ".class, \"" + q + "\")")
+                    .map(q -> "get(" + typeName + ".class, \"" + CodeLiterals.javaString(q) + "\")")
                     .orElse("get" + component.getClassName() + "()");
         } else if (provider instanceof io.tiko.processor.config.ConfigurationModel) {
             // @Configuration records are stored in configSingletons and retrieved via get(Class)
@@ -768,7 +769,7 @@ public final class ContainerGenerator {
         } else {
             call = dependency
                     .getQualifier()
-                    .map(q -> "get(" + typeName + ".class, \"" + q + "\")")
+                    .map(q -> "get(" + typeName + ".class, \"" + CodeLiterals.javaString(q) + "\")")
                     .orElse("get" + simpleClassName(typeName) + "()");
         }
 

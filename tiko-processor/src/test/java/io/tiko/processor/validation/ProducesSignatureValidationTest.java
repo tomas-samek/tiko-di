@@ -96,6 +96,9 @@ class ProducesSignatureValidationTest {
 
     @Test
     void abstractProducesFailsCleanly() {
+        // An abstract @Produces method forces an abstract declaring class, so since #333
+        // the class-level shape check fires first — still one clean, located error rather
+        // than a javac cascade on generated sources.
         JavaFileObject thing =
                 JavaFileObjects.forSourceLines("io.example.Thing", "package io.example;", "public class Thing {}");
         JavaFileObject factory = JavaFileObjects.forSourceLines(
@@ -113,7 +116,8 @@ class ProducesSignatureValidationTest {
         Compilation c = compile(thing, factory);
 
         CompilationSubject.assertThat(c).failed();
-        CompilationSubject.assertThat(c).hadErrorContaining("must have a body");
+        CompilationSubject.assertThat(c).hadErrorContaining("cannot be a @Component: it is not a concrete class");
+        CompilationSubject.assertThat(c).hadErrorContaining("Suggested fixes");
     }
 
     @Test

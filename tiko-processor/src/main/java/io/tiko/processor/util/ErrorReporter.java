@@ -152,6 +152,41 @@ public final class ErrorReporter {
                 "Make " + className + " implement an existing interface");
     }
 
+    public void rawWrapperInjection(Element parameter, Element owner, String wrapperName) {
+        // Prefer the parameter element for location; fall back to the owner when the
+        // parameter element is unavailable (defensive — collection always sets it today).
+        reportError(
+                KIND_OTHER,
+                parameter != null ? parameter : owner,
+                "Raw " + wrapperName + " injection point — without a type argument the container has no type to"
+                        + " resolve.",
+                "Declare the dependency as " + wrapperName + "<YourType>");
+    }
+
+    public void nonInstantiableComponent(Element element, String className, String reason, String... fixes) {
+        reportError(KIND_OTHER, element, className + " cannot be a @Component: " + reason + ".", fixes);
+    }
+
+    public void duplicateSimpleNames(Element element, String simpleName, String qualifiedNames) {
+        reportError(
+                KIND_OTHER,
+                element,
+                "Two or more components share the simple name '" + simpleName + "': " + qualifiedNames
+                        + ". Tiko generates per-simple-name factories and getters, so component simple names"
+                        + " must be unique across packages.",
+                "Rename one of the classes so every component has a unique simple name");
+    }
+
+    public void eventHandlerOutsideComponent(Element element, String className) {
+        reportError(
+                KIND_OTHER,
+                element,
+                "@EventHandler methods are only wired on @Component classes; '" + className
+                        + "' is not registered as a component.",
+                "Annotate " + className + " with @Component",
+                "Move the handler method to a @Component class");
+    }
+
     public void proxiedConcreteInjection(Element element, String concreteName, String interfaceName) {
         // Same SCOPE_VIOLATION family as missingInterface: the cross-scope proxy implements
         // the interface, so a concrete-typed injection point can never receive it (#331).
