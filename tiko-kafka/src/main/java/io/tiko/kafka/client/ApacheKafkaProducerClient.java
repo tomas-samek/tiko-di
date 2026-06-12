@@ -3,6 +3,7 @@ package io.tiko.kafka.client;
 import io.tiko.kafka.KafkaConfig;
 import java.util.Properties;
 import java.util.concurrent.Future;
+import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -36,8 +37,8 @@ public final class ApacheKafkaProducerClient implements KafkaProducerClient {
     }
 
     @Override
-    public Future<RecordMetadata> send(ProducerRecord<String, byte[]> record) {
-        return producer.send(record);
+    public Future<RecordMetadata> send(ProducerRecord<String, byte[]> record, Callback callback) {
+        return producer.send(record, callback);
     }
 
     @Override
