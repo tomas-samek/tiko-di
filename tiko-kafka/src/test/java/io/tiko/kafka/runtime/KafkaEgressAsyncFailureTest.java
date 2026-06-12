@@ -80,4 +80,51 @@ class KafkaEgressAsyncFailureTest {
             assertThat(e.cause()).hasMessageContaining("record too large");
         });
     }
+
+    @Test
+    void throwingErrorHandlerDoesNotPropagateFromTheSendCallback() {
+        FakeKafkaBroker broker = new FakeKafkaBroker();
+        TikoOptions opts = TikoOptions.builder()
+                .errorHandler(ctx -> {
+                    throw new IllegalStateException("error handler failure");
+                })
+                .build();
+
+        List<GeneratedSinkDescriptor> sinks = List.of(new GeneratedSinkDescriptor(
+                "handler-throws", "", OrderPlaced.class, KafkaSerializer.Default.class, (container, event) -> event));
+
+        try (Container container = Tiko.create(opts)) {
+            KafkaBootstrapSupport support = new KafkaBootstrapSupport(
+                    container,
+                    List.of(),
+                    sinks,
+                    (config, group) -> broker.consumerClient(group),
+                    config -> new AsyncFailingProducerClient());
+            support.start();
+            try {
+                // The send callback runs on the producer thread (synchronously here); a
+                // throwing ErrorHandler must be contained, not escape through publish.
+                org.assertj.core.api.Assertions.assertThatCode(
+                                () -> container.getEventBus().publish(new OrderPlaced("o-3", 1)))
+                        .doesNotThrowAnyException();
+            } finally {
+                support.shutdown();
+            }
+        }
+    }
+
+    @Test
+    void fireAndForgetSendDelegatesThroughTheCallbackVariant() {
+        FakeKafkaBroker broker = new FakeKafkaBroker();
+        KafkaProducerClient producer = broker.producerClient();
+
+        producer.send(new ProducerRecord<>(
+                "plain-send",
+                null,
+                null,
+                "x".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                new org.apache.kafka.common.header.internals.RecordHeaders()));
+
+        assertThat(broker.produced("plain-send")).hasSize(1);
+    }
 }
