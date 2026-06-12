@@ -118,12 +118,7 @@ class KafkaEgressAsyncFailureTest {
         FakeKafkaBroker broker = new FakeKafkaBroker();
         KafkaProducerClient producer = broker.producerClient();
 
-        producer.send(new ProducerRecord<>(
-                "plain-send",
-                null,
-                null,
-                "x".getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                new org.apache.kafka.common.header.internals.RecordHeaders()));
+        producer.send(new ProducerRecord<>("plain-send", "x".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
 
         assertThat(broker.produced("plain-send")).hasSize(1);
     }
