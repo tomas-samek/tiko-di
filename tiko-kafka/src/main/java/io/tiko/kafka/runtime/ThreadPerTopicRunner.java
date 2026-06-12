@@ -24,6 +24,18 @@ import org.apache.kafka.common.header.internals.RecordHeaders;
  * One thread per source topic. The thread owns its own {@link KafkaConsumerClient} and
  * runs the consume loop documented in the spec: poll → deserialize → invoke bridge →
  * publish → commitSync(offset+1); on bridge throw, route via ErrorHandler and seek-back.
+ *
+ * <h2>Delivery contract (#341)</h2>
+ *
+ * <p>The offset acknowledges successful delivery <em>to the bus</em>, not handler
+ * outcome. The redelivery boundary is the bridge: a deserialize / dispatch / publish
+ * failure routes a {@code KafkaIngestError} and seeks back, so the record is delivered
+ * at-least-once and handlers must be idempotent. Once {@code publish} returns, the
+ * offset commits — handler execution is at-most-once per delivery: a throwing sync
+ * handler routes to the ErrorHandler (the bus isolates it from the publisher), and an
+ * async handler runs entirely after the commit. Holding the offset hostage to N
+ * independent in-process handlers would invert the event model's isolation contract;
+ * handler-side recovery is the dead-letter story (#111).
  */
 public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
 
