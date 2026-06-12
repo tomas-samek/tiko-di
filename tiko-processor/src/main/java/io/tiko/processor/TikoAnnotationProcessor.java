@@ -910,6 +910,13 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
     private boolean validate() {
         boolean valid = true;
 
+        // Structural shape checks run first and short-circuit (#333): the validators below
+        // assume well-shaped models — e.g. a raw Provider dependency NPEs the moment any
+        // of them reads its dependency key.
+        if (!new ComponentShapeValidator(context, typeUtil).validate()) {
+            return false;
+        }
+
         // Validate scope rules
         ScopeValidator scopeValidator = new ScopeValidator(context);
         for (ComponentModel component : context.getActiveComponents()) {
