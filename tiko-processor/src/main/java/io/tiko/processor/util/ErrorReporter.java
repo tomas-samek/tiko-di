@@ -152,6 +152,18 @@ public final class ErrorReporter {
                 "Make " + className + " implement an existing interface");
     }
 
+    public void proxiedConcreteInjection(Element element, String concreteName, String interfaceName) {
+        // Same SCOPE_VIOLATION family as missingInterface: the cross-scope proxy implements
+        // the interface, so a concrete-typed injection point can never receive it (#331).
+        reportError(
+                KIND_SCOPE_VIOLATION,
+                element,
+                concreteName + " is EVENT-scoped and proxied; the generated proxy implements " + interfaceName
+                        + ", so this injection point cannot be typed by the concrete class.",
+                "Inject " + interfaceName + " instead of " + concreteName,
+                "Use Provider<" + interfaceName + "> for lazy per-call resolution");
+    }
+
     public void invalidAnnotationUsage(Element element, String annotationName, String reason) {
         reportError(
                 KIND_OTHER,

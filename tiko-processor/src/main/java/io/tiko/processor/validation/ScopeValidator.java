@@ -60,6 +60,12 @@ public final class ScopeValidator {
      * Validates a single dependency of a component.
      */
     private boolean validateDependency(ComponentModel consumer, DependencyModel dependency) {
+        // Checked before the Provider escape: Provider<ConcreteProxiedBean> is just as
+        // unreceivable as a direct concrete injection (#331).
+        if (!validateProxiedConcreteInjection(consumer.getTypeElement(), dependency)) {
+            return false;
+        }
+
         // Provider<T> is always valid (lazy resolution)
         if (dependency.isProvider()) {
             return true;
@@ -94,6 +100,10 @@ public final class ScopeValidator {
      * Validates a single dependency of a factory method.
      */
     private boolean validateFactoryDependency(FactoryMethodModel factory, DependencyModel dependency) {
+        if (!validateProxiedConcreteInjection(factory.getMethodElement(), dependency)) {
+            return false;
+        }
+
         // Provider<T> is always valid
         if (dependency.isProvider()) {
             return true;
@@ -170,6 +180,30 @@ public final class ScopeValidator {
             }
         }
 
+        return true;
+    }
+
+    /**
+     * A proxied EVENT bean can only be received through its interface — the generated
+     * proxy implements the interface, not the concrete class — so an injection point
+     * typed by the concrete class (directly or as {@code Provider<Concrete>}) can never
+     * be satisfied; without this check the mismatch surfaced as a raw javac inference
+     * error inside generated factories (#331).
+     */
+    private boolean validateProxiedConcreteInjection(
+            javax.lang.model.element.Element consumerElement, DependencyModel dependency) {
+        String depKey = dependency.getDependencyKey();
+        String typePart = depKey.contains("#") ? depKey.substring(0, depKey.indexOf('#')) : depKey;
+        if (context.findComponentOrFactory(depKey).orElse(null) instanceof ComponentModel component
+                && component.requiresProxy()
+                && component.getQualifiedName().equals(typePart)) {
+            context.getErrorReporter()
+                    .proxiedConcreteInjection(
+                            consumerElement,
+                            component.getClassName(),
+                            component.getImplementedInterface().orElseThrow().toString());
+            return false;
+        }
         return true;
     }
 
