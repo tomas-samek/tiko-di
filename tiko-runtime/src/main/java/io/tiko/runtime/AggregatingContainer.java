@@ -602,8 +602,7 @@ public final class AggregatingContainer implements Container {
         } catch (Throwable t) {
             // Bus-impl defect; user-facing flow must continue. Handler exceptions are
             // already isolated by #44, so this catch fires only for genuine bus bugs.
-            System.getLogger("io.tiko.events")
-                    .log(System.Logger.Level.WARNING, "ApplicationStartedEvent publish threw", t);
+            LoggerHolder.LOG.log(System.Logger.Level.WARNING, "ApplicationStartedEvent publish threw", t);
         }
     }
 
@@ -623,8 +622,7 @@ public final class AggregatingContainer implements Container {
             sharedEventBus.publish(new ApplicationEndingEvent(endTimestamp, uptime));
         } catch (Throwable t) {
             // Bus-impl defect; per-module @PreDestroy must still run.
-            System.getLogger("io.tiko.events")
-                    .log(System.Logger.Level.WARNING, "ApplicationEndingEvent publish threw", t);
+            LoggerHolder.LOG.log(System.Logger.Level.WARNING, "ApplicationEndingEvent publish threw", t);
         }
         // Shutdown in reverse order. Per-module containers no longer shut down the executor
         // themselves (#51): they were constructed with the shared executor, so their internal
@@ -634,8 +632,7 @@ public final class AggregatingContainer implements Container {
                 moduleContainers.get(i).shutdown();
             } catch (Exception e) {
                 // Log but continue shutting down other containers
-                System.getLogger("io.tiko.events")
-                        .log(System.Logger.Level.WARNING, "Error shutting down module container", e);
+                LoggerHolder.LOG.log(System.Logger.Level.WARNING, "Error shutting down module container", e);
             }
         }
         // Shut down framework-owned event executor (#51). User-supplied executors are not
