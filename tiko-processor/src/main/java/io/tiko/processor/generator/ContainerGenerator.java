@@ -898,11 +898,11 @@ public final class ContainerGenerator {
             MethodSpec.Builder method, TypeName returnType, String mapExpr, String storageKey, String createExpr) {
         emitUnitFrameGuard(method, storageKey);
         method.addStatement("$T __existing = ($T) $L.get($S)", returnType, returnType, mapExpr, storageKey);
-        method.beginControlFlow("if (__existing == null)");
+        method.beginControlFlow(IF_EXISTING_NULL);
         method.addStatement("__existing = $L", createExpr);
         method.addStatement("$L.put($S, __existing)", mapExpr, storageKey);
         method.endControlFlow();
-        method.addStatement("return __existing");
+        method.addStatement(RETURN_EXISTING);
     }
 
     /**
@@ -915,11 +915,11 @@ public final class ContainerGenerator {
             MethodSpec.Builder method, TypeName returnType, String mapExpr, String storageKey, String createExpr) {
         emitUnitFrameGuard(method, storageKey);
         method.addStatement("$T __existing = ($T) $L.get($S)", returnType, returnType, mapExpr, storageKey);
-        method.beginControlFlow("if (__existing == null)");
+        method.beginControlFlow(IF_EXISTING_NULL);
         method.addStatement("__existing = $L", createExpr);
         method.addStatement("$L.put($S, __existing)", mapExpr, storageKey);
         method.endControlFlow();
-        method.addStatement("return __existing");
+        method.addStatement(RETURN_EXISTING);
     }
 
     /**
@@ -944,6 +944,11 @@ public final class ContainerGenerator {
     private static final ClassName APP_ENDING = ClassName.get(EVENTS_PACKAGE, "ApplicationEndingEvent");
     private static final ClassName BOUNDED_EXECUTION = ClassName.get("io.tiko.runtime", "BoundedExecution");
     private static final ClassName CONTAINER_SHUT_DOWN = ClassName.get("io.tiko", "ContainerShutDownException");
+    /** Shared get-or-create statement fragments (S1192) — used by scoped and singleton emission. */
+    private static final String IF_EXISTING_NULL = "if (__existing == null)";
+
+    private static final String RETURN_EXISTING = "return __existing";
+
     private static final ClassName NO_SUCH_COMPONENT = ClassName.get("io.tiko", "NoSuchComponentException");
     private static final ClassName NO_ACTIVE_EVENT_SCOPE = ClassName.get("io.tiko", "NoActiveEventScopeException");
 
@@ -1070,15 +1075,15 @@ public final class ContainerGenerator {
                 .addParameter(supplierOfObject, "factory");
         method.addStatement("$T __existing = singletons.get(key)", Object.class);
         method.beginControlFlow("if (__existing != null)");
-        method.addStatement("return __existing");
+        method.addStatement(RETURN_EXISTING);
         method.endControlFlow();
         method.beginControlFlow("synchronized (singletonLock)");
         method.addStatement("__existing = singletons.get(key)");
-        method.beginControlFlow("if (__existing == null)");
+        method.beginControlFlow(IF_EXISTING_NULL);
         method.addStatement("__existing = factory.get()");
         method.addStatement("singletons.put(key, __existing)");
         method.endControlFlow();
-        method.addStatement("return __existing");
+        method.addStatement(RETURN_EXISTING);
         method.endControlFlow();
         return method.build();
     }
