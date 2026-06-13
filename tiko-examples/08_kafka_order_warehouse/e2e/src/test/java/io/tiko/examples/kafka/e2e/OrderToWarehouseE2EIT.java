@@ -32,7 +32,7 @@ import org.testcontainers.utility.DockerImageName;
  * hope the consumer-group join finished" pattern timed out reliably under cold-start CI
  * (#149).
  */
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 class OrderToWarehouseE2EIT {
 
     private static final Duration READY_TIMEOUT = Duration.ofSeconds(60);
