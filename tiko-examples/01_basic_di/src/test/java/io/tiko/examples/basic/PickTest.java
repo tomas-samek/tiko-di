@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.tiko.Container;
 import io.tiko.NoSuchComponentException;
-import io.tiko.Pick;
+import io.tiko.PickBuilder;
 import io.tiko.Provider;
 import io.tiko.runtime.Tiko;
 import org.junit.jupiter.api.Test;
@@ -65,7 +65,7 @@ class PickTest {
     @Test
     void resolve_unknownName_throws() {
         try (Container container = Tiko.create()) {
-            Pick<Greeter> pick = container.pick(Greeter.class).withName("french");
+            PickBuilder<Greeter> pick = container.pick(Greeter.class).withName("french");
             assertThatThrownBy(pick::resolve).isInstanceOf(NoSuchComponentException.class);
         }
     }

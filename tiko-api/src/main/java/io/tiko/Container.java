@@ -90,9 +90,9 @@ public interface Container extends AutoCloseable {
     <T> Provider<T> getProvider(Class<T> type, String name);
 
     /**
-     * Entry point for the multi-axis lookup builder. Use {@link Pick#withName(String)}
-     * to add a qualifier and one of {@link Pick#resolve()},
-     * {@link Pick#asProvider()}, {@link Pick#orDefault(Object)} as the terminal.
+     * Entry point for the multi-axis lookup builder. Use {@link PickBuilder#withName(String)}
+     * to add a qualifier and one of {@link PickBuilder#resolve()},
+     * {@link PickBuilder#asProvider()}, {@link PickBuilder#orDefault(Object)} as the terminal.
      *
      * <p>{@code container.pick(Type.class).resolve()} with no filters is equivalent
      * to {@link #get(Class)}.
@@ -101,8 +101,8 @@ public interface Container extends AutoCloseable {
      * @param <T>  the type of the component
      * @return a fluent builder
      */
-    default <T> Pick<T> pick(Class<T> type) {
-        return new DefaultPick<>(this, type);
+    default <T> PickBuilder<T> pick(Class<T> type) {
+        return new DefaultPickBuilder<>(this, type);
     }
 
     /**
