@@ -74,10 +74,33 @@ public final class TikoTestExtension
 
     @Override
     public boolean supportsParameter(ParameterContext pCtx, ExtensionContext eCtx) {
-        // Resolve any parameter; container.get(...) inside resolveParameter will throw clearly
-        // if the type is not wireable. Returning false here would let other extensions take
-        // over, which would mask the more helpful container error.
+        Class<?> type = pCtx.getParameter().getType();
+        // Tiko always owns the handles it puts in the store.
+        if (type == Container.class || type == EventBus.class || type == RecordingEventBus.class) {
+            return true;
+        }
+        // Yield to JUnit's built-in resolvers — claiming a parameter they also support throws
+        // "Discovered multiple competing ParameterResolvers" before the test body runs (#351).
+        if (isJUnitManaged(pCtx)) {
+            return false;
+        }
+        // Everything else is a container-wired dependency; container.get(...) inside
+        // resolveParameter throws a clear error if the type is not actually wireable.
         return true;
+    }
+
+    /**
+     * True when {@code pCtx} is a parameter JUnit's own resolvers supply — by type
+     * ({@link org.junit.jupiter.api.TestInfo}, {@link org.junit.jupiter.api.TestReporter},
+     * {@link org.junit.jupiter.api.RepetitionInfo}) or by the {@link org.junit.jupiter.api.io.TempDir}
+     * annotation. {@code @TikoTest} declines these so the built-in resolver wins (#351).
+     */
+    private static boolean isJUnitManaged(ParameterContext pCtx) {
+        Class<?> type = pCtx.getParameter().getType();
+        return type == org.junit.jupiter.api.TestInfo.class
+                || type == org.junit.jupiter.api.TestReporter.class
+                || type == org.junit.jupiter.api.RepetitionInfo.class
+                || pCtx.isAnnotated(org.junit.jupiter.api.io.TempDir.class);
     }
 
     @Override
