@@ -44,6 +44,20 @@ class TikoBootstrapFailureTest {
     }
 
     @Test
+    void cleanupToleratesShutdownFailuresAndStillReportsOriginalFailure() {
+        ShutdownThrowingContainer container = new ShutdownThrowingContainer();
+        ShutdownThrowingBootstrap started = new ShutdownThrowingBootstrap();
+        ThrowingBootstrap bad = new ThrowingBootstrap();
+        List<TransportBootstrap> bootstraps = List.of(started, bad);
+
+        // Both the started transport's shutdown and the container's shutdown throw during
+        // cleanup; those are swallowed so the ORIGINAL start failure is what surfaces.
+        assertThatThrownBy(() -> Tiko.startTransports(container, bootstraps))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("transport start failed");
+    }
+
+    @Test
     void noTransportsReturnsBareContainerWithoutShutdown() {
         BootstrapTestContainer container = new BootstrapTestContainer();
 
@@ -64,6 +78,17 @@ class TikoBootstrapFailureTest {
                 .isInstanceOf(ContainerInitializationException.class)
                 .hasMessageContaining("io.tiko.generated.EventRegistry_reg")
                 .hasMessageContaining("registration boom");
+    }
+
+    @Test
+    void missingRegisterHandlersMethodReportsVersionDrift() {
+        EventBus bus = new LocalEventBus();
+        BootstrapTestContainer_sig container = new BootstrapTestContainer_sig();
+
+        assertThatThrownBy(() -> Tiko.registerEventHandlers(bus, container, BootstrapTestContainer_sig.class))
+                .isInstanceOf(ContainerInitializationException.class)
+                .hasMessageContaining("no registerHandlers")
+                .hasMessageContaining("versions");
     }
 
     @Test
@@ -102,6 +127,28 @@ class TikoBootstrapFailureTest {
         @Override
         public void shutdown() {
             shutdowns.incrementAndGet();
+        }
+    }
+
+    /** Starts cleanly but throws when stopped — exercises the swallow in shutdownQuietly(TransportBootstrap). */
+    private static final class ShutdownThrowingBootstrap implements TransportBootstrap {
+        @Override
+        public void start(Container container) {
+            // started successfully
+        }
+
+        @Override
+        public void shutdown() {
+            throw new IllegalStateException("transport shutdown boom");
+        }
+    }
+
+    /** Throws when shut down — exercises the swallow in shutdownQuietly(Container). */
+    private static final class ShutdownThrowingContainer extends BootstrapTestContainer {
+        @Override
+        public void shutdown() {
+            super.shutdown();
+            throw new IllegalStateException("container shutdown boom");
         }
     }
 }

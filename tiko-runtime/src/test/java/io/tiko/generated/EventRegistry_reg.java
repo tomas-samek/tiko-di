@@ -15,8 +15,8 @@ public final class EventRegistry_reg {
     private EventRegistry_reg() {}
 
     public static void registerHandlers(EventBus eventBus, BootstrapTestContainer_reg container) {
-        // Reference both params so the signature stays reflection-matched without an unused warning;
-        // the point is purely to throw, mimicking a subscribe failure on a decorated bus.
+        // Throws to mimic a subscribe failure on a decorated bus. Both params are woven into the
+        // message so the reflection-matched signature carries no unused-parameter warning.
         throw new IllegalStateException("registration boom (bus=" + eventBus + ", container=" + container + ")");
     }
 }
