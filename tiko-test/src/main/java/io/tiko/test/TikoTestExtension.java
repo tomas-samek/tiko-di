@@ -81,12 +81,9 @@ public final class TikoTestExtension
         }
         // Yield to JUnit's built-in resolvers — claiming a parameter they also support throws
         // "Discovered multiple competing ParameterResolvers" before the test body runs (#351).
-        if (isJUnitManaged(pCtx)) {
-            return false;
-        }
         // Everything else is a container-wired dependency; container.get(...) inside
         // resolveParameter throws a clear error if the type is not actually wireable.
-        return true;
+        return !isJUnitManaged(pCtx);
     }
 
     /**
