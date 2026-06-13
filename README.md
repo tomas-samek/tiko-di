@@ -11,7 +11,7 @@
 
 **Status: 0.2.2 on Maven Central.** Suitable for early-adopter experimentation. See [docs/roadmap.md](./docs/roadmap.md) for what ships today and what's next.
 
-**Benchmarked for AI-friendliness** → [llm-framework-benchmark](https://github.com/tomas-samek/llm-framework-benchmark): on an external-oracle-graded build task (a Kafka → H2 → merged-notification service), a coding agent reached an **86% median** building on tiko *despite tiko being absent from the model's training data* — carried by tiko's in-repo affordances (machine-readable guidance + an MCP topology server) rather than prior familiarity. Early results (Claude Opus 4.8, n=5); see the benchmark for the full picture and caveats.
+**Benchmarked for AI-friendliness** → [llm-framework-benchmark](https://github.com/tomas-samek/llm-framework-benchmark): on an external-oracle-graded build task (a Kafka → H2 → merged-notification service), run across three models (Claude Sonnet 4.6 / Fable 5 / Opus 4.8, n=5). tiko — *absent from the models' training data* — reaches **86–100% median compliance**, on par with Spring on versions the models know, and clears the brand-new Spring Boot 4.0.6 wall that broke Sonnet 4.6 (median 0%). See the benchmark for the full picture, per-build token cost, and caveats.
 
 ## What Tiko is
 
