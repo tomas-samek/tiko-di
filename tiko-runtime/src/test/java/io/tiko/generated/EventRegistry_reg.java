@@ -15,6 +15,8 @@ public final class EventRegistry_reg {
     private EventRegistry_reg() {}
 
     public static void registerHandlers(EventBus eventBus, BootstrapTestContainer_reg container) {
-        throw new IllegalStateException("registration boom");
+        // Reference both params so the signature stays reflection-matched without an unused warning;
+        // the point is purely to throw, mimicking a subscribe failure on a decorated bus.
+        throw new IllegalStateException("registration boom (bus=" + eventBus + ", container=" + container + ")");
     }
 }

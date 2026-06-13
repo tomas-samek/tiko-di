@@ -26,8 +26,9 @@ class TikoBootstrapFailureTest {
         BootstrapTestContainer container = new BootstrapTestContainer();
         RecordingBootstrap ok = new RecordingBootstrap();
         ThrowingBootstrap bad = new ThrowingBootstrap();
+        List<TransportBootstrap> bootstraps = List.of(ok, bad);
 
-        assertThatThrownBy(() -> Tiko.startTransports(container, List.of(ok, bad)))
+        assertThatThrownBy(() -> Tiko.startTransports(container, bootstraps))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("transport start failed");
 

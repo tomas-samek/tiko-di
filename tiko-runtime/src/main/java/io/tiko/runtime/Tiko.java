@@ -192,22 +192,10 @@ public final class Tiko {
             // once on the shared bus and leaves per-module singleton init lazy (#45).
             container.start();
 
-            // 6. Discover transport modules (tiko-kafka, future tiko-http, ...). Each transport
-            //    ships its own ServiceLoader entry; the runtime knows nothing transport-specific.
-            //    Bootstraps are collected first so the wrapper can be built before start() is
-            //    called — that way start(container) receives the public wrapper, not the raw impl.
+            // 6. Discover transport modules (tiko-kafka, future tiko-http, ...) and start them.
             //    A failure discovering or starting any transport must not leak the
             //    already-started container (#348) — tear it down before the exception escapes.
-            java.util.List<TransportBootstrap> bootstraps = new java.util.ArrayList<>();
-            try {
-                for (TransportBootstrap tb : java.util.ServiceLoader.load(TransportBootstrap.class, classLoader)) {
-                    bootstraps.add(tb);
-                }
-            } catch (RuntimeException | Error e) {
-                shutdownQuietly(container);
-                throw e;
-            }
-            return startTransports(container, bootstraps);
+            return startTransportsOrShutdown(container, classLoader);
         } catch (RuntimeException e) {
             throw e;
         } catch (ClassNotFoundException e) {
@@ -470,13 +458,33 @@ public final class Tiko {
                 started++;
             }
             return wrapper;
-        } catch (RuntimeException | Error e) {
+        } catch (RuntimeException | LinkageError e) {
+            // RuntimeException covers normal start failures (bad config); LinkageError covers a
+            // half-present transport jar (missing transitive dep). Either way, unwind cleanly.
             for (int i = started - 1; i >= 0; i--) {
                 shutdownQuietly(bootstraps.get(i));
             }
             shutdownQuietly(container);
             throw e;
         }
+    }
+
+    /**
+     * Discovers transports via {@code ServiceLoader} and hands off to {@link #startTransports}.
+     * A {@link java.util.ServiceConfigurationError} raised while iterating providers shuts the
+     * already-started container down before propagating (#348).
+     */
+    private static Container startTransportsOrShutdown(Container container, ClassLoader classLoader) {
+        java.util.List<TransportBootstrap> bootstraps = new java.util.ArrayList<>();
+        try {
+            for (TransportBootstrap tb : java.util.ServiceLoader.load(TransportBootstrap.class, classLoader)) {
+                bootstraps.add(tb);
+            }
+        } catch (RuntimeException | java.util.ServiceConfigurationError e) {
+            shutdownQuietly(container);
+            throw e;
+        }
+        return startTransports(container, bootstraps);
     }
 
     /** Best-effort container teardown on a failing bootstrap path — never masks the original failure. */
