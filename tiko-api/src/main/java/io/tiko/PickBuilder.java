@@ -18,12 +18,12 @@ package io.tiko;
  *
  * @param <T> the bean type
  */
-public interface Pick<T> {
+public interface PickBuilder<T> {
 
     /**
      * Adds a qualifier name to the query.
      */
-    Pick<T> withName(String name);
+    PickBuilder<T> withName(String name);
 
     /**
      * Resolves the bean, throwing if no match exists.

@@ -1,29 +1,29 @@
 package io.tiko;
 
 /**
- * Default {@link Pick} implementation backed by {@link Container#get(Class)} /
+ * Default {@link PickBuilder} implementation backed by {@link Container#get(Class)} /
  * {@link Container#get(Class, String)}. Immutable — each axis call returns a
- * new instance so a {@code Pick} can be safely shared.
+ * new instance so a {@code PickBuilder} can be safely shared.
  */
-final class DefaultPick<T> implements Pick<T> {
+final class DefaultPickBuilder<T> implements PickBuilder<T> {
 
     private final Container container;
     private final Class<T> type;
     private final String name;
 
-    DefaultPick(Container container, Class<T> type) {
+    DefaultPickBuilder(Container container, Class<T> type) {
         this(container, type, null);
     }
 
-    private DefaultPick(Container container, Class<T> type, String name) {
+    private DefaultPickBuilder(Container container, Class<T> type, String name) {
         this.container = container;
         this.type = type;
         this.name = name;
     }
 
     @Override
-    public Pick<T> withName(String name) {
-        return new DefaultPick<>(container, type, name);
+    public PickBuilder<T> withName(String name) {
+        return new DefaultPickBuilder<>(container, type, name);
     }
 
     @Override

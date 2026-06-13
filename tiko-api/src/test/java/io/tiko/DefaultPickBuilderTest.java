@@ -7,15 +7,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 /**
- * Covers the {@link DefaultPick} fluent surface: named axis, eager resolve, lazy Provider,
+ * Covers the {@link DefaultPickBuilder} fluent surface: named axis, eager resolve, lazy Provider,
  * fallback on missing bean, and confirms immutability via reused-instance per-axis pattern.
  */
-class DefaultPickTest {
+class DefaultPickBuilderTest {
 
     @Test
     void resolveWithoutNameDelegatesToGetByType() {
         ContainerStub container = new ContainerStub();
-        Pick<String> pick = new DefaultPick<>(container, String.class);
+        PickBuilder<String> pick = new DefaultPickBuilder<>(container, String.class);
 
         assertThat(pick.resolve()).isEqualTo("by-type");
         assertThat(container.getByTypeCalls).hasValue(1);
@@ -25,7 +25,7 @@ class DefaultPickTest {
     @Test
     void resolveWithNameDelegatesToGetByTypeAndName() {
         ContainerStub container = new ContainerStub();
-        Pick<String> named = new DefaultPick<>(container, String.class).withName("primary");
+        PickBuilder<String> named = new DefaultPickBuilder<>(container, String.class).withName("primary");
 
         assertThat(named.resolve()).isEqualTo("by-name:primary");
         assertThat(container.getByNameCalls).hasValue(1);
@@ -35,8 +35,8 @@ class DefaultPickTest {
     @Test
     void withNameReturnsNewInstanceAndDoesNotMutateOriginal() {
         ContainerStub container = new ContainerStub();
-        Pick<String> original = new DefaultPick<>(container, String.class);
-        Pick<String> named = original.withName("alt");
+        PickBuilder<String> original = new DefaultPickBuilder<>(container, String.class);
+        PickBuilder<String> named = original.withName("alt");
 
         assertThat(named).isNotSameAs(original);
         assertThat(original.resolve()).isEqualTo("by-type");
@@ -46,7 +46,7 @@ class DefaultPickTest {
     @Test
     void asProviderDefersResolutionAndReResolvesEachGet() {
         ContainerStub container = new ContainerStub();
-        Provider<String> provider = new DefaultPick<>(container, String.class).asProvider();
+        Provider<String> provider = new DefaultPickBuilder<>(container, String.class).asProvider();
 
         assertThat(container.getByTypeCalls).hasValue(0);
         provider.get();
@@ -57,7 +57,7 @@ class DefaultPickTest {
     @Test
     void orDefaultReturnsResolvedWhenPresent() {
         ContainerStub container = new ContainerStub();
-        Pick<String> pick = new DefaultPick<>(container, String.class);
+        PickBuilder<String> pick = new DefaultPickBuilder<>(container, String.class);
 
         assertThat(pick.orDefault("fallback")).isEqualTo("by-type");
     }
@@ -65,7 +65,7 @@ class DefaultPickTest {
     @Test
     void orDefaultReturnsFallbackWhenNoSuchComponent() {
         ContainerStub container = new ContainerStub().throwingOnGet();
-        Pick<String> pick = new DefaultPick<>(container, String.class);
+        PickBuilder<String> pick = new DefaultPickBuilder<>(container, String.class);
 
         assertThat(pick.orDefault("fallback")).isEqualTo("fallback");
     }
@@ -73,7 +73,7 @@ class DefaultPickTest {
     @Test
     void orDefaultPropagatesOtherExceptions() {
         ContainerStub container = new ContainerStub().throwingOnGetWith(new IllegalStateException("boom"));
-        Pick<String> pick = new DefaultPick<>(container, String.class);
+        PickBuilder<String> pick = new DefaultPickBuilder<>(container, String.class);
 
         assertThatThrownBy(() -> pick.orDefault("fallback"))
                 .isInstanceOf(IllegalStateException.class)
@@ -148,12 +148,12 @@ class DefaultPickTest {
 
         @Override
         public EventBus getEventBus() {
-            throw new UnsupportedOperationException("not used in DefaultPick tests");
+            throw new UnsupportedOperationException("not used in DefaultPickBuilder tests");
         }
 
         @Override
         public java.util.concurrent.ExecutorService getEventExecutor() {
-            throw new UnsupportedOperationException("not used in DefaultPick tests");
+            throw new UnsupportedOperationException("not used in DefaultPickBuilder tests");
         }
     }
 }

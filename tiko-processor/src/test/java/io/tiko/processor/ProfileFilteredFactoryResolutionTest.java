@@ -217,10 +217,10 @@ class ProfileFilteredFactoryResolutionTest {
         JavaFileObject consumer = JavaFileObjects.forSourceLines(
                 "demo.Consumer",
                 "package demo;",
-                "import io.tiko.Pick;",
                 "import io.tiko.Scope;",
                 "import io.tiko.annotations.Component;",
                 "import io.tiko.annotations.Inject;",
+                "import io.tiko.annotations.Pick;",
                 "@Component(scope = Scope.SINGLETON)",
                 "public class Consumer {",
                 "    @Inject public Consumer(@Pick(DevTagger.class) Tagger t) {}",
