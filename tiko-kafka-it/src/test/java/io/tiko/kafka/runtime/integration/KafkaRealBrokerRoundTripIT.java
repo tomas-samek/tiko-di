@@ -39,7 +39,7 @@ import org.testcontainers.utility.DockerImageName;
  *   <li>The test asserts at least one {@code ItOrderPlaced("real-1", 99)} arrived.</li>
  * </ol>
  */
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 class KafkaRealBrokerRoundTripIT {
 
     @org.testcontainers.junit.jupiter.Container
