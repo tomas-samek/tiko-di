@@ -192,25 +192,10 @@ public final class Tiko {
             // once on the shared bus and leaves per-module singleton init lazy (#45).
             container.start();
 
-            // 6. Discover transport modules (tiko-kafka, future tiko-http, ...). Each transport
-            //    ships its own ServiceLoader entry; the runtime knows nothing transport-specific.
-            //    Bootstraps are collected first so the wrapper can be built before start() is
-            //    called — that way start(container) receives the public wrapper, not the raw impl.
-            java.util.List<TransportBootstrap> bootstraps = new java.util.ArrayList<>();
-            for (TransportBootstrap tb : java.util.ServiceLoader.load(TransportBootstrap.class, classLoader)) {
-                bootstraps.add(tb);
-            }
-
-            if (bootstraps.isEmpty()) {
-                return container;
-            }
-
-            // Build the wrapper first so start() callers receive the public-facing handle.
-            TransportAwareContainer wrapper = new TransportAwareContainer(container, bootstraps);
-            for (TransportBootstrap tb : bootstraps) {
-                tb.start(wrapper);
-            }
-            return wrapper;
+            // 6. Discover transport modules (tiko-kafka, future tiko-http, ...) and start them.
+            //    A failure discovering or starting any transport must not leak the
+            //    already-started container (#348) — tear it down before the exception escapes.
+            return startTransportsOrShutdown(container, classLoader);
         } catch (RuntimeException e) {
             throw e;
         } catch (ClassNotFoundException e) {
@@ -455,6 +440,72 @@ public final class Tiko {
     }
 
     /**
+     * Builds the transport-aware wrapper and starts every discovered {@link TransportBootstrap}.
+     * Returns the bare container when none were discovered. On any start failure, stops the
+     * transports already started (reverse order) and shuts the container down before rethrowing,
+     * so a failed bootstrap never leaves a started-but-unreachable container behind (#348).
+     */
+    static Container startTransports(Container container, java.util.List<TransportBootstrap> bootstraps) {
+        if (bootstraps.isEmpty()) {
+            return container;
+        }
+        // Build the wrapper first so start() callers receive the public-facing handle.
+        TransportAwareContainer wrapper = new TransportAwareContainer(container, bootstraps);
+        int started = 0;
+        try {
+            for (TransportBootstrap tb : bootstraps) {
+                tb.start(wrapper);
+                started++;
+            }
+            return wrapper;
+        } catch (RuntimeException | LinkageError e) {
+            // RuntimeException covers normal start failures (bad config); LinkageError covers a
+            // half-present transport jar (missing transitive dep). Either way, unwind cleanly.
+            for (int i = started - 1; i >= 0; i--) {
+                shutdownQuietly(bootstraps.get(i));
+            }
+            shutdownQuietly(container);
+            throw e;
+        }
+    }
+
+    /**
+     * Discovers transports via {@code ServiceLoader} and hands off to {@link #startTransports}.
+     * A {@link java.util.ServiceConfigurationError} raised while iterating providers shuts the
+     * already-started container down before propagating (#348).
+     */
+    private static Container startTransportsOrShutdown(Container container, ClassLoader classLoader) {
+        java.util.List<TransportBootstrap> bootstraps = new java.util.ArrayList<>();
+        try {
+            for (TransportBootstrap tb : java.util.ServiceLoader.load(TransportBootstrap.class, classLoader)) {
+                bootstraps.add(tb);
+            }
+        } catch (RuntimeException | java.util.ServiceConfigurationError e) {
+            shutdownQuietly(container);
+            throw e;
+        }
+        return startTransports(container, bootstraps);
+    }
+
+    /** Best-effort container teardown on a failing bootstrap path — never masks the original failure. */
+    private static void shutdownQuietly(Container container) {
+        try {
+            container.shutdown();
+        } catch (Exception ignored) {
+            /* unwinding a bootstrap failure; the original exception is the one that matters */
+        }
+    }
+
+    /** Best-effort transport teardown on a failing bootstrap path. */
+    private static void shutdownQuietly(TransportBootstrap bootstrap) {
+        try {
+            bootstrap.shutdown();
+        } catch (Exception ignored) {
+            /* best-effort */
+        }
+    }
+
+    /**
      * Registers event handlers if {@code EventRegistry_<hash>} is present.
      *
      * <p>The generated registry class is named after the container — {@code EventRegistry_}
@@ -475,12 +526,27 @@ public final class Tiko {
             // No event handlers registered for this container - that's fine
             return;
         }
+        // Once the registry class is present, registration is NOT optional — the absent-registry
+        // case was already handled by the ClassNotFoundException return above. A failure here is a
+        // real defect (version drift, or a subscribe throwing on a decorated bus); surface it
+        // loudly naming the registry, rather than silently dropping every handler in the module (#348).
+        java.lang.reflect.Method registerMethod;
         try {
-            java.lang.reflect.Method registerMethod =
-                    registryClass.getMethod("registerHandlers", EventBus.class, containerClass);
+            registerMethod = registryClass.getMethod("registerHandlers", EventBus.class, containerClass);
+        } catch (NoSuchMethodException e) {
+            throw new ContainerInitializationException(
+                    registryFqn + " has no registerHandlers(EventBus, " + containerClass.getSimpleName()
+                            + ") method — rebuild with matching tiko-processor and tiko-runtime versions.",
+                    e);
+        }
+        try {
             registerMethod.invoke(null, eventBus, container);
-        } catch (Exception e) {
-            // Ignore - event registration is optional
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            throw new ContainerInitializationException(
+                    "Event handler registration failed in " + registryFqn + ": " + cause, cause);
+        } catch (IllegalAccessException e) {
+            throw new ContainerInitializationException(registryFqn + ".registerHandlers is not accessible.", e);
         }
     }
 
