@@ -134,6 +134,14 @@ forced via `shutdownNow()`. This means a server shutdown signal does not
 abruptly cancel async side-effects already queued on the executor — they drain
 cleanly within the configured window.
 
+Events published *after* shutdown has begun are dropped rather than dispatched —
+running handlers against singletons that have already been torn down would be worse —
+but the drop is **observable, never silent**: each dropped delivery logs a `WARNING`
+on `io.tiko.events` (#346). Delivery is not guaranteed once shutdown starts; if a
+handler must not miss late events, publish before initiating shutdown. The one residual
+edge is a task still queued when the drain budget expires and `shutdownNow()` cancels it —
+that is the deliberate cost of bounding shutdown, not a silent application-level loss.
+
 Two equivalent ways to configure the budget:
 
 **Programmatically:**

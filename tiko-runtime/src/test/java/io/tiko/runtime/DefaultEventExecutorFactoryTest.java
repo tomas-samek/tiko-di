@@ -24,7 +24,8 @@ class DefaultEventExecutorFactoryTest {
             assertThat(tpe.getKeepAliveTime(TimeUnit.SECONDS)).isEqualTo(60);
             assertThat(tpe.getQueue()).isInstanceOf(LinkedBlockingQueue.class);
             assertThat(tpe.getQueue().remainingCapacity()).isEqualTo(1024);
-            assertThat(tpe.getRejectedExecutionHandler()).isInstanceOf(ThreadPoolExecutor.CallerRunsPolicy.class);
+            // Shutdown-aware caller-runs (#346): backpressure while live, observable drop once stopping.
+            assertThat(tpe.getRejectedExecutionHandler()).isInstanceOf(ShutdownAwareCallerRunsPolicy.class);
         } finally {
             es.shutdownNow();
         }
