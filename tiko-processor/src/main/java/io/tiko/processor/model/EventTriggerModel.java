@@ -60,7 +60,9 @@ public final class EventTriggerModel {
         private Builder() {}
 
         public Builder eventName(String eventName) {
-            this.eventName = eventName;
+            // Optional trace label (#349): normalize null to "" — it is not a routing key, so
+            // an absent or blank name is valid (dispatch is by the handler's return type).
+            this.eventName = eventName == null ? "" : eventName;
             return this;
         }
 
@@ -85,8 +87,10 @@ public final class EventTriggerModel {
         }
 
         public EventTriggerModel build() {
-            if (eventName == null || eventName.isEmpty()) {
-                throw new IllegalStateException("EventName is required");
+            // eventName is an optional label (#349); no required-name check. Normalize a
+            // builder that was never given a name so getEventName() never returns null.
+            if (eventName == null) {
+                eventName = "";
             }
             return new EventTriggerModel(this);
         }

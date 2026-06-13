@@ -12,42 +12,40 @@ import java.lang.annotation.Target;
  * Declaratively triggers additional events after an event handler completes successfully.
  *
  * <p>This annotation enables event chaining without explicit EventBus injection. The return
- * value of the handler method becomes the payload of the triggered event.</p>
+ * value of the handler method becomes the payload of the triggered event, and the triggered
+ * event is <strong>routed by that return type</strong> — every {@code @EventHandler} of the
+ * returned type receives it. {@code eventName} is an optional human-readable label for the
+ * topology / tracing view only; it is <strong>not</strong> a routing key (see
+ * {@link #eventName()}). Model distinct intents as distinct return types, not as event names.</p>
  *
  * <p><strong>Basic Example:</strong></p>
  * <pre>{@code
  * @Component(scope = Scope.SINGLETON)
  * public class OrderService {
  *     @EventHandler
- *     @EventTrigger(eventName = "OrderProcessed")
+ *     @EventTrigger
  *     public OrderProcessedEvent onOrderCreated(OrderCreatedEvent event) {
  *         // Process order
  *         return new OrderProcessedEvent(event.orderId());
  *     }
- *     // When OrderCreatedEvent is published, after processing,
- *     // OrderProcessedEvent is automatically published
+ *     // When OrderCreatedEvent is published, after processing, the returned
+ *     // OrderProcessedEvent is automatically published to its @EventHandlers.
  * }
  * }</pre>
  *
- * <p><strong>Multiple Triggers:</strong></p>
- * <pre>{@code
- * @EventHandler
- * @EventTrigger(eventName = "OrderValidated")
- * @EventTrigger(eventName = "InventoryChecked")
- * @EventTrigger(eventName = "PaymentAuthorized")
- * public OrderValidationResult validate(OrderCreatedEvent event) {
- *     // All three events triggered with same payload (return value)
- *     return validateOrder(event);
- * }
- * }</pre>
+ * <p><strong>Multiple Triggers:</strong> the annotation is {@link Repeatable}, but because
+ * routing is by return type, every repeat publishes the <em>same</em> return value to the
+ * <em>same</em> handlers — repeating {@code @EventTrigger} with different {@code eventName}s
+ * does not create different events (names don't route) and only results in duplicate
+ * publishes. If you need genuinely distinct downstream events, return distinct types from
+ * distinct handlers rather than stacking triggers.</p>
  *
  * <p><strong>Async Processing:</strong></p>
  * <pre>{@code
  * @EventHandler
- * @EventTrigger(eventName = "EmailSent", async = true)
- * @EventTrigger(eventName = "NotificationSent", async = true)
+ * @EventTrigger(async = true)
  * public NotificationResult onUserRegistered(UserRegisteredEvent event) {
- *     // Async events fire in parallel, don't block main flow
+ *     // Published asynchronously — doesn't block the handler's completion.
  *     return new NotificationResult(event.userId());
  * }
  * }</pre>
@@ -55,9 +53,9 @@ import java.lang.annotation.Target;
  * <p><strong>Spread Collections:</strong></p>
  * <pre>{@code
  * @EventHandler
- * @EventTrigger(eventName = "IndividualOrderProcessed", spread = true)
+ * @EventTrigger(spread = true)
  * public List<Order> onBatchReceived(BatchReceivedEvent event) {
- *     // Each order in the list triggers separate IndividualOrderProcessed event
+ *     // Each Order in the list is published separately to Order handlers.
  *     return event.orders();
  * }
  * }</pre>
@@ -65,10 +63,7 @@ import java.lang.annotation.Target;
  * <p><strong>Conditional Triggering:</strong></p>
  * <pre>{@code
  * @EventHandler
- * @EventTrigger(
- *     eventName = "HighValueOrder",
- *     guard = HighValueGuard.class
- * )
+ * @EventTrigger(guard = HighValueGuard.class)
  * public OrderDetails onOrderCreated(OrderCreatedEvent event) {
  *     return getOrderDetails(event.orderId());
  * }
@@ -94,14 +89,20 @@ import java.lang.annotation.Target;
 public @interface EventTrigger {
 
     /**
-     * Name of the event to trigger after the handler completes successfully.
+     * Optional human-readable label for this trigger, surfaced in the generated
+     * {@code topology.json} and the MCP event-flow view for tracing and documentation.
      *
-     * <p>This can be either a simple event class name (e.g., "OrderProcessed")
-     * or a fully qualified event name for disambiguation.</p>
+     * <p><strong>It is not a routing key.</strong> The triggered event is dispatched by the
+     * handler's return type — every {@code @EventHandler} of that type receives it — exactly
+     * as if you had called {@code eventBus.publish(returnValue)}. The label has no effect on
+     * which handlers run; a typo or a rename changes only the trace label, never the wiring.
+     * Model distinct intents as distinct return types, not as event names.</p>
      *
-     * @return event name
+     * <p>Defaults to empty (no label).</p>
+     *
+     * @return the trace label, or {@code ""} for none
      */
-    String eventName();
+    String eventName() default "";
 
     /**
      * Whether to trigger the event asynchronously.
