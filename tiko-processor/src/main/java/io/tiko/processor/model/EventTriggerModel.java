@@ -52,7 +52,9 @@ public final class EventTriggerModel {
     }
 
     public static final class Builder {
-        private String eventName;
+        // Optional trace label (#349): defaults to "" so an @EventTrigger without a name is
+        // valid. It is not a routing key — dispatch is by the handler's return type.
+        private String eventName = "";
         private boolean async = false;
         private boolean spread = false;
         private List<TypeMirror> guardClasses = new ArrayList<>();
@@ -85,9 +87,7 @@ public final class EventTriggerModel {
         }
 
         public EventTriggerModel build() {
-            if (eventName == null || eventName.isEmpty()) {
-                throw new IllegalStateException("EventName is required");
-            }
+            // eventName is an optional label (#349) — no required-name check.
             return new EventTriggerModel(this);
         }
     }

@@ -55,6 +55,7 @@ These are explicit, not accidents of implementation. A handler that depends on d
 - **Backpressure — publishers never block on handler work.** Async handlers run on a bounded executor; `bus.publish(...)` returns once the event is enqueued. Synchronous in-process delivery is the default for handlers without `async = true`, and remains an option per handler — it is not the publisher's responsibility to throttle.
 - **Transactional semantics — request-scope buffering built in, outbox recommended for crash safety.** Events published inside `runInEventScope` are buffered and only released when the scope exits successfully; on failure they are dropped. Persistence-backed outbox (for crash safety across the JVM boundary) is the consumer's responsibility — Tiko does not own a database.
 - **Error handling — log + isolate by default, per-handler policy configurable.** A throwing handler does not propagate to the publisher and does not break sibling handlers. See [Error handling](#error-handling) below.
+- **Routing is by event type, not by name.** A handler subscribes to a payload *type*; an event reaches every `@EventHandler` of that type. Tiko deliberately has no name-keyed dispatch — model distinct intents as distinct types (`CustomerAdded` / `SupplierAdded`), not as one type fanned out by string name. `@EventTrigger(eventName = "...")` is therefore an optional trace label for the topology view, never a routing key. This keeps wiring compile-time-checked: a typo or rename can't silently misroute an event, because there is no name to mistype.
 
 ## Error handling
 
@@ -272,7 +273,7 @@ public class DistributedTracer {
 
 ## Event chains with `@EventTrigger`
 
-Declarative event workflows: an `@EventHandler` can automatically trigger one or more follow-on events when it completes successfully. The handler's return value becomes the payload of the next event.
+Declarative event workflows: an `@EventHandler` can automatically trigger one or more follow-on events when it completes successfully. The handler's return value becomes the payload of the next event, and it is **routed by that return type** — the next handler subscribes to the type, not to a name. `@EventTrigger(eventName = "...")` is an optional human-readable label for the topology/tracing view only; it never affects which handlers run. The chain below works because each step returns a *distinct type*.
 
 ### Basic chain
 
@@ -280,20 +281,20 @@ Declarative event workflows: an `@EventHandler` can automatically trigger one or
 @Component(scope = Scope.SINGLETON)
 public class OrderWorkflow {
     @EventHandler
-    @EventTrigger(eventName = "OrderValidated")
+    @EventTrigger
     public ValidationResult onOrderCreated(OrderCreatedEvent event) {
-        // Return value becomes payload of OrderValidated
+        // The returned ValidationResult is published to ValidationResult handlers.
         return validateOrder(event.order());
     }
 
     @EventHandler
-    @EventTrigger(eventName = "PaymentProcessed")
+    @EventTrigger
     public PaymentResult onOrderValidated(ValidationResult validation) {
         return processPayment(validation.orderId());
     }
 
     @EventHandler
-    @EventTrigger(eventName = "OrderShipped")
+    @EventTrigger
     public ShipmentResult onPaymentProcessed(PaymentResult payment) {
         return shipOrder(payment.orderId());
     }
@@ -310,24 +311,15 @@ container.events().publish(new OrderCreatedEvent(order));
 
 ### Multiple triggers
 
-```java
-@EventHandler
-@EventTrigger(eventName = "InventoryReserved")
-@EventTrigger(eventName = "NotificationSent", async = true)
-@EventTrigger(eventName = "AnalyticsTracked", async = true)
-public OrderDetails onOrderCreated(OrderCreatedEvent event) {
-    // All three follow-ons get the same payload (the return value)
-    return getOrderDetails(event.orderId());
-}
-```
+The annotation is repeatable, but since routing is by return type, **every repeat publishes the same return value to the same handlers**. Repeating `@EventTrigger` with different `eventName`s does not create different events — names don't route, so additional triggers of the same return type just deliver duplicates. For genuinely distinct downstream events, return distinct types from distinct handlers rather than stacking triggers on one method.
 
 ### Spread collections
 
 ```java
 @EventHandler
-@EventTrigger(eventName = "IndividualOrderProcessed", spread = true)
+@EventTrigger(spread = true)
 public List<Order> onBatchReceived(BatchReceivedEvent event) {
-    // Each order in the list triggers a separate IndividualOrderProcessed event
+    // Each Order in the list is published separately to Order handlers
     return event.orders();
 }
 
