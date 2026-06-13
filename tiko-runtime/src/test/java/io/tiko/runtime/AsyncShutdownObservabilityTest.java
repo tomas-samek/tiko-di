@@ -52,7 +52,8 @@ class AsyncShutdownObservabilityTest {
         new ShutdownAwareCallerRunsPolicy().rejectedExecution(() -> ran.set(true), pool);
 
         assertThat(ran).isFalse();
-        assertThat(CapturingLoggerFinder.RECORDS)
+        var records = CapturingLoggerFinder.RECORDS;
+        assertThat(records)
                 .anyMatch(r -> r.level() == System.Logger.Level.WARNING
                         && r.message().toLowerCase().contains("shut"));
     }
@@ -61,7 +62,8 @@ class AsyncShutdownObservabilityTest {
     void droppedDuringShutdownHelperWarnsNamingTheEventType() {
         EventChainContext.logDroppedDuringShutdown(new DropPing());
 
-        assertThat(CapturingLoggerFinder.RECORDS)
+        var records = CapturingLoggerFinder.RECORDS;
+        assertThat(records)
                 .anyMatch(r ->
                         r.level() == System.Logger.Level.WARNING && r.message().contains("DropPing"));
     }
