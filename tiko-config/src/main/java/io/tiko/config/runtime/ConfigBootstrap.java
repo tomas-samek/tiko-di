@@ -86,7 +86,7 @@ public final class ConfigBootstrap {
         }
         for (String k : interpolated.keySet()) {
             if (!claimed.contains(k) && !claimedFirstSegments.contains(k)) {
-                String hint = NearestKey.hint(k, claimed, java.util.function.Function.identity());
+                String hint = NearestKey.hint(k, claimed, java.util.function.UnaryOperator.identity());
                 ctx.reportAtPath(ConfigIssueCode.UNKNOWN_SECTION, k, "unknown top-level section '" + k + "'." + hint);
             }
         }

@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class NestedRecordSupportTest {
@@ -86,7 +87,8 @@ class NestedRecordSupportTest {
     void checkUnknownKeys_throws_with_record_name_and_first_unknown_key() {
         Map<String, Object> node = new LinkedHashMap<>();
         node.put("typo", "x");
-        assertThatThrownBy(() -> NestedRecordSupport.checkUnknownKeys(node, "DbConfig", java.util.Set.of("url")))
+        Set<String> known = Set.of("url");
+        assertThatThrownBy(() -> NestedRecordSupport.checkUnknownKeys(node, "DbConfig", known))
                 .isInstanceOf(CoercionException.class)
                 .hasMessage("DbConfig unknown key 'typo'.");
     }
@@ -95,8 +97,8 @@ class NestedRecordSupportTest {
     void checkUnknownKeys_suggests_nearest_field() {
         Map<String, Object> node = new LinkedHashMap<>();
         node.put("pool-size", "x"); // kebab-case near-miss for poolSize
-        assertThatThrownBy(() ->
-                        NestedRecordSupport.checkUnknownKeys(node, "DbConfig", java.util.Set.of("url", "poolSize")))
+        Set<String> known = Set.of("url", "poolSize");
+        assertThatThrownBy(() -> NestedRecordSupport.checkUnknownKeys(node, "DbConfig", known))
                 .isInstanceOf(CoercionException.class)
                 .hasMessage("DbConfig unknown key 'pool-size'. Did you mean 'poolSize'?");
     }

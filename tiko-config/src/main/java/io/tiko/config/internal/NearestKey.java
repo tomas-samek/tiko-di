@@ -1,6 +1,7 @@
 package io.tiko.config.internal;
 
 import java.util.Set;
+import java.util.function.UnaryOperator;
 
 /**
  * Nearest-match "did you mean" suggestion for config keys, shared by the top-level
@@ -42,10 +43,9 @@ public final class NearestKey {
      * Renders a {@code " Did you mean '<display>'?"} fragment for the nearest candidate,
      * or an empty string when nothing is close enough. {@code display} maps the bare
      * matched candidate to how it should be shown (e.g. prefixed with the section path);
-     * pass {@link java.util.function.Function#identity()} to show the candidate verbatim.
+     * pass {@link UnaryOperator#identity()} to show the candidate verbatim.
      */
-    public static String hint(
-            String input, Set<String> candidates, java.util.function.Function<String, String> display) {
+    public static String hint(String input, Set<String> candidates, UnaryOperator<String> display) {
         String suggestion = suggest(input, candidates);
         return suggestion != null ? " Did you mean '" + display.apply(suggestion) + "'?" : "";
     }

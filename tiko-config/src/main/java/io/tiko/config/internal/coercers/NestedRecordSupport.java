@@ -99,7 +99,7 @@ public final class NestedRecordSupport {
     public static void checkUnknownKeys(Map<String, Object> node, String recordName, Set<String> known) {
         if (!node.isEmpty()) {
             String unknown = node.keySet().iterator().next();
-            String hint = NearestKey.hint(unknown, known, java.util.function.Function.identity());
+            String hint = NearestKey.hint(unknown, known, java.util.function.UnaryOperator.identity());
             throw new CoercionException(recordName + " unknown key '" + unknown + "'." + hint);
         }
     }

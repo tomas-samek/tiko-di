@@ -3,7 +3,7 @@ package io.tiko.config.internal;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Set;
-import java.util.function.Function;
+import java.util.function.UnaryOperator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -36,7 +36,7 @@ class NearestKeyTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("hints")
     void hint_renders_only_for_close_matches(String name, String input, Set<String> candidates, String expected) {
-        assertThat(NearestKey.hint(input, candidates, Function.identity())).isEqualTo(expected);
+        assertThat(NearestKey.hint(input, candidates, UnaryOperator.identity())).isEqualTo(expected);
     }
 
     @Test
