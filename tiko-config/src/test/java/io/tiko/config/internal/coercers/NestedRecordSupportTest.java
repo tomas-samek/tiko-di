@@ -78,7 +78,7 @@ class NestedRecordSupportTest {
 
     @Test
     void checkUnknownKeys_passes_for_empty_node() {
-        NestedRecordSupport.checkUnknownKeys(new LinkedHashMap<>(), "X");
+        NestedRecordSupport.checkUnknownKeys(new LinkedHashMap<>(), "X", java.util.Set.of("a"));
         // no exception
     }
 
@@ -86,8 +86,18 @@ class NestedRecordSupportTest {
     void checkUnknownKeys_throws_with_record_name_and_first_unknown_key() {
         Map<String, Object> node = new LinkedHashMap<>();
         node.put("typo", "x");
-        assertThatThrownBy(() -> NestedRecordSupport.checkUnknownKeys(node, "DbConfig"))
+        assertThatThrownBy(() -> NestedRecordSupport.checkUnknownKeys(node, "DbConfig", java.util.Set.of("url")))
                 .isInstanceOf(CoercionException.class)
-                .hasMessage("DbConfig unknown key 'typo'");
+                .hasMessage("DbConfig unknown key 'typo'.");
+    }
+
+    @Test
+    void checkUnknownKeys_suggests_nearest_field() {
+        Map<String, Object> node = new LinkedHashMap<>();
+        node.put("pool-size", "x"); // kebab-case near-miss for poolSize
+        assertThatThrownBy(() ->
+                        NestedRecordSupport.checkUnknownKeys(node, "DbConfig", java.util.Set.of("url", "poolSize")))
+                .isInstanceOf(CoercionException.class)
+                .hasMessage("DbConfig unknown key 'pool-size'. Did you mean 'poolSize'?");
     }
 }

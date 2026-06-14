@@ -9,6 +9,7 @@ import io.tiko.config.BindContext;
 import io.tiko.config.ConfigBinder;
 import io.tiko.config.ConfigValidationException;
 import io.tiko.config.internal.Interpolator;
+import io.tiko.config.internal.NearestKey;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -85,8 +86,7 @@ public final class ConfigBootstrap {
         }
         for (String k : interpolated.keySet()) {
             if (!claimed.contains(k) && !claimedFirstSegments.contains(k)) {
-                String suggestion = nearest(k, claimed);
-                String hint = suggestion != null ? " Did you mean '" + suggestion + "'?" : "";
+                String hint = NearestKey.hint(k, claimed, java.util.function.Function.identity());
                 ctx.reportAtPath(ConfigIssueCode.UNKNOWN_SECTION, k, "unknown top-level section '" + k + "'." + hint);
             }
         }
@@ -110,33 +110,5 @@ public final class ConfigBootstrap {
             throw cve;
         }
         return bound;
-    }
-
-    private static String nearest(String input, Set<String> candidates) {
-        String best = null;
-        int bestDist = Integer.MAX_VALUE;
-        for (String c : candidates) {
-            int d = levenshtein(input, c);
-            if (d < bestDist) {
-                bestDist = d;
-                best = c;
-            }
-        }
-        return (bestDist <= 2) ? best : null;
-    }
-
-    private static int levenshtein(String a, String b) {
-        int[] prev = new int[b.length() + 1];
-        for (int j = 0; j <= b.length(); j++) prev[j] = j;
-        for (int i = 1; i <= a.length(); i++) {
-            int[] curr = new int[b.length() + 1];
-            curr[0] = i;
-            for (int j = 1; j <= b.length(); j++) {
-                int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
-                curr[j] = Math.min(Math.min(curr[j - 1] + 1, prev[j] + 1), prev[j - 1] + cost);
-            }
-            prev = curr;
-        }
-        return prev[b.length()];
     }
 }

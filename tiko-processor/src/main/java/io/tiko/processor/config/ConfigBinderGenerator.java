@@ -243,12 +243,14 @@ public final class ConfigBinderGenerator {
                 recordSimpleName);
 
         StringBuilder ctorArgs = new StringBuilder();
+        Set<String> knownKeys = new LinkedHashSet<>();
 
         java.util.List<VariableElement> components = enclosedRecordComponents(record);
         for (int i = 0; i < components.size(); i++) {
             VariableElement comp = components.get(i);
             String fieldName = comp.getSimpleName().toString();
             String yamlKey = readKeyAnnotation(record, comp).orElse(fieldName);
+            knownKeys.add(yamlKey);
 
             TypeMirror raw = comp.asType();
             TypeMirror inner = unwrapOptional(raw);
@@ -294,7 +296,12 @@ public final class ConfigBinderGenerator {
             ctorArgs.append(varName);
         }
 
-        doCoerce.addStatement("$T.checkUnknownKeys(node, $S)", NestedRecordSupport.class, recordSimpleName);
+        doCoerce.addStatement(
+                "$T.checkUnknownKeys(node, $S, $T.of($L))",
+                NestedRecordSupport.class,
+                recordSimpleName,
+                Set.class,
+                quotedJoin(knownKeys));
         doCoerce.addStatement("return new $T($L)", recordType, ctorArgs.toString());
 
         // coercer() returns a method reference to doCoerce — a single statement that

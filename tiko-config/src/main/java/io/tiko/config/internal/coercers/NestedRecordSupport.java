@@ -1,9 +1,11 @@
 // tiko-config/src/main/java/io/tiko/config/internal/coercers/NestedRecordSupport.java
 package io.tiko.config.internal.coercers;
 
+import io.tiko.config.internal.NearestKey;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Internal helpers used exclusively by generated nested-record coercers.
@@ -90,12 +92,15 @@ public final class NestedRecordSupport {
      * mirrors {@link io.tiko.config.BindContext#checkUnknownKeys} for top-level binders.
      *
      * <p>Throws on the first unknown key — nested binding terminates on first error,
-     * unlike top-level binding which accumulates.
+     * unlike top-level binding which accumulates. {@code known} is the record's field
+     * names, used to suggest the nearest valid key (parity with the top-level and
+     * field-level "did you mean" treatment).
      */
-    public static void checkUnknownKeys(Map<String, Object> node, String recordName) {
+    public static void checkUnknownKeys(Map<String, Object> node, String recordName, Set<String> known) {
         if (!node.isEmpty()) {
-            throw new CoercionException(
-                    recordName + " unknown key '" + node.keySet().iterator().next() + "'");
+            String unknown = node.keySet().iterator().next();
+            String hint = NearestKey.hint(unknown, known, java.util.function.Function.identity());
+            throw new CoercionException(recordName + " unknown key '" + unknown + "'." + hint);
         }
     }
 

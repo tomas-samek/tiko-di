@@ -71,7 +71,7 @@ class ConfigBinderGeneratorTest {
         assertThat(nestedContent).contains("NestedRecordSupport.requireMap");
         assertThat(nestedContent).contains("NestedRecordSupport.requireField(node, \"url\"");
         assertThat(nestedContent).contains("NestedRecordSupport.requireField(node, \"max\"");
-        assertThat(nestedContent).contains("NestedRecordSupport.checkUnknownKeys(node, \"DbConfig\")");
+        assertThat(nestedContent).contains("NestedRecordSupport.checkUnknownKeys(node, \"DbConfig\", Set.of(");
         assertThat(nestedContent).contains("return new DbConfig(");
 
         // The outer binder references the generated nested coercer.
