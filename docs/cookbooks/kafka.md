@@ -133,12 +133,11 @@ tiko:
     autoOffsetReset: earliest
 ```
 
-> **⚠️ Maintainer-verify (ties to #310):** the exact key casing the binder accepts —
-> camelCase (`bootstrapServers`) vs kebab-case (`bootstrap-servers`) — and whether a
-> mismatch fails fast with a "did-you-mean" is the subject of open issue #310. This
-> block uses camelCase to mirror the record field names; confirm against the binder /
-> `defaults.yaml` before merge, and keep your own `@Configuration` records' keys
-> aligned to their field names the same way.
+> **Key casing (resolved in #310):** config binding is **exact-key** — the YAML key
+> must match the record field name verbatim. Use camelCase (`bootstrapServers`), not
+> kebab-case (`bootstrap-servers`) or snake_case. A near-miss fails the build with a
+> "did you mean 'bootstrapServers'?" suggestion rather than binding silently. Keep your
+> own `@Configuration` records' keys aligned to their field names the same way.
 
 ## 5. Poison messages (undeserializable records)
 
