@@ -167,8 +167,10 @@ public final class EventRegistryGenerator {
 
         // Subscriptions are never released from the bus, and per-component getters carry no
         // stopped gate — so the dispatcher drops the delivery once shutdown has gated the
-        // container, or it would run handlers on destroyed singletons (#337).
+        // container, or it would run handlers on destroyed singletons (#337). The drop is
+        // logged, not silent, so a post-shutdown publish leaves a trace (#346).
         method.beginControlFlow("if (container.__isStopped())");
+        method.addStatement("$T.logDroppedDuringShutdown(event)", CHAIN_CONTEXT);
         method.addStatement("return");
         method.endControlFlow();
 

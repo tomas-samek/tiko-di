@@ -17,9 +17,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  *   <li>Max pool: {@code availableProcessors() * 4}</li>
  *   <li>Keep-alive: 60 seconds</li>
  *   <li>Queue: bounded {@link LinkedBlockingQueue} with capacity 1024</li>
- *   <li>Rejection policy: {@link ThreadPoolExecutor.CallerRunsPolicy} — under sustained
- *       overload the publisher thread runs the rejected task itself, providing
- *       backpressure rather than dropping events.</li>
+ *   <li>Rejection policy: {@link ShutdownAwareCallerRunsPolicy} — caller-runs backpressure
+ *       while the pool is live, and an observable WARNING (never a silent drop, never a
+ *       throw) for tasks rejected once the pool is shutting down (#346).</li>
  *   <li>Threads: daemon, named {@code tiko-event-async-{n}}.</li>
  * </ul>
  *
@@ -53,6 +53,6 @@ public final class DefaultEventExecutorFactory {
                 TimeUnit.SECONDS,
                 new LinkedBlockingQueue<>(1024),
                 threadFactory,
-                new ThreadPoolExecutor.CallerRunsPolicy());
+                new ShutdownAwareCallerRunsPolicy());
     }
 }

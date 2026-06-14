@@ -47,7 +47,9 @@ class EventRegistryPostShutdownGateTest {
 
         assertThat(registry)
                 .as("each dispatcher must drop deliveries once the container is stopped")
-                .contains("container.__isStopped()");
+                .contains("container.__isStopped()")
+                .as("the drop must be observable, not silent (#346)")
+                .contains("logDroppedDuringShutdown(event)");
         assertThat(container)
                 .as("the container must expose the stopped flag to its registry")
                 .contains("__isStopped");

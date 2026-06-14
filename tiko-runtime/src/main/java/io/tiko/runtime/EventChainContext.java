@@ -64,6 +64,22 @@ public final class EventChainContext {
     }
 
     /**
+     * Observability for an event dropped because the container is shutting down (#346).
+     * Called exclusively from generated {@code EventRegistry} code at the stopped-gate: once
+     * shutdown has gated the container the dispatcher skips delivery (it would otherwise run
+     * handlers on destroyed singletons, #337), and this WARNING records the dropped event
+     * rather than letting it vanish silently. Kept here so generated source imports no logging
+     * framework.
+     *
+     * @param event the event whose delivery was skipped
+     */
+    public static void logDroppedDuringShutdown(Object event) {
+        String type = event == null ? "null" : event.getClass().getName();
+        LoggerHolder.LOG.log(
+                System.Logger.Level.WARNING, "Event of type " + type + " was dropped: the container is shutting down.");
+    }
+
+    /**
      * Wraps {@code payload} in an {@link Event}, chaining its origin to the wrapper currently
      * being delivered on this thread (if any).
      */
