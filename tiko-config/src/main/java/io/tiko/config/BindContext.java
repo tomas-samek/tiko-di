@@ -5,6 +5,7 @@ import io.tiko.ConfigIssue;
 import io.tiko.ConfigIssueCode;
 import io.tiko.SourceLocation;
 import io.tiko.config.internal.ConfigError;
+import io.tiko.config.internal.NearestKey;
 import io.tiko.config.internal.coercers.CoercionException;
 import io.tiko.config.internal.coercers.TypeCoercer;
 import java.util.ArrayList;
@@ -218,10 +219,11 @@ public final class BindContext {
     public void checkUnknownKeys(Map<String, Object> node, String sectionPath, Set<String> known) {
         for (String k : node.keySet()) {
             if (!known.contains(k)) {
+                String hint = NearestKey.hint(k, known, suggestion -> sectionPath + "." + suggestion);
                 reportAtPath(
                         ConfigIssueCode.UNKNOWN_KEY,
                         sectionPath + "." + k,
-                        "unknown key '" + sectionPath + "." + k + "'");
+                        "unknown key '" + sectionPath + "." + k + "'." + hint);
             }
         }
     }

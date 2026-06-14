@@ -44,7 +44,7 @@ class NestedRecordEndToEndTest {
             Map<String, Object> node = NestedRecordSupport.requireMap(raw, "DbConfig");
             String url = NestedRecordSupport.requireField(node, "url", "DbConfig", Coercers.stringCoercer());
             int max = NestedRecordSupport.fieldOrDefault(node, "max", "DbConfig", Coercers.intCoercer(), 10);
-            NestedRecordSupport.checkUnknownKeys(node, "DbConfig");
+            NestedRecordSupport.checkUnknownKeys(node, "DbConfig", java.util.Set.of("url", "max"));
             return new DbConfig(url, max);
         };
     }
@@ -54,7 +54,7 @@ class NestedRecordEndToEndTest {
             Map<String, Object> node = NestedRecordSupport.requireMap(raw, "Endpoint");
             String host = NestedRecordSupport.requireField(node, "host", "Endpoint", Coercers.stringCoercer());
             int port = NestedRecordSupport.requireField(node, "port", "Endpoint", Coercers.intCoercer());
-            NestedRecordSupport.checkUnknownKeys(node, "Endpoint");
+            NestedRecordSupport.checkUnknownKeys(node, "Endpoint", java.util.Set.of("host", "port"));
             return new Endpoint(host, port);
         };
     }
@@ -64,7 +64,7 @@ class NestedRecordEndToEndTest {
             Map<String, Object> node = NestedRecordSupport.requireMap(raw, "FeatureFlag");
             boolean enabled =
                     NestedRecordSupport.requireField(node, "enabled", "FeatureFlag", Coercers.booleanCoercer());
-            NestedRecordSupport.checkUnknownKeys(node, "FeatureFlag");
+            NestedRecordSupport.checkUnknownKeys(node, "FeatureFlag", java.util.Set.of("enabled"));
             return new FeatureFlag(enabled);
         };
     }

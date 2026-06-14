@@ -84,4 +84,30 @@ class BindContextTest {
         assertThat(ctx.errors()).hasSize(2);
         assertThat(ctx.errors().get(0).message()).contains("unknown");
     }
+
+    @Test
+    void checkUnknownKeys_suggests_nearest_field() {
+        BindContext ctx = new BindContext("c.yaml");
+        Map<String, Object> node = new java.util.LinkedHashMap<>();
+        node.put("pool-size", "x"); // kebab-case near-miss for poolSize
+
+        ctx.checkUnknownKeys(node, "db", Set.of("url", "poolSize"));
+
+        assertThat(ctx.errors()).hasSize(1);
+        assertThat(ctx.errors().get(0).message())
+                .contains("unknown key 'db.pool-size'")
+                .contains("Did you mean 'db.poolSize'?");
+    }
+
+    @Test
+    void checkUnknownKeys_omits_suggestion_when_nothing_is_close() {
+        BindContext ctx = new BindContext("c.yaml");
+        Map<String, Object> node = new java.util.LinkedHashMap<>();
+        node.put("completelyUnrelated", "x");
+
+        ctx.checkUnknownKeys(node, "db", Set.of("url"));
+
+        assertThat(ctx.errors()).hasSize(1);
+        assertThat(ctx.errors().get(0).message()).contains("unknown").doesNotContain("Did you mean");
+    }
 }
