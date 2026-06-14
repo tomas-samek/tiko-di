@@ -138,8 +138,15 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
                 Object payload = serializer.deserialize(r.value(), source.payloadType());
                 KafkaContext ctx = new KafkaContext(
                         r.topic(), r.partition(), r.offset(), Instant.ofEpochMilli(r.timestamp()), r.headers());
-                Object event = source.dispatcher().dispatch(container, payload, ctx);
-                eventBus.publish(event);
+                // Each consumed message is one unit of work (#347): open a fresh EVENT scope so
+                // EVENT-scoped beans resolve and tear down per message and unit lifecycle events
+                // publish. The scope closes (teardown runs) BEFORE commit, so per-unit resources
+                // flush before the offset is acknowledged. Sync handlers run in this frame; async
+                // handlers detach to the executor with their own scope (#220).
+                container.runInEventScope(() -> {
+                    Object event = source.dispatcher().dispatch(container, payload, ctx);
+                    eventBus.publish(event);
+                });
                 consumer.commitSync(Map.of(tp, new OffsetAndMetadata(r.offset() + 1)));
             } catch (WakeupException wakeup) {
                 throw wakeup; // orderly shutdown — handled by run()
