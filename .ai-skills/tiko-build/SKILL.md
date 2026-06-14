@@ -131,10 +131,63 @@ Every recipe = one factory class. Construction shape + lifecycle is enough.
 | HTTP layer | Javalin | `@Produces Javalin` + `@PreDestroy app.stop()`. Routes registered in `Main`. |
 | Templates | FreeMarker | `@Produces freemarker.template.Configuration`. No lifecycle. |
 | SDK client | any | `@Produces ClientType`. Add `@PreDestroy` if not `AutoCloseable`. |
-| Messaging (Kafka) | tiko-kafka | Use `@KafkaSource`/`@KafkaSink`; **not** a generic `@Produces` recipe. |
+| Messaging (Kafka) | tiko-kafka | `@KafkaSource`/`@KafkaSink` bridges — **not** a `@Produces` recipe. Write the shape below, not a "void consumer". |
 
 See [`docs/orchestrator-model.md` §3](../../docs/orchestrator-model.md) for
 the full code snippets and lifecycle notes per recipe.
+
+## Kafka transport: write this shape first
+
+The obvious instinct — a `void` method that consumes a record and calls a
+service — **fails the processor**. A `@KafkaSource` is a *bridge into the local
+event bus*, not a consumer: it has three hard compile-time rules.
+
+1. Enclosing class is `@Component(scope = Scope.SINGLETON)`.
+2. The method is **non-void** — it returns the local event payload.
+3. It carries a sibling **`@EventTrigger`** on the same method.
+
+The return value is published on the local bus **by its type**; an ordinary
+`@EventHandler` for that type does the work. This is the canonical inbound
+shape (verbatim from `tiko-examples/08_kafka_order_warehouse`):
+
+```java
+@Component(scope = Scope.SINGLETON)
+public class OrderKafkaConsumer {
+
+    @KafkaSource(topic = "orders")
+    @EventTrigger(eventName = "OrderPlaced")   // sibling trigger is required
+    public OrderPlaced fromKafka(OrderPlaced payload) {
+        return payload;                        // non-void: becomes the local event
+    }
+}
+
+@Component(scope = Scope.SINGLETON)
+public class WarehouseService {
+    @EventHandler
+    public void on(OrderPlaced event) { /* the actual work — dispatched by type */ }
+}
+```
+
+Outbound is the mirror: a `@KafkaSink` is subscribed by the runtime to its
+parameter type — when that event is published locally, the return value is
+serialized to the topic. Same `SINGLETON` rule; **do not** also add
+`@EventHandler` (that double-fires). `partitionKey` names an accessor on the
+return type for the message key.
+
+```java
+@Component(scope = Scope.SINGLETON)
+public class OrderKafkaPublisher {
+
+    @KafkaSink(topic = "orders", partitionKey = "orderId")
+    public OrderPlaced toKafka(OrderPlaced event) {
+        return event;
+    }
+}
+```
+
+Broker config binds to `tiko.kafka.*` (exact-key, camelCase —
+`bootstrapServers`, not `bootstrap-servers`). Full contract, configuration, and
+the poison-record story: [`docs/cookbooks/kafka.md`](../../docs/cookbooks/kafka.md).
 
 ## Anti-pattern redirect table
 
