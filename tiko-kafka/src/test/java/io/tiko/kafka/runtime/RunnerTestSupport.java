@@ -27,6 +27,10 @@ final class RunnerTestSupport {
     private RunnerTestSupport() {}
 
     static KafkaConfig config() {
+        return config("SEEK");
+    }
+
+    static KafkaConfig config(String poisonRecordPolicy) {
         return new KafkaConfig(
                 "unused:9092",
                 "g",
@@ -35,7 +39,8 @@ final class RunnerTestSupport {
                 Duration.ofMillis(10),
                 Duration.ofSeconds(2),
                 Map.of(),
-                Map.of());
+                Map.of(),
+                poisonRecordPolicy);
     }
 
     /**

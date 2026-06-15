@@ -78,6 +78,12 @@ public final class KafkaConfigBinder implements ConfigBinder<KafkaConfig> {
                 "tiko.kafka.consumer-properties",
                 CompositeCoercers.map(Coercers.stringCoercer()),
                 null);
+        String poisonRecordPolicy = ctx.scalarOrDefault(
+                node,
+                "poison-record-policy",
+                "tiko.kafka.poison-record-policy",
+                Coercers.stringCoercer(),
+                Coercers.stringCoercer().coerce("SEEK"));
         ctx.checkUnknownKeys(
                 node,
                 "tiko.kafka",
@@ -89,7 +95,8 @@ public final class KafkaConfigBinder implements ConfigBinder<KafkaConfig> {
                         "poll-timeout",
                         "shutdown-timeout",
                         "producer-properties",
-                        "consumer-properties"));
+                        "consumer-properties",
+                        "poison-record-policy"));
         return new KafkaConfig(
                 bootstrapServers,
                 consumerGroup,
@@ -98,6 +105,7 @@ public final class KafkaConfigBinder implements ConfigBinder<KafkaConfig> {
                 pollTimeout,
                 shutdownTimeout,
                 producerProperties,
-                consumerProperties);
+                consumerProperties,
+                poisonRecordPolicy);
     }
 }
