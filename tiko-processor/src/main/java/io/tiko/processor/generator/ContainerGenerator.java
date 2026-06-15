@@ -734,11 +734,38 @@ public final class ContainerGenerator {
                 ? dependency.getUnwrappedType().orElseThrow().toString()
                 : dependency.getTypeName();
 
-        // @Pick: route to the picked impl's getter (see resolvePickedCall).
+        // @Pick: route to the picked impl's getter. When @Named is also present, the
+        // qualifier narrows the lookup to a specific provider via the (impl#name) key —
+        // typically one of several @Produces methods that all return the picked class.
+        // Mirrors ComponentFactoryGenerator without the "container." prefix.
         if (dependency.isPicked()) {
-            return resolvePickedCall(dependency);
+            String pickedFqn = dependency.getPickedTypeName().orElseThrow();
+            Object pickedProvider = dependency
+                    .getQualifier()
+                    .map(q ->
+                            context.findComponentOrFactory(pickedFqn + "#" + q).orElse(null))
+                    .orElseGet(() -> context.findByImplClass(pickedFqn).orElse(null));
+            String pickedCall;
+            if (pickedProvider instanceof FactoryMethodModel pickedFactory) {
+                pickedCall = factoryGetterName(pickedFactory) + "()";
+            } else if (pickedProvider instanceof ComponentModel pickedComponent) {
+                pickedCall = "get" + pickedComponent.getClassName() + "()";
+            } else {
+                pickedCall = "get" + simpleClassName(pickedFqn) + "()";
+            }
+            return dependency.isProvider() ? "() -> " + pickedCall : pickedCall;
         }
 
+        return resolveProviderCall(dependency, typeName);
+    }
+
+    /**
+     * Resolves a non-picked, non-built-in dependency to its container getter call (component
+     * getter, {@code produce_*} factory getter, {@code get(Class)} for {@code @Configuration},
+     * or a qualified {@code get(Class, name)}), wrapping in a lazy lambda for {@code Provider<T>}.
+     * Extracted from {@link #generateContainerGetCall} to keep that method's branching in check.
+     */
+    private String resolveProviderCall(DependencyModel dependency, String typeName) {
         Object provider =
                 context.findComponentOrFactory(dependency.getDependencyKey()).orElse(null);
 
@@ -763,30 +790,6 @@ public final class ContainerGenerator {
         }
 
         return dependency.isProvider() ? "() -> " + call : call;
-    }
-
-    /**
-     * Resolves a {@code @Pick}ed dependency to the picked impl's getter call. When {@code @Named}
-     * is also present, the qualifier narrows the lookup to a specific provider via the
-     * {@code (impl#name)} key — typically one of several {@code @Produces} methods that all return
-     * the picked class. Mirrors {@link ComponentFactoryGenerator} without the {@code container.}
-     * prefix (we are inside the container).
-     */
-    private String resolvePickedCall(DependencyModel dependency) {
-        String pickedFqn = dependency.getPickedTypeName().orElseThrow();
-        Object pickedProvider = dependency
-                .getQualifier()
-                .map(q -> context.findComponentOrFactory(pickedFqn + "#" + q).orElse(null))
-                .orElseGet(() -> context.findByImplClass(pickedFqn).orElse(null));
-        String pickedCall;
-        if (pickedProvider instanceof FactoryMethodModel pickedFactory) {
-            pickedCall = factoryGetterName(pickedFactory) + "()";
-        } else if (pickedProvider instanceof ComponentModel pickedComponent) {
-            pickedCall = "get" + pickedComponent.getClassName() + "()";
-        } else {
-            pickedCall = "get" + simpleClassName(pickedFqn) + "()";
-        }
-        return dependency.isProvider() ? "() -> " + pickedCall : pickedCall;
     }
 
     private static String factoryGetterName(FactoryMethodModel factory) {
