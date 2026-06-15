@@ -62,13 +62,10 @@ public final class DependencyGraphValidator {
         boolean valid = true;
 
         for (DependencyModel dependency : component.getDependencies()) {
-            // Picker<T> doesn't resolve to a single provider — its existence check
-            // ("at least one impl of T") lives in PickerValidator.
-            if (dependency.isPicker()) {
-                continue;
-            }
-            // EventBus is a built-in, container-provided dependency (#314) — not a user bean.
-            if (dependency.isEventBus()) {
+            // Skip dependencies that don't resolve to a single user-declared provider here:
+            //  - Picker<T>: its "at least one impl of T" check lives in PickerValidator.
+            //  - EventBus: a built-in, container-provided dependency (#314), not a user bean.
+            if (dependency.isPicker() || dependency.isEventBus()) {
                 continue;
             }
             String depKey = dependency.getDependencyKey();
@@ -114,11 +111,9 @@ public final class DependencyGraphValidator {
 
         // Validate factory method's own dependencies
         for (DependencyModel dependency : factory.getDependencies()) {
-            if (dependency.isPicker()) {
-                continue;
-            }
-            // EventBus is a built-in, container-provided dependency (#314) — not a user bean.
-            if (dependency.isEventBus()) {
+            // Picker<T> (checked in PickerValidator) and the built-in EventBus (#314) don't
+            // resolve to a user-declared provider here.
+            if (dependency.isPicker() || dependency.isEventBus()) {
                 continue;
             }
             String depKey = dependency.getDependencyKey();
