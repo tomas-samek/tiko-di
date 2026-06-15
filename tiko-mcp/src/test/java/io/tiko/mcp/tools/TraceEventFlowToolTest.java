@@ -109,10 +109,113 @@ class TraceEventFlowToolTest {
         assertThat(nodes.get(1)).containsEntry("event", "x.E2").containsEntry("depth", 1L);
     }
 
+    @Test
+    void kafkaSinkCarriedEventIsNotTerminalAndExposesEgress(@TempDir Path root) throws Exception {
+        var store = storeWith(root, """
+                {"schemaVersion":1,"module":"m","components":[],"factoryMethods":[],"configurations":[],
+                 "eventHandlers":[],"eventTriggers":[]}
+                """, """
+                {"schemaVersion":1,"kafkaSources":[],
+                 "kafkaSinks":[
+                   {"declaringClass":"x.OrderPublisher","methodName":"toKafka","topic":"orders",
+                    "partitionKey":"orderId","eventType":"x.OrderPlaced","payloadType":"x.OrderPlaced"}
+                 ]}
+                """);
+        var tool = new TraceEventFlowTool(store);
+
+        var node = onlyNode(tool.execute(Map.of("eventType", "x.OrderPlaced")));
+        assertThat(node.get("terminal")).isEqualTo(Boolean.FALSE);
+        @SuppressWarnings("unchecked")
+        var egress = (List<Map<String, Object>>) node.get("kafkaEgress");
+        assertThat(egress).hasSize(1);
+        assertThat(egress.get(0)).containsEntry("topic", "orders").containsEntry("partitionKey", "orderId");
+    }
+
+    @Test
+    void kafkaSourceProducedEventIsTraceableWithIngress(@TempDir Path root) throws Exception {
+        // No handler/trigger references this event — before #312 trace_event_flow threw "Unknown event".
+        var store = storeWith(root, """
+                {"schemaVersion":1,"module":"m","components":[],"factoryMethods":[],"configurations":[],
+                 "eventHandlers":[],"eventTriggers":[]}
+                """, """
+                {"schemaVersion":1,"kafkaSinks":[],
+                 "kafkaSources":[
+                   {"declaringClass":"x.OrderConsumer","methodName":"fromKafka","topic":"orders",
+                    "consumerGroup":"warehouse","eventType":"x.OrderPlaced","payloadType":"x.OrderPlaced",
+                    "eventName":"OrderPlaced"}
+                 ]}
+                """);
+        var tool = new TraceEventFlowTool(store);
+
+        var node = onlyNode(tool.execute(Map.of("eventType", "x.OrderPlaced")));
+        @SuppressWarnings("unchecked")
+        var ingress = (List<Map<String, Object>>) node.get("kafkaIngress");
+        assertThat(ingress).hasSize(1);
+        assertThat(ingress.get(0)).containsEntry("topic", "orders").containsEntry("consumerGroup", "warehouse");
+    }
+
+    @Test
+    void confirmsKafkaEndToEndPathFromIngestTopicToSinkTopic(@TempDir Path root) throws Exception {
+        // ingest topic "orders" -> OrderPlaced -(handler+trigger)-> Shipment -> sink topic "shipments"
+        var store = storeWith(root, """
+                {"schemaVersion":1,"module":"m","components":[],"factoryMethods":[],"configurations":[],
+                 "eventHandlers":[
+                   {"declaringClass":"x.Warehouse","methodName":"on","eventType":"x.OrderPlaced",
+                    "async":false,"hasEventWrapper":false}
+                 ],
+                 "eventTriggers":[
+                   {"handlerClass":"x.Warehouse","handlerMethod":"on","eventName":"Shipment",
+                    "eventType":"x.Shipment","async":false,"spread":false,"guards":[]}
+                 ]}
+                """, """
+                {"schemaVersion":1,
+                 "kafkaSources":[
+                   {"declaringClass":"x.OrderConsumer","methodName":"fromKafka","topic":"orders",
+                    "consumerGroup":"warehouse","eventType":"x.OrderPlaced","payloadType":"x.OrderPlaced",
+                    "eventName":"OrderPlaced"}
+                 ],
+                 "kafkaSinks":[
+                   {"declaringClass":"x.ShipmentPublisher","methodName":"toKafka","topic":"shipments",
+                    "partitionKey":"id","eventType":"x.Shipment","payloadType":"x.Shipment"}
+                 ]}
+                """);
+        var tool = new TraceEventFlowTool(store);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>)
+                tool.execute(Map.of("eventType", "x.OrderPlaced")).get("nodes");
+        assertThat(nodes).hasSize(2);
+        // Ingress on the root event.
+        assertThat(nodes.get(0)).containsKey("kafkaIngress");
+        // Terminal Shipment node now forwards to a sink topic instead of reading as a dead end.
+        var shipment = nodes.get(1);
+        assertThat(shipment.get("event")).isEqualTo("x.Shipment");
+        assertThat(shipment.get("terminal")).isEqualTo(Boolean.FALSE);
+        @SuppressWarnings("unchecked")
+        var egress = (List<Map<String, Object>>) shipment.get("kafkaEgress");
+        assertThat(egress).hasSize(1);
+        assertThat(egress.get(0)).containsEntry("topic", "shipments");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> onlyNode(Map<String, Object> result) {
+        var nodes = (List<Map<String, Object>>) result.get("nodes");
+        assertThat(nodes).hasSize(1);
+        return nodes.get(0);
+    }
+
     private TopologyStore storeWith(Path root, String json) throws Exception {
         var f = root.resolve("m/target/classes/META-INF/tiko/topology.json");
         Files.createDirectories(f.getParent());
         Files.writeString(f, json, StandardCharsets.UTF_8);
+        return TopologyStore.loadFrom(root);
+    }
+
+    private TopologyStore storeWith(Path root, String topologyJson, String kafkaJson) throws Exception {
+        var dir = root.resolve("m/target/classes/META-INF/tiko");
+        Files.createDirectories(dir);
+        Files.writeString(dir.resolve("topology.json"), topologyJson, StandardCharsets.UTF_8);
+        Files.writeString(dir.resolve("topology-kafka.json"), kafkaJson, StandardCharsets.UTF_8);
         return TopologyStore.loadFrom(root);
     }
 }

@@ -29,6 +29,8 @@ class TopologyOverviewToolTest {
                 .containsEntry("factoryMethods", 0)
                 .containsEntry("eventHandlers", 0)
                 .containsEntry("eventTriggers", 0)
+                .containsEntry("kafkaSources", 0)
+                .containsEntry("kafkaSinks", 0)
                 .containsEntry("configurations", 0)
                 .containsEntry("wiringErrors", 0);
         assertThat(out).containsEntry("hasProfileConflicts", false);
@@ -146,6 +148,26 @@ class TopologyOverviewToolTest {
         var suggested = (List<String>) out.get("suggestedNextQueries");
         assertThat(suggested).first().isEqualTo("list_wiring_errors");
         assertThat(out).containsEntry("hasProfileConflicts", true);
+    }
+
+    @Test
+    void kafkaFragmentCountsSurfaceInTotals(@TempDir Path root) throws Exception {
+        var dir = root.resolve("m/target/classes/META-INF/tiko");
+        Files.createDirectories(dir);
+        Files.writeString(dir.resolve("topology.json"), """
+                {"schemaVersion":1,"module":"m",
+                 "components":[],"factoryMethods":[],"eventHandlers":[],"eventTriggers":[],"configurations":[]}
+                """, StandardCharsets.UTF_8);
+        Files.writeString(dir.resolve("topology-kafka.json"), """
+                {"schemaVersion":1,
+                 "kafkaSources":[{"declaringClass":"x.C","methodName":"in","topic":"orders","eventType":"x.O"}],
+                 "kafkaSinks":[{"declaringClass":"x.P","methodName":"out","topic":"orders","eventType":"x.O"}]}
+                """, StandardCharsets.UTF_8);
+        var tool = new TopologyOverviewTool(TopologyStore.loadFrom(root));
+
+        @SuppressWarnings("unchecked")
+        var totals = (Map<String, Object>) tool.execute(Map.of()).get("totals");
+        assertThat(totals).containsEntry("kafkaSources", 1).containsEntry("kafkaSinks", 1);
     }
 
     private TopologyStore storeWith(Path root, String topologyJson) throws Exception {
