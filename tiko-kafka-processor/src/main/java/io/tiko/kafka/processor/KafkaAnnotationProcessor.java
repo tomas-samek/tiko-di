@@ -5,6 +5,7 @@ import io.tiko.annotations.EventTrigger;
 import io.tiko.kafka.KafkaSerializer;
 import io.tiko.kafka.annotations.KafkaSink;
 import io.tiko.kafka.annotations.KafkaSource;
+import io.tiko.kafka.processor.generator.KafkaTopologyWriter;
 import io.tiko.kafka.processor.generator.KafkaTransportBootstrapGenerator;
 import io.tiko.kafka.processor.model.KafkaSinkDescriptor;
 import io.tiko.kafka.processor.model.KafkaSourceDescriptor;
@@ -76,6 +77,9 @@ public final class KafkaAnnotationProcessor extends AbstractProcessor {
             if (!ok) return false;
             try {
                 new KafkaTransportBootstrapGenerator(processingEnv).generate(sources, sinks);
+                // Companion topology fragment (#312): lets the MCP topology store see the
+                // transport edges the core Kafka-agnostic topology.json cannot.
+                new KafkaTopologyWriter(processingEnv.getFiler()).write(sources, sinks);
             } catch (java.io.IOException ex) {
                 processingEnv
                         .getMessager()

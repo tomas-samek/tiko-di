@@ -15,9 +15,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Loads {@code META-INF/tiko/topology.json}, {@code META-INF/tiko/config-schema.json},
- * and {@code META-INF/tiko/wiring-errors.json} from every Maven module under the
- * given project root and merges them into a single in-memory model. Config schemas
+ * Loads {@code META-INF/tiko/topology.json}, {@code META-INF/tiko/topology-kafka.json},
+ * {@code META-INF/tiko/config-schema.json}, and {@code META-INF/tiko/wiring-errors.json}
+ * from every Maven module under the given project root and merges them into a single
+ * in-memory model. The {@code topology-kafka.json} fragment carries Kafka transport edges
+ * the core (transport-agnostic) {@code topology.json} omits (#312). Config schemas
  * are merged into a single {@code properties: {}} union keyed by prefix (later
  * modules win on collision). Wiring errors are appended across modules in the
  * order they are visited.
@@ -29,6 +31,8 @@ public final class TopologyStore {
     private final List<Map<String, Object>> factoryMethods;
     private final List<Map<String, Object>> eventHandlers;
     private final List<Map<String, Object>> eventTriggers;
+    private final List<Map<String, Object>> kafkaSources;
+    private final List<Map<String, Object>> kafkaSinks;
     private final List<Map<String, Object>> configurations;
     private final List<Map<String, Object>> wiringErrors;
     private Map<String, Object> configSchema; // nullable
@@ -40,6 +44,8 @@ public final class TopologyStore {
             List<Map<String, Object>> factoryMethods,
             List<Map<String, Object>> eventHandlers,
             List<Map<String, Object>> eventTriggers,
+            List<Map<String, Object>> kafkaSources,
+            List<Map<String, Object>> kafkaSinks,
             List<Map<String, Object>> configurations,
             List<Map<String, Object>> wiringErrors,
             Map<String, Object> configSchema,
@@ -49,6 +55,8 @@ public final class TopologyStore {
         this.factoryMethods = factoryMethods;
         this.eventHandlers = eventHandlers;
         this.eventTriggers = eventTriggers;
+        this.kafkaSources = kafkaSources;
+        this.kafkaSinks = kafkaSinks;
         this.configurations = configurations;
         this.wiringErrors = wiringErrors;
         this.configSchema = configSchema;
@@ -60,6 +68,8 @@ public final class TopologyStore {
         var factoryMethods = new ArrayList<Map<String, Object>>();
         var eventHandlers = new ArrayList<Map<String, Object>>();
         var eventTriggers = new ArrayList<Map<String, Object>>();
+        var kafkaSources = new ArrayList<Map<String, Object>>();
+        var kafkaSinks = new ArrayList<Map<String, Object>>();
         var configurations = new ArrayList<Map<String, Object>>();
         var wiringErrors = new ArrayList<Map<String, Object>>();
         Map<String, Object> mergedSchema = null;
@@ -71,6 +81,14 @@ public final class TopologyStore {
             appendIfArray(doc, "eventHandlers", eventHandlers);
             appendIfArray(doc, "eventTriggers", eventTriggers);
             appendIfArray(doc, "configurations", configurations);
+        }
+
+        // Kafka transport edges live in a companion fragment (#312) written by
+        // tiko-kafka-processor; the core topology.json is transport-agnostic.
+        for (var kafkaFile : findFiles(projectRoot, "topology-kafka.json")) {
+            var doc = readJsonObject(kafkaFile);
+            appendIfArray(doc, "kafkaSources", kafkaSources);
+            appendIfArray(doc, "kafkaSinks", kafkaSinks);
         }
 
         for (var wiringErrorsFile : findFiles(projectRoot, "wiring-errors.json")) {
@@ -105,6 +123,8 @@ public final class TopologyStore {
                 factoryMethods,
                 eventHandlers,
                 eventTriggers,
+                kafkaSources,
+                kafkaSinks,
                 configurations,
                 wiringErrors,
                 mergedSchema,
@@ -121,6 +141,10 @@ public final class TopologyStore {
         this.eventHandlers.addAll(fresh.eventHandlers);
         this.eventTriggers.clear();
         this.eventTriggers.addAll(fresh.eventTriggers);
+        this.kafkaSources.clear();
+        this.kafkaSources.addAll(fresh.kafkaSources);
+        this.kafkaSinks.clear();
+        this.kafkaSinks.addAll(fresh.kafkaSinks);
         this.configurations.clear();
         this.configurations.addAll(fresh.configurations);
         this.wiringErrors.clear();
@@ -156,6 +180,16 @@ public final class TopologyStore {
 
     public List<Map<String, Object>> eventTriggers() {
         return eventTriggers;
+    }
+
+    /** {@code @KafkaSource} edges (topic → local event), merged from {@code topology-kafka.json} (#312). */
+    public List<Map<String, Object>> kafkaSources() {
+        return kafkaSources;
+    }
+
+    /** {@code @KafkaSink} edges (local event → topic), merged from {@code topology-kafka.json} (#312). */
+    public List<Map<String, Object>> kafkaSinks() {
+        return kafkaSinks;
     }
 
     public List<Map<String, Object>> configurations() {

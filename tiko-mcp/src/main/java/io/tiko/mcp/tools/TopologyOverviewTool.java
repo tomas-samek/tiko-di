@@ -49,6 +49,8 @@ public final class TopologyOverviewTool {
         totals.put("factoryMethods", store.factoryMethods().size());
         totals.put("eventHandlers", store.eventHandlers().size());
         totals.put("eventTriggers", store.eventTriggers().size());
+        totals.put("kafkaSources", store.kafkaSources().size());
+        totals.put("kafkaSinks", store.kafkaSinks().size());
         totals.put("configurations", store.configurations().size());
         totals.put("wiringErrors", wiringErrorsCount);
         out.put("totals", totals);

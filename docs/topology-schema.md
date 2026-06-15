@@ -151,6 +151,53 @@ the file always being present.
 | `message`      | string         | Same text the Messager prints |
 | `suggestedFix` | string \| null | One-line hint when available |
 
+## Sibling artifact: `topology-kafka.json`
+
+Emitted by **`tiko-kafka-processor`** (not the core processor) whenever a module
+declares at least one `@KafkaSource` or `@KafkaSink`. The core `topology.json` is
+transport-agnostic — it never contains Kafka edges — so the Kafka transport wiring
+lives in this companion fragment. Tools that need the whole picture (the
+`tiko-mcp` `TopologyStore`) load both files per module and merge them; for Kafka
+this is what lets `trace_event_flow` confirm an end-to-end path (ingest topic →
+event → sink topic) instead of reporting a Kafka-carried event as terminal.
+
+```json
+{
+  "schemaVersion": 1,
+  "kafkaSources": [ ... ],
+  "kafkaSinks": [ ... ]
+}
+```
+
+### `kafkaSources[]`
+
+One per `@KafkaSource` bridge method (topic → local event).
+
+| Field           | Type           | Notes |
+| --------------- | -------------- | ----- |
+| `declaringClass`| string         | FQN of the `@Component` carrying the bridge |
+| `methodName`    | string         | |
+| `topic`         | string         | `@KafkaSource(topic = ...)` |
+| `consumerGroup` | string         | `@KafkaSource(consumerGroup = ...)`; empty = YAML default |
+| `serializer`    | string         | FQN of the serializer class |
+| `eventName`     | string         | Sibling `@EventTrigger(eventName = ...)` label |
+| `payloadType`   | string         | FQN of the deserialized record (method's first parameter) |
+| `eventType`     | string \| null | FQN of the local event the bridge publishes (its return type) — the join key the MCP traces by |
+
+### `kafkaSinks[]`
+
+One per `@KafkaSink` bridge method (local event → topic).
+
+| Field           | Type           | Notes |
+| --------------- | -------------- | ----- |
+| `declaringClass`| string         | FQN of the `@Component` carrying the bridge |
+| `methodName`    | string         | |
+| `topic`         | string         | `@KafkaSink(topic = ...)` |
+| `partitionKey`  | string         | `@KafkaSink(partitionKey = ...)`; empty = null key (round-robin) |
+| `serializer`    | string         | FQN of the serializer class |
+| `eventType`     | string \| null | FQN of the local event that triggers the send (method's first parameter) — the join key |
+| `payloadType`   | string \| null | FQN of the serialized payload (method's return type) |
+
 ## Consuming the file
 
 From the shell:

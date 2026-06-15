@@ -31,6 +31,28 @@ class TopologyStoreTest {
     }
 
     @Test
+    void mergesKafkaTopologyFragmentAcrossModules(@TempDir Path root) throws Exception {
+        writeJson(root.resolve("module-a/target/classes/META-INF/tiko/topology-kafka.json"), """
+                        {"schemaVersion":1,
+                         "kafkaSources":[{"declaringClass":"io.example.Consumer","methodName":"in",
+                          "topic":"orders","consumerGroup":"wh","eventType":"io.example.OrderPlaced"}],
+                         "kafkaSinks":[]}
+                        """);
+        writeJson(root.resolve("module-b/target/classes/META-INF/tiko/topology-kafka.json"), """
+                        {"schemaVersion":1,
+                         "kafkaSources":[],
+                         "kafkaSinks":[{"declaringClass":"io.example.Publisher","methodName":"out",
+                          "topic":"shipments","partitionKey":"id","eventType":"io.example.Shipment"}]}
+                        """);
+
+        var store = TopologyStore.loadFrom(root);
+        assertThat(store.kafkaSources()).hasSize(1);
+        assertThat(store.kafkaSources().get(0)).containsEntry("eventType", "io.example.OrderPlaced");
+        assertThat(store.kafkaSinks()).hasSize(1);
+        assertThat(store.kafkaSinks().get(0)).containsEntry("topic", "shipments");
+    }
+
+    @Test
     void emptyProjectGivesEmptyStore(@TempDir Path root) {
         var store = TopologyStore.loadFrom(root);
         assertThat(store.components()).isEmpty();
