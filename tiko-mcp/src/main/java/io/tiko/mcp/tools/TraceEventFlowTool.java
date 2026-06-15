@@ -28,6 +28,10 @@ public final class TraceEventFlowTool {
 
     private static final long DEFAULT_MAX_DEPTH = 20L;
 
+    private static final String DECLARING_CLASS = "declaringClass";
+    private static final String METHOD_NAME = "methodName";
+    private static final String TOPIC = "topic";
+
     private final TopologyStore store;
 
     public TraceEventFlowTool(TopologyStore store) {
@@ -62,8 +66,8 @@ public final class TraceEventFlowTool {
             var kafkaEgress = new ArrayList<Map<String, Object>>();
             if (!isCycle) {
                 for (var handler : handlersFor(f.event())) {
-                    var handlerClass = (String) handler.get("declaringClass");
-                    var handlerMethod = (String) handler.get("methodName");
+                    var handlerClass = (String) handler.get(DECLARING_CLASS);
+                    var handlerMethod = (String) handler.get(METHOD_NAME);
                     for (var trig : triggersOn(handlerClass, handlerMethod)) {
                         var next = (String) trig.get("eventType");
                         var edge = new LinkedHashMap<String, Object>();
@@ -139,9 +143,9 @@ public final class TraceEventFlowTool {
         for (var s : store.kafkaSources()) {
             if (eventType.equals(s.get("eventType"))) {
                 var edge = new LinkedHashMap<String, Object>();
-                edge.put("topic", s.get("topic"));
+                edge.put(TOPIC, s.get(TOPIC));
                 edge.put("consumerGroup", s.get("consumerGroup"));
-                edge.put("via", s.get("declaringClass") + "#" + s.get("methodName"));
+                edge.put("via", s.get(DECLARING_CLASS) + "#" + s.get(METHOD_NAME));
                 result.add(edge);
             }
         }
@@ -154,9 +158,9 @@ public final class TraceEventFlowTool {
         for (var s : store.kafkaSinks()) {
             if (eventType.equals(s.get("eventType"))) {
                 var edge = new LinkedHashMap<String, Object>();
-                edge.put("topic", s.get("topic"));
+                edge.put(TOPIC, s.get(TOPIC));
                 edge.put("partitionKey", s.get("partitionKey"));
-                edge.put("via", s.get("declaringClass") + "#" + s.get("methodName"));
+                edge.put("via", s.get(DECLARING_CLASS) + "#" + s.get(METHOD_NAME));
                 result.add(edge);
             }
         }

@@ -47,9 +47,9 @@ class TopologyStoreTest {
 
         var store = TopologyStore.loadFrom(root);
         assertThat(store.kafkaSources()).hasSize(1);
-        assertThat(store.kafkaSources().get(0).get("eventType")).isEqualTo("io.example.OrderPlaced");
+        assertThat(store.kafkaSources().get(0)).containsEntry("eventType", "io.example.OrderPlaced");
         assertThat(store.kafkaSinks()).hasSize(1);
-        assertThat(store.kafkaSinks().get(0).get("topic")).isEqualTo("shipments");
+        assertThat(store.kafkaSinks().get(0)).containsEntry("topic", "shipments");
     }
 
     @Test

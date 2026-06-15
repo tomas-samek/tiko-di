@@ -58,19 +58,17 @@ class KafkaTopologyFragmentTest {
                 .generatedFile(StandardLocation.CLASS_OUTPUT, "", "META-INF/tiko/topology-kafka.json");
 
         String json = fragment(compilation);
-        // schema + both edge arrays present
         assertThat(json)
+                // schema + both edge arrays present
                 .contains("\"schemaVersion\"")
                 .contains("\"kafkaSources\"")
-                .contains("\"kafkaSinks\"");
-        // source edge: topic -> produced event (the join key the MCP traces by)
-        assertThat(json)
+                .contains("\"kafkaSinks\"")
+                // source edge: topic -> produced event (the join key the MCP traces by)
                 .contains("\"declaringClass\": \"demo.OrderConsumer\"")
                 .contains("\"topic\": \"orders\"")
                 .contains("\"consumerGroup\": \"warehouse\"")
-                .contains("\"eventType\": \"demo.OrderPlaced\"");
-        // sink edge: consumed event -> topic, with partition key
-        assertThat(json)
+                .contains("\"eventType\": \"demo.OrderPlaced\"")
+                // sink edge: consumed event -> topic, with partition key
                 .contains("\"declaringClass\": \"demo.OrderPublisher\"")
                 .contains("\"partitionKey\": \"orderId\"");
     }

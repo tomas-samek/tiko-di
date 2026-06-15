@@ -124,7 +124,7 @@ class TraceEventFlowToolTest {
         var tool = new TraceEventFlowTool(store);
 
         var node = onlyNode(tool.execute(Map.of("eventType", "x.OrderPlaced")));
-        assertThat(node.get("terminal")).isEqualTo(Boolean.FALSE);
+        assertThat(node).containsEntry("terminal", false);
         @SuppressWarnings("unchecked")
         var egress = (List<Map<String, Object>>) node.get("kafkaEgress");
         assertThat(egress).hasSize(1);
@@ -189,8 +189,7 @@ class TraceEventFlowToolTest {
         assertThat(nodes.get(0)).containsKey("kafkaIngress");
         // Terminal Shipment node now forwards to a sink topic instead of reading as a dead end.
         var shipment = nodes.get(1);
-        assertThat(shipment.get("event")).isEqualTo("x.Shipment");
-        assertThat(shipment.get("terminal")).isEqualTo(Boolean.FALSE);
+        assertThat(shipment).containsEntry("event", "x.Shipment").containsEntry("terminal", false);
         @SuppressWarnings("unchecked")
         var egress = (List<Map<String, Object>>) shipment.get("kafkaEgress");
         assertThat(egress).hasSize(1);
