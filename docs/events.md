@@ -10,14 +10,14 @@ For a runnable example, see [`tiko-examples/03_events`](../tiko-examples/03_even
 // Define event
 public record UserRegisteredEvent(String userId, String email) {}
 
-// Publish events
+// Publish events — inject EventBus directly (it is a built-in dependency).
 @Component(scope = Scope.SINGLETON)
 public class UserService {
     private final EventBus events;
 
     @Inject
-    public UserService(Container container) {
-        this.events = container.events();
+    public UserService(EventBus events) {
+        this.events = events;
     }
 
     public void registerUser(String email) {
@@ -314,7 +314,7 @@ public class OrderWorkflow {
 }
 
 // Publishing OrderCreatedEvent triggers the entire chain automatically
-container.events().publish(new OrderCreatedEvent(order));
+container.getEventBus().publish(new OrderCreatedEvent(order));
 ```
 
 ### Multiple triggers

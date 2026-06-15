@@ -724,6 +724,12 @@ public final class ContainerGenerator {
             return "new io.tiko.runtime.ContainerPicker<>(this, " + baseType + ".class)";
         }
 
+        // EventBus is a built-in, container-provided dependency (#314). We ARE the container,
+        // so call getEventBus() unqualified; Provider<EventBus> wraps it in a lazy lambda.
+        if (dependency.isEventBus()) {
+            return dependency.isProvider() ? "() -> getEventBus()" : "getEventBus()";
+        }
+
         String typeName = dependency.isProvider()
                 ? dependency.getUnwrappedType().orElseThrow().toString()
                 : dependency.getTypeName();

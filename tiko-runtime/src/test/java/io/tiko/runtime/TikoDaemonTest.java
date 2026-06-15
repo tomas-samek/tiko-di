@@ -51,6 +51,48 @@ class TikoDaemonTest {
     }
 
     @Test
+    void awaitShutdownBlocksUntilStop() throws InterruptedException {
+        TikoDaemon daemon = new TikoDaemon(new RecordingContainer());
+        java.util.concurrent.CountDownLatch returned = new java.util.concurrent.CountDownLatch(1);
+        Thread waiter = new Thread(() -> {
+            daemon.awaitShutdown();
+            returned.countDown();
+        });
+        waiter.setDaemon(true);
+        waiter.start();
+
+        // It must keep blocking while the daemon is live — this is what keeps the process alive.
+        assertThat(returned.await(200, java.util.concurrent.TimeUnit.MILLISECONDS))
+                .as("awaitShutdown must not return while the daemon is running")
+                .isFalse();
+
+        daemon.stop();
+
+        assertThat(returned.await(2, java.util.concurrent.TimeUnit.SECONDS))
+                .as("awaitShutdown must return once the daemon is stopped")
+                .isTrue();
+    }
+
+    @Test
+    void awaitShutdownUnblocksWhenHookFires() throws InterruptedException {
+        TikoDaemon daemon = new TikoDaemon(new RecordingContainer());
+        java.util.concurrent.CountDownLatch returned = new java.util.concurrent.CountDownLatch(1);
+        Thread waiter = new Thread(() -> {
+            daemon.awaitShutdown();
+            returned.countDown();
+        });
+        waiter.setDaemon(true);
+        waiter.start();
+
+        daemon.shutdownHook().run(); // simulate JVM running the hook on SIGTERM
+        try {
+            assertThat(returned.await(2, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+        } finally {
+            Runtime.getRuntime().removeShutdownHook(daemon.shutdownHook());
+        }
+    }
+
+    @Test
     void hookInvokesContainerShutdown() {
         RecordingContainer delegate = new RecordingContainer();
         TikoDaemon daemon = new TikoDaemon(delegate);

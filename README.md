@@ -102,6 +102,8 @@ public class Main {
 
 The annotation processor validates all dependencies at compile-time and generates the wiring code. Nothing runs by reflection.
 
+**Lifecycle & imperative publish.** `Tiko.create(...)` returns an `AutoCloseable` container you manage (try-with-resources above). For a long-lived headless process — a Kafka consumer or scheduler with no foreground server — use `Tiko.daemon(...)` (it installs a graceful-shutdown hook so `@PreDestroy` runs on `Ctrl+C` / `SIGTERM`) and keep the process alive with the one canonical idiom `daemon.awaitShutdown()`. To publish events imperatively from inside a component, inject `EventBus` as a constructor dependency — it is built-in, no plain-class workaround. Details: the [`tiko-build`](./.ai-skills/tiko-build/SKILL.md) skill and [events.md](./docs/events.md).
+
 ## Installation
 
 Tiko ships to Maven Central. Import the BOM once — then declare the artifacts (and the annotation-processor path) without restating the version:

@@ -67,6 +67,10 @@ public final class DependencyGraphValidator {
             if (dependency.isPicker()) {
                 continue;
             }
+            // EventBus is a built-in, container-provided dependency (#314) — not a user bean.
+            if (dependency.isEventBus()) {
+                continue;
+            }
             String depKey = dependency.getDependencyKey();
             boolean resolved = dependency.isPicked()
                     ? (dependency.getQualifier().isPresent()
@@ -111,6 +115,10 @@ public final class DependencyGraphValidator {
         // Validate factory method's own dependencies
         for (DependencyModel dependency : factory.getDependencies()) {
             if (dependency.isPicker()) {
+                continue;
+            }
+            // EventBus is a built-in, container-provided dependency (#314) — not a user bean.
+            if (dependency.isEventBus()) {
                 continue;
             }
             String depKey = dependency.getDependencyKey();

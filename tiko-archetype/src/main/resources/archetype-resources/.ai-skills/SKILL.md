@@ -28,7 +28,7 @@ Load-bearing rule: **ask, don't fabricate.**
 - All dependency wiring is validated and generated at compile time. Build failures point at exact problems.
 - `@Component` declares a bean. Default scope is `PROTOTYPE` — pass `Scope.SINGLETON` for stateless services.
 - Cross-scope injection (e.g. SINGLETON depending on REQUEST) requires the shorter-scoped bean to implement an interface — the framework generates a proxy.
-- Events: `@EventHandler` to receive, `container.events().publish(...)` to send. `@EventTrigger` chains handlers declaratively.
+- Events: `@EventHandler` to receive; to send, inject `EventBus` into a component and call `publish(...)` (or `container.getEventBus().publish(...)` outside a component). `@EventTrigger` chains handlers declaratively.
 - See README "Core Concepts" and "Usage Examples" sections for full details.
 
 ## When in doubt
