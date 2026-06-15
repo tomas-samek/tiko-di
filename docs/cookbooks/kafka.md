@@ -139,19 +139,39 @@ tiko:
 > "did you mean 'bootstrapServers'?" suggestion rather than binding silently. Keep your
 > own `@Configuration` records' keys aligned to their field names the same way.
 
-## 5. Poison messages (undeserializable records)
+## 5. Poison messages (ingest failures)
 
-> **⚠️ Maintainer-verify (ties to #313):** on a deserialization failure the consumer
-> runner currently seeks back to the same offset and retries, with no first-class
-> skip / dead-letter hook (#313). Until that lands, an undeserializable record can
-> stall its partition. The interim pattern is a serializer that **never throws** —
-> it logs and returns a null/sentinel that the bridge treats as "skip" — so the
-> offset advances. Document the recommended pattern here once #313 is resolved.
+When a record fails to ingest — deserialize, bridge dispatch, or publish — the runner
+routes a `KafkaIngestError` to your `ErrorHandler`, then applies the configured
+**`tiko.kafka.poison-record-policy`**:
+
+```yaml
+tiko:
+  kafka:
+    poison-record-policy: SEEK   # default; or SKIP
+```
+
+- **`SEEK`** (default) — seek back to the failed offset and redeliver. No data is lost
+  across a *transient* failure (a brief broker/schema-registry/DB blip rides through),
+  but a genuinely bad ("poison") record blocks its partition until it is removed or the
+  consumer is reconfigured.
+- **`SKIP`** — log via the `ErrorHandler` (above) and commit past the record so the
+  partition advances. This is the first-class "log and skip a poison record" — no
+  `null`-returning serializer workaround needed.
+
+**Choosing:** the runner cannot tell a permanent poison record from a transient blip at
+the moment of failure — and deserialization is *not* exempt (a schema-registry
+deserializer does a network call; a rolling deployment can make the same bytes fail now
+and succeed minutes later). So `SKIP` also drops records that failed for a transient
+reason. Enable it only for streams where occasional loss on a blip is acceptable; keep
+the default `SEEK` when every record matters. A *safe* auto-skip that rides out transient
+failures before giving up needs bounded retry, tracked separately (#108), as does a
+dead-letter destination (#111).
 
 ## Trade-offs (MVP)
 
 - Per-record commit only (`commitMode = PER_RECORD`).
-- Poison-record skip/DLT is not yet first-class (see §5 / #313).
+- Poison handling is skip-or-seek (§5); bounded-retry and dead-letter are future (#108 / #111).
 - The Kafka transport edges are not yet reflected in `topology.json`, so the MCP
   `trace_event_flow` tool can't confirm a Kafka end-to-end path (see #312) — verify
   the generated `KafkaTransportBootstrap` directly meanwhile.

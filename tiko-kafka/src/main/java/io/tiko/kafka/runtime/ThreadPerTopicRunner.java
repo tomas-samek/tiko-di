@@ -3,6 +3,7 @@ package io.tiko.kafka.runtime;
 import io.tiko.Container;
 import io.tiko.ErrorHandler;
 import io.tiko.EventBus;
+import io.tiko.kafka.IngestErrorPolicy;
 import io.tiko.kafka.KafkaConfig;
 import io.tiko.kafka.KafkaContext;
 import io.tiko.kafka.KafkaIngestError;
@@ -46,6 +47,7 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
     private final ErrorHandler errorHandler;
     private final KafkaSerializer serializer;
     private final KafkaConfig config;
+    private final IngestErrorPolicy poisonRecordPolicy;
 
     private final AtomicBoolean running = new AtomicBoolean(false);
     private Thread thread;
@@ -65,6 +67,8 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
         this.errorHandler = errorHandler;
         this.serializer = serializer;
         this.config = config;
+        // Parse eagerly so a typo'd policy fails fast at start() rather than per record.
+        this.poisonRecordPolicy = IngestErrorPolicy.parse(config.poisonRecordPolicy());
     }
 
     @Override
@@ -152,8 +156,17 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
                 throw wakeup; // orderly shutdown — handled by run()
             } catch (Exception ex) {
                 routeIngestError(new KafkaIngestError(r.topic(), r.partition(), r.offset(), r.headers(), ex));
-                seekSafely(tp, r.offset());
-                return;
+                if (poisonRecordPolicy == IngestErrorPolicy.SKIP) {
+                    // Opt-in (#313): the error is logged via the ErrorHandler above; commit
+                    // past the record so the partition advances instead of redelivering it.
+                    // Other records in this partition's slice keep flowing.
+                    commitSafely(tp, r.offset() + 1);
+                } else {
+                    // SEEK (default): rewind for redelivery — no data lost across a transient
+                    // failure, at the cost of a poison record blocking until removed.
+                    seekSafely(tp, r.offset());
+                    return;
+                }
             }
         }
     }
@@ -185,6 +198,24 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
                     "Seek-back failed for " + tp + " at offset " + offset + " (partition revoked?); the uncommitted"
                             + " record will be redelivered to its current assignee",
                     seekFailure);
+        }
+    }
+
+    /**
+     * Commits {@code offset} for the SKIP poison policy, tolerating a concurrently revoked
+     * partition the same way {@link #seekSafely}/the success-path commit do: after a
+     * rebalance {@code commitSync} throws, the offset was never committed, and the new
+     * assignee redelivers the record — the thread must not die over it.
+     */
+    private void commitSafely(TopicPartition tp, long offset) {
+        try {
+            consumer.commitSync(Map.of(tp, new OffsetAndMetadata(offset)));
+        } catch (Exception commitFailure) {
+            LoggerHolder.LOG.log(
+                    System.Logger.Level.WARNING,
+                    "Commit of skipped record offset " + offset + " for " + tp + " failed (partition revoked?); the"
+                            + " record may be redelivered to its current assignee",
+                    commitFailure);
         }
     }
 

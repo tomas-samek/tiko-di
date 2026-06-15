@@ -12,3 +12,7 @@ tiko:
     shutdown-timeout: PT5S
     producer-properties: {}
     consumer-properties: {}
+    # SEEK (default): retry a failed record forever (no data loss, but a poison
+    # record blocks its partition). SKIP: log via the ErrorHandler and commit past
+    # it (opt-in; also drops records that failed for a transient reason). See #313.
+    poison-record-policy: SEEK
