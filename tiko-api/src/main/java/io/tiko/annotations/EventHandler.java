@@ -136,4 +136,48 @@ public @interface EventHandler {
      * @return an ISO-8601 duration string, or empty for no timeout
      */
     String timeout() default "";
+
+    /**
+     * Optional retry count for an asynchronous handler (#108). When greater than zero and the
+     * handler throws, it is re-invoked up to this many times before the final failure is routed
+     * to the {@link io.tiko.ErrorHandler} — so {@code retries = 3} means one initial call plus up
+     * to three retries (four attempts total). On the first attempt that succeeds, no error is
+     * routed; once the budget is exhausted a single {@link io.tiko.EventHandlerError} is routed
+     * whose {@code attempts()} is the total number of attempts made.
+     *
+     * <p><strong>Requires {@code async = true}.</strong> Retries wait for {@link #backoff()}
+     * between attempts; doing that on the publisher's thread would block it. Like {@link #timeout()},
+     * a retry on a synchronous handler is a compile-time error. If both {@code timeout} and
+     * {@code retries} are set, each attempt is time-boxed and a timed-out attempt counts as a
+     * failed attempt. Errors (as opposed to exceptions) are never retried.
+     *
+     * <p><strong>Idempotency is the handler's responsibility</strong> — a retried handler may run
+     * its side effects more than once.
+     *
+     * <p>Default: {@code 0} (no retries — opt-in).
+     *
+     * @return the number of retries after the initial attempt, or 0 for none
+     */
+    int retries() default 0;
+
+    /**
+     * Base delay between retry attempts, as an ISO-8601 {@link java.time.Duration} string
+     * (e.g. {@code "PT0.1S"}). Scaled across attempts per {@link #backoffStrategy()}. Only
+     * meaningful when {@link #retries()} is greater than zero.
+     *
+     * <p>Default: {@code ""} (retry immediately, no delay).
+     *
+     * @return an ISO-8601 duration string, or empty for no delay
+     */
+    String backoff() default "";
+
+    /**
+     * How {@link #backoff()} grows across successive retries. Only meaningful when
+     * {@link #retries()} is greater than zero.
+     *
+     * <p>Default: {@link BackoffStrategy#FIXED}.
+     *
+     * @return the backoff growth strategy
+     */
+    BackoffStrategy backoffStrategy() default BackoffStrategy.FIXED;
 }
