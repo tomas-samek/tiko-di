@@ -143,6 +143,26 @@ If the handler runs longer than the budget, its worker thread is interrupted, th
 - **Async-only:** `timeout` requires `async = true`. A timeout on a synchronous handler is a **compile-time error** — a sync handler runs on the publisher's thread (and its unit-of-work scope), which cannot be preempted; time-boxing requires the off-thread, own-scope execution that `async = true` provides.
 - **Best-effort:** interruption can only stop a handler that respects `Thread.interrupt()` (e.g. is blocked on I/O or checks the flag). A handler running a tight uninterruptible loop will keep going — the timeout is reported, but Java cannot force-stop the thread.
 
+### Retries with backoff
+
+An async handler can retry on failure with `retries` + `backoff` + `backoffStrategy`:
+
+```java
+@EventHandler(async = true, retries = 3, backoff = "PT0.1S", backoffStrategy = BackoffStrategy.EXPONENTIAL)
+public void onPayment(PaymentEvent event) {
+    // re-invoked up to 3 times if it throws; 100ms, then 200ms, then 400ms apart
+}
+```
+
+`retries = 3` means one initial call plus up to three retries (four attempts total). The first attempt that returns normally wins — no error is routed. Once the budget is exhausted, a **single** `EventHandlerError` is routed whose `attempts()` is the total number of attempts made (here, `4`). Backoff is `FIXED` (constant delay) or `EXPONENTIAL` (doubling) and is *scheduled*, so it never ties up an executor thread while waiting.
+
+- **Opt-in:** the default is no retries (`retries = 0`).
+- **Async-only:** `retries` requires `async = true` (a **compile-time error** otherwise) — retrying waits for the backoff between attempts, which would block the publisher's thread.
+- **ISO-8601 backoff:** `backoff` is a `Duration` string (`"PT0.1S"`), like `timeout`.
+- **Composes with `timeout`:** if both are set, each attempt is time-boxed and a timed-out attempt counts as a failed attempt to be retried.
+- **Errors are not retried:** an `Error` (vs an `Exception`) stops the loop and is logged, never retried.
+- **Idempotency is your responsibility** — a retried handler runs its side effects more than once. Make the work safe to repeat.
+
 ## Graceful shutdown drain
 
 When `Container.shutdown()` runs, in-flight async event handlers are allowed to

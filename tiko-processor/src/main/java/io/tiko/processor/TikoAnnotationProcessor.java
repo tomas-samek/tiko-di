@@ -878,6 +878,11 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
             return null; // a timeout validation error was reported; skip this handler
         }
 
+        long backoffNanos = resolveHandlerBackoffNanos(methodElement, annotation);
+        if (backoffNanos < 0 || !validateRetries(methodElement, annotation)) {
+            return null; // a retry validation error was reported; skip this handler
+        }
+
         return EventHandlerModel.builder()
                 .methodElement(methodElement)
                 .declaringClass(declaringClass)
@@ -887,8 +892,74 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
                 .async(annotation.async())
                 .hasEventWrapper(hasEventWrapper)
                 .timeoutNanos(timeoutNanos)
+                .retries(annotation.retries())
+                .backoffNanos(backoffNanos)
+                .backoffStrategy(annotation.backoffStrategy())
                 .eventTriggers(eventTriggers)
                 .build();
+    }
+
+    /**
+     * Validates {@code @EventHandler(retries = ...)} (#108): retries are async-only (they wait for
+     * the backoff between attempts, which would block the publisher's thread) and the count cannot
+     * be negative. Returns {@code false} (and reports a compile error) when invalid.
+     */
+    private boolean validateRetries(ExecutableElement methodElement, EventHandler annotation) {
+        int retries = annotation.retries();
+        if (retries == 0) {
+            return true;
+        }
+        if (retries < 0) {
+            context.getErrorReporter()
+                    .error(
+                            methodElement,
+                            "@EventHandler retries '" + retries + "' must not be negative",
+                            "Use a non-negative retry count, e.g. retries = 3");
+            return false;
+        }
+        if (!annotation.async()) {
+            context.getErrorReporter()
+                    .error(
+                            methodElement,
+                            "@EventHandler retries requires async = true: retrying with backoff on the"
+                                    + " publisher's thread would block it",
+                            "Add async = true to retry off-thread",
+                            "Or remove retries");
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Resolves {@code @EventHandler(backoff = ...)} (#108) to a non-negative nanosecond base delay,
+     * or {@code 0} when no backoff is declared. Returns {@code -1} (and reports a compile error)
+     * when the value is not an ISO-8601 {@link java.time.Duration} or is negative.
+     */
+    private long resolveHandlerBackoffNanos(ExecutableElement methodElement, EventHandler annotation) {
+        String backoff = annotation.backoff();
+        if (backoff == null || backoff.isBlank()) {
+            return 0L;
+        }
+        java.time.Duration duration;
+        try {
+            duration = java.time.Duration.parse(backoff.trim());
+        } catch (java.time.format.DateTimeParseException badFormat) {
+            context.getErrorReporter()
+                    .error(
+                            methodElement,
+                            "@EventHandler backoff '" + backoff + "' is not a valid ISO-8601 Duration",
+                            "Use an ISO-8601 duration such as \"PT0.1S\" (100 ms) or \"PT2S\" (2 seconds)");
+            return -1L;
+        }
+        if (duration.isNegative()) {
+            context.getErrorReporter()
+                    .error(
+                            methodElement,
+                            "@EventHandler backoff '" + backoff + "' must not be negative",
+                            "Use a non-negative duration such as \"PT0.1S\"");
+            return -1L;
+        }
+        return duration.toNanos();
     }
 
     /**

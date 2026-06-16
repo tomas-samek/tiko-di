@@ -5,10 +5,12 @@ import io.tiko.Event;
 import io.tiko.EventBus;
 import io.tiko.EventHandlerError;
 import io.tiko.EventHandlerInfo;
+import io.tiko.annotations.BackoffStrategy;
 import java.lang.reflect.Array;
 import java.util.Collection;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -220,19 +222,13 @@ public final class EventChainContext {
      * exclusively from generated {@code EventRegistry} code for a handler that declared
      * {@code @EventHandler(async = true, timeout = ...)}.
      *
-     * <p>The body runs on {@code executor} via {@link CompletableFuture#runAsync} (which captures
-     * every {@link Throwable}, so a handler {@link Error} is never lost on the executor thread). If
-     * it does not finish within {@code timeoutNanos}, {@link CompletableFuture#orTimeout} completes
-     * the future with a {@link TimeoutException} and the worker thread is interrupted — best-effort,
-     * since Java cannot force-stop a thread that ignores interruption — which frees the executor
-     * slot once the handler returns. The overrun is routed to {@code errorHandler} as an
-     * {@link EventHandlerError} whose cause is the {@code TimeoutException}. A handler that fails on
-     * its own routes that failure instead; exactly one outcome is reported, because {@code orTimeout}
-     * completes the single shared future once.
-     *
-     * <p>Routing mirrors the plain async path: an {@link Error} is logged via
-     * {@link #logUnhandledAsyncError} (kept out of {@code ErrorHandler}), everything else goes
-     * through {@code ErrorHandler}.
+     * <p>If the body does not finish within {@code timeoutNanos}, the worker thread is interrupted
+     * (best-effort — Java cannot force-stop a thread that ignores interruption), the executor slot
+     * is freed, and the overrun is routed to {@code errorHandler} as an {@link EventHandlerError}
+     * whose cause is a {@link TimeoutException}. A handler that fails on its own routes that failure
+     * instead; exactly one outcome is reported. An {@link Error} is logged via
+     * {@link #logUnhandledAsyncError} (kept out of {@code ErrorHandler}), matching the plain async
+     * path.
      */
     public static void runAsyncWithTimeout(
             Runnable body,
@@ -241,6 +237,75 @@ public final class EventChainContext {
             ErrorHandler errorHandler,
             EventHandlerInfo info,
             Object event) {
+        runOnce(body, timeoutNanos, executor).whenComplete((ignored, throwable) -> {
+            if (throwable != null) {
+                reportAsyncHandlerFailure(unwrapCompletion(throwable), errorHandler, info, event, 1);
+            }
+        });
+    }
+
+    /**
+     * Runs an async {@code @EventHandler} body with retries and backoff (#108). Called exclusively
+     * from generated {@code EventRegistry} code for a handler that declared
+     * {@code @EventHandler(async = true, retries = ...)}.
+     *
+     * <p>The body is re-invoked up to {@code retries} times after the initial attempt. The first
+     * attempt that completes normally wins (no error routed). Once the budget is exhausted, a single
+     * {@link EventHandlerError} carrying the total {@code attempts} is routed. Backoff between
+     * attempts is scheduled (via {@link CompletableFuture#delayedExecutor}), so it never holds an
+     * executor slot. When {@code timeoutNanos > 0} each attempt is time-boxed (composing #107) and a
+     * timed-out attempt counts as a failed attempt. {@link Error}s are not retried — they are logged
+     * and stop the loop, consistent with the plain async path.
+     */
+    public static void runAsyncWithRetry(
+            Runnable body,
+            RetryPolicy policy,
+            ExecutorService executor,
+            ErrorHandler errorHandler,
+            EventHandlerInfo info,
+            Object event) {
+        attempt(body, 0, policy, executor, errorHandler, info, event);
+    }
+
+    private static void attempt(
+            Runnable body,
+            int attemptIndex,
+            RetryPolicy policy,
+            ExecutorService executor,
+            ErrorHandler errorHandler,
+            EventHandlerInfo info,
+            Object event) {
+        runOnce(body, policy.timeoutNanos(), executor).whenComplete((ignored, throwable) -> {
+            if (throwable == null) {
+                return; // attempt succeeded
+            }
+            Throwable cause = unwrapCompletion(throwable);
+            if (cause instanceof Error) {
+                logUnhandledAsyncError(cause); // Errors are never retried
+                return;
+            }
+            if (attemptIndex >= policy.retries()) {
+                // Budget exhausted: attempts made = initial + retries = attemptIndex + 1.
+                reportAsyncHandlerFailure(cause, errorHandler, info, event, attemptIndex + 1);
+                return;
+            }
+            long delay = backoffDelayNanos(policy, attemptIndex);
+            Executor next =
+                    delay > 0 ? CompletableFuture.delayedExecutor(delay, TimeUnit.NANOSECONDS, executor) : executor;
+            next.execute(() -> attempt(body, attemptIndex + 1, policy, executor, errorHandler, info, event));
+        });
+    }
+
+    /**
+     * Runs {@code body} on {@code executor} once, returning a future that mirrors its outcome.
+     * {@link CompletableFuture#runAsync} captures every {@link Throwable} (so a handler {@link Error}
+     * is never lost on the executor thread). When {@code timeoutNanos > 0}, the future is completed
+     * with a {@link TimeoutException} on breach and the worker thread interrupted to free the slot.
+     */
+    private static CompletableFuture<Void> runOnce(Runnable body, long timeoutNanos, ExecutorService executor) {
+        if (timeoutNanos <= 0) {
+            return CompletableFuture.runAsync(body, executor);
+        }
         // The worker thread is captured so a breached timeout can interrupt it directly (orTimeout
         // has no handle on it).
         AtomicReference<Thread> worker = new AtomicReference<>();
@@ -250,18 +315,22 @@ public final class EventChainContext {
                     body.run();
                 },
                 executor);
-        // orTimeout returns the same future, completing it exceptionally with TimeoutException only
-        // if the body has not completed it first — so whenComplete fires exactly once.
-        work.orTimeout(timeoutNanos, TimeUnit.NANOSECONDS).whenComplete((ignored, throwable) -> {
-            if (throwable == null) {
-                return;
-            }
-            Throwable cause = unwrapCompletion(throwable);
-            if (cause instanceof TimeoutException) {
+        // orTimeout returns the same future, completing it with TimeoutException only if the body
+        // has not completed it first. The whenComplete propagates that outcome to the caller.
+        return work.orTimeout(timeoutNanos, TimeUnit.NANOSECONDS).whenComplete((ignored, throwable) -> {
+            if (throwable != null && unwrapCompletion(throwable) instanceof TimeoutException) {
                 interruptWorker(worker.get());
             }
-            reportAsyncHandlerFailure(cause, errorHandler, info, event);
         });
+    }
+
+    /** Backoff delay before the next retry: constant for FIXED, doubling for EXPONENTIAL. */
+    private static long backoffDelayNanos(RetryPolicy policy, int attemptIndex) {
+        long base = policy.backoffNanos();
+        if (base <= 0) {
+            return 0L;
+        }
+        return policy.backoffStrategy() == BackoffStrategy.EXPONENTIAL ? base << Math.min(attemptIndex, 30) : base;
     }
 
     /** Unwraps the {@link CompletionException} wrapper a {@link CompletableFuture} adds, if present. */
@@ -285,16 +354,17 @@ public final class EventChainContext {
      * Routes an async {@code @EventHandler} failure exactly as the plain async path does: an
      * {@link Error} is logged (kept out of {@code ErrorHandler}); everything else — including a
      * timeout's {@link TimeoutException} — goes through {@code ErrorHandler} as an
-     * {@link EventHandlerError}, with a throwing handler logged as a last resort.
+     * {@link EventHandlerError} carrying {@code attempts}, with a throwing handler logged as a
+     * last resort.
      */
     private static void reportAsyncHandlerFailure(
-            Throwable cause, ErrorHandler errorHandler, EventHandlerInfo info, Object event) {
+            Throwable cause, ErrorHandler errorHandler, EventHandlerInfo info, Object event, int attempts) {
         if (cause instanceof Error) {
             logUnhandledAsyncError(cause);
             return;
         }
         try {
-            errorHandler.onError(new EventHandlerError(info, event, cause));
+            errorHandler.onError(new EventHandlerError(info, event, cause, attempts));
         } catch (Exception inner) {
             logErrorHandlerFailure(inner);
         }

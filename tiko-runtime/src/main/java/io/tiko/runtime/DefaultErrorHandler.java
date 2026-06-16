@@ -35,15 +35,16 @@ public final class DefaultErrorHandler implements ErrorHandler {
     @Override
     public void onError(ErrorContext context) {
         switch (context) {
-            case EventHandlerError(var handler, var event, var cause) ->
+            case EventHandlerError(var handler, var event, var cause, var attempts) ->
                 TikoLog.log(
                         LoggerHolder.LOG,
                         System.Logger.Level.WARNING,
                         cause,
-                        "EventHandler {0}#{1} on event {2} threw: {3}",
+                        "EventHandler {0}#{1} on event {2} threw after {3} attempt(s): {4}",
                         handler.declaringClass().getName(),
                         handler.methodName(),
                         handler.eventType().getName(),
+                        attempts,
                         cause);
             case PostConstructFailure(var component, var cause) ->
                 TikoLog.log(

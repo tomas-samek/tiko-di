@@ -222,7 +222,26 @@ public final class EventRegistryGenerator {
             runBody.addStatement("$T.exit(__asyncPrev)", CHAIN_CONTEXT);
             runBody.endControlFlow();
 
-            if (handler.hasTimeout()) {
+            if (handler.hasRetries()) {
+                // Retry dispatch (#108): re-invoke on failure up to the budget, with backoff
+                // scheduled between attempts and (when a timeout is also set) each attempt
+                // time-boxed. The helper routes a single EventHandlerError carrying the attempt
+                // count once the budget is exhausted. Composes the #107 timeout per attempt.
+                method.addCode(CodeBlock.builder()
+                        .add(
+                                "$T.runAsyncWithRetry(() -> {\n$L}, new $T($L, $LL, $T.$L, $LL), __exec, __err,"
+                                        + " HANDLER_INFO_$L, event);\n",
+                                CHAIN_CONTEXT,
+                                runBody.build(),
+                                ClassName.get("io.tiko.runtime", "RetryPolicy"),
+                                handler.getRetries(),
+                                handler.getBackoffNanos(),
+                                ClassName.get("io.tiko.annotations", "BackoffStrategy"),
+                                handler.getBackoffStrategy().name(),
+                                handler.getTimeoutNanos(),
+                                index)
+                        .build());
+            } else if (handler.hasTimeout()) {
                 // Timed dispatch (#107): run the invocation under a wall-clock budget. The runtime
                 // helper submits the body to the executor as an interruptible Future, interrupts it
                 // on breach (best-effort), frees the slot, and routes an EventHandlerError whose
