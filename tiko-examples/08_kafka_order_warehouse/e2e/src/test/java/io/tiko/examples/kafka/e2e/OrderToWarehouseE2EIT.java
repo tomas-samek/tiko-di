@@ -10,9 +10,18 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import org.apache.kafka.clients.admin.Admin;
+import org.apache.kafka.clients.admin.AdminClientConfig;
+import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.common.errors.TopicExistsException;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.KafkaContainer;
@@ -38,12 +47,58 @@ class OrderToWarehouseE2EIT {
     private static final Duration READY_TIMEOUT = Duration.ofSeconds(60);
     private static final Duration PROBE_TIMEOUT = Duration.ofSeconds(60);
 
+    /** The topic both services bridge through ({@code @KafkaSink}/{@code @KafkaSource(topic = "orders")}). */
+    private static final String TOPIC = "orders";
+
     @Container
     static final KafkaContainer KAFKA = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.7.1"));
 
     private Path probeFile;
     private Process orderProc;
     private Process warehouseProc;
+
+    /**
+     * Pre-create the topic before any service starts (#372). Relying on broker auto-creation made
+     * this IT flaky: a freshly auto-created topic can be momentarily leaderless, so the
+     * order-service producer's first metadata fetch occasionally failed with
+     * {@code TimeoutException: Topic orders not present in metadata after 60000 ms}. Creating the
+     * topic up front and waiting until its partition has an elected leader removes that race —
+     * the producer finds usable metadata immediately.
+     */
+    @BeforeAll
+    static void createTopic() throws Exception {
+        var props = Map.<String, Object>of(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, KAFKA.getBootstrapServers());
+        try (Admin admin = Admin.create(props)) {
+            try {
+                admin.createTopics(List.of(new NewTopic(TOPIC, 1, (short) 1)))
+                        .all()
+                        .get(30, TimeUnit.SECONDS);
+            } catch (ExecutionException e) {
+                if (!(e.getCause() instanceof TopicExistsException)) {
+                    throw e;
+                }
+            }
+            await().atMost(Duration.ofSeconds(30))
+                    .pollInterval(Duration.ofMillis(200))
+                    .alias("topic '" + TOPIC + "' has an elected partition leader")
+                    .until(() -> hasLeader(admin));
+        }
+    }
+
+    private static boolean hasLeader(Admin admin) {
+        try {
+            var partitions = admin.describeTopics(List.of(TOPIC))
+                    .allTopicNames()
+                    .get(5, TimeUnit.SECONDS)
+                    .get(TOPIC)
+                    .partitions();
+            return !partitions.isEmpty()
+                    && partitions.stream()
+                            .allMatch(p -> p.leader() != null && p.leader().id() >= 0);
+        } catch (Exception stillSettling) {
+            return false;
+        }
+    }
 
     @BeforeEach
     void setUp() throws Exception {
