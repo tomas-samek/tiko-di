@@ -8,8 +8,12 @@ import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.stream.Stream;
 import javax.tools.JavaFileObject;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 /**
  * Event-handler retries with backoff (#108). {@code @EventHandler(retries = ...)} is opt-in and
@@ -28,24 +32,20 @@ class EventHandlerRetryTest {
                 .compile(EVENT, JavaFileObjects.forSourceLines("demo.H", handlerLines));
     }
 
-    @Test
-    void retriesOnSyncHandlerIsACompileError() {
-        Compilation c = compile(
-                "package demo;",
-                "import io.tiko.Scope;",
-                "import io.tiko.annotations.Component;",
-                "import io.tiko.annotations.EventHandler;",
-                "@Component(scope = Scope.SINGLETON)",
-                "public class H {",
-                "  @EventHandler(retries = 3)",
-                "  public void onPing(PingEvent event) {}",
-                "}");
-        CompilationSubject.assertThat(c).failed();
-        CompilationSubject.assertThat(c).hadErrorContaining("retries requires async = true");
+    static Stream<Arguments> invalidRetryDeclarations() {
+        return Stream.of(
+                Arguments.of(
+                        "retries on a sync handler", "@EventHandler(retries = 3)", "retries requires async = true"),
+                Arguments.of("negative retries", "@EventHandler(async = true, retries = -1)", "retries"),
+                Arguments.of(
+                        "non-ISO-8601 backoff",
+                        "@EventHandler(async = true, retries = 2, backoff = \"100ms\")",
+                        "backoff"));
     }
 
-    @Test
-    void negativeRetriesIsACompileError() {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("invalidRetryDeclarations")
+    void invalidRetryDeclarationIsACompileError(String name, String handlerAnnotation, String expectedError) {
         Compilation c = compile(
                 "package demo;",
                 "import io.tiko.Scope;",
@@ -53,27 +53,11 @@ class EventHandlerRetryTest {
                 "import io.tiko.annotations.EventHandler;",
                 "@Component(scope = Scope.SINGLETON)",
                 "public class H {",
-                "  @EventHandler(async = true, retries = -1)",
+                "  " + handlerAnnotation,
                 "  public void onPing(PingEvent event) {}",
                 "}");
         CompilationSubject.assertThat(c).failed();
-        CompilationSubject.assertThat(c).hadErrorContaining("retries");
-    }
-
-    @Test
-    void nonIso8601BackoffIsACompileError() {
-        Compilation c = compile(
-                "package demo;",
-                "import io.tiko.Scope;",
-                "import io.tiko.annotations.Component;",
-                "import io.tiko.annotations.EventHandler;",
-                "@Component(scope = Scope.SINGLETON)",
-                "public class H {",
-                "  @EventHandler(async = true, retries = 2, backoff = \"100ms\")",
-                "  public void onPing(PingEvent event) {}",
-                "}");
-        CompilationSubject.assertThat(c).failed();
-        CompilationSubject.assertThat(c).hadErrorContaining("backoff");
+        CompilationSubject.assertThat(c).hadErrorContaining(expectedError);
     }
 
     @Test

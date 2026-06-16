@@ -229,8 +229,7 @@ public final class EventRegistryGenerator {
                 // count once the budget is exhausted. Composes the #107 timeout per attempt.
                 method.addCode(CodeBlock.builder()
                         .add(
-                                "$T.runAsyncWithRetry(() -> {\n$L}, new $T($L, $LL, $T.$L, $LL), __exec, __err,"
-                                        + " HANDLER_INFO_$L, event);\n",
+                                "$T.runAsyncWithRetry(() -> {\n$L}, new $T($L, $LL, $T.$L, $LL), __exec, __err, HANDLER_INFO_$L, event);\n",
                                 CHAIN_CONTEXT,
                                 runBody.build(),
                                 ClassName.get("io.tiko.runtime", "RetryPolicy"),
