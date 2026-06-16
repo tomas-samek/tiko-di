@@ -114,4 +114,26 @@ public @interface EventHandler {
      * @return the event class to handle
      */
     Class<?> eventType() default Object.class;
+
+    /**
+     * Optional execution timeout for an asynchronous handler, as an ISO-8601
+     * {@link java.time.Duration} string (e.g. {@code "PT5S"}, {@code "PT0.5S"}).
+     *
+     * <p>When set, a handler that runs longer than this budget has its worker thread
+     * interrupted (best-effort — Java cannot force-stop a thread that ignores interruption),
+     * the executor slot is freed, and the overrun is routed to the configured
+     * {@link io.tiko.ErrorHandler} as an {@link io.tiko.EventHandlerError} whose
+     * {@code cause()} is a {@link java.util.concurrent.TimeoutException}. Subsequent events
+     * keep flowing.
+     *
+     * <p><strong>Requires {@code async = true}.</strong> A timeout on a synchronous handler
+     * is a compile-time error: a sync handler runs on the publisher's thread and within the
+     * publisher's unit-of-work (EVENT) scope, which cannot be preempted. Time-boxing requires
+     * off-thread execution — exactly what {@code async = true} provides (its own fresh scope).
+     *
+     * <p>Default: {@code ""} (no timeout — opt-in).
+     *
+     * @return an ISO-8601 duration string, or empty for no timeout
+     */
+    String timeout() default "";
 }

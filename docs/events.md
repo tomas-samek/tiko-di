@@ -126,6 +126,23 @@ try (Container container = Tiko.create(opts)) { ... }
 
 When you supply your own executor, **you own its lifecycle** — `Container.shutdown()` does not stop it. Async handler exceptions still route to the configured `ErrorHandler` regardless of which executor is in use.
 
+### Execution timeouts
+
+An async handler can declare a wall-clock budget with `timeout` (an ISO-8601 `Duration`):
+
+```java
+@EventHandler(async = true, timeout = "PT5S")
+public void onSlowOperation(SlowEvent event) {
+    // interrupted if it runs longer than 5 seconds
+}
+```
+
+If the handler runs longer than the budget, its worker thread is interrupted, the executor slot is freed, and the overrun is routed to the `ErrorHandler` as an `EventHandlerError` whose `cause()` is a `java.util.concurrent.TimeoutException`. Subsequent events keep flowing.
+
+- **Opt-in:** the default is no timeout.
+- **Async-only:** `timeout` requires `async = true`. A timeout on a synchronous handler is a **compile-time error** — a sync handler runs on the publisher's thread (and its unit-of-work scope), which cannot be preempted; time-boxing requires the off-thread, own-scope execution that `async = true` provides.
+- **Best-effort:** interruption can only stop a handler that respects `Thread.interrupt()` (e.g. is blocked on I/O or checks the flag). A handler running a tight uninterruptible loop will keep going — the timeout is reported, but Java cannot force-stop the thread.
+
 ## Graceful shutdown drain
 
 When `Container.shutdown()` runs, in-flight async event handlers are allowed to
