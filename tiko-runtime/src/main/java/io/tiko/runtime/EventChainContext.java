@@ -220,13 +220,15 @@ public final class EventChainContext {
      * exclusively from generated {@code EventRegistry} code for a handler that declared
      * {@code @EventHandler(async = true, timeout = ...)}.
      *
-     * <p>The body is submitted to {@code executor} as an interruptible {@link Future}. If it does
-     * not finish within {@code timeoutNanos}, the worker is interrupted ({@code cancel(true)}) —
-     * best-effort, since Java cannot force-stop a thread that ignores interruption — which frees
-     * the executor slot once the handler returns, and the overrun is routed to {@code errorHandler}
-     * as an {@link EventHandlerError} whose cause is a {@link TimeoutException}. A handler that
-     * fails on its own routes that failure instead; exactly one outcome is reported, because
-     * {@link CompletableFuture#orTimeout} completes the single shared future once.
+     * <p>The body runs on {@code executor} via {@link CompletableFuture#runAsync} (which captures
+     * every {@link Throwable}, so a handler {@link Error} is never lost on the executor thread). If
+     * it does not finish within {@code timeoutNanos}, {@link CompletableFuture#orTimeout} completes
+     * the future with a {@link TimeoutException} and the worker thread is interrupted — best-effort,
+     * since Java cannot force-stop a thread that ignores interruption — which frees the executor
+     * slot once the handler returns. The overrun is routed to {@code errorHandler} as an
+     * {@link EventHandlerError} whose cause is the {@code TimeoutException}. A handler that fails on
+     * its own routes that failure instead; exactly one outcome is reported, because {@code orTimeout}
+     * completes the single shared future once.
      *
      * <p>Routing mirrors the plain async path: an {@link Error} is logged via
      * {@link #logUnhandledAsyncError} (kept out of {@code ErrorHandler}), everything else goes
@@ -239,9 +241,8 @@ public final class EventChainContext {
             ErrorHandler errorHandler,
             EventHandlerInfo info,
             Object event) {
-        // runAsync captures every Throwable (incl. Error) into the future — so a handler Error is
-        // never lost on the executor thread, matching the plain async path. The worker thread is
-        // captured so a breached timeout can interrupt it directly (orTimeout has no handle on it).
+        // The worker thread is captured so a breached timeout can interrupt it directly (orTimeout
+        // has no handle on it).
         AtomicReference<Thread> worker = new AtomicReference<>();
         CompletableFuture<Void> work = CompletableFuture.runAsync(
                 () -> {
@@ -255,26 +256,47 @@ public final class EventChainContext {
             if (throwable == null) {
                 return;
             }
-            Throwable cause = (throwable instanceof CompletionException && throwable.getCause() != null)
-                    ? throwable.getCause()
-                    : throwable;
+            Throwable cause = unwrapCompletion(throwable);
             if (cause instanceof TimeoutException) {
-                Thread w = worker.get();
-                if (w != null) {
-                    // Best-effort interrupt; frees the executor slot once the handler returns. A
-                    // handler that ignores interruption keeps running (documented limitation).
-                    w.interrupt();
-                }
+                interruptWorker(worker.get());
             }
-            if (cause instanceof Error) {
-                logUnhandledAsyncError(cause);
-            } else {
-                try {
-                    errorHandler.onError(new EventHandlerError(info, event, cause));
-                } catch (Exception inner) {
-                    logErrorHandlerFailure(inner);
-                }
-            }
+            reportAsyncHandlerFailure(cause, errorHandler, info, event);
         });
+    }
+
+    /** Unwraps the {@link CompletionException} wrapper a {@link CompletableFuture} adds, if present. */
+    private static Throwable unwrapCompletion(Throwable throwable) {
+        return (throwable instanceof CompletionException && throwable.getCause() != null)
+                ? throwable.getCause()
+                : throwable;
+    }
+
+    /**
+     * Best-effort interrupt of a timed-out handler's worker thread — frees the executor slot once
+     * the handler returns. A handler that ignores interruption keeps running (documented limitation).
+     */
+    private static void interruptWorker(Thread worker) {
+        if (worker != null) {
+            worker.interrupt();
+        }
+    }
+
+    /**
+     * Routes an async {@code @EventHandler} failure exactly as the plain async path does: an
+     * {@link Error} is logged (kept out of {@code ErrorHandler}); everything else — including a
+     * timeout's {@link TimeoutException} — goes through {@code ErrorHandler} as an
+     * {@link EventHandlerError}, with a throwing handler logged as a last resort.
+     */
+    private static void reportAsyncHandlerFailure(
+            Throwable cause, ErrorHandler errorHandler, EventHandlerInfo info, Object event) {
+        if (cause instanceof Error) {
+            logUnhandledAsyncError(cause);
+            return;
+        }
+        try {
+            errorHandler.onError(new EventHandlerError(info, event, cause));
+        } catch (Exception inner) {
+            logErrorHandlerFailure(inner);
+        }
     }
 }
