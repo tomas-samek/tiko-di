@@ -73,31 +73,8 @@ public final class ConfigBootstrap {
             }
         }
 
-        // 5. Top-level prefix check. A top-level YAML key is accepted if it matches a
-        // claimed prefix literally (flat-dotted form, e.g. `"tiko.kafka":`) OR if it's
-        // the first segment of any dotted prefix (nested form, e.g. `tiko: kafka: ...`
-        // for prefix `tiko.kafka`). Both forms route to the same binder via
-        // BindContext.requireSection.
-        Set<String> claimed = new LinkedHashSet<>(prefixToTypes.keySet());
-        Set<String> claimedFirstSegments = new LinkedHashSet<>();
-        for (String p : claimed) {
-            int dot = p.indexOf('.');
-            claimedFirstSegments.add(dot < 0 ? p : p.substring(0, dot));
-        }
-        for (String k : interpolated.keySet()) {
-            if (claimed.contains(k)) {
-                continue; // exact claimed prefix (flat-dotted form) — its binder owns everything below
-            }
-            if (claimedFirstSegments.contains(k)) {
-                // Intermediate node (nested form): `k` is only the first segment of a dotted prefix,
-                // not a prefix itself. Walk its children so a typo'd sibling that matches no claimed
-                // prefix is reported instead of binding silently against layered defaults (#381).
-                validateNestedSections(ctx, k, interpolated.get(k), claimed);
-                continue;
-            }
-            String hint = NearestKey.hint(k, claimed, java.util.function.UnaryOperator.identity());
-            ctx.reportAtPath(ConfigIssueCode.UNKNOWN_SECTION, k, "unknown top-level section '" + k + "'." + hint);
-        }
+        // 5. Top-level section check (and nested-sibling check, #381).
+        validateTopLevelSections(ctx, interpolated, new LinkedHashSet<>(prefixToTypes.keySet()));
 
         // 6. Bind each record
         Map<Class<?>, Object> bound = new LinkedHashMap<>();
@@ -118,6 +95,34 @@ public final class ConfigBootstrap {
             throw cve;
         }
         return bound;
+    }
+
+    /**
+     * Top-level section check. A top-level YAML key is accepted if it matches a claimed prefix
+     * literally (flat-dotted form, e.g. {@code "tiko.kafka":}) — its binder then owns everything
+     * below — or if it is the first segment of a dotted prefix (nested form, e.g. {@code tiko:
+     * kafka: ...} for prefix {@code tiko.kafka}), in which case its children are walked so a typo'd
+     * sibling that matches no claimed prefix is reported rather than binding silently against
+     * layered defaults (#381). Anything else is an unknown top-level section.
+     */
+    private static void validateTopLevelSections(
+            BindContext ctx, Map<String, Object> interpolated, Set<String> claimed) {
+        Set<String> claimedFirstSegments = new LinkedHashSet<>();
+        for (String p : claimed) {
+            int dot = p.indexOf('.');
+            claimedFirstSegments.add(dot < 0 ? p : p.substring(0, dot));
+        }
+        for (Map.Entry<String, Object> entry : interpolated.entrySet()) {
+            String k = entry.getKey();
+            if (claimed.contains(k)) {
+                // exact claimed prefix (flat-dotted form) — its binder owns everything below
+            } else if (claimedFirstSegments.contains(k)) {
+                validateNestedSections(ctx, k, entry.getValue(), claimed);
+            } else {
+                String hint = NearestKey.hint(k, claimed, java.util.function.UnaryOperator.identity());
+                ctx.reportAtPath(ConfigIssueCode.UNKNOWN_SECTION, k, "unknown top-level section '" + k + "'." + hint);
+            }
+        }
     }
 
     /**
@@ -142,19 +147,20 @@ public final class ConfigBootstrap {
                 continuations.add(dot < 0 ? rest : rest.substring(0, dot));
             }
         }
-        for (Object rawKey : node.keySet()) {
-            String child = String.valueOf(rawKey);
+        for (Map.Entry<?, ?> entry : node.entrySet()) {
+            String child = String.valueOf(entry.getKey());
             String childPath = path + "." + child;
             if (claimed.contains(childPath)) {
-                continue; // reached a claimed prefix — its binder owns everything below
+                // reached a claimed prefix — its binder owns everything below
+            } else if (isIntermediateOf(childPath, claimed)) {
+                validateNestedSections(ctx, childPath, entry.getValue(), claimed);
+            } else {
+                String hint = NearestKey.hint(child, continuations, c -> path + "." + c);
+                ctx.reportAtPath(
+                        ConfigIssueCode.UNKNOWN_SECTION,
+                        childPath,
+                        "unknown config section '" + childPath + "'." + hint);
             }
-            if (isIntermediateOf(childPath, claimed)) {
-                validateNestedSections(ctx, childPath, node.get(rawKey), claimed);
-                continue;
-            }
-            String hint = NearestKey.hint(child, continuations, c -> path + "." + c);
-            ctx.reportAtPath(
-                    ConfigIssueCode.UNKNOWN_SECTION, childPath, "unknown config section '" + childPath + "'." + hint);
         }
     }
 

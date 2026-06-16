@@ -111,19 +111,12 @@ class ConfigBootstrapTest {
                 Map.of(
                         "kafka", Map.of("bootstrap-servers", "localhost:9092"),
                         "kavka", Map.of("bootstrap-servers", "prod:9092"))));
-        assertThatThrownBy(() -> ConfigBootstrap.bind("c.yaml", src, List.of(new KafkaConfigBinder())))
+        List<ConfigBinder<?>> binders = List.of(new KafkaConfigBinder());
+        assertThatThrownBy(() -> ConfigBootstrap.bind("c.yaml", src, binders))
                 .isInstanceOf(ConfigValidationException.class)
                 .hasMessageContaining("tiko.kavka")
                 .hasMessageContaining("Did you mean 'tiko.kafka'?");
-    }
-
-    @Test
-    void valid_nested_section_under_a_claimed_first_segment_binds_without_error() {
-        // Guard against a false positive: the legitimate nested form must still bind cleanly.
-        ConfigSource src =
-                ConfigSources.fromMap(Map.of("tiko", Map.of("kafka", Map.of("bootstrap-servers", "broker:9092"))));
-        Map<Class<?>, Object> result = ConfigBootstrap.bind("c.yaml", src, List.of(new KafkaConfigBinder()));
-        assertThat(((KafkaConfig) result.get(KafkaConfig.class)).bootstrap()).isEqualTo("broker:9092");
+        // The valid nested form (no typo) still binds — covered by dotted_prefix_accepts_nested_yaml_form.
     }
 
     record DeepConfig(String v) {}
@@ -156,7 +149,8 @@ class ConfigBootstrapTest {
                         Map.of(
                                 "c", Map.of("v", "ok"),
                                 "x", Map.of("v", "oops")))));
-        assertThatThrownBy(() -> ConfigBootstrap.bind("c.yaml", src, List.of(new DeepBinder())))
+        List<ConfigBinder<?>> binders = List.of(new DeepBinder());
+        assertThatThrownBy(() -> ConfigBootstrap.bind("c.yaml", src, binders))
                 .isInstanceOf(ConfigValidationException.class)
                 .hasMessageContaining("unknown config section 'a.b.x'")
                 .hasMessageContaining("Did you mean 'a.b.c'?");
