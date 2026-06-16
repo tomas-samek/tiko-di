@@ -724,6 +724,12 @@ public final class ContainerGenerator {
             return "new io.tiko.runtime.ContainerPicker<>(this, " + baseType + ".class)";
         }
 
+        // EventBus is a built-in, container-provided dependency (#314). We ARE the container,
+        // so call getEventBus() unqualified; Provider<EventBus> wraps it in a lazy lambda.
+        if (dependency.isEventBus()) {
+            return dependency.isProvider() ? "() -> getEventBus()" : "getEventBus()";
+        }
+
         String typeName = dependency.isProvider()
                 ? dependency.getUnwrappedType().orElseThrow().toString()
                 : dependency.getTypeName();
@@ -750,6 +756,16 @@ public final class ContainerGenerator {
             return dependency.isProvider() ? "() -> " + pickedCall : pickedCall;
         }
 
+        return resolveProviderCall(dependency, typeName);
+    }
+
+    /**
+     * Resolves a non-picked, non-built-in dependency to its container getter call (component
+     * getter, {@code produce_*} factory getter, {@code get(Class)} for {@code @Configuration},
+     * or a qualified {@code get(Class, name)}), wrapping in a lazy lambda for {@code Provider<T>}.
+     * Extracted from {@link #generateContainerGetCall} to keep that method's branching in check.
+     */
+    private String resolveProviderCall(DependencyModel dependency, String typeName) {
         Object provider =
                 context.findComponentOrFactory(dependency.getDependencyKey()).orElse(null);
 

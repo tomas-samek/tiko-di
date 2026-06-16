@@ -9,7 +9,7 @@ package io.tiko;
  *
  * <p>Example:</p>
  * <pre>{@code
- * EventBus eventBus = container.events();
+ * EventBus eventBus = container.getEventBus();
  * Subscription sub = eventBus.subscribe(OrderCreatedEvent.class, event -> {
  *     System.out.println("Order created: " + event.orderId());
  * });

@@ -235,6 +235,13 @@ public final class ComponentFactoryGenerator {
      *     current scope).
      */
     private String generateContainerGetCall(DependencyModel dependency, ComponentModel consumer) {
+        // EventBus is a built-in, container-provided dependency (#314): resolve it from the
+        // container rather than looking up a user bean. The Provider<EventBus> case is wrapped
+        // into a lambda by the caller, exactly like any other direct provider.
+        if (dependency.isEventBus()) {
+            return "container.getEventBus()";
+        }
+
         String typeName = dependency.isProvider()
                 ? dependency.getUnwrappedType().orElseThrow().toString()
                 : dependency.getTypeName();

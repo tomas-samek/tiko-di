@@ -14,8 +14,8 @@ package io.tiko;
  *     private final EventBus events;
  *
  *     @Inject
- *     public OrderService(Container container) {
- *         this.events = container.events();
+ *     public OrderService(EventBus events) {
+ *         this.events = events;
  *     }
  *
  *     public void createOrder(Order order) {

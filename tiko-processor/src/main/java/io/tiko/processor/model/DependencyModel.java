@@ -10,6 +10,15 @@ import javax.lang.model.type.TypeMirror;
  */
 public final class DependencyModel {
 
+    /**
+     * FQN of the framework event bus. It is injectable into a {@code @Component} constructor
+     * or a {@code @Produces} method as a built-in dependency (#314) — resolved from the
+     * container, not from a user-declared bean. {@code io.tiko.Container} is intentionally
+     * NOT in this set: injecting the container is service location, whereas {@code EventBus}
+     * is a legitimate collaborator interface for imperative {@code publish(...)}.
+     */
+    public static final String EVENT_BUS_TYPE = "io.tiko.EventBus";
+
     private final VariableElement parameter;
     private final TypeMirror type;
     private final String typeName;
@@ -74,6 +83,16 @@ public final class DependencyModel {
 
     public boolean isPicked() {
         return pickedTypeName != null;
+    }
+
+    /**
+     * True when this is a plain injection of the built-in {@link #EVENT_BUS_TYPE} service —
+     * either {@code EventBus} directly or {@code Provider<EventBus>}, unqualified and not
+     * {@code @Pick}ed. A qualified {@code @Named EventBus} is excluded (there is one bus),
+     * so it falls through to the normal missing-dependency path.
+     */
+    public boolean isEventBus() {
+        return !isPicker && pickedTypeName == null && EVENT_BUS_TYPE.equals(getDependencyKey());
     }
 
     /**
