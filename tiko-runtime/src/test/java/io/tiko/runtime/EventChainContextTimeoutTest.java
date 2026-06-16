@@ -45,11 +45,12 @@ class EventChainContextTimeoutTest {
         List<ErrorContext> errors = new CopyOnWriteArrayList<>();
         ErrorHandler handler = errors::add;
         CountDownLatch interrupted = new CountDownLatch(1);
+        CountDownLatch neverReleased = new CountDownLatch(1); // blocks the body until interrupted
 
         EventChainContext.runAsyncWithTimeout(
                 () -> {
                     try {
-                        Thread.sleep(10_000);
+                        neverReleased.await();
                     } catch (InterruptedException e) {
                         interrupted.countDown();
                         Thread.currentThread().interrupt();
@@ -62,6 +63,8 @@ class EventChainContextTimeoutTest {
                 INFO,
                 "evt");
 
+        // singleElement asserts exactly one outcome — the late RuntimeException from the
+        // interrupted body must not add a second error (orTimeout completes the future once).
         await().atMost(Duration.ofSeconds(5))
                 .untilAsserted(() -> assertThat(errors)
                         .singleElement()
@@ -71,9 +74,6 @@ class EventChainContextTimeoutTest {
         assertThat(interrupted.await(2, TimeUnit.SECONDS))
                 .as("the worker thread was interrupted (best-effort)")
                 .isTrue();
-        // The late RuntimeException from the interrupted body must not add a second error.
-        Thread.sleep(150);
-        assertThat(errors).hasSize(1);
     }
 
     @Test

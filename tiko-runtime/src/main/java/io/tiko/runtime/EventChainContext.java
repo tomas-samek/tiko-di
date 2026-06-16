@@ -10,9 +10,9 @@ import java.util.Collection;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Tracks the currently-executing event wrapper across a thread of event delivery, so that
@@ -239,24 +239,32 @@ public final class EventChainContext {
             ErrorHandler errorHandler,
             EventHandlerInfo info,
             Object event) {
-        CompletableFuture<Void> done = new CompletableFuture<>();
-        Future<?> work = executor.submit(() -> {
-            try {
-                body.run();
-                done.complete(null);
-            } catch (Throwable t) {
-                done.completeExceptionally(t);
+        // runAsync captures every Throwable (incl. Error) into the future — so a handler Error is
+        // never lost on the executor thread, matching the plain async path. The worker thread is
+        // captured so a breached timeout can interrupt it directly (orTimeout has no handle on it).
+        AtomicReference<Thread> worker = new AtomicReference<>();
+        CompletableFuture<Void> work = CompletableFuture.runAsync(
+                () -> {
+                    worker.set(Thread.currentThread());
+                    body.run();
+                },
+                executor);
+        // orTimeout returns the same future, completing it exceptionally with TimeoutException only
+        // if the body has not completed it first — so whenComplete fires exactly once.
+        work.orTimeout(timeoutNanos, TimeUnit.NANOSECONDS).whenComplete((ignored, throwable) -> {
+            if (throwable == null) {
+                return;
             }
-        });
-        // orTimeout returns the same future, completing it exceptionally with TimeoutException if
-        // the body has not completed it first — so whenComplete fires exactly once.
-        done.orTimeout(timeoutNanos, TimeUnit.NANOSECONDS).whenComplete((__, throwable) -> {
-            if (throwable == null) return;
             Throwable cause = (throwable instanceof CompletionException && throwable.getCause() != null)
                     ? throwable.getCause()
                     : throwable;
             if (cause instanceof TimeoutException) {
-                work.cancel(true);
+                Thread w = worker.get();
+                if (w != null) {
+                    // Best-effort interrupt; frees the executor slot once the handler returns. A
+                    // handler that ignores interruption keeps running (documented limitation).
+                    w.interrupt();
+                }
             }
             if (cause instanceof Error) {
                 logUnhandledAsyncError(cause);
