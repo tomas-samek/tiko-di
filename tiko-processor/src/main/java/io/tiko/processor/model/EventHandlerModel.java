@@ -18,6 +18,7 @@ public final class EventHandlerModel {
     private final String eventTypeName;
     private final boolean async;
     private final boolean hasEventWrapper; // Second parameter is Event<?> wrapper
+    private final long timeoutNanos; // 0 = no timeout (#107); async-only, validated at build time
     private final List<EventTriggerModel> eventTriggers;
 
     private EventHandlerModel(Builder builder) {
@@ -28,6 +29,7 @@ public final class EventHandlerModel {
         this.eventTypeName = builder.eventTypeName;
         this.async = builder.async;
         this.hasEventWrapper = builder.hasEventWrapper;
+        this.timeoutNanos = builder.timeoutNanos;
         this.eventTriggers = List.copyOf(builder.eventTriggers);
     }
 
@@ -63,6 +65,16 @@ public final class EventHandlerModel {
         return hasEventWrapper;
     }
 
+    /** Execution-timeout budget in nanoseconds, or {@code 0} for no timeout (#107). Always async-only. */
+    public long getTimeoutNanos() {
+        return timeoutNanos;
+    }
+
+    /** True when this handler declared a positive {@code @EventHandler(timeout = ...)}. */
+    public boolean hasTimeout() {
+        return timeoutNanos > 0;
+    }
+
     public List<EventTriggerModel> getEventTriggers() {
         return eventTriggers;
     }
@@ -82,6 +94,7 @@ public final class EventHandlerModel {
         private String eventTypeName;
         private boolean async = false;
         private boolean hasEventWrapper = false;
+        private long timeoutNanos = 0L;
         private List<EventTriggerModel> eventTriggers = new ArrayList<>();
 
         private Builder() {}
@@ -118,6 +131,11 @@ public final class EventHandlerModel {
 
         public Builder hasEventWrapper(boolean hasEventWrapper) {
             this.hasEventWrapper = hasEventWrapper;
+            return this;
+        }
+
+        public Builder timeoutNanos(long timeoutNanos) {
+            this.timeoutNanos = timeoutNanos;
             return this;
         }
 

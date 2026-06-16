@@ -873,6 +873,11 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
 
         List<EventTriggerModel> eventTriggers = collectEventTriggers(methodElement);
 
+        long timeoutNanos = resolveHandlerTimeoutNanos(methodElement, annotation);
+        if (timeoutNanos < 0) {
+            return null; // a timeout validation error was reported; skip this handler
+        }
+
         return EventHandlerModel.builder()
                 .methodElement(methodElement)
                 .declaringClass(declaringClass)
@@ -881,8 +886,53 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
                 .eventTypeName(eventTypeName)
                 .async(annotation.async())
                 .hasEventWrapper(hasEventWrapper)
+                .timeoutNanos(timeoutNanos)
                 .eventTriggers(eventTriggers)
                 .build();
+    }
+
+    /**
+     * Resolves {@code @EventHandler(timeout = ...)} (#107) to a positive nanosecond budget, or
+     * {@code 0} when no timeout is declared. Returns {@code -1} (and reports a compile error) when
+     * the declaration is invalid: timeouts are async-only (a sync handler runs on the publisher's
+     * thread and cannot be interrupted), the value must be an ISO-8601 {@link java.time.Duration},
+     * and it must be positive.
+     */
+    private long resolveHandlerTimeoutNanos(ExecutableElement methodElement, EventHandler annotation) {
+        String timeout = annotation.timeout();
+        if (timeout == null || timeout.isBlank()) {
+            return 0L;
+        }
+        if (!annotation.async()) {
+            context.getErrorReporter()
+                    .error(
+                            methodElement,
+                            "@EventHandler timeout requires async = true: a sync handler runs on the publisher's"
+                                    + " thread (and its unit-of-work scope) and cannot be interrupted",
+                            "Add async = true to time-box this handler (it then runs off-thread in its own scope)",
+                            "Or remove the timeout");
+            return -1L;
+        }
+        java.time.Duration duration;
+        try {
+            duration = java.time.Duration.parse(timeout.trim());
+        } catch (java.time.format.DateTimeParseException badFormat) {
+            context.getErrorReporter()
+                    .error(
+                            methodElement,
+                            "@EventHandler timeout '" + timeout + "' is not a valid ISO-8601 Duration",
+                            "Use an ISO-8601 duration such as \"PT5S\" (5 seconds) or \"PT0.5S\" (500 ms)");
+            return -1L;
+        }
+        if (duration.isZero() || duration.isNegative()) {
+            context.getErrorReporter()
+                    .error(
+                            methodElement,
+                            "@EventHandler timeout '" + timeout + "' must be positive",
+                            "Use a positive duration such as \"PT5S\"");
+            return -1L;
+        }
+        return duration.toNanos();
     }
 
     /**

@@ -222,35 +222,51 @@ public final class EventRegistryGenerator {
             runBody.addStatement("$T.exit(__asyncPrev)", CHAIN_CONTEXT);
             runBody.endControlFlow();
 
-            // Build the whenComplete body. CompletableFuture captures every Throwable (including
-            // Error) into the future, so an Error never surfaces on the executor thread — without
-            // handling it here it would vanish. Unwrap CompletionException first, then: Exceptions
-            // route through ErrorHandler (as the sync path does), while Errors are logged but kept
-            // out of ErrorHandler — observable, yet consistent with Exception-only routing (#306).
-            CodeBlock.Builder wcBody = CodeBlock.builder();
-            wcBody.beginControlFlow("if (__t != null)");
-            wcBody.addStatement(
-                    "$T __cause = (__t instanceof $T && __t.getCause() != null) ? __t.getCause() : __t",
-                    Throwable.class,
-                    completionExceptionClass);
-            wcBody.beginControlFlow("if (__cause instanceof $T)", Error.class);
-            wcBody.addStatement("$T.logUnhandledAsyncError(__cause)", CHAIN_CONTEXT);
-            wcBody.nextControlFlow("else");
-            wcBody.beginControlFlow("try");
-            wcBody.addStatement("__err.onError(new $T(HANDLER_INFO_$L, event, __cause))", eventHandlerError, index);
-            wcBody.nextControlFlow("catch ($T __inner)", Exception.class);
-            wcBody.addStatement("$T.logErrorHandlerFailure(__inner)", CHAIN_CONTEXT);
-            wcBody.endControlFlow();
-            wcBody.endControlFlow();
-            wcBody.endControlFlow();
+            if (handler.hasTimeout()) {
+                // Timed dispatch (#107): run the invocation under a wall-clock budget. The runtime
+                // helper submits the body to the executor as an interruptible Future, interrupts it
+                // on breach (best-effort), frees the slot, and routes an EventHandlerError whose
+                // cause is a TimeoutException. It applies the same Error-vs-Exception routing as the
+                // plain async path below, so no whenComplete block is generated here.
+                method.addCode(CodeBlock.builder()
+                        .add(
+                                "$T.runAsyncWithTimeout(() -> {\n$L}, $LL, __exec, __err, HANDLER_INFO_$L, event);\n",
+                                CHAIN_CONTEXT,
+                                runBody.build(),
+                                handler.getTimeoutNanos(),
+                                index)
+                        .build());
+            } else {
+                // Build the whenComplete body. CompletableFuture captures every Throwable (including
+                // Error) into the future, so an Error never surfaces on the executor thread — without
+                // handling it here it would vanish. Unwrap CompletionException first, then: Exceptions
+                // route through ErrorHandler (as the sync path does), while Errors are logged but kept
+                // out of ErrorHandler — observable, yet consistent with Exception-only routing (#306).
+                CodeBlock.Builder wcBody = CodeBlock.builder();
+                wcBody.beginControlFlow("if (__t != null)");
+                wcBody.addStatement(
+                        "$T __cause = (__t instanceof $T && __t.getCause() != null) ? __t.getCause() : __t",
+                        Throwable.class,
+                        completionExceptionClass);
+                wcBody.beginControlFlow("if (__cause instanceof $T)", Error.class);
+                wcBody.addStatement("$T.logUnhandledAsyncError(__cause)", CHAIN_CONTEXT);
+                wcBody.nextControlFlow("else");
+                wcBody.beginControlFlow("try");
+                wcBody.addStatement("__err.onError(new $T(HANDLER_INFO_$L, event, __cause))", eventHandlerError, index);
+                wcBody.nextControlFlow("catch ($T __inner)", Exception.class);
+                wcBody.addStatement("$T.logErrorHandlerFailure(__inner)", CHAIN_CONTEXT);
+                wcBody.endControlFlow();
+                wcBody.endControlFlow();
+                wcBody.endControlFlow();
 
-            method.addCode(CodeBlock.builder()
-                    .add(
-                            "$T.runAsync(() -> {\n$L}, __exec).whenComplete((__r, __t) -> {\n$L});\n",
-                            completableFutureClass,
-                            runBody.build(),
-                            wcBody.build())
-                    .build());
+                method.addCode(CodeBlock.builder()
+                        .add(
+                                "$T.runAsync(() -> {\n$L}, __exec).whenComplete((__r, __t) -> {\n$L});\n",
+                                completableFutureClass,
+                                runBody.build(),
+                                wcBody.build())
+                        .build());
+            }
 
         } else {
             // Sync dispatch: inline try/catch, error routed immediately.

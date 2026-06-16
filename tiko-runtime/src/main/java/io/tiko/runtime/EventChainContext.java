@@ -10,6 +10,9 @@ import java.util.Collection;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Tracks the currently-executing event wrapper across a thread of event delivery, so that
@@ -210,5 +213,60 @@ public final class EventChainContext {
         } catch (Exception inner) {
             logErrorHandlerFailure(inner);
         }
+    }
+
+    /**
+     * Runs an async {@code @EventHandler} body under a wall-clock timeout (#107). Called
+     * exclusively from generated {@code EventRegistry} code for a handler that declared
+     * {@code @EventHandler(async = true, timeout = ...)}.
+     *
+     * <p>The body is submitted to {@code executor} as an interruptible {@link Future}. If it does
+     * not finish within {@code timeoutNanos}, the worker is interrupted ({@code cancel(true)}) —
+     * best-effort, since Java cannot force-stop a thread that ignores interruption — which frees
+     * the executor slot once the handler returns, and the overrun is routed to {@code errorHandler}
+     * as an {@link EventHandlerError} whose cause is a {@link TimeoutException}. A handler that
+     * fails on its own routes that failure instead; exactly one outcome is reported, because
+     * {@link CompletableFuture#orTimeout} completes the single shared future once.
+     *
+     * <p>Routing mirrors the plain async path: an {@link Error} is logged via
+     * {@link #logUnhandledAsyncError} (kept out of {@code ErrorHandler}), everything else goes
+     * through {@code ErrorHandler}.
+     */
+    public static void runAsyncWithTimeout(
+            Runnable body,
+            long timeoutNanos,
+            ExecutorService executor,
+            ErrorHandler errorHandler,
+            EventHandlerInfo info,
+            Object event) {
+        CompletableFuture<Void> done = new CompletableFuture<>();
+        Future<?> work = executor.submit(() -> {
+            try {
+                body.run();
+                done.complete(null);
+            } catch (Throwable t) {
+                done.completeExceptionally(t);
+            }
+        });
+        // orTimeout returns the same future, completing it exceptionally with TimeoutException if
+        // the body has not completed it first — so whenComplete fires exactly once.
+        done.orTimeout(timeoutNanos, TimeUnit.NANOSECONDS).whenComplete((__, throwable) -> {
+            if (throwable == null) return;
+            Throwable cause = (throwable instanceof CompletionException && throwable.getCause() != null)
+                    ? throwable.getCause()
+                    : throwable;
+            if (cause instanceof TimeoutException) {
+                work.cancel(true);
+            }
+            if (cause instanceof Error) {
+                logUnhandledAsyncError(cause);
+            } else {
+                try {
+                    errorHandler.onError(new EventHandlerError(info, event, cause));
+                } catch (Exception inner) {
+                    logErrorHandlerFailure(inner);
+                }
+            }
+        });
     }
 }
