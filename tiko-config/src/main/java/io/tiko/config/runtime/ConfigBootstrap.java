@@ -73,23 +73,8 @@ public final class ConfigBootstrap {
             }
         }
 
-        // 5. Top-level prefix check. A top-level YAML key is accepted if it matches a
-        // claimed prefix literally (flat-dotted form, e.g. `"tiko.kafka":`) OR if it's
-        // the first segment of any dotted prefix (nested form, e.g. `tiko: kafka: ...`
-        // for prefix `tiko.kafka`). Both forms route to the same binder via
-        // BindContext.requireSection.
-        Set<String> claimed = new LinkedHashSet<>(prefixToTypes.keySet());
-        Set<String> claimedFirstSegments = new LinkedHashSet<>();
-        for (String p : claimed) {
-            int dot = p.indexOf('.');
-            claimedFirstSegments.add(dot < 0 ? p : p.substring(0, dot));
-        }
-        for (String k : interpolated.keySet()) {
-            if (!claimed.contains(k) && !claimedFirstSegments.contains(k)) {
-                String hint = NearestKey.hint(k, claimed, java.util.function.UnaryOperator.identity());
-                ctx.reportAtPath(ConfigIssueCode.UNKNOWN_SECTION, k, "unknown top-level section '" + k + "'." + hint);
-            }
-        }
+        // 5. Top-level section check (and nested-sibling check, #381).
+        validateTopLevelSections(ctx, interpolated, new LinkedHashSet<>(prefixToTypes.keySet()));
 
         // 6. Bind each record
         Map<Class<?>, Object> bound = new LinkedHashMap<>();
@@ -110,5 +95,82 @@ public final class ConfigBootstrap {
             throw cve;
         }
         return bound;
+    }
+
+    /**
+     * Top-level section check. A top-level YAML key is accepted if it matches a claimed prefix
+     * literally (flat-dotted form, e.g. {@code "tiko.kafka":}) — its binder then owns everything
+     * below — or if it is the first segment of a dotted prefix (nested form, e.g. {@code tiko:
+     * kafka: ...} for prefix {@code tiko.kafka}), in which case its children are walked so a typo'd
+     * sibling that matches no claimed prefix is reported rather than binding silently against
+     * layered defaults (#381). Anything else is an unknown top-level section.
+     */
+    private static void validateTopLevelSections(
+            BindContext ctx, Map<String, Object> interpolated, Set<String> claimed) {
+        Set<String> claimedFirstSegments = new LinkedHashSet<>();
+        for (String p : claimed) {
+            int dot = p.indexOf('.');
+            claimedFirstSegments.add(dot < 0 ? p : p.substring(0, dot));
+        }
+        for (Map.Entry<String, Object> entry : interpolated.entrySet()) {
+            String k = entry.getKey();
+            if (claimed.contains(k)) {
+                // exact claimed prefix (flat-dotted form) — its binder owns everything below
+            } else if (claimedFirstSegments.contains(k)) {
+                validateNestedSections(ctx, k, entry.getValue(), claimed);
+            } else {
+                String hint = NearestKey.hint(k, claimed, java.util.function.UnaryOperator.identity());
+                ctx.reportAtPath(ConfigIssueCode.UNKNOWN_SECTION, k, "unknown top-level section '" + k + "'." + hint);
+            }
+        }
+    }
+
+    /**
+     * Validates the nested children of an intermediate path (#381). {@code path} matched the first
+     * segment of some claimed prefix but is not itself a claimed prefix, so its sub-map must lead
+     * only toward claimed prefixes. A child whose full path is a claimed prefix is left to that
+     * prefix's binder (it owns everything below). A child that merely extends the claimed tree
+     * (a deeper intermediate node) recurses. Any other child is an unknown section — the case a
+     * typo like {@code tiko.kavka} hits, which previously bound silently against layered defaults.
+     */
+    private static void validateNestedSections(BindContext ctx, String path, Object value, Set<String> claimed) {
+        if (!(value instanceof Map<?, ?> node)) {
+            return; // not a nested mapping — a type mismatch is the binder's concern, not ours
+        }
+        // Valid next segments at this depth: the segment following `path` in every claimed prefix
+        // that strictly extends it — the "did you mean" candidates for a sibling typo.
+        Set<String> continuations = new LinkedHashSet<>();
+        for (String prefix : claimed) {
+            if (prefix.startsWith(path + ".")) {
+                String rest = prefix.substring(path.length() + 1);
+                int dot = rest.indexOf('.');
+                continuations.add(dot < 0 ? rest : rest.substring(0, dot));
+            }
+        }
+        for (Map.Entry<?, ?> entry : node.entrySet()) {
+            String child = String.valueOf(entry.getKey());
+            String childPath = path + "." + child;
+            if (claimed.contains(childPath)) {
+                // reached a claimed prefix — its binder owns everything below
+            } else if (isIntermediateOf(childPath, claimed)) {
+                validateNestedSections(ctx, childPath, entry.getValue(), claimed);
+            } else {
+                String hint = NearestKey.hint(child, continuations, c -> path + "." + c);
+                ctx.reportAtPath(
+                        ConfigIssueCode.UNKNOWN_SECTION,
+                        childPath,
+                        "unknown config section '" + childPath + "'." + hint);
+            }
+        }
+    }
+
+    /** True when {@code path} is a strict prefix of some claimed prefix (i.e. a deeper intermediate node). */
+    private static boolean isIntermediateOf(String path, Set<String> claimed) {
+        for (String prefix : claimed) {
+            if (prefix.startsWith(path + ".")) {
+                return true;
+            }
+        }
+        return false;
     }
 }
