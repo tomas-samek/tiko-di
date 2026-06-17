@@ -107,9 +107,9 @@ The framework dispatches via a bounded `ThreadPoolExecutor` sized for typical sm
 
 | Knob              | Value                                              |
 |-------------------|----------------------------------------------------|
-| Core pool size    | `max(2, cores / 2)`                                |
-| Max pool size     | `cores * 4`                                        |
-| Keep-alive        | 60 seconds                                         |
+| Core pool size    | configurable via `eventExecutorCoreSize(...)` (default `max(2, cores / 2)`) |
+| Max pool size     | configurable via `eventExecutorMaxSize(...)` (default `cores * 4`)  |
+| Keep-alive        | configurable via `eventExecutorKeepAlive(...)` (default 60 seconds) |
 | Queue             | bounded `LinkedBlockingQueue`, capacity `queueCapacity` (default 1024) |
 | Rejection policy  | chosen by `onOverflow(...)` (default `CALLER_RUNS` — slows publisher under overload) |
 | Thread name       | `tiko-event-async-{n}` (daemon)                    |
@@ -134,6 +134,31 @@ TikoOptions opts = TikoOptions.builder()
 
 Whatever the policy, once the container is shutting down a rejected task degrades to an observable logged drop — `BLOCK` never hangs teardown and `THROW` never throws on the shutdown path.
 
+#### Tuning the default executor's pool size
+
+Size the pool for your workload — more threads for I/O-bound handlers, fewer for CPU-bound. Omitting a knob keeps its processor-derived default, so these are purely additive:
+
+```java
+TikoOptions opts = TikoOptions.builder()
+        .eventExecutorCoreSize(8)                    // default max(2, cores / 2)
+        .eventExecutorMaxSize(32)                    // default cores * 4
+        .eventExecutorKeepAlive(Duration.ofSeconds(45)) // default 60s
+        .build();
+```
+
+The effective max size must be `>=` the effective core size, or container start fails with `IllegalArgumentException`.
+
+#### Observing the default executor
+
+Poll a point-in-time snapshot of the framework executor for monitoring (saturation, queue depth, throughput):
+
+```java
+container.eventExecutorMetrics().ifPresent(m ->
+        meterRegistry.gauge("tiko.events.queue", m.queueSize()));
+```
+
+`eventExecutorMetrics()` returns `Optional<ExecutorMetrics>` — a record exposing `activeCount`, `poolSize`, `queueSize`, `queueRemainingCapacity`, `completedTaskCount`, `corePoolSize`, and `maxPoolSize`. It is **empty** when you supply your own executor (its metrics are yours to expose, not the framework's).
+
 Workloads with extreme throughput or latency requirements can supply their own executor instead:
 
 ```java
@@ -144,7 +169,7 @@ TikoOptions opts = TikoOptions.builder()
 try (Container container = Tiko.create(opts)) { ... }
 ```
 
-When you supply your own executor, **you own its lifecycle** — `Container.shutdown()` does not stop it, and `queueCapacity` / `onOverflow` have no effect (your executor brings its own queue and rejection policy). Async handler exceptions still route to the configured `ErrorHandler` regardless of which executor is in use.
+When you supply your own executor, **you own its lifecycle** — `Container.shutdown()` does not stop it; `queueCapacity` / `onOverflow` and the pool-size knobs have no effect (your executor brings its own queue, rejection policy, and sizing); and `eventExecutorMetrics()` returns empty. Async handler exceptions still route to the configured `ErrorHandler` regardless of which executor is in use.
 
 ### Execution timeouts
 

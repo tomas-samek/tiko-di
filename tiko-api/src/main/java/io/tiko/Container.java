@@ -192,6 +192,22 @@ public interface Container extends AutoCloseable {
     java.util.concurrent.ExecutorService getEventExecutor();
 
     /**
+     * Returns a point-in-time snapshot of the framework's event-dispatch executor (#110),
+     * for monitoring saturation and queue depth.
+     *
+     * <p>Returns {@link java.util.Optional#empty()} when the container does not own a
+     * sampleable executor — chiefly when a custom executor was supplied via
+     * {@code TikoOptions.eventExecutor(...)} (its lifecycle and metrics are yours, not the
+     * framework's). The default implementation returns {@code empty()} so user-supplied
+     * {@code Container} implementations remain source-compatible.
+     *
+     * @return a snapshot of the framework executor, or empty when none is owned
+     */
+    default java.util.Optional<ExecutorMetrics> eventExecutorMetrics() {
+        return java.util.Optional.empty();
+    }
+
+    /**
      * Returns the error handler configured for this container.
      *
      * <p>Transports (e.g., Kafka) use this to route errors through the same handler

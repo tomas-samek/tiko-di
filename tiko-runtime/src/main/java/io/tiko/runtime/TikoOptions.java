@@ -34,7 +34,13 @@ public final class TikoOptions {
     private final java.util.function.UnaryOperator<EventBus> eventBusDecorator;
     private final int queueCapacity;
     private final OverflowPolicy overflowPolicy;
+    private final int eventExecutorCoreSize;
+    private final int eventExecutorMaxSize;
+    private final Duration eventExecutorKeepAlive;
     private final java.util.Map<OverrideKey, java.util.function.Supplier<?>> overrides;
+
+    /** Sentinel for an unset pool-size knob: the framework derives the default from {@code availableProcessors()}. */
+    static final int UNSET_POOL_SIZE = -1;
 
     private TikoOptions(Builder b) {
         this.configSource = b.configSource;
@@ -45,6 +51,9 @@ public final class TikoOptions {
         this.eventBusDecorator = b.eventBusDecorator;
         this.queueCapacity = b.queueCapacity;
         this.overflowPolicy = b.overflowPolicy;
+        this.eventExecutorCoreSize = b.eventExecutorCoreSize;
+        this.eventExecutorMaxSize = b.eventExecutorMaxSize;
+        this.eventExecutorKeepAlive = b.eventExecutorKeepAlive;
         this.overrides = b.overrides == null
                 ? new java.util.concurrent.ConcurrentHashMap<>()
                 : new java.util.concurrent.ConcurrentHashMap<>(b.overrides);
@@ -121,6 +130,33 @@ public final class TikoOptions {
      */
     public OverflowPolicy onOverflow() {
         return overflowPolicy;
+    }
+
+    /**
+     * @return the configured core pool size for the framework default event executor (#110),
+     *         or {@link #UNSET_POOL_SIZE} when unset (the framework derives {@code Math.max(2,
+     *         availableProcessors() / 2)}). Ignored when a custom {@link #eventExecutor()} is supplied.
+     */
+    public int eventExecutorCoreSize() {
+        return eventExecutorCoreSize;
+    }
+
+    /**
+     * @return the configured maximum pool size for the framework default event executor (#110),
+     *         or {@link #UNSET_POOL_SIZE} when unset (the framework derives {@code availableProcessors()
+     *         * 4}). Ignored when a custom {@link #eventExecutor()} is supplied.
+     */
+    public int eventExecutorMaxSize() {
+        return eventExecutorMaxSize;
+    }
+
+    /**
+     * @return the configured idle keep-alive for the framework default event executor's
+     *         non-core threads (#110), or {@code null} when unset (the framework default of
+     *         60 seconds). Ignored when a custom {@link #eventExecutor()} is supplied.
+     */
+    public Duration eventExecutorKeepAlive() {
+        return eventExecutorKeepAlive;
     }
 
     public boolean hasOverride(Class<?> type) {
@@ -206,6 +242,9 @@ public final class TikoOptions {
         private java.util.function.UnaryOperator<EventBus> eventBusDecorator;
         private int queueCapacity = 1024; // framework default; matches DefaultEventExecutorFactory
         private OverflowPolicy overflowPolicy = OverflowPolicy.CALLER_RUNS;
+        private int eventExecutorCoreSize = UNSET_POOL_SIZE;
+        private int eventExecutorMaxSize = UNSET_POOL_SIZE;
+        private Duration eventExecutorKeepAlive;
         private java.util.Map<OverrideKey, java.util.function.Supplier<?>> overrides;
 
         private Builder() {}
@@ -329,6 +368,63 @@ public final class TikoOptions {
          */
         public Builder onOverflow(OverflowPolicy policy) {
             this.overflowPolicy = Objects.requireNonNull(policy, "policy");
+            return this;
+        }
+
+        /**
+         * Sets the core pool size of the framework default event executor (#110). When unset,
+         * the framework derives {@code Math.max(2, availableProcessors() / 2)} — today's behaviour.
+         *
+         * <p>Has <strong>no effect</strong> when {@link #eventExecutor(java.util.concurrent.ExecutorService)}
+         * is set — a user-supplied executor brings its own sizing.
+         *
+         * @param coreSize non-negative core pool size
+         * @throws IllegalArgumentException if {@code coreSize} is negative
+         */
+        public Builder eventExecutorCoreSize(int coreSize) {
+            if (coreSize < 0) {
+                throw new IllegalArgumentException("eventExecutorCoreSize must not be negative");
+            }
+            this.eventExecutorCoreSize = coreSize;
+            return this;
+        }
+
+        /**
+         * Sets the maximum pool size of the framework default event executor (#110). When unset,
+         * the framework derives {@code availableProcessors() * 4} — today's behaviour. The
+         * effective maximum must be {@code >=} the effective core size, else container start fails.
+         *
+         * <p>Has <strong>no effect</strong> when {@link #eventExecutor(java.util.concurrent.ExecutorService)}
+         * is set — a user-supplied executor brings its own sizing.
+         *
+         * @param maxSize positive maximum pool size
+         * @throws IllegalArgumentException if {@code maxSize} is not positive
+         */
+        public Builder eventExecutorMaxSize(int maxSize) {
+            if (maxSize <= 0) {
+                throw new IllegalArgumentException("eventExecutorMaxSize must be positive");
+            }
+            this.eventExecutorMaxSize = maxSize;
+            return this;
+        }
+
+        /**
+         * Sets the idle keep-alive for the framework default event executor's non-core threads
+         * (#110). When unset, the framework default of 60 seconds applies.
+         *
+         * <p>Has <strong>no effect</strong> when {@link #eventExecutor(java.util.concurrent.ExecutorService)}
+         * is set — a user-supplied executor brings its own keep-alive.
+         *
+         * @param keepAlive non-negative idle keep-alive
+         * @throws IllegalArgumentException if {@code keepAlive} is negative
+         * @throws NullPointerException if {@code keepAlive} is null
+         */
+        public Builder eventExecutorKeepAlive(Duration keepAlive) {
+            Objects.requireNonNull(keepAlive, "eventExecutorKeepAlive");
+            if (keepAlive.isNegative()) {
+                throw new IllegalArgumentException("eventExecutorKeepAlive must not be negative");
+            }
+            this.eventExecutorKeepAlive = keepAlive;
             return this;
         }
 

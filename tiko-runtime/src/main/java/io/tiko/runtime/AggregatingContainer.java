@@ -149,7 +149,12 @@ public final class AggregatingContainer implements Container {
         this.errorHandler = errorHandler;
         this.eventExecutor = userEventExecutor != null
                 ? userEventExecutor
-                : DefaultEventExecutorFactory.create(options.queueCapacity(), options.onOverflow());
+                : DefaultEventExecutorFactory.create(
+                        options.queueCapacity(),
+                        options.onOverflow(),
+                        options.eventExecutorCoreSize(),
+                        options.eventExecutorMaxSize(),
+                        options.eventExecutorKeepAlive());
         this.ownsEventExecutor = (userEventExecutor == null);
         this.shutdownTimeout = shutdownTimeout;
         this.options = options;
@@ -496,6 +501,15 @@ public final class AggregatingContainer implements Container {
     public java.util.concurrent.ExecutorService getEventExecutor() {
         // Returns the shared executor (#51): same instance across all per-module containers.
         return eventExecutor;
+    }
+
+    @Override
+    public java.util.Optional<io.tiko.ExecutorMetrics> eventExecutorMetrics() {
+        // Only the framework-owned default pool is sampleable (#110). A user-supplied executor —
+        // even a ThreadPoolExecutor — is the user's to observe; we report empty for it.
+        return ownsEventExecutor && eventExecutor instanceof java.util.concurrent.ThreadPoolExecutor tpe
+                ? java.util.Optional.of(io.tiko.ExecutorMetrics.from(tpe))
+                : java.util.Optional.empty();
     }
 
     @Override
