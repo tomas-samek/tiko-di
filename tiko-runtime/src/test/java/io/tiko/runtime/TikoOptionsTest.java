@@ -186,6 +186,70 @@ class TikoOptionsTest {
     }
 
     @Test
+    void eventExecutorSizingDefaultsAreUnset() {
+        // Unset = sentinel/null so the factory derives processor-based defaults (today's behaviour).
+        TikoOptions opts = TikoOptions.builder().build();
+        assertThat(opts.eventExecutorCoreSize()).isEqualTo(TikoOptions.UNSET_POOL_SIZE);
+        assertThat(opts.eventExecutorMaxSize()).isEqualTo(TikoOptions.UNSET_POOL_SIZE);
+        assertThat(opts.eventExecutorKeepAlive()).isNull();
+    }
+
+    @Test
+    void builderRoundTripsEventExecutorSizing() {
+        TikoOptions opts = TikoOptions.builder()
+                .eventExecutorCoreSize(8)
+                .eventExecutorMaxSize(32)
+                .eventExecutorKeepAlive(Duration.ofSeconds(45))
+                .build();
+        assertThat(opts.eventExecutorCoreSize()).isEqualTo(8);
+        assertThat(opts.eventExecutorMaxSize()).isEqualTo(32);
+        assertThat(opts.eventExecutorKeepAlive()).isEqualTo(Duration.ofSeconds(45));
+    }
+
+    @Test
+    void builderAcceptsZeroCoreSizeAndZeroKeepAlive() {
+        // Both are valid ThreadPoolExecutor configs: a 0 core pool grows on demand; a 0 keep-alive
+        // reaps idle non-core threads immediately.
+        TikoOptions opts = TikoOptions.builder()
+                .eventExecutorCoreSize(0)
+                .eventExecutorKeepAlive(Duration.ZERO)
+                .build();
+        assertThat(opts.eventExecutorCoreSize()).isZero();
+        assertThat(opts.eventExecutorKeepAlive()).isEqualTo(Duration.ZERO);
+    }
+
+    @Test
+    void builderRejectsNegativeCoreSize() {
+        TikoOptions.Builder b = TikoOptions.builder();
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> b.eventExecutorCoreSize(-1))
+                .withMessageContaining("eventExecutorCoreSize");
+    }
+
+    @Test
+    void builderRejectsNonPositiveMaxSize() {
+        TikoOptions.Builder b = TikoOptions.builder();
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> b.eventExecutorMaxSize(0))
+                .withMessageContaining("eventExecutorMaxSize");
+        assertThatIllegalArgumentException().isThrownBy(() -> b.eventExecutorMaxSize(-1));
+    }
+
+    @Test
+    void builderRejectsNegativeKeepAlive() {
+        TikoOptions.Builder b = TikoOptions.builder();
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> b.eventExecutorKeepAlive(Duration.ofSeconds(-1)))
+                .withMessageContaining("eventExecutorKeepAlive");
+    }
+
+    @Test
+    void builderRejectsNullKeepAlive() {
+        TikoOptions.Builder b = TikoOptions.builder();
+        assertThatNullPointerException().isThrownBy(() -> b.eventExecutorKeepAlive(null));
+    }
+
+    @Test
     void overrideStoresTypeKeyedSupplier() {
         java.util.function.Supplier<String> sup = () -> "test";
         TikoOptions opts = TikoOptions.builder().override(String.class, sup).build();
