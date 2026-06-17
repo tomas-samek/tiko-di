@@ -154,6 +154,38 @@ class TikoOptionsTest {
     }
 
     @Test
+    void queueCapacityAndOverflowDefaults() {
+        TikoOptions opts = TikoOptions.builder().build();
+        assertThat(opts.queueCapacity()).isEqualTo(1024);
+        assertThat(opts.onOverflow()).isEqualTo(OverflowPolicy.CALLER_RUNS);
+    }
+
+    @Test
+    void builderRoundTripsQueueCapacityAndOverflowPolicy() {
+        TikoOptions opts = TikoOptions.builder()
+                .queueCapacity(64)
+                .onOverflow(OverflowPolicy.THROW)
+                .build();
+        assertThat(opts.queueCapacity()).isEqualTo(64);
+        assertThat(opts.onOverflow()).isEqualTo(OverflowPolicy.THROW);
+    }
+
+    @Test
+    void builderRejectsNonPositiveQueueCapacity() {
+        TikoOptions.Builder b = TikoOptions.builder();
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> b.queueCapacity(0))
+                .withMessageContaining("queueCapacity");
+        assertThatIllegalArgumentException().isThrownBy(() -> b.queueCapacity(-1));
+    }
+
+    @Test
+    void builderRejectsNullOverflowPolicy() {
+        TikoOptions.Builder b = TikoOptions.builder();
+        assertThatNullPointerException().isThrownBy(() -> b.onOverflow(null));
+    }
+
+    @Test
     void overrideStoresTypeKeyedSupplier() {
         java.util.function.Supplier<String> sup = () -> "test";
         TikoOptions opts = TikoOptions.builder().override(String.class, sup).build();

@@ -2,6 +2,7 @@ package io.tiko.runtime;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -16,9 +17,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  *   <li>Core pool: {@code Math.max(2, availableProcessors() / 2)}</li>
  *   <li>Max pool: {@code availableProcessors() * 4}</li>
  *   <li>Keep-alive: 60 seconds</li>
- *   <li>Queue: bounded {@link LinkedBlockingQueue} with capacity 1024</li>
- *   <li>Rejection policy: {@link ShutdownAwareCallerRunsPolicy} — caller-runs backpressure
- *       while the pool is live, and an observable WARNING (never a silent drop, never a
+ *   <li>Queue: bounded {@link LinkedBlockingQueue}, capacity configurable (default 1024, #109)</li>
+ *   <li>Rejection policy: chosen by the {@link OverflowPolicy} (default {@code CALLER_RUNS}, #109).
+ *       Every policy degrades to an observable WARNING (never a silent drop, never a hang, never a
  *       throw) for tasks rejected once the pool is shutting down (#346).</li>
  *   <li>Threads: daemon, named {@code tiko-event-async-{n}}.</li>
  * </ul>
@@ -28,9 +29,20 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public final class DefaultEventExecutorFactory {
 
+    /** Historical defaults, applied when callers do not configure backpressure (#109). */
+    static final int DEFAULT_QUEUE_CAPACITY = 1024;
+
     private DefaultEventExecutorFactory() {}
 
     public static ExecutorService create() {
+        return create(DEFAULT_QUEUE_CAPACITY, OverflowPolicy.CALLER_RUNS);
+    }
+
+    /**
+     * Builds the default event executor with a bounded queue of {@code queueCapacity} and the
+     * given {@code overflowPolicy} for tasks rejected when that queue is full (#109).
+     */
+    public static ExecutorService create(int queueCapacity, OverflowPolicy overflowPolicy) {
         int cores = Runtime.getRuntime().availableProcessors();
         int corePoolSize = Math.max(2, cores / 2);
         int maxPoolSize = cores * 4;
@@ -51,8 +63,15 @@ public final class DefaultEventExecutorFactory {
                 maxPoolSize,
                 60L,
                 TimeUnit.SECONDS,
-                new LinkedBlockingQueue<>(1024),
+                new LinkedBlockingQueue<>(queueCapacity),
                 threadFactory,
-                new ShutdownAwareCallerRunsPolicy());
+                rejectionHandlerFor(overflowPolicy));
+    }
+
+    private static RejectedExecutionHandler rejectionHandlerFor(OverflowPolicy policy) {
+        // CALLER_RUNS keeps its dedicated handler (#346); BLOCK/DROP/THROW share OverflowRejectionHandler.
+        return policy == OverflowPolicy.CALLER_RUNS
+                ? new ShutdownAwareCallerRunsPolicy()
+                : new OverflowRejectionHandler(policy);
     }
 }

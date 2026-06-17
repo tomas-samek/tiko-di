@@ -110,11 +110,31 @@ The framework dispatches via a bounded `ThreadPoolExecutor` sized for typical sm
 | Core pool size    | `max(2, cores / 2)`                                |
 | Max pool size     | `cores * 4`                                        |
 | Keep-alive        | 60 seconds                                         |
-| Queue             | bounded `LinkedBlockingQueue` capacity 1024        |
-| Rejection policy  | `CallerRunsPolicy` — slows publisher under overload|
+| Queue             | bounded `LinkedBlockingQueue`, capacity `queueCapacity` (default 1024) |
+| Rejection policy  | chosen by `onOverflow(...)` (default `CALLER_RUNS` — slows publisher under overload) |
 | Thread name       | `tiko-event-async-{n}` (daemon)                    |
 
-Workloads with extreme throughput or latency requirements can supply their own:
+#### Tuning the default executor's backpressure
+
+When the bounded queue fills, the **overflow policy** decides what happens to the next publish. Both knobs apply only to the framework's default executor:
+
+```java
+TikoOptions opts = TikoOptions.builder()
+        .queueCapacity(256)                  // default 1024
+        .onOverflow(OverflowPolicy.BLOCK)    // default CALLER_RUNS
+        .build();
+```
+
+| `OverflowPolicy` | Behaviour when the queue is full                                                  |
+|------------------|-----------------------------------------------------------------------------------|
+| `CALLER_RUNS`    | Default. The overflowing task runs on the publisher's thread — natural backpressure, no work dropped. |
+| `BLOCK`          | The publisher blocks until the queue has space. Strongest backpressure; can stall the producer. |
+| `DROP`           | The overflowing event is dropped and a `WARNING` is logged. Favours liveness over delivery. |
+| `THROW`          | `publish(...)` throws `io.tiko.EventQueueOverflowException` on the publisher's thread. |
+
+Whatever the policy, once the container is shutting down a rejected task degrades to an observable logged drop — `BLOCK` never hangs teardown and `THROW` never throws on the shutdown path.
+
+Workloads with extreme throughput or latency requirements can supply their own executor instead:
 
 ```java
 ExecutorService myExecutor = ...;
@@ -124,7 +144,7 @@ TikoOptions opts = TikoOptions.builder()
 try (Container container = Tiko.create(opts)) { ... }
 ```
 
-When you supply your own executor, **you own its lifecycle** — `Container.shutdown()` does not stop it. Async handler exceptions still route to the configured `ErrorHandler` regardless of which executor is in use.
+When you supply your own executor, **you own its lifecycle** — `Container.shutdown()` does not stop it, and `queueCapacity` / `onOverflow` have no effect (your executor brings its own queue and rejection policy). Async handler exceptions still route to the configured `ErrorHandler` regardless of which executor is in use.
 
 ### Execution timeouts
 

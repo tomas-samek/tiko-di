@@ -32,6 +32,8 @@ public final class TikoOptions {
     private final Duration shutdownTimeout;
     private final Duration teardownTimeout;
     private final java.util.function.UnaryOperator<EventBus> eventBusDecorator;
+    private final int queueCapacity;
+    private final OverflowPolicy overflowPolicy;
     private final java.util.Map<OverrideKey, java.util.function.Supplier<?>> overrides;
 
     private TikoOptions(Builder b) {
@@ -41,6 +43,8 @@ public final class TikoOptions {
         this.shutdownTimeout = b.shutdownTimeout;
         this.teardownTimeout = b.teardownTimeout;
         this.eventBusDecorator = b.eventBusDecorator;
+        this.queueCapacity = b.queueCapacity;
+        this.overflowPolicy = b.overflowPolicy;
         this.overrides = b.overrides == null
                 ? new java.util.concurrent.ConcurrentHashMap<>()
                 : new java.util.concurrent.ConcurrentHashMap<>(b.overrides);
@@ -100,6 +104,23 @@ public final class TikoOptions {
      */
     public java.util.function.UnaryOperator<EventBus> eventBusDecorator() {
         return eventBusDecorator;
+    }
+
+    /**
+     * @return the bounded work-queue capacity for the framework default event executor (#109).
+     *         Defaults to {@code 1024}. Ignored when a custom {@link #eventExecutor()} is supplied.
+     */
+    public int queueCapacity() {
+        return queueCapacity;
+    }
+
+    /**
+     * @return the overflow policy for the framework default event executor's bounded queue (#109).
+     *         Defaults to {@link OverflowPolicy#CALLER_RUNS}. Ignored when a custom
+     *         {@link #eventExecutor()} is supplied.
+     */
+    public OverflowPolicy onOverflow() {
+        return overflowPolicy;
     }
 
     public boolean hasOverride(Class<?> type) {
@@ -183,6 +204,8 @@ public final class TikoOptions {
         private Duration shutdownTimeout;
         private Duration teardownTimeout;
         private java.util.function.UnaryOperator<EventBus> eventBusDecorator;
+        private int queueCapacity = 1024; // framework default; matches DefaultEventExecutorFactory
+        private OverflowPolicy overflowPolicy = OverflowPolicy.CALLER_RUNS;
         private java.util.Map<OverrideKey, java.util.function.Supplier<?>> overrides;
 
         private Builder() {}
@@ -273,6 +296,39 @@ public final class TikoOptions {
          */
         public Builder eventBusDecorator(java.util.function.UnaryOperator<EventBus> wrap) {
             this.eventBusDecorator = Objects.requireNonNull(wrap, "eventBusDecorator");
+            return this;
+        }
+
+        /**
+         * Bounds the framework default event executor's work queue (#109). Defaults to {@code 1024}.
+         * Pair with {@link #onOverflow(OverflowPolicy)} to choose what happens when it fills.
+         *
+         * <p>Has <strong>no effect</strong> when {@link #eventExecutor(java.util.concurrent.ExecutorService)}
+         * is set — a user-supplied executor brings its own queue.
+         *
+         * @param capacity positive queue capacity
+         * @throws IllegalArgumentException if {@code capacity} is not positive
+         */
+        public Builder queueCapacity(int capacity) {
+            if (capacity <= 0) {
+                throw new IllegalArgumentException("queueCapacity must be positive");
+            }
+            this.queueCapacity = capacity;
+            return this;
+        }
+
+        /**
+         * Selects what the framework default event executor does when its bounded queue is full
+         * (#109). Defaults to {@link OverflowPolicy#CALLER_RUNS} (today's behaviour).
+         *
+         * <p>Has <strong>no effect</strong> when {@link #eventExecutor(java.util.concurrent.ExecutorService)}
+         * is set — a user-supplied executor brings its own rejection policy.
+         *
+         * @param policy the overflow policy
+         * @throws NullPointerException if {@code policy} is null
+         */
+        public Builder onOverflow(OverflowPolicy policy) {
+            this.overflowPolicy = Objects.requireNonNull(policy, "policy");
             return this;
         }
 
