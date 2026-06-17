@@ -147,7 +147,9 @@ public final class AggregatingContainer implements Container {
             String descriptorName) {
         this.sharedEventBus = eventBus;
         this.errorHandler = errorHandler;
-        this.eventExecutor = userEventExecutor != null ? userEventExecutor : DefaultEventExecutorFactory.create();
+        this.eventExecutor = userEventExecutor != null
+                ? userEventExecutor
+                : DefaultEventExecutorFactory.create(options.queueCapacity(), options.onOverflow());
         this.ownsEventExecutor = (userEventExecutor == null);
         this.shutdownTimeout = shutdownTimeout;
         this.options = options;
