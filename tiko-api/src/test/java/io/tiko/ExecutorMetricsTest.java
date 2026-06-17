@@ -11,8 +11,8 @@ class ExecutorMetricsTest {
 
     @Test
     void fromMirrorsThreadPoolExecutorState() {
-        ThreadPoolExecutor tpe = new ThreadPoolExecutor(2, 6, 60, TimeUnit.SECONDS, new LinkedBlockingQueue<>(16));
-        try {
+        try (ThreadPoolExecutor tpe =
+                new ThreadPoolExecutor(2, 6, 60, TimeUnit.SECONDS, new LinkedBlockingQueue<>(16))) {
             ExecutorMetrics m = ExecutorMetrics.from(tpe);
 
             assertThat(m.corePoolSize()).isEqualTo(2);
@@ -21,8 +21,6 @@ class ExecutorMetricsTest {
             assertThat(m.queueRemainingCapacity()).isEqualTo(16);
             assertThat(m.activeCount()).isZero();
             assertThat(m.completedTaskCount()).isZero();
-        } finally {
-            tpe.shutdownNow();
         }
     }
 

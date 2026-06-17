@@ -21,9 +21,8 @@ class AggregatingContainerExecutorMetricsTest {
 
     @Test
     void frameworkOwnedPoolExposesSnapshotMatchingLiveGetters() {
-        AggregatingContainer container =
-                new AggregatingContainer(new LocalEventBus(), NOOP_ERROR_HANDLER, /* userEventExecutor= */ null);
-        try {
+        try (AggregatingContainer container =
+                new AggregatingContainer(new LocalEventBus(), NOOP_ERROR_HANDLER, /* userEventExecutor= */ null)) {
             Optional<ExecutorMetrics> metrics = container.eventExecutorMetrics();
             assertThat(metrics).isPresent();
 
@@ -35,21 +34,16 @@ class AggregatingContainerExecutorMetricsTest {
             assertThat(m.queueRemainingCapacity()).isEqualTo(tpe.getQueue().remainingCapacity());
             assertThat(m.activeCount()).isEqualTo(tpe.getActiveCount());
             assertThat(m.queueSize()).isEqualTo(tpe.getQueue().size());
-        } finally {
-            container.shutdown();
         }
     }
 
     @Test
     void userSuppliedExecutorYieldsEmptyMetrics() {
         // A user-supplied executor — even a ThreadPoolExecutor — is the user's to observe.
-        ThreadPoolExecutor userPool = (ThreadPoolExecutor) java.util.concurrent.Executors.newFixedThreadPool(2);
-        AggregatingContainer container = new AggregatingContainer(new LocalEventBus(), NOOP_ERROR_HANDLER, userPool);
-        try {
+        try (ThreadPoolExecutor userPool = (ThreadPoolExecutor) java.util.concurrent.Executors.newFixedThreadPool(2);
+                AggregatingContainer container =
+                        new AggregatingContainer(new LocalEventBus(), NOOP_ERROR_HANDLER, userPool)) {
             assertThat(container.eventExecutorMetrics()).isEmpty();
-        } finally {
-            container.shutdown();
-            userPool.shutdownNow();
         }
     }
 }
