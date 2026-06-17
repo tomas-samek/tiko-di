@@ -131,6 +131,7 @@ TikoOptions opts = TikoOptions.builder()
 | `BLOCK`          | The publisher blocks until the queue has space. Strongest backpressure; can stall the producer. |
 | `DROP`           | The overflowing event is dropped and a `WARNING` is logged. Favours liveness over delivery. |
 | `THROW`          | `publish(...)` throws `io.tiko.EventQueueOverflowException` on the publisher's thread. |
+| `ROUTE_TO_DLQ`   | The overflowing event is routed to your `ErrorHandler` as an `EventDispatchRejected` dead-letter context — persist, log, or replay it there. See [Dead-letter handling](#dead-letter-handling). |
 
 Whatever the policy, once the container is shutting down a rejected task degrades to an observable logged drop — `BLOCK` never hangs teardown and `THROW` never throws on the shutdown path.
 
@@ -207,6 +208,37 @@ public void onPayment(PaymentEvent event) {
 - **Composes with `timeout`:** if both are set, each attempt is time-boxed and a timed-out attempt counts as a failed attempt to be retried.
 - **Errors are not retried:** an `Error` (vs an `Exception`) stops the loop and is logged, never retried.
 - **Idempotency is your responsibility** — a retried handler runs its side effects more than once. Make the work safe to repeat.
+
+### Dead-letter handling
+
+When an async dispatch ultimately fails, the framework routes it to your `ErrorHandler` so you can persist, log, or replay it — there is **no separate DLQ SPI**, you reuse the handler you already configure via `TikoOptions.errorHandler(...)`. Two `ErrorContext` shapes cover the failure modes:
+
+- A **handler that ran and failed** (threw, timed out, or exhausted its retries) is an `EventHandlerError`. Its derived `kind()` classifies the failure without inspecting the cause by hand:
+
+  | `DeliveryFailureKind` | When |
+  |-----------------------|------|
+  | `EXCEPTION`           | a single failed attempt (no retries) |
+  | `TIMEOUT`             | the `timeout` budget was exceeded (#107) — takes precedence |
+  | `EXHAUSTED`           | the `retries` budget was spent (#108) |
+
+- An event **rejected before any handler ran** — the executor queue overflowed under the `ROUTE_TO_DLQ` overflow policy — is an `EventDispatchRejected`. No handler ran, so it has no handler identity and `cause()` is `null`; it just carries the `event()`.
+
+```java
+TikoOptions.builder()
+    .onOverflow(OverflowPolicy.ROUTE_TO_DLQ)
+    .errorHandler(ctx -> {
+        switch (ctx) {
+            case EventHandlerError e when e.kind() != DeliveryFailureKind.EXCEPTION ->
+                deadLetters.persist(e.event(), e.cause(), e.attempts());
+            case EventDispatchRejected r ->
+                deadLetters.persist(r.event(), null, 0); // queue overflow; replay later via bus.publish(r.event())
+            default -> { /* other error contexts */ }
+        }
+    })
+    .build();
+```
+
+As with every overflow policy, `ROUTE_TO_DLQ` degrades to a logged drop once the container is shutting down — a dead-letter routing never blocks or fails teardown.
 
 ## Graceful shutdown drain
 

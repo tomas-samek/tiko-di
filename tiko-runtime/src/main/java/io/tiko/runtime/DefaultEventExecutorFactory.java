@@ -94,7 +94,7 @@ public final class DefaultEventExecutorFactory {
     }
 
     private static RejectedExecutionHandler rejectionHandlerFor(OverflowPolicy policy) {
-        // CALLER_RUNS keeps its dedicated handler (#346); BLOCK/DROP/THROW share OverflowRejectionHandler.
+        // CALLER_RUNS keeps its dedicated handler (#346); BLOCK/DROP/THROW/ROUTE_TO_DLQ share OverflowRejectionHandler.
         return policy == OverflowPolicy.CALLER_RUNS
                 ? new ShutdownAwareCallerRunsPolicy()
                 : new OverflowRejectionHandler(policy);

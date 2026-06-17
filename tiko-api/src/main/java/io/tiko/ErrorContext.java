@@ -8,6 +8,7 @@ package io.tiko;
  * public void onError(ErrorContext ctx) {
  *     switch (ctx) {
  *         case EventHandlerError e     -> metrics.eventHandlerError(e.handler());
+ *         case EventDispatchRejected r -> metrics.eventDropped(r.event());
  *         case PostConstructFailure f  -> metrics.lifecycleError("init", f.component());
  *         case PreDestroyFailure f     -> metrics.lifecycleError("teardown", f.component());
  *         case AutoCloseFailure f      -> metrics.lifecycleError("close", f.component());
@@ -19,7 +20,9 @@ package io.tiko;
  * }</pre>
  *
  * <p>{@link EventHandlerError} is in-process / handler-side errors raised by the local
- * {@code EventBus}. {@link PostConstructFailure}, {@link PreDestroyFailure} and
+ * {@code EventBus}. {@link EventDispatchRejected} is the delivery-side counterpart — an async
+ * dispatch rejected by queue overflow under the {@code ROUTE_TO_DLQ} policy, where no handler
+ * ran. {@link PostConstructFailure}, {@link PreDestroyFailure} and
  * {@link AutoCloseFailure} are lifecycle-hook failures — annotation-driven for the first
  * two, implicit {@code close()} dispatch for the third. {@link ConfigurationFailure}
  * bundles every {@code @Configuration} binding problem from a single
@@ -36,6 +39,7 @@ package io.tiko;
  */
 public sealed interface ErrorContext
         permits EventHandlerError,
+                EventDispatchRejected,
                 PostConstructFailure,
                 PreDestroyFailure,
                 AutoCloseFailure,

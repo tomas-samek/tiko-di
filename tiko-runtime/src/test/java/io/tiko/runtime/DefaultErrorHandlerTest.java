@@ -7,6 +7,7 @@ import io.tiko.ConfigIssue;
 import io.tiko.ConfigIssueCode;
 import io.tiko.ConfigurationFailure;
 import io.tiko.ErrorHandler;
+import io.tiko.EventDispatchRejected;
 import io.tiko.EventHandlerError;
 import io.tiko.EventHandlerInfo;
 import io.tiko.PostConstructFailure;
@@ -43,6 +44,20 @@ class DefaultErrorHandlerTest {
                     assertThat(record.message()).contains("onSomething");
                     assertThat(record.message()).contains(FakeEvent.class.getName());
                     assertThat(record.message()).contains("boom");
+                });
+    }
+
+    @Test
+    void eventDispatchRejectedLogsEventTypeAtWarning() {
+        HANDLER.onError(new EventDispatchRejected(new FakeEvent()));
+
+        assertThat(CapturingLoggerFinder.RECORDS)
+                .filteredOn(r -> "io.tiko.events".equals(r.loggerName()))
+                .singleElement()
+                .satisfies(record -> {
+                    assertThat(record.level()).isEqualTo(System.Logger.Level.WARNING);
+                    assertThat(record.message()).contains(FakeEvent.class.getName());
+                    assertThat(record.message()).contains("ROUTE_TO_DLQ");
                 });
     }
 

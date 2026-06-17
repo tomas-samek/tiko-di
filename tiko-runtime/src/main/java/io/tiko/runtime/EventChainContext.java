@@ -3,6 +3,7 @@ package io.tiko.runtime;
 import io.tiko.ErrorHandler;
 import io.tiko.Event;
 import io.tiko.EventBus;
+import io.tiko.EventDispatchRejected;
 import io.tiko.EventHandlerError;
 import io.tiko.EventHandlerInfo;
 import io.tiko.annotations.BackoffStrategy;
@@ -178,11 +179,17 @@ public final class EventChainContext {
             ErrorHandler errorHandler,
             EventHandlerInfo info) {
         if (payload == null) return CompletableFuture.completedFuture(null);
-        return CompletableFuture.runAsync(() -> publishWithOrigin(bus, payload, origin), executor)
-                .handle((__, throwable) -> {
-                    reportIfFailed(throwable, payload, errorHandler, info);
-                    return null;
-                });
+        CompletableFuture<Void> submitted;
+        try {
+            submitted = CompletableFuture.runAsync(() -> publishWithOrigin(bus, payload, origin), executor);
+        } catch (DlqOverflowSignal dlq) {
+            routeDispatchRejected(payload, errorHandler);
+            return CompletableFuture.completedFuture(null);
+        }
+        return submitted.handle((__, throwable) -> {
+            reportIfFailed(throwable, payload, errorHandler, info);
+            return null;
+        });
     }
 
     /**
@@ -197,11 +204,17 @@ public final class EventChainContext {
             ErrorHandler errorHandler,
             EventHandlerInfo info) {
         if (payload == null) return CompletableFuture.completedFuture(null);
-        return CompletableFuture.runAsync(() -> publishSpreadWithOrigin(bus, payload, origin), executor)
-                .handle((__, throwable) -> {
-                    reportIfFailed(throwable, payload, errorHandler, info);
-                    return null;
-                });
+        CompletableFuture<Void> submitted;
+        try {
+            submitted = CompletableFuture.runAsync(() -> publishSpreadWithOrigin(bus, payload, origin), executor);
+        } catch (DlqOverflowSignal dlq) {
+            routeDispatchRejected(payload, errorHandler);
+            return CompletableFuture.completedFuture(null);
+        }
+        return submitted.handle((__, throwable) -> {
+            reportIfFailed(throwable, payload, errorHandler, info);
+            return null;
+        });
     }
 
     private static void reportIfFailed(
@@ -237,7 +250,14 @@ public final class EventChainContext {
             ErrorHandler errorHandler,
             EventHandlerInfo info,
             Object event) {
-        runOnce(body, timeoutNanos, executor).whenComplete((ignored, throwable) -> {
+        CompletableFuture<Void> once;
+        try {
+            once = runOnce(body, timeoutNanos, executor);
+        } catch (DlqOverflowSignal dlq) {
+            routeDispatchRejected(event, errorHandler);
+            return;
+        }
+        once.whenComplete((ignored, throwable) -> {
             if (throwable != null) {
                 reportAsyncHandlerFailure(unwrapCompletion(throwable), errorHandler, info, event, 1);
             }
@@ -275,7 +295,15 @@ public final class EventChainContext {
             ErrorHandler errorHandler,
             EventHandlerInfo info,
             Object event) {
-        runOnce(body, policy.timeoutNanos(), executor).whenComplete((ignored, throwable) -> {
+        CompletableFuture<Void> once;
+        try {
+            once = runOnce(body, policy.timeoutNanos(), executor);
+        } catch (DlqOverflowSignal dlq) {
+            // Queue overflowed when submitting this attempt — dead-letter the event, abandon the loop.
+            routeDispatchRejected(event, errorHandler);
+            return;
+        }
+        once.whenComplete((ignored, throwable) -> {
             if (throwable == null) {
                 return; // attempt succeeded
             }
@@ -292,7 +320,12 @@ public final class EventChainContext {
             long delay = backoffDelayNanos(policy, attemptIndex);
             Executor next =
                     delay > 0 ? CompletableFuture.delayedExecutor(delay, TimeUnit.NANOSECONDS, executor) : executor;
-            next.execute(() -> attempt(body, attemptIndex + 1, policy, executor, errorHandler, info, event));
+            try {
+                next.execute(() -> attempt(body, attemptIndex + 1, policy, executor, errorHandler, info, event));
+            } catch (DlqOverflowSignal dlq) {
+                // A retry re-submission overflowed the queue — dead-letter rather than lose it silently.
+                routeDispatchRejected(event, errorHandler);
+            }
         });
     }
 
@@ -365,6 +398,19 @@ public final class EventChainContext {
         }
         try {
             errorHandler.onError(new EventHandlerError(info, event, cause, attempts));
+        } catch (Exception inner) {
+            logErrorHandlerFailure(inner);
+        }
+    }
+
+    /**
+     * Routes a queue-overflow rejection to the {@code ErrorHandler} as an {@link EventDispatchRejected}
+     * dead-letter context (#111, {@code ROUTE_TO_DLQ}). No handler ran, so there is no
+     * {@link EventHandlerInfo} and no cause; a throwing handler is logged as a last resort.
+     */
+    private static void routeDispatchRejected(Object event, ErrorHandler errorHandler) {
+        try {
+            errorHandler.onError(new EventDispatchRejected(event));
         } catch (Exception inner) {
             logErrorHandlerFailure(inner);
         }

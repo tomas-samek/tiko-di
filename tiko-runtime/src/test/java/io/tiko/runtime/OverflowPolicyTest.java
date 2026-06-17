@@ -104,6 +104,29 @@ class OverflowPolicyTest {
     }
 
     @Test
+    void routeToDlqPolicyThrowsSignalWhileLive() {
+        // ROUTE_TO_DLQ (#111) signals the dispatch site via a marker; EventChainContext catches it
+        // and routes an EventDispatchRejected. The handler itself throws the marker.
+        ThreadPoolExecutor pool = livePool();
+        OverflowRejectionHandler handler = new OverflowRejectionHandler(OverflowPolicy.ROUTE_TO_DLQ);
+        try {
+            assertThatThrownBy(() -> handler.rejectedExecution(() -> {}, pool)).isInstanceOf(DlqOverflowSignal.class);
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void routeToDlqPolicyDegradesToDropOnShutdown() {
+        ThreadPoolExecutor pool = livePool();
+        pool.shutdown(); // isShutdown() == true
+        AtomicBoolean ran = new AtomicBoolean(false);
+        // Must NOT throw the signal during shutdown (would break the publisher/shutdown thread).
+        new OverflowRejectionHandler(OverflowPolicy.ROUTE_TO_DLQ).rejectedExecution(() -> ran.set(true), pool);
+        assertThat(ran).isFalse();
+    }
+
+    @Test
     void factoryBuildsBoundedQueueOfTheRequestedCapacityAndPolicyHandler() {
         ThreadPoolExecutor caller =
                 (ThreadPoolExecutor) DefaultEventExecutorFactory.create(7, OverflowPolicy.CALLER_RUNS);

@@ -25,8 +25,15 @@ public enum OverflowPolicy {
 
     /**
      * {@code publish(...)} throws {@link io.tiko.EventQueueOverflowException} on the publisher's
-     * thread, letting the caller decide what to do. ({@code ROUTE_TO_DLQ} — route the overflow to a
-     * dead-letter channel — is deferred until that channel ships in #111.)
+     * thread, letting the caller decide what to do.
      */
-    THROW
+    THROW,
+
+    /**
+     * The overflowing event is routed to the configured {@code ErrorHandler} as an
+     * {@link io.tiko.EventDispatchRejected} dead-letter context (#111) — persist, log, or replay it
+     * there — instead of being dropped, blocking the publisher, or throwing. Like every policy, it
+     * degrades to a logged drop once the executor is shutting down (#346).
+     */
+    ROUTE_TO_DLQ
 }
