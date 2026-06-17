@@ -2,8 +2,10 @@ package io.tiko.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 
 import io.tiko.EventQueueOverflowException;
+import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -25,9 +27,9 @@ class OverflowPolicyTest {
     @Test
     void throwPolicyThrowsTypedExceptionWhileLive() {
         ThreadPoolExecutor pool = livePool();
+        OverflowRejectionHandler handler = new OverflowRejectionHandler(OverflowPolicy.THROW);
         try {
-            assertThatThrownBy(
-                            () -> new OverflowRejectionHandler(OverflowPolicy.THROW).rejectedExecution(() -> {}, pool))
+            assertThatThrownBy(() -> handler.rejectedExecution(() -> {}, pool))
                     .isInstanceOf(EventQueueOverflowException.class);
         } finally {
             pool.shutdownNow();
@@ -94,7 +96,7 @@ class OverflowPolicyTest {
             assertThat(submitted.await(3, TimeUnit.SECONDS))
                     .as("BLOCK unblocks once space is available")
                     .isTrue();
-            await(() -> thirdRan.get());
+            await().atMost(Duration.ofSeconds(3)).untilTrue(thirdRan);
         } finally {
             release.countDown();
             pool.shutdownNow();
@@ -122,13 +124,5 @@ class OverflowPolicyTest {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-    }
-
-    private static void await(java.util.function.BooleanSupplier condition) throws InterruptedException {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
-        while (!condition.getAsBoolean() && System.nanoTime() < deadline) {
-            TimeUnit.MILLISECONDS.sleep(20);
-        }
-        assertThat(condition.getAsBoolean()).isTrue();
     }
 }
