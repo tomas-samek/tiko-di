@@ -9,7 +9,7 @@
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=tomas-samek_tiko-di&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=tomas-samek_tiko-di)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=tomas-samek_tiko-di&metric=coverage)](https://sonarcloud.io/summary/new_code?id=tomas-samek_tiko-di)
 
-**Status: 0.2.2 on Maven Central.** Suitable for early-adopter experimentation. See [docs/roadmap.md](./docs/roadmap.md) for what ships today and what's next.
+**Status: 0.3.0 on Maven Central.** Suitable for early-adopter experimentation. See [docs/roadmap.md](./docs/roadmap.md) for what ships today and what's next.
 
 **Benchmarked for AI-friendliness** → [llm-framework-benchmark](https://github.com/tomas-samek/llm-framework-benchmark): on an external-oracle-graded build task (a Kafka → H2 → merged-notification service), run across three models (Claude Sonnet 4.6 / Fable 5 / Opus 4.8, n=5). tiko — *absent from the models' training data* — reaches **86–100% median compliance**, on par with Spring on versions the models know, and clears the brand-new Spring Boot 4.0.6 wall that broke Sonnet 4.6 (median 0%). See the benchmark for the full picture, per-build token cost, and caveats.
 
@@ -114,7 +114,7 @@ Tiko ships to Maven Central. Import the BOM once — then declare the artifacts 
         <dependency>
             <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-bom</artifactId>
-            <version>0.2.2</version>
+            <version>0.3.0</version>
             <type>pom</type>
             <scope>import</scope>
         </dependency>
@@ -168,7 +168,7 @@ The fastest way to start a fresh project — generates a runnable single-module 
 mvn archetype:generate \
     -DarchetypeGroupId=io.github.tomas-samek \
     -DarchetypeArtifactId=tiko-archetype \
-    -DarchetypeVersion=0.2.2 \
+    -DarchetypeVersion=0.3.0 \
     -DgroupId=com.example \
     -DartifactId=my-app \
     -DinteractiveMode=false
