@@ -23,6 +23,19 @@ class JsonKafkaSerializerTest {
     }
 
     @Test
+    void isUsableAsTheSharedEventSerializerSpi() {
+        // #119: the Kafka default serializer is an io.tiko.EventSerializer, so every transport
+        // (Kafka, RabbitMQ, JMS) consumes one shared serializer surface.
+        io.tiko.EventSerializer ser = new JsonKafkaSerializer();
+        OrderPlaced original = new OrderPlaced("o-2", new BigDecimal("5.00"), Instant.parse("2026-06-18T08:00:00Z"));
+
+        byte[] bytes = ser.serialize(original);
+        OrderPlaced roundTripped = ser.deserialize(bytes, OrderPlaced.class);
+
+        assertThat(roundTripped).isEqualTo(original);
+    }
+
+    @Test
     void deserialize_unknown_property_does_not_fail() {
         JsonKafkaSerializer json = new JsonKafkaSerializer();
         byte[] bytes =
