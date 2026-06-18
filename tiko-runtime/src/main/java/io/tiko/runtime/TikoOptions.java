@@ -264,6 +264,13 @@ public final class TikoOptions {
          *
          * <p>See {@link #shutdownTimeout(Duration)} for the related drain window — that knob
          * has no effect when this executor is user-supplied (you own its lifecycle).
+         *
+         * <p>The framework's overflow handling is also inert here: {@link #queueCapacity(int)},
+         * {@link #onOverflow(OverflowPolicy)} (including {@code ROUTE_TO_DLQ} dead-letter routing),
+         * and the {@code eventExecutor*} pool-sizing knobs apply only to the framework default pool.
+         * A user-supplied executor brings its own queue and rejection policy, so a saturated custom
+         * executor surfaces its own {@code RejectedExecutionException} rather than an
+         * {@code EventDispatchRejected} — overflow and dead-lettering are then yours to handle.
          */
         public Builder eventExecutor(java.util.concurrent.ExecutorService executor) {
             this.eventExecutor = Objects.requireNonNull(executor, "eventExecutor");
