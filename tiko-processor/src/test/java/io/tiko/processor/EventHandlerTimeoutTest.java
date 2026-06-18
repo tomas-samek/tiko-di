@@ -110,7 +110,7 @@ class EventHandlerTimeoutTest {
     }
 
     @Test
-    void asyncHandlerWithoutTimeoutKeepsPlainRunAsyncDispatch() throws IOException {
+    void asyncHandlerWithoutTimeoutRoutesThroughZeroBudgetHelper() throws IOException {
         JavaFileObject handler = JavaFileObjects.forSourceLines(
                 "demo.PlainAsyncHandler",
                 "package demo;",
@@ -128,8 +128,10 @@ class EventHandlerTimeoutTest {
 
         CompilationSubject.assertThat(c).succeeded();
         assertThat(generatedSource(c, "EventRegistry"))
-                .as("an untimed async handler is unchanged — plain runAsync, no timeout helper")
-                .doesNotContain("runAsyncWithTimeout");
+                .as("an untimed async handler routes through runAsyncWithTimeout with a zero budget (#111),"
+                        + " sharing the DLQ-aware submit + error-routing path of the timeout dispatch")
+                .contains("runAsyncWithTimeout")
+                .contains("0L");
     }
 
     private static String generatedSource(Compilation c, String nameFragment) throws IOException {

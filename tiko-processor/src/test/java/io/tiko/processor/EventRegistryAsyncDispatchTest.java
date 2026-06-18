@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 class EventRegistryAsyncDispatchTest {
 
     @Test
-    void async_handler_generates_completable_future_dispatch_with_when_complete() throws IOException {
+    void asyncHandlerRoutesDispatchThroughRunAsyncWithTimeoutHelper() throws IOException {
         JavaFileObject component = JavaFileObjects.forSourceLines(
                 "io.example.AsyncHandler",
                 "package io.example;",
@@ -45,21 +45,20 @@ class EventRegistryAsyncDispatchTest {
         assertThat(content).contains("Ping.class");
         assertThat(content).contains("true)"); // The async boolean — last arg of EventHandlerInfo
 
-        // Async path uses CompletableFuture.runAsync
-        assertThat(content).contains("CompletableFuture");
-        assertThat(content).contains("runAsync");
+        // Plain async now routes through the shared runAsyncWithTimeout helper with a zero budget (#111),
+        // so the executor submit, ROUTE_TO_DLQ overflow handling, and error routing live in one runtime
+        // path instead of being inlined into every generated dispatcher.
+        assertThat(content).contains("EventChainContext.runAsyncWithTimeout");
+        assertThat(content).contains("0L"); // zero timeout budget — no time-boxing, a bare runAsync
         assertThat(content).contains("getEventExecutor()");
+        assertThat(content).contains("getErrorHandler()");
+        assertThat(content).contains("HANDLER_INFO_0");
 
-        // Re-enter chain context inside async task
+        // Chain context is re-entered inside the async body
         assertThat(content).contains("EventChainContext.enter");
 
-        // whenComplete (or handle) routes to ErrorHandler
-        assertThat(content).contains("whenComplete");
-        assertThat(content).contains("getErrorHandler()");
-        assertThat(content).contains("EventHandlerError(HANDLER_INFO_0");
-
-        // CompletionException unwrap
-        assertThat(content).contains("CompletionException");
+        // The inline CompletableFuture / whenComplete / EventHandlerError wiring now lives in the runtime helper.
+        assertThat(content).doesNotContain("whenComplete");
     }
 
     @Test

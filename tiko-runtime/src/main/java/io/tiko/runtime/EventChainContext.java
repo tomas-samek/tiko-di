@@ -11,11 +11,11 @@ import java.lang.reflect.Array;
 import java.util.Collection;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 /**
  * Tracks the currently-executing event wrapper across a thread of event delivery, so that
@@ -179,13 +179,11 @@ public final class EventChainContext {
             ErrorHandler errorHandler,
             EventHandlerInfo info) {
         if (payload == null) return CompletableFuture.completedFuture(null);
-        CompletableFuture<Void> submitted;
-        try {
-            submitted = CompletableFuture.runAsync(() -> publishWithOrigin(bus, payload, origin), executor);
-        } catch (DlqOverflowSignal dlq) {
-            routeDispatchRejected(payload, errorHandler);
-            return CompletableFuture.completedFuture(null);
-        }
+        CompletableFuture<Void> submitted = submitOrDlq(
+                () -> CompletableFuture.runAsync(() -> publishWithOrigin(bus, payload, origin), executor),
+                payload,
+                errorHandler);
+        if (submitted == null) return CompletableFuture.completedFuture(null); // overflowed → dead-lettered
         return submitted.handle((__, throwable) -> {
             reportIfFailed(throwable, payload, errorHandler, info);
             return null;
@@ -204,13 +202,11 @@ public final class EventChainContext {
             ErrorHandler errorHandler,
             EventHandlerInfo info) {
         if (payload == null) return CompletableFuture.completedFuture(null);
-        CompletableFuture<Void> submitted;
-        try {
-            submitted = CompletableFuture.runAsync(() -> publishSpreadWithOrigin(bus, payload, origin), executor);
-        } catch (DlqOverflowSignal dlq) {
-            routeDispatchRejected(payload, errorHandler);
-            return CompletableFuture.completedFuture(null);
-        }
+        CompletableFuture<Void> submitted = submitOrDlq(
+                () -> CompletableFuture.runAsync(() -> publishSpreadWithOrigin(bus, payload, origin), executor),
+                payload,
+                errorHandler);
+        if (submitted == null) return CompletableFuture.completedFuture(null); // overflowed → dead-lettered
         return submitted.handle((__, throwable) -> {
             reportIfFailed(throwable, payload, errorHandler, info);
             return null;
@@ -250,13 +246,8 @@ public final class EventChainContext {
             ErrorHandler errorHandler,
             EventHandlerInfo info,
             Object event) {
-        CompletableFuture<Void> once;
-        try {
-            once = runOnce(body, timeoutNanos, executor);
-        } catch (DlqOverflowSignal dlq) {
-            routeDispatchRejected(event, errorHandler);
-            return;
-        }
+        CompletableFuture<Void> once = submitOrDlq(() -> runOnce(body, timeoutNanos, executor), event, errorHandler);
+        if (once == null) return; // overflowed on submit → dead-lettered
         once.whenComplete((ignored, throwable) -> {
             if (throwable != null) {
                 reportAsyncHandlerFailure(unwrapCompletion(throwable), errorHandler, info, event, 1);
@@ -295,14 +286,9 @@ public final class EventChainContext {
             ErrorHandler errorHandler,
             EventHandlerInfo info,
             Object event) {
-        CompletableFuture<Void> once;
-        try {
-            once = runOnce(body, policy.timeoutNanos(), executor);
-        } catch (DlqOverflowSignal dlq) {
-            // Queue overflowed when submitting this attempt — dead-letter the event, abandon the loop.
-            routeDispatchRejected(event, errorHandler);
-            return;
-        }
+        CompletableFuture<Void> once =
+                submitOrDlq(() -> runOnce(body, policy.timeoutNanos(), executor), event, errorHandler);
+        if (once == null) return; // overflowed on submit → dead-lettered, loop abandoned
         once.whenComplete((ignored, throwable) -> {
             if (throwable == null) {
                 return; // attempt succeeded
@@ -317,16 +303,36 @@ public final class EventChainContext {
                 reportAsyncHandlerFailure(cause, errorHandler, info, event, attemptIndex + 1);
                 return;
             }
-            long delay = backoffDelayNanos(policy, attemptIndex);
-            Executor next =
-                    delay > 0 ? CompletableFuture.delayedExecutor(delay, TimeUnit.NANOSECONDS, executor) : executor;
-            try {
-                next.execute(() -> attempt(body, attemptIndex + 1, policy, executor, errorHandler, info, event));
-            } catch (DlqOverflowSignal dlq) {
-                // A retry re-submission overflowed the queue — dead-letter rather than lose it silently.
-                routeDispatchRejected(event, errorHandler);
-            }
+            scheduleRetry(body, attemptIndex, policy, executor, errorHandler, info, event);
         });
+    }
+
+    /**
+     * Schedules the next retry attempt. Backoff waits on the default delayed executor, then the
+     * re-submission to {@code executor} runs under the {@code ROUTE_TO_DLQ} guard — so an overflow at
+     * (re)submit time is dead-lettered even when backoff defers the submit onto a scheduler thread.
+     * (Wrapping {@code delayedExecutor(.., executor).execute(..)} directly would miss that: the real
+     * {@code executor.execute} then runs off the catch's stack and the signal would leak and be lost.)
+     */
+    private static void scheduleRetry(
+            Runnable body,
+            int attemptIndex,
+            RetryPolicy policy,
+            ExecutorService executor,
+            ErrorHandler errorHandler,
+            EventHandlerInfo info,
+            Object event) {
+        Runnable resubmit = () -> executeOrDlq(
+                () -> attempt(body, attemptIndex + 1, policy, executor, errorHandler, info, event),
+                executor,
+                event,
+                errorHandler);
+        long delay = backoffDelayNanos(policy, attemptIndex);
+        if (delay > 0) {
+            CompletableFuture.delayedExecutor(delay, TimeUnit.NANOSECONDS).execute(resubmit);
+        } else {
+            resubmit.run();
+        }
     }
 
     /**
@@ -400,6 +406,36 @@ public final class EventChainContext {
             errorHandler.onError(new EventHandlerError(info, event, cause, attempts));
         } catch (Exception inner) {
             logErrorHandlerFailure(inner);
+        }
+    }
+
+    /**
+     * Submits an async dispatch via {@code submitAction} (which calls the executor and may throw
+     * {@link DlqOverflowSignal} synchronously on a {@code ROUTE_TO_DLQ} overflow). On overflow it
+     * routes an {@link EventDispatchRejected} and returns {@code null}, so the caller skips its
+     * post-submit wiring; otherwise it returns the submitted future. Single choke point for every
+     * async submit site, so the DLQ guard cannot be forgotten at one of them.
+     */
+    private static CompletableFuture<Void> submitOrDlq(
+            Supplier<CompletableFuture<Void>> submitAction, Object event, ErrorHandler errorHandler) {
+        try {
+            return submitAction.get();
+        } catch (DlqOverflowSignal ignored) {
+            routeDispatchRejected(event, errorHandler);
+            return null;
+        }
+    }
+
+    /**
+     * {@code execute}-shaped sibling of {@link #submitOrDlq}: runs {@code task} on {@code executor},
+     * routing a {@code ROUTE_TO_DLQ} overflow to the dead-letter handler rather than letting the
+     * {@link DlqOverflowSignal} leak.
+     */
+    private static void executeOrDlq(Runnable task, ExecutorService executor, Object event, ErrorHandler errorHandler) {
+        try {
+            executor.execute(task);
+        } catch (DlqOverflowSignal ignored) {
+            routeDispatchRejected(event, errorHandler);
         }
     }
 

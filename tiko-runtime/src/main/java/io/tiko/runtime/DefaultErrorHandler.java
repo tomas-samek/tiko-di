@@ -52,7 +52,7 @@ public final class DefaultErrorHandler implements ErrorHandler {
                         LoggerHolder.LOG,
                         System.Logger.Level.WARNING,
                         "Async dispatch of event {0} was rejected by queue overflow and routed to the dead-letter handler (overflow policy = ROUTE_TO_DLQ).",
-                        event.getClass().getName());
+                        event == null ? "null" : event.getClass().getName());
             case PostConstructFailure(var component, var cause) ->
                 TikoLog.log(
                         LoggerHolder.LOG,

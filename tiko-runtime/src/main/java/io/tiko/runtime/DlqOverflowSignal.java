@@ -18,4 +18,14 @@ final class DlqOverflowSignal extends RejectedExecutionException {
     DlqOverflowSignal(String message) {
         super(message);
     }
+
+    /**
+     * Suppresses stack-trace capture. This is a control-flow marker thrown and immediately caught at
+     * the dispatch site — its trace is never read — and it is thrown on the overload path (a full
+     * queue), exactly where the wasted native stack walk would hurt most.
+     */
+    @Override
+    public synchronized Throwable fillInStackTrace() {
+        return this;
+    }
 }
