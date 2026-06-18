@@ -26,19 +26,18 @@ project's own documentation — fill it in as the project grows.
 
 ## Scopes
 
-Four scopes, longest to shortest lifetime:
+Three scopes, longest to shortest lifetime:
 
 | Scope         | Lifetime                           | Typical use                                |
 | ------------- | ---------------------------------- | ------------------------------------------ |
 | `SINGLETON`   | application lifetime               | stateless services, repositories           |
-| `REQUEST`     | one transaction / HTTP request / batch | per-request context, JDBC connection   |
-| `EVENT`       | one event handler execution        | per-event correlation ID, audit context    |
+| `EVENT`       | one unit of work — HTTP request, message, job, async dispatch | per-unit context (txn, JDBC connection, correlation ID) |
 | `PROTOTYPE`   | new instance per injection (default) | short-lived value objects                |
 
 **Default scope is `PROTOTYPE`** — declare `Scope.SINGLETON` (or another)
 explicitly when you want a different lifetime.
 
-**Cross-scope injection** (e.g. `SINGLETON` depending on `REQUEST`) is
+**Cross-scope injection** (e.g. `SINGLETON` depending on `EVENT`) is
 allowed — the framework generates an auto-proxy at compile time, but
 **the shorter-scoped bean must implement an interface** for the proxy
 to bind to. Cross-scope from longer-lived to shorter-lived is fine;
@@ -147,7 +146,7 @@ public class HttpServer implements AutoCloseable {
     private Server server;
 
     @PostConstruct
-    void start() { server = new Server(8080); server.start(); }
+    public void start() { server = new Server(8080); server.start(); }
 
     @Override
     public void close() { if (server != null) server.stop(); }
@@ -160,7 +159,7 @@ public class HttpServer implements AutoCloseable {
 ```java
 public interface RequestContext { String requestId(); }
 
-@Component(scope = Scope.REQUEST)
+@Component(scope = Scope.EVENT)
 public class RequestContextImpl implements RequestContext {
     private final String id = UUID.randomUUID().toString();
     public String requestId() { return id; }
@@ -170,7 +169,7 @@ public class RequestContextImpl implements RequestContext {
 public class AuditLogger {
     @Inject
     public AuditLogger(RequestContext ctx) {
-        // ctx is auto-proxied — each call resolves the current REQUEST scope's instance.
+        // ctx is auto-proxied — each call resolves the current EVENT scope's instance.
     }
 }
 ```
@@ -289,7 +288,7 @@ public class FixedClock extends Clock {
 
 - **Field injection doesn't work** — Tiko rejects it at compile time. Use the constructor.
 - **`@Component` with no scope is `PROTOTYPE`** — a new instance per injection. Usually you want `SINGLETON`. Be explicit.
-- **`SINGLETON` injecting `REQUEST`/`EVENT` requires an interface on the shorter-scoped bean** — the framework generates the proxy via that interface.
+- **`SINGLETON` injecting `EVENT` requires an interface on the shorter-scoped bean** — the framework generates the proxy via that interface.
 - **`Container.get(...)` after `shutdown()` throws** — the container is one-shot. Use try-with-resources or careful manual lifecycle.
 - **Annotation processing is silently skipped on JDK 23+ without `<proc>full</proc>`** — the archetype's `pom.xml` already sets this.
 - **Override the *consumer's* declared type, not the impl's concrete class** — `TikoOptions.override(PaymentGateway.class, mock)` matches injection sites typed `PaymentGateway`. Overriding `HttpPaymentGateway.class` only matches sites typed at that concrete class.
