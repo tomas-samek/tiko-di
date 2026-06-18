@@ -9,7 +9,6 @@ import io.tiko.processor.util.GeneratorAnnotations;
 import io.tiko.processor.util.ProcessorContext;
 import java.io.IOException;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.type.TypeKind;
@@ -136,10 +135,11 @@ public final class EventRegistryGenerator {
      * The per-handler helper. Centralises chain-context bookkeeping and trigger logic so
      * the lambdas in {@code registerHandlers} stay one-liners.
      *
-     * <p>Async handlers ({@code @EventHandler(async = true)}) submit the invocation to the
-     * container's event executor via {@link CompletableFuture#runAsync} and route any
-     * exceptional completion to the container's {@link io.tiko.ErrorHandler} via
-     * {@code whenComplete}. Sync handlers keep the original inline try/catch behaviour.
+     * <p>Async handlers ({@code @EventHandler(async = true)}) delegate to
+     * {@code EventChainContext.runAsyncWithTimeout} / {@code runAsyncWithRetry} (a plain async
+     * handler uses a zero timeout budget), which submit to the container's event executor, apply the
+     * configured overflow policy, and route any failure to the container's {@link io.tiko.ErrorHandler}.
+     * Sync handlers keep the original inline try/catch behaviour.
      */
     private MethodSpec createDispatcherMethod(EventHandlerModel handler, int index) {
         ClassName containerClass = ClassName.get(GENERATED_PACKAGE, context.getContainerClassName());
