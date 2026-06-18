@@ -184,7 +184,7 @@ public final class EventChainContext {
                 payload,
                 errorHandler);
         if (submitted == null) return CompletableFuture.completedFuture(null); // overflowed → dead-lettered
-        return submitted.handle((__, throwable) -> {
+        return submitted.handle((ignored, throwable) -> {
             reportIfFailed(throwable, payload, errorHandler, info);
             return null;
         });
@@ -207,7 +207,7 @@ public final class EventChainContext {
                 payload,
                 errorHandler);
         if (submitted == null) return CompletableFuture.completedFuture(null); // overflowed → dead-lettered
-        return submitted.handle((__, throwable) -> {
+        return submitted.handle((ignored, throwable) -> {
             reportIfFailed(throwable, payload, errorHandler, info);
             return null;
         });

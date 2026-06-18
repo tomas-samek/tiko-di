@@ -1,6 +1,7 @@
 package io.tiko.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.awaitility.Awaitility.await;
 
 import io.tiko.ErrorContext;
@@ -104,6 +105,35 @@ class EventChainContextDlqTest {
                 .isEqualTo(2);
     }
 
+    @Test
+    void publishSpreadAsyncDeliversEachElementOnHappyPath() {
+        // Non-overflow path: each element is published, nothing is dead-lettered.
+        var delivered = new CopyOnWriteArrayList<String>();
+        bus.subscribe(String.class, delivered::add);
+        var pool = DefaultEventExecutorFactory.create();
+        try {
+            EventChainContext.publishSpreadAsync(bus, List.of("a", "b"), null, pool, recorder, INFO);
+            await().atMost(Duration.ofSeconds(2))
+                    .untilAsserted(() -> assertThat(delivered).containsExactlyInAnyOrder("a", "b"));
+            assertThat(routed).isEmpty();
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void dlqRoutingSwallowsAThrowingErrorHandler() throws Exception {
+        // If the user's ErrorHandler itself throws while dead-lettering, it must be logged as a last
+        // resort, never propagated to the publisher's thread.
+        ErrorHandler throwing = ctx -> {
+            throw new IllegalStateException("handler boom");
+        };
+        try (SaturatedPool s = saturate()) {
+            assertThatCode(() -> EventChainContext.publishAsync(bus, "evt", null, s.pool, throwing, INFO))
+                    .doesNotThrowAnyException();
+        }
+    }
+
     private void assertRouted(Object expectedEvent) {
         await().atMost(Duration.ofSeconds(2))
                 .untilAsserted(() -> assertThat(routed)
@@ -155,7 +185,9 @@ class EventChainContextDlqTest {
         }
 
         @Override
-        public void shutdown() {}
+        public void shutdown() {
+            // no-op: this fake's lifecycle is not exercised by the retry-resubmit test.
+        }
 
         @Override
         public List<Runnable> shutdownNow() {

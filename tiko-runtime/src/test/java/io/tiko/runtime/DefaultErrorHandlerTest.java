@@ -54,10 +54,10 @@ class DefaultErrorHandlerTest {
         assertThat(CapturingLoggerFinder.RECORDS)
                 .filteredOn(r -> "io.tiko.events".equals(r.loggerName()))
                 .singleElement()
-                .satisfies(record -> {
-                    assertThat(record.level()).isEqualTo(System.Logger.Level.WARNING);
-                    assertThat(record.message()).contains(FakeEvent.class.getName());
-                    assertThat(record.message()).contains("ROUTE_TO_DLQ");
+                .satisfies(rec -> {
+                    assertThat(rec.level()).isEqualTo(System.Logger.Level.WARNING);
+                    assertThat(rec.message()).contains(FakeEvent.class.getName());
+                    assertThat(rec.message()).contains("ROUTE_TO_DLQ");
                 });
     }
 
