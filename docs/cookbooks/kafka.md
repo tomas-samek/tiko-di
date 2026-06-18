@@ -139,6 +139,26 @@ tiko:
 > "did you mean 'bootstrapServers'?" suggestion rather than binding silently. Keep your
 > own `@Configuration` records' keys aligned to their field names the same way.
 
+### Swapping the serializer (the `EventSerializer` SPI)
+
+Serialization is a transport-neutral SPI: `io.tiko.EventSerializer` (in `tiko-api`) — two methods,
+`byte[] serialize(Object)` and `<T> T deserialize(byte[], Class<T>)`. A serializer written once
+works across every transport (Kafka today; RabbitMQ / JMS as they land), so you don't fork an
+adapter to change the wire format. The default is JSON (Jackson), registered under the name `json`.
+
+To plug in a different format (Avro, Protobuf, a schema-registry client, ...):
+
+1. Implement `EventSerializer` — or `KafkaSerializer` (the Kafka-named sub-interface) if you want it
+   selectable by config name. A single instance handles every payload type via the method-level
+   type parameter on `deserialize`, so you write one impl, not one per event class.
+2. Register it for name-based lookup by shipping a `NamedKafkaSerializer` via
+   `META-INF/services/io.tiko.kafka.NamedKafkaSerializer` whose `name()` is your config key.
+3. Select it with `tiko.kafka.serializer: <name>` (whole transport) or per-bridge with
+   `@KafkaSource(serializer = MyAvroSerializer.class)` / `@KafkaSink(serializer = ...)`.
+
+An unknown serializer name fails fast at container start, naming the missing serializer and the
+YAML key.
+
 ## 5. Poison messages (ingest failures)
 
 When a record fails to ingest — deserialize, bridge dispatch, or publish — the runner
