@@ -22,4 +22,27 @@ public record EventHandlerError(EventHandlerInfo handler, Object event, Throwabl
     public EventHandlerError(EventHandlerInfo handler, Object event, Throwable cause) {
         this(handler, event, cause, 1);
     }
+
+    /**
+     * Classifies this failure (#111), derived from {@link #cause()} and {@link #attempts()} — no
+     * extra state. A dead-letter {@link ErrorHandler} can branch on the result rather than
+     * inspecting the cause type by hand:
+     *
+     * <ul>
+     *   <li>{@link DeliveryFailureKind#TIMEOUT} when the cause is a
+     *       {@link java.util.concurrent.TimeoutException} (#107) — takes precedence, since it
+     *       describes how the terminal attempt failed;</li>
+     *   <li>{@link DeliveryFailureKind#EXHAUSTED} when more than one attempt ran (a retry budget
+     *       was spent, #108);</li>
+     *   <li>{@link DeliveryFailureKind#EXCEPTION} otherwise — a single failed attempt.</li>
+     * </ul>
+     *
+     * @return the failure classification, never {@code null}
+     */
+    public DeliveryFailureKind kind() {
+        if (cause instanceof java.util.concurrent.TimeoutException) {
+            return DeliveryFailureKind.TIMEOUT;
+        }
+        return attempts > 1 ? DeliveryFailureKind.EXHAUSTED : DeliveryFailureKind.EXCEPTION;
+    }
 }

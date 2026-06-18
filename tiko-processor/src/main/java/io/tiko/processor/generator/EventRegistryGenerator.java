@@ -10,7 +10,6 @@ import io.tiko.processor.util.ProcessorContext;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.type.TypeKind;
@@ -155,8 +154,6 @@ public final class EventRegistryGenerator {
 
         ClassName errorHandler = ClassName.get("io.tiko", "ErrorHandler");
         ClassName eventHandlerError = ClassName.get("io.tiko", "EventHandlerError");
-        ClassName completableFutureClass = ClassName.get(CompletableFuture.class);
-        ClassName completionExceptionClass = ClassName.get(CompletionException.class);
         ClassName executorServiceClass = ClassName.get(ExecutorService.class);
 
         MethodSpec.Builder method = MethodSpec.methodBuilder(dispatcherName(handler, index))
@@ -255,34 +252,18 @@ public final class EventRegistryGenerator {
                                 index)
                         .build());
             } else {
-                // Build the whenComplete body. CompletableFuture captures every Throwable (including
-                // Error) into the future, so an Error never surfaces on the executor thread — without
-                // handling it here it would vanish. Unwrap CompletionException first, then: Exceptions
-                // route through ErrorHandler (as the sync path does), while Errors are logged but kept
-                // out of ErrorHandler — observable, yet consistent with Exception-only routing (#306).
-                CodeBlock.Builder wcBody = CodeBlock.builder();
-                wcBody.beginControlFlow("if (__t != null)");
-                wcBody.addStatement(
-                        "$T __cause = (__t instanceof $T && __t.getCause() != null) ? __t.getCause() : __t",
-                        Throwable.class,
-                        completionExceptionClass);
-                wcBody.beginControlFlow("if (__cause instanceof $T)", Error.class);
-                wcBody.addStatement("$T.logUnhandledAsyncError(__cause)", CHAIN_CONTEXT);
-                wcBody.nextControlFlow("else");
-                wcBody.beginControlFlow("try");
-                wcBody.addStatement("__err.onError(new $T(HANDLER_INFO_$L, event, __cause))", eventHandlerError, index);
-                wcBody.nextControlFlow("catch ($T __inner)", Exception.class);
-                wcBody.addStatement("$T.logErrorHandlerFailure(__inner)", CHAIN_CONTEXT);
-                wcBody.endControlFlow();
-                wcBody.endControlFlow();
-                wcBody.endControlFlow();
-
+                // Plain async dispatch (#111): route through runAsyncWithTimeout with a zero budget so
+                // the base async path shares the executor-submit, ROUTE_TO_DLQ overflow handling, and
+                // Error-vs-Exception routing of the timeout path. timeout = 0 means no time-boxing —
+                // runOnce degrades to a bare runAsync — so behaviour matches the former inline
+                // runAsync(...).whenComplete(...), minus the duplicated wiring (and now DLQ-covered: the
+                // inline form bypassed EventChainContext and so leaked the overflow signal to the publisher).
                 method.addCode(CodeBlock.builder()
                         .add(
-                                "$T.runAsync(() -> {\n$L}, __exec).whenComplete((__r, __t) -> {\n$L});\n",
-                                completableFutureClass,
+                                "$T.runAsyncWithTimeout(() -> {\n$L}, 0L, __exec, __err, HANDLER_INFO_$L, event);\n",
+                                CHAIN_CONTEXT,
                                 runBody.build(),
-                                wcBody.build())
+                                index)
                         .build());
             }
 

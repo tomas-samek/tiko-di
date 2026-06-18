@@ -50,10 +50,13 @@ class EventRegistryAsyncErrorObservableTest {
     }
 
     @Test
-    void asyncDispatcherLogsErrorsInsteadOfDroppingThem() throws IOException {
+    void asyncDispatcherDelegatesErrorObservabilityToRuntimeHelper() throws IOException {
         var content = generatedRegistry();
 
-        assertThat(content).contains("logUnhandledAsyncError");
+        // #306's Error-observability now lives in the runtime (#111): the plain async dispatcher delegates
+        // to EventChainContext.runAsyncWithTimeout, which logs an Error via logUnhandledAsyncError — see the
+        // runtime EventChainContext tests — rather than inlining that guard into every generated dispatcher.
+        assertThat(content).contains("runAsyncWithTimeout");
     }
 
     @Test

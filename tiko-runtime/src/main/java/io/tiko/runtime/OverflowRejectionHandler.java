@@ -5,9 +5,9 @@ import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.ThreadPoolExecutor;
 
 /**
- * Rejection handler for the {@code BLOCK}, {@code DROP}, and {@code THROW} overflow policies of the
- * default async event executor (#109). The {@code CALLER_RUNS} policy keeps its own
- * {@link ShutdownAwareCallerRunsPolicy}; this handler covers the other three.
+ * Rejection handler for the {@code BLOCK}, {@code DROP}, {@code THROW}, and {@code ROUTE_TO_DLQ}
+ * overflow policies of the default async event executor (#109, #111). The {@code CALLER_RUNS}
+ * policy keeps its own {@link ShutdownAwareCallerRunsPolicy}; this handler covers the rest.
  *
  * <p>Like {@code ShutdownAwareCallerRunsPolicy}, it degrades to an observable, non-throwing logged
  * drop once the pool is shutting down: a rejection at shutdown lands on whatever thread published
@@ -43,6 +43,10 @@ final class OverflowRejectionHandler implements RejectedExecutionHandler {
                         "Async event queue is full; the event was dropped (overflow policy = DROP).");
             case THROW ->
                 throw new EventQueueOverflowException("Async event queue is full and the overflow policy is THROW.");
+            case ROUTE_TO_DLQ ->
+                // Signal the dispatch site (which holds the event + ErrorHandler) to route an
+                // EventDispatchRejected; the rejection handler itself sees neither.
+                throw new DlqOverflowSignal("Async event queue is full; routing the event to the dead-letter handler.");
             default ->
                 throw new IllegalStateException("OverflowRejectionHandler does not serve overflow policy " + policy);
         }

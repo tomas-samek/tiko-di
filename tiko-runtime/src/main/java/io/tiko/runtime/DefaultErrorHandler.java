@@ -4,6 +4,7 @@ import io.tiko.AutoCloseFailure;
 import io.tiko.ConfigurationFailure;
 import io.tiko.ErrorContext;
 import io.tiko.ErrorHandler;
+import io.tiko.EventDispatchRejected;
 import io.tiko.EventHandlerError;
 import io.tiko.PostConstructFailure;
 import io.tiko.PreDestroyFailure;
@@ -46,6 +47,12 @@ public final class DefaultErrorHandler implements ErrorHandler {
                         handler.eventType().getName(),
                         attempts,
                         cause);
+            case EventDispatchRejected(var event) ->
+                TikoLog.log(
+                        LoggerHolder.LOG,
+                        System.Logger.Level.WARNING,
+                        "Async dispatch of event {0} was rejected by queue overflow and routed to the dead-letter handler (overflow policy = ROUTE_TO_DLQ).",
+                        event == null ? "null" : event.getClass().getName());
             case PostConstructFailure(var component, var cause) ->
                 TikoLog.log(
                         LoggerHolder.LOG,
