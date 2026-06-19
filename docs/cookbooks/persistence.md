@@ -76,6 +76,29 @@ public class HikariDataSourceFactory {
 `HikariDataSource` implements `AutoCloseable`, so Tiko drains the pool
 at container shutdown automatically.
 
+> **Not every pool is `AutoCloseable`.** The implicit-cleanup-at-shutdown above relies on the
+> pool implementing `AutoCloseable`, which `HikariDataSource` does. If you reach for a different
+> pool — e.g. embedded H2's `org.h2.jdbcx.JdbcConnectionPool` (a self-contained pooled
+> `DataSource` with no first-party module) — note it is **not** `AutoCloseable`; it exposes
+> `dispose()` instead. Release it with an explicit `@PreDestroy`, or the pool leaks at shutdown.
+> The hook must be `public` (the generated factory calls it from `io.tiko.generated`):
+>
+> ```java
+> @Component(scope = Scope.SINGLETON)
+> public class H2PoolFactory {
+>     private JdbcConnectionPool pool;
+>
+>     @Produces(scope = Scope.SINGLETON)
+>     public DataSource dataSource(DbConfig config) {
+>         pool = JdbcConnectionPool.create(config.url(), config.username(), config.password());
+>         return pool;
+>     }
+>
+>     @PreDestroy
+>     public void close() { if (pool != null) pool.dispose(); }
+> }
+> ```
+
 ## REQUEST-scoped Connection + auto-proxy
 
 ```java
