@@ -211,6 +211,8 @@ try (Container container = Tiko.create(
 }
 ```
 
+> **Imports & file name.** `@Configuration` / `@Key` / `@Default` are in `io.tiko.annotations`; `ConfigSources` is `io.tiko.config.ConfigSources` (the `tiko-config` module). The config file name is **your choice** — whatever you pass to `ConfigSources.classpath(...)`; pick one and use it consistently. Keys bind **exact** (camelCase as declared — `poolSize`, never `pool-size`). Separately, each Tiko module merges its own defaults from its jar's `META-INF/tiko/defaults.yaml` (e.g. `tiko-kafka` ships `tiko.kafka.*` defaults).
+
 ### Events
 
 ```java
@@ -310,6 +312,19 @@ ls target/generated-sources/annotations/io/tiko/generated/
 
 You'll see `TikoContainerImpl_<hash>.java` (the wiring), `<Component>Factory.java` per component, `EventRegistry.java` if you use events, and optional config binders.
 
+### Long-running services (Kafka consumers, schedulers)
+
+`Tiko.create(...)` with try-with-resources **shuts the container down at the end of the block** — correct for a one-shot task, but a transport-driven app (e.g. a `@KafkaSource` consumer) must stay alive or it connects and immediately exits. Use the daemon idiom instead:
+
+```java
+public static void main(String[] args) {
+    TikoDaemon daemon = Tiko.daemon(ConfigSources.classpath("application.yaml"));
+    daemon.awaitShutdown();   // blocks main until Ctrl+C / SIGTERM; @PreDestroy runs gracefully
+}
+```
+
+`Tiko.daemon(...)` installs a JVM shutdown hook and auto-starts discovered `TransportBootstrap` services (Kafka consumers, etc.) via `ServiceLoader`. Don't improvise `Thread.join()` / `CountDownLatch`. An app that runs its own foreground server (e.g. Javalin `app.start()`) doesn't need this — that thread already keeps the JVM up; use `Tiko.create(...)` there.
+
 ## Optional Tiko modules
 
 The starter `pom.xml` already wires the core (`tiko-api`, `tiko-runtime`) and the annotation processor. To opt into more:
@@ -318,7 +333,7 @@ The starter `pom.xml` already wires the core (`tiko-api`, `tiko-runtime`) and th
 | -------------------------- | ------------------------------------------------------------------------ | ----- |
 | `tiko-config`              | Typed YAML configuration injection via `@Configuration` records.        | compile |
 | `tiko-test`                | JUnit 5 extension, `@TestComponent` shadow overrides, `RecordingEventBus`. | test  |
-| `tiko-kafka` + `tiko-kafka-processor` | Kafka transport — `@KafkaSource` / `@KafkaSink`, JSON serializer. | compile |
+| `tiko-kafka` + `tiko-kafka-processor` | Kafka transport — `@KafkaSource` / `@KafkaSink` bridges, `tiko.kafka.*` config, JSON serializer. See `.ai-skills/tiko-build/SKILL.md` for the bridge-method contract + poison-record policy. | compile |
 
 Each is opt-in. Uncomment the corresponding block in `pom.xml` to enable.
 
@@ -342,6 +357,8 @@ sdk install jbang
 ```
 
 After that the first agent session downloads the `tiko-mcp` jar from Maven Central and caches it. Subsequent sessions reuse the cache.
+
+**No MCP server (or no jbang)?** The same data is on disk after a build — read the JSON directly under `target/classes/META-INF/tiko/`: `topology.json` (component graph, scopes, event topology), `config-schema.json`, `wiring-errors.json`, plus `topology-kafka.json` if you use the Kafka transport. For the API of a dependency (e.g. the `@KafkaSource` contract), `javap` the relevant jar. No MCP required.
 
 ## Where to dig deeper
 

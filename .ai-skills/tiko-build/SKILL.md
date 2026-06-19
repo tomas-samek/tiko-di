@@ -155,6 +155,14 @@ app:               # @Configuration(prefix = "app")
 Read it with `Tiko.create(ConfigSources.classpath("application.yml"))` and
 inject `AppConfig` (or a nested record) as a constructor parameter.
 
+**Packages & file name.** `@Configuration` / `@Key` / `@Default` live in
+`io.tiko.annotations`; `ConfigSources` is `io.tiko.config.ConfigSources` (the
+`tiko-config` module — add it as a dependency). The config file name is **your
+choice** — whatever you pass to `ConfigSources.classpath(...)`; pick **one** name and
+use it consistently (this skill uses `application.yml`). That is separate from each
+module's own defaults, which merge from its jar's `META-INF/tiko/defaults.yaml` (e.g.
+`tiko-kafka` ships `tiko.kafka.*` defaults there) — see the Kafka section below.
+
 ## Cookbook table
 
 Every recipe = one factory class. Construction shape + lifecycle is enough.
