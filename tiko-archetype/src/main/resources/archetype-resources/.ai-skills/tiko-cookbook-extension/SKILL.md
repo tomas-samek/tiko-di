@@ -5,11 +5,12 @@ description: Use when adding a new integration recipe to the tiko-build cookbook
 
 # tiko-cookbook-extension
 
-This file is the **operational distillation** of the cookbook-extension
-doc in the framework repo
-(https://github.com/tomas-samek/tiko-di/blob/main/docs/cookbook-extension.md).
-The long doc is the source of truth for prose; this file is the shape an
-agent reads to act.
+This file is the **operational distillation** of
+[`docs/cookbook-extension.md`](https://github.com/tomas-samek/tiko-di/blob/main/docs/cookbook-extension.md). The long
+doc is the source of truth for prose; this file is the shape an agent
+reads to act. When this skill teaches the cookbook to grow, both files
+need to grow together — update both, or the future-you reading the agent
+side won't know why the human side disagrees.
 
 ## The rule — ask, don't fabricate
 
@@ -45,7 +46,9 @@ and write the question to the user.
 ## When to use this skill
 
 - The user wants to integrate tiko with a library or framework the
-  [tiko-build cookbook](../tiko-build/SKILL.md) doesn't cover.
+  [tiko-build cookbook](../tiko-build/SKILL.md) and
+  [`docs/orchestrator-model.md`](https://github.com/tomas-samek/tiko-di/blob/main/docs/orchestrator-model.md) don't
+  cover.
 - A contributor wants to add a new recipe to the cookbook.
 - You (the agent) notice the cookbook is silent on a question the user
   is asking and want to propose adding it.
@@ -55,14 +58,15 @@ the user didn't ask for, generic refactoring of the cookbook.
 
 ## Step 1 — gate: does this even belong in the cookbook?
 
-Check the proposed addition against the three buckets
-(https://github.com/tomas-samek/tiko-di/blob/main/docs/orchestrator-vocabulary.md):
+Check the proposed addition against
+[`docs/orchestrator-vocabulary.md`](https://github.com/tomas-samek/tiko-di/blob/main/docs/orchestrator-vocabulary.md)'s
+three buckets:
 
 | Bucket | What to do |
 |---|---|
-| **Core** (container, scopes, event bus, compile-time wiring, lifecycle) | **Not a cookbook entry.** Surface to the user — this is a framework-feature discussion, not an integration recipe. File an issue against `tomas-samek/tiko-di` if it's a real gap. |
+| **Core** (container, scopes, event bus, compile-time wiring, lifecycle) | **Not a cookbook entry.** Surface to the user — this is a framework-feature discussion, not an integration recipe. File an issue if it's a real gap. |
 | **Plug in** (HTTP, DB, cache, templates, scheduling, retry, SDK clients, security) | **Proceed to step 2.** This is what the cookbook is for. |
-| **Open design questions** (extends the event model itself — new async modes, scheduling-as-event, retry-as-loop) | **Not a cookbook entry.** Surface to the user — open an issue against `tomas-samek/tiko-di`; the cookbook can't make this decision. |
+| **Open design questions** (extends the event model itself — new async modes, scheduling-as-event, retry-as-loop) | **Not a cookbook entry.** Surface to the user — open an issue against tiko-di; the cookbook can't make this decision. |
 
 If you're not sure which bucket — that's a step-1 ask. Don't pick.
 
@@ -82,11 +86,12 @@ Before any code, get answers from the user:
    needed. If not, ask whether the recipe should add one and what
    `close()`-equivalent it should call.
 4. **Singleton vs per-request.** Most plug-in libraries are
-   `SINGLETON`. If the user has a use case for `EVENT`-scoped, ask
-   explicitly — the proxy generation has rules they should know about.
-5. **Overlap with existing recipes.** Read the cookbook table in
-   [`tiko-build/SKILL.md`](../tiko-build/SKILL.md). If the new library
-   competes with an existing recipe (e.g. Vert.x vs Javalin), ask:
+   `SINGLETON`. If the user has a use case for `EVENT`-scoped (e.g.
+   per-request DB connection wrappers), ask explicitly — the proxy
+   generation has rules they should know about.
+5. **Overlap with existing recipes.** Search the cookbook table in
+   `tiko-build/SKILL.md`. If the new library competes with an existing
+   recipe (e.g. user wants Vert.x and the cookbook has Javalin), ask:
    replace? augment with a *choose-one* note? sit alongside?
 6. **Out-of-scope concerns.** Distributed tracing? Connection pooling
    knobs? Async semantics? Ask which the user cares about for this
@@ -99,8 +104,8 @@ writing the recipe with it.
 ## Step 3 — the canonical recipe template
 
 Every cookbook entry follows the same five-element shape. Mirror it.
-The three worked examples below are from the canonical cookbook in the
-framework repo — read them before writing yours.
+The three worked examples below are from the canonical cookbook — read
+them before writing yours.
 
 ### The shape
 
@@ -112,7 +117,7 @@ framework repo — read them before writing yours.
 | **Why-this-instead-of-bundling** | One sentence in the orchestrator-model voice. Not "tiko's equivalent of X." Name the tiko-native primitive. |
 | **Reference link** | Either a worked example in `tiko-examples/` if one exists, or the upstream library doc. |
 
-### Worked example 1 — HikariCP `DataSource`
+### Worked example 1 — HikariCP `DataSource` (canonical, see `docs/orchestrator-model.md` §3.1)
 
 ```java
 @Component(scope = Scope.SINGLETON)
@@ -134,10 +139,10 @@ public class DataSourceFactory {
 }
 ```
 
-`HikariDataSource` is `AutoCloseable` → no `@PreDestroy` needed.
-Reference: https://github.com/tomas-samek/tiko-di/blob/main/tiko-examples/15_quickstart/src/main/java/io/tiko/examples/quickstart/DataSourceFactory.java
+`HikariDataSource` is `AutoCloseable` → no `@PreDestroy` needed. Reference:
+[`DataSourceFactory.java`](https://github.com/tomas-samek/tiko-di/blob/main/tiko-examples/15_quickstart/src/main/java/io/tiko/examples/quickstart/DataSourceFactory.java).
 
-### Worked example 2 — Javalin HTTP server
+### Worked example 2 — Javalin HTTP server (canonical, see `docs/orchestrator-model.md` §3.5)
 
 ```java
 @Component(scope = Scope.SINGLETON)
@@ -157,9 +162,9 @@ public class JavalinFactory {
 
 Javalin isn't AutoCloseable in current versions → explicit `@PreDestroy`.
 Routes register in `Main`. Reference:
-https://github.com/tomas-samek/tiko-di/blob/main/tiko-examples/15_quickstart/src/main/java/io/tiko/examples/quickstart/JavalinFactory.java
+[`JavalinFactory.java`](https://github.com/tomas-samek/tiko-di/blob/main/tiko-examples/15_quickstart/src/main/java/io/tiko/examples/quickstart/JavalinFactory.java).
 
-### Worked example 3 — Caffeine cache
+### Worked example 3 — Caffeine cache (canonical, see `docs/orchestrator-model.md` §3.4)
 
 ```java
 @Component(scope = Scope.SINGLETON)
@@ -176,7 +181,8 @@ public class UserCacheFactory {
 
 No lifecycle hook — Caffeine holds no external resources. The
 `name = "users"` qualifier disambiguates if the project later adds a
-second cache.
+second cache. Reference: orchestrator-model §3.4 (no example app yet —
+this is fine for a recipe).
 
 ## Step 4 — anti-pattern check
 
@@ -202,21 +208,25 @@ fires, stop and reconsider:
 
 ## Step 5 — where the recipe lands
 
-If you're contributing back to the framework, the recipe lands in
-**two files together** in the `tomas-samek/tiko-di` repo:
+Two files, both updated together:
 
-1. `docs/orchestrator-model.md` — the long-form prose entry. Goes under
-   §3 (Plug-in cookbook). Numbered section (§3.N). Full code snippet +
-   lifecycle note + reference link + one-sentence "why-this-instead-of-bundling."
-2. `.ai-skills/tiko-build/SKILL.md` — the operational distillation. Add
-   a row to the **Cookbook table** and (if the library replaces a Spring
-   reflex) a row to the **Anti-pattern redirect table**. Cross-link the
-   §3.N anchor in `orchestrator-model.md`.
+1. **[`docs/orchestrator-model.md`](https://github.com/tomas-samek/tiko-di/blob/main/docs/orchestrator-model.md)** —
+   the long-form prose entry. Goes under §3 (Plug-in cookbook). Numbered
+   section (§3.N). Full code snippet + lifecycle note + reference link
+   + the one-sentence "why-this-instead-of-bundling."
+2. **[`.ai-skills/tiko-build/SKILL.md`](../tiko-build/SKILL.md)** —
+   the operational distillation. Add a row to the **Cookbook table** and
+   (if the library replaces a Spring reflex) a row to the **Anti-pattern
+   redirect table**. Cross-link the §3.N anchor in `orchestrator-model.md`.
 
-Open a PR against `tomas-samek/tiko-di` with both file updates.
+Don't update one without the other. The two files drift if you do.
 
-If the recipe is project-internal (you're not contributing back), the
-same template applies — just keep it in your project's own docs.
+The archetype's local copy of `tiko-build/SKILL.md`
+(`.ai-skills/tiko-build/SKILL.md`) updates automatically on the next
+release because it's copied from the repo's
+`tiko-archetype/src/main/resources/archetype-resources/.ai-skills/tiko-build/SKILL.md`
+at build time — but a recipe addition lands in the **repo's** SKILL.md
+*and* the archetype's copy in the same PR.
 
 ## Quality criteria — minimal beats comprehensive
 
@@ -231,7 +241,7 @@ Default to minimal:
 - **One sentence on why.** Why this is plug-in, not bundled.
 
 If a recipe deserves expansion (advanced configuration, error handling,
-multi-tenancy), spin it out as a follow-up. Ship the minimum first.
+multi-tenancy), spin it out as a follow-up PR. Ship the minimum first.
 
 ## What this skill does NOT do
 
@@ -240,4 +250,15 @@ multi-tenancy), spin it out as a follow-up. Ship the minimum first.
 - Replace user judgment on overlapping recipes. When two recipes
   compete, the user picks; the skill surfaces the choice.
 - Open a PR automatically. The agent writes the files, the user reviews
-  and opens / merges — same as any other change.
+  and merges — same as any other change.
+
+## Reading list
+
+- [`docs/orchestrator-model.md`](https://github.com/tomas-samek/tiko-di/blob/main/docs/orchestrator-model.md) — the
+  canonical cookbook. The shape every new entry mirrors.
+- [`docs/orchestrator-vocabulary.md`](https://github.com/tomas-samek/tiko-di/blob/main/docs/orchestrator-vocabulary.md) —
+  the three-bucket gate from step 1.
+- [`tiko-build/SKILL.md`](../tiko-build/SKILL.md) — the operational
+  distillation. Where the table row lands.
+- [`docs/mcp-design.md`](https://github.com/tomas-samek/tiko-di/blob/main/docs/mcp-design.md) — sibling principle
+  (per-partes serving) for the other agent-facing surface.

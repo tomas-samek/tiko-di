@@ -12,8 +12,12 @@
             </includes>
         </fileSet>
 
-        <!-- AI assistant context — committed by default; users can ignore via .gitignore. -->
-        <fileSet filtered="true" encoding="UTF-8">
+        <!-- AI assistant context — committed by default; users can ignore via .gitignore.
+             NOT filtered: the bundled skills are verbatim copies of the canonical repo skills
+             (kept in sync by ArchetypeBundledSkillsInSyncTest) and contain literal ${VAR:default}
+             config examples that must pass through Velocity untouched. They use no archetype
+             properties, so filtering would only risk mangling those examples. -->
+        <fileSet filtered="false" encoding="UTF-8">
             <directory>.ai-skills</directory>
             <includes>
                 <include>**/*.md</include>

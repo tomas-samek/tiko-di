@@ -16,6 +16,21 @@
     <name>Tiko DI - Archetype</name>
     <description>Maven archetype that scaffolds a runnable single-module Tiko DI project</description>
 
+    <!-- Test-only deps: the doc-sync gate (#408) verifies the archetype-bundled agent-skill
+         docs stay in sync with their canonical repo-root sources. Versions are BOM-managed. -->
+    <dependencies>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
     <build>
         <extensions>
             <extension>
@@ -33,6 +48,38 @@
                 </plugin>
             </plugins>
         </pluginManagement>
+
+        <plugins>
+            <!-- The maven-archetype packaging lifecycle does not bind compile/test phases
+                 (archetypes are resource-only), so the doc-sync gate's test (#408) is wired
+                 explicitly: compile src/test/java, then run it under surefire. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>doc-sync-test-compile</id>
+                        <phase>test-compile</phase>
+                        <goals>
+                            <goal>testCompile</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>doc-sync-test</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>test</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
         <!--
           The maven-archetype packaging binds archetype:integration-test to the
           integration-test phase by default. The IT regenerates the archetype against
