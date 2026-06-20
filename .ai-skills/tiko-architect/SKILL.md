@@ -128,22 +128,22 @@ Produce the verdict report using the template below. The releaser reads it and a
 **VERDICT: GO | CONDITIONAL | NO-GO**
 
 Release delta: vX.Y.Z-prev..HEAD
-Invariants in scope: ARCH-N, ARCH-M, …
-Invariants triaged out: ARCH-P (reason), ARCH-Q (reason), …
+Invariants in scope: ARCH-A, ARCH-B, ARCH-C, …
+Invariants triaged out: ARCH-Y (reason), ARCH-Z (reason), …
 
 | Invariant | Verdict   | Severity | Evidence                         |
 |-----------|-----------|----------|----------------------------------|
-| ARCH-N    | clean     | —        | —                                |
-| ARCH-M    | eroded    | concern  | path/to/File.java:42 — one line  |
-| ARCH-P    | violated  | blocker  | tiko-api/pom.xml:17 — one line   |
+| ARCH-A    | clean     | —        | —                                |
+| ARCH-B    | eroded    | concern  | path/to/File.java:42 — one line  |
+| ARCH-C    | violated  | blocker  | tiko-api/pom.xml:17 — one line   |
 
 **Blockers (NO-GO):** resolve before release
-- ARCH-P: <what must change>
+- ARCH-C: <what must change>
 
 **Follow-ups to file (CONDITIONAL):** title + one-line scope
 - "<Issue title>" — <one-line scope>
 
 **Registry changes proposed:**
-- Add ARCH-N+1: <statement> — <anchor>
-- Edit ARCH-N: update anchor to <new reference>
+- Add ARCH-<next>: <statement> — <anchor>
+- Edit ARCH-A: update anchor to <new reference>
 ```
