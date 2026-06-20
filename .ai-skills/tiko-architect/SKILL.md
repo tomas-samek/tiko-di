@@ -147,3 +147,29 @@ Invariants triaged out: ARCH-Y (reason), ARCH-Z (reason), …
 - Add ARCH-<next>: <statement> — <anchor>
 - Edit ARCH-A: update anchor to <new reference>
 ```
+
+---
+
+## Worked example — 0.3.0 retrospective (CONDITIONAL)
+
+First real run of this skill, against the `v0.2.2..v0.3.0` delta (235 files, ~9.8k insertions:
+the resiliency layer, generated-code pass, Kafka hardening, config/DI ergonomics).
+
+- **Triage → touched:** ARCH-1 (tiko-api changed), ARCH-2 (annotations changed), ARCH-4
+  (`EventDispatchRejected` permit), ARCH-13 (docs + archetype changed). Triaged out: ARCH-3/5/6/8/10/11/12.
+- **Fan-out findings:**
+
+| Invariant | Verdict | Severity | Evidence |
+|---|---|---|---|
+| ARCH-1 | clean | — | no new tiko-api deps; only JDK imports (`ThreadPoolExecutor`, `RejectedExecutionException`); `System.Logger` only |
+| ARCH-2 | clean | — | new `@EventHandler` members + others all `SOURCE`; `@PostConstruct`/`@PreDestroy` the documented RUNTIME exceptions; `BackoffStrategy` is an enum |
+| ARCH-4 | clean | — | `EventDispatchRejected` added to `permits` (compile-loud), interface still `sealed`, exhaustive switch updated |
+| ARCH-13 | violated | concern | archetype CLAUDE.md documents `Scope.REQUEST` (never shipped), a package-private `@PostConstruct` example, and a stale 131-line bundled `tiko-build` skill (canonical was 267) |
+
+- **VERDICT: CONDITIONAL.** Code invariants clean; the ARCH-13 doc drift is real and was later
+  filed as #399 / #400 / #401–#406 (all resolved) — confirming the gate would have surfaced it
+  at release time.
+- **Calibration learned:** the ARCH-13 agent first rated the drift `blocker` (→ NO-GO), but a
+  released, code-sound build must not be NO-GO'd by stale prose. Result: the registry's ARCH-13
+  now caps doc-coherence at `concern` unless a *published artifact* is broken. This is the
+  step-5 self-audit working — a dry-run that refined the registry.

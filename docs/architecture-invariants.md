@@ -229,6 +229,12 @@ must be valid, and contracts are described as they actually behave.
 working on the codebase. The drift postmortem (#401–#406) showed that stale docs cause
 systematic misreads of the architecture.
 
+**Severity (calibration).** Cap a doc-coherence violation at **concern** (→ CONDITIONAL: ship,
+file the fixes) unless the drift breaks a *published artifact* (a wrong coordinate in the
+install snippet, a broken jar) — then it is a **blocker** (→ NO-GO). A code-sound release must
+not be NO-GO'd by stale prose alone; the fixes are filed and shipped next. (Calibrated by the
+0.3.0 retrospective dry-run, which would otherwise have NO-GO'd a released, working build.)
+
 **Anchor.** The #401–#406 drift postmortem and the #408 archetype-doc-sync gate (issues on the
 GitHub tracker). #408 covers the bundled-docs subset mechanically; ARCH-13 covers the broader
 doc surface #408 does not reach automatically. Once #408 lands, its gate test under
