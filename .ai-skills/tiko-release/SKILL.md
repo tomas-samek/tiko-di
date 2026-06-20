@@ -45,6 +45,13 @@ Not for: releasing user projects (every project has its own conventions),
 SNAPSHOT-only deploys, or framework-internal version bumps that don't
 publish.
 
+## Step 0 — architecture go/no-go (run first)
+
+Before any pre-flight, run **`/tiko-architect`** against the release delta. Do **not** proceed
+past a **NO-GO** without resolving the named architectural blockers. A **CONDITIONAL** means
+file the listed follow-ups, then proceed. A **GO** clears this step. See
+[`.ai-skills/tiko-architect/SKILL.md`](../tiko-architect/SKILL.md).
+
 ## Step 1 — pre-flight checks
 
 Before asking for the version inputs, verify these. If any fail, fix
