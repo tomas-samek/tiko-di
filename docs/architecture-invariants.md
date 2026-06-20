@@ -50,7 +50,7 @@ an optional trace label for topology views, never a routing key.
 silently misroute an event. Type-keyed dispatch keeps wiring compile-time-checked, consistent
 with tiko's no-runtime-surprises contract.
 
-**Anchor.** `docs/events.md` trade-offs section (routing by type, not by name).
+**Anchor.** `docs/events.md` "Trade-off positions" (the "Routing is by event type, not by name" bullet).
 
 **Violation looks like.** A code path that dispatches or filters handlers by `eventName`
 string comparison at runtime; or framework docs / examples implying `eventName` affects which
@@ -229,9 +229,10 @@ must be valid, and contracts are described as they actually behave.
 working on the codebase. The drift postmortem (#401–#406) showed that stale docs cause
 systematic misreads of the architecture.
 
-**Anchor.** The #401–#406 drift postmortem; the #408 archetype-doc-sync gate, which covers
-the bundled-docs subset mechanically — ARCH-13 covers the broader doc surface that #408 does
-not reach automatically.
+**Anchor.** The #401–#406 drift postmortem and the #408 archetype-doc-sync gate (issues on the
+GitHub tracker). #408 covers the bundled-docs subset mechanically; ARCH-13 covers the broader
+doc surface #408 does not reach automatically. Once #408 lands, its gate test under
+`tiko-archetype/src/test/` is the in-repo foothold for the mechanical half.
 
 **Violation looks like.** CLAUDE.md describing an annotation, scope, or API that was removed
 or renamed without updating the doc; a cookbook showing an import path that no longer exists;
