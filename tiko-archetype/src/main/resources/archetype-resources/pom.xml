@@ -59,6 +59,14 @@
         </dependency>
         -->
 
+        <!-- JUnit 5 for unit tests (*Test, surefire) and integration tests (*IT, failsafe).
+             Version managed by tiko-bom. -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+
         <!-- Kafka transport: @KafkaSource / @KafkaSink, JSON serializer. Add
              tiko-kafka-processor to <annotationProcessorPaths> below if enabled. -->
         <!--
@@ -113,6 +121,22 @@
                 <configuration>
                     <mainClass>${package}.Main</mainClass>
                 </configuration>
+            </plugin>
+            <!-- Runs *IT integration tests at the verify phase. A standalone app has no parent,
+                 and failsafe (unlike surefire) is not bound by the default lifecycle, so without
+                 this execution `mvn verify` reports success while running zero integration tests. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.2.5</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
