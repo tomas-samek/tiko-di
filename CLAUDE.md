@@ -18,6 +18,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > rule: ask, don't fabricate.** Long-form companion:
 > [`docs/cookbook-extension.md`](./docs/cookbook-extension.md).
 >
+> **About to cut a release? Run the architecture gate first.** Read
+> [`.ai-skills/tiko-architect/SKILL.md`](./.ai-skills/tiko-architect/SKILL.md) —
+> the architecture go/no-go (GO / CONDITIONAL / NO-GO) that runs *before*
+> `tiko-release`'s pre-flight, checking the release delta against the
+> [architecture invariants registry](./docs/architecture-invariants.md).
+> **Load-bearing rule: a NO-GO stops the release until the named blockers
+> are resolved.**
+>
 > **Cutting a release of tiko-di?** Read
 > [`.ai-skills/tiko-release/SKILL.md`](./.ai-skills/tiko-release/SKILL.md) —
 > pre-flight checks, the two version inputs to ask the user about,
