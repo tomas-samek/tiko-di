@@ -173,3 +173,21 @@ the resiliency layer, generated-code pass, Kafka hardening, config/DI ergonomics
   released, code-sound build must not be NO-GO'd by stale prose. Result: the registry's ARCH-13
   now caps doc-coherence at `concern` unless a *published artifact* is broken. This is the
   step-5 self-audit working — a dry-run that refined the registry.
+
+## Worked example — seeded ARCH-1 violation (NO-GO)
+
+A deliberate negative test: a throwaway working-tree edit added
+`org.apache.commons:commons-lang3:3.14.0` (no `<scope>` → compile scope) to `tiko-api/pom.xml`,
+then the gate ran against that delta.
+
+- **Triage → touched:** ARCH-1 only (the sole changed file is `tiko-api/pom.xml`).
+- **Fan-out finding:**
+
+| Invariant | Verdict | Severity | Evidence |
+|---|---|---|---|
+| ARCH-1 | violated | blocker | `commons-lang3:3.14.0` added with no scope (effective compile scope) — a third-party runtime dependency on the zero-dep `tiko-api` |
+
+- **VERDICT: NO-GO.** Resolution named: remove the dependency (inline the trivial logic, or move
+  the consuming code to `tiko-runtime` where third-party deps are allowed). Seed then reverted.
+- Confirms the gate hard-stops on a real architectural breakage in the shipped code — the
+  counterpart to the 0.3.0 retrospective's CONDITIONAL.
