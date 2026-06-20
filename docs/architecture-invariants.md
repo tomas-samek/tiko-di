@@ -105,7 +105,8 @@ mesh.
 **Rationale.** Keeping tiko single-process preserves its compile-time-safety guarantee:
 cross-process coordination requires runtime contracts the framework cannot verify.
 
-**Anchor.** `docs/VISION.md` "Explicitly out of scope" section.
+**Anchor.** `docs/VISION.md`, the bold bullet "Explicitly out of scope: distributed
+orchestration across processes — use a service mesh" (in the Plug-in / out-of-scope list).
 
 **Violation looks like.** A new module or API that routes events between two running JVM
 processes through tiko itself; or a design doc treating tiko as a process-level orchestrator.
