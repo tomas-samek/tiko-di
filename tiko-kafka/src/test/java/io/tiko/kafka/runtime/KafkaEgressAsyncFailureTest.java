@@ -55,7 +55,12 @@ class KafkaEgressAsyncFailureTest {
         TikoOptions opts = TikoOptions.builder().errorHandler(errors::add).build();
 
         List<GeneratedSinkDescriptor> sinks = List.of(new GeneratedSinkDescriptor(
-                "async-fail-out", "", OrderPlaced.class, KafkaSerializer.Default.class, (container, event) -> event));
+                "async-fail-out",
+                "",
+                OrderPlaced.class,
+                KafkaSerializer.Default.class,
+                (container, event) -> event,
+                p -> null));
 
         try (Container container = Tiko.create(opts)) {
             KafkaBootstrapSupport support = new KafkaBootstrapSupport(
@@ -91,7 +96,12 @@ class KafkaEgressAsyncFailureTest {
                 .build();
 
         List<GeneratedSinkDescriptor> sinks = List.of(new GeneratedSinkDescriptor(
-                "handler-throws", "", OrderPlaced.class, KafkaSerializer.Default.class, (container, event) -> event));
+                "handler-throws",
+                "",
+                OrderPlaced.class,
+                KafkaSerializer.Default.class,
+                (container, event) -> event,
+                p -> null));
 
         try (Container container = Tiko.create(opts)) {
             KafkaBootstrapSupport support = new KafkaBootstrapSupport(
