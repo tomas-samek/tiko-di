@@ -55,6 +55,14 @@ the bus from Kafka transparently.
 - The bridge code is small and confined to one file per direction.
 - Compile-time validation catches mistakes: try removing `@EventTrigger` from `OrderKafkaConsumer.java` and run `mvn compile` — the build fails with a clear pointer to the missing sibling annotation.
 
+## Testing without a broker
+
+Two Docker-free integration tests show the supported fake-broker seam (#414):
+`order-service/.../FakeBrokerOrderPublishIT` drives the `@KafkaSink` outbound path and
+`warehouse-service/.../FakeBrokerWarehouseConsumeIT` the `@KafkaSource` inbound path, via
+`TikoOptions.replaceTransport(KafkaTransport.class, t -> FakeKafkaTransport.over(t, broker))`.
+The Testcontainers e2e (`OrderToWarehouseE2EIT`) still covers the real-broker path.
+
 ## Future docker images
 
 Service images for `order-service` / `warehouse-service` will be added to
