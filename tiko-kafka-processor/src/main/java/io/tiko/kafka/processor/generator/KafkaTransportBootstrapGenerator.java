@@ -23,11 +23,12 @@ import javax.tools.StandardLocation;
  * Emits one {@code io.tiko.generated.KafkaTransportBootstrap} class per compilation unit
  * plus the matching {@code META-INF/services/io.tiko.TransportBootstrap} entry.
  *
- * <p>The generated class implements {@link io.tiko.TransportBootstrap}. {@code start(Container)}
- * resolves bridge components via {@code container.get(...)}, looks up the {@code KafkaConfig}
- * record, resolves serializers via {@code ServiceLoader<NamedKafkaSerializer>}, subscribes
- * one EventBus callback per sink, and launches one consumer thread per source.
- * {@code shutdown()} signals the threads to stop and closes the producer / consumers.
+ * <p>The generated class implements {@link io.tiko.kafka.KafkaTransport} (which extends
+ * {@link io.tiko.TransportBootstrap}). {@code start(Container)} resolves bridge components via
+ * {@code container.get(...)}, looks up the {@code KafkaConfig} record, resolves serializers via
+ * {@code ServiceLoader<NamedKafkaSerializer>}, subscribes one EventBus callback per sink, and
+ * launches one consumer thread per source. {@code shutdown()} signals the threads to stop and
+ * closes the producer / consumers.
  */
 public final class KafkaTransportBootstrapGenerator {
 
@@ -35,7 +36,6 @@ public final class KafkaTransportBootstrapGenerator {
     private static final String CLASS_NAME = "KafkaTransportBootstrap";
 
     private static final ClassName GENERATED = ClassName.get("javax.annotation.processing", "Generated");
-    private static final ClassName TRANSPORT_BOOTSTRAP = ClassName.get("io.tiko", "TransportBootstrap");
     private static final ClassName KAFKA_TRANSPORT = ClassName.get("io.tiko.kafka", "KafkaTransport");
     private static final ClassName CONTAINER = ClassName.get("io.tiko", "Container");
     private static final ClassName KAFKA_BOOTSTRAP_SUPPORT =

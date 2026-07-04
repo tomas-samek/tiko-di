@@ -82,7 +82,7 @@ class FakeKafkaTransportTest {
     }
 
     @Test
-    void substitutionThroughTikoOptionsUsesTheFake() {
+    void substitutionFailsFastWhenNoKafkaTransportIsDiscovered() {
         FakeKafkaBroker broker = new FakeKafkaBroker();
 
         // No generated transport is on tiko-kafka's own test classpath, so the discovered
