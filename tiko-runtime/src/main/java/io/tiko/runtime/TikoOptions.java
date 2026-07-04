@@ -3,6 +3,7 @@ package io.tiko.runtime;
 import io.tiko.ConfigSource;
 import io.tiko.ErrorHandler;
 import io.tiko.EventBus;
+import io.tiko.TransportBootstrap;
 import java.time.Duration;
 import java.util.Objects;
 
@@ -38,6 +39,8 @@ public final class TikoOptions {
     private final int eventExecutorMaxSize;
     private final Duration eventExecutorKeepAlive;
     private final java.util.Map<OverrideKey, java.util.function.Supplier<?>> overrides;
+    private final java.util.Map<Class<?>, java.util.function.Function<TransportBootstrap, TransportBootstrap>>
+            transportReplacements;
 
     /** Sentinel for an unset pool-size knob: the framework derives the default from {@code availableProcessors()}. */
     static final int UNSET_POOL_SIZE = -1;
@@ -57,6 +60,9 @@ public final class TikoOptions {
         this.overrides = b.overrides == null
                 ? new java.util.concurrent.ConcurrentHashMap<>()
                 : new java.util.concurrent.ConcurrentHashMap<>(b.overrides);
+        this.transportReplacements = b.transportReplacements == null
+                ? java.util.Map.of()
+                : java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(b.transportReplacements));
     }
 
     /**
@@ -199,6 +205,16 @@ public final class TikoOptions {
     }
 
     /**
+     * Registered transport replacements in registration order; empty when none. Keys are the
+     * marker classes passed to {@link Builder#replaceTransport}; values are the decorators,
+     * pre-wrapped so the framework can apply them to any discovered {@code TransportBootstrap}.
+     */
+    java.util.Map<Class<?>, java.util.function.Function<TransportBootstrap, TransportBootstrap>>
+            transportReplacements() {
+        return transportReplacements;
+    }
+
+    /**
      * Package-private entry point used by {@link AggregatingContainer} to register
      * shadow-declared overrides AFTER {@link Builder#build()} has been called.
      * User code cannot reach this method; it is the only mutation surface on
@@ -246,6 +262,8 @@ public final class TikoOptions {
         private int eventExecutorMaxSize = UNSET_POOL_SIZE;
         private Duration eventExecutorKeepAlive;
         private java.util.Map<OverrideKey, java.util.function.Supplier<?>> overrides;
+        private java.util.Map<Class<?>, java.util.function.Function<TransportBootstrap, TransportBootstrap>>
+                transportReplacements;
 
         private Builder() {}
 
@@ -448,6 +466,35 @@ public final class TikoOptions {
             Objects.requireNonNull(supplier, "supplier");
             if (overrides == null) overrides = new java.util.LinkedHashMap<>();
             overrides.put(key, supplier);
+            return this;
+        }
+
+        /**
+         * Replaces every ServiceLoader-discovered {@link TransportBootstrap} that is an instance of
+         * {@code transport} with the result of {@code replacement}, applied between discovery and
+         * transport start. Returning {@code null} drops the transport for this container — the
+         * disable idiom. {@code replaceTransport(TransportBootstrap.class, t -> null)} disables all
+         * transports.
+         *
+         * <p>This is a <strong>test affordance</strong> in the same family as
+         * {@link #override(Class, java.util.function.Supplier)}: it exists so integration tests can
+         * substitute a fake transport (e.g. {@code FakeKafkaTransport} over a {@code FakeKafkaBroker})
+         * for the generated one. Production configuration belongs in the transport's own config keys.
+         *
+         * @throws IllegalArgumentException if a replacement is already registered for {@code transport}
+         * @throws NullPointerException if either argument is null
+         */
+        public <T extends TransportBootstrap> Builder replaceTransport(
+                Class<T> transport, java.util.function.Function<T, TransportBootstrap> replacement) {
+            Objects.requireNonNull(transport, "transport");
+            Objects.requireNonNull(replacement, "replacement");
+            if (transportReplacements == null) {
+                transportReplacements = new java.util.LinkedHashMap<>();
+            }
+            if (transportReplacements.containsKey(transport)) {
+                throw new IllegalArgumentException("replaceTransport already registered for " + transport.getName());
+            }
+            transportReplacements.put(transport, tb -> replacement.apply(transport.cast(tb)));
             return this;
         }
 
