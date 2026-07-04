@@ -7,6 +7,7 @@ import io.tiko.Container;
 import io.tiko.ContainerInitializationException;
 import io.tiko.TransportBootstrap;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 
 class TransportReplacementTest {
@@ -121,5 +122,47 @@ class TransportReplacementTest {
         assertThatThrownBy(() -> builder.replaceTransport(StubTransport.class, t -> null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("StubTransport");
+    }
+
+    /**
+     * Records start/shutdown so the test can assert both ran without depending on the
+     * {@code TransportBootstrapDiscoveryTest} fixture's own static counters.
+     */
+    static final class RecordingReplacementTransport implements TransportBootstrap {
+        final AtomicBoolean started = new AtomicBoolean();
+        final AtomicBoolean shutdown = new AtomicBoolean();
+
+        @Override
+        public void start(Container container) {
+            started.set(true);
+        }
+
+        @Override
+        public void shutdown() {
+            shutdown.set(true);
+        }
+    }
+
+    @Test
+    void replacementRunsThroughRealContainerLifecycleInsteadOfTheDiscoveredTransport() {
+        // Same reset convention as TransportBootstrapDiscoveryTest: the ServiceLoader fixture's
+        // counters are static, so each test that depends on them starts from a known zero.
+        TransportBootstrapDiscoveryTest.RecordingTransportBootstrap.STARTS.set(0);
+        TransportBootstrapDiscoveryTest.RecordingTransportBootstrap.SHUTDOWNS.set(0);
+
+        var replacement = new RecordingReplacementTransport();
+        var options = TikoOptions.builder()
+                .replaceTransport(TransportBootstrapDiscoveryTest.RecordingTransportBootstrap.class, t -> replacement)
+                .build();
+
+        try (Container container = Tiko.create(options)) {
+            assertThat(replacement.started).isTrue();
+            assertThat(TransportBootstrapDiscoveryTest.RecordingTransportBootstrap.STARTS.get())
+                    .isZero();
+        }
+
+        assertThat(replacement.shutdown).isTrue();
+        assertThat(TransportBootstrapDiscoveryTest.RecordingTransportBootstrap.SHUTDOWNS.get())
+                .isZero();
     }
 }

@@ -537,6 +537,8 @@ public final class Tiko {
                         + "2. Remove the replaceTransport(...) registration if the transport is not part of this app.");
             }
         }
+        // Nulls are kept in place during the loop so indexes stay stable and later entries
+        // still see the surviving transports; removed once at the end.
         result.removeIf(java.util.Objects::isNull);
         return result;
     }

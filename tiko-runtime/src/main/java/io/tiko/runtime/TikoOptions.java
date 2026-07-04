@@ -480,6 +480,13 @@ public final class TikoOptions {
          * {@link #override(Class, java.util.function.Supplier)}: it exists so integration tests can
          * substitute a fake transport (e.g. {@code FakeKafkaTransport} over a {@code FakeKafkaBroker})
          * for the generated one. Production configuration belongs in the transport's own config keys.
+         * A registration that matches no discovered transport fails fast at {@code Tiko.create(...)}
+         * with {@link io.tiko.ContainerInitializationException} — unlike {@code override(...)}, which
+         * is inert when unused.
+         *
+         * <p>Multiple registrations apply in registration order, and later registrations match
+         * against the results of earlier ones — a replacement instance can itself be matched and
+         * replaced by a later key.
          *
          * @throws IllegalArgumentException if a replacement is already registered for {@code transport}
          * @throws NullPointerException if either argument is null

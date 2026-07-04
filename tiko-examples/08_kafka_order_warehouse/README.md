@@ -60,7 +60,7 @@ the bus from Kafka transparently.
 Two Docker-free integration tests show the supported fake-broker seam (#414):
 `order-service/.../FakeBrokerOrderPublishIT` drives the `@KafkaSink` outbound path and
 `warehouse-service/.../FakeBrokerWarehouseConsumeIT` the `@KafkaSource` inbound path, via
-`TikoOptions.replaceTransport(KafkaTransport.class, t -> FakeKafkaTransport.over(t, broker))`.
+`TikoOptions.builder().replaceTransport(KafkaTransport.class, t -> FakeKafkaTransport.over(t, broker))`.
 The Testcontainers e2e (`OrderToWarehouseE2EIT`) still covers the real-broker path.
 
 ## Future docker images

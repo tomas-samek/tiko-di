@@ -12,6 +12,7 @@ import io.tiko.kafka.test.FakeKafkaBroker;
 import io.tiko.kafka.test.FakeKafkaTransport;
 import io.tiko.runtime.Tiko;
 import io.tiko.runtime.TikoOptions;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -53,7 +54,7 @@ class FakeBrokerWarehouseConsumeIT {
 
             await().atMost(Duration.ofSeconds(10)).until(() -> Files.exists(probe));
             assertThat(Files.readAllLines(probe)).containsExactly("o-7");
-        } catch (java.io.IOException e) {
+        } catch (IOException e) {
             throw new AssertionError("probe file could not be read", e);
         }
     }
