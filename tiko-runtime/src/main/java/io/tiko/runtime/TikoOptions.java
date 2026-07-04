@@ -39,8 +39,7 @@ public final class TikoOptions {
     private final int eventExecutorMaxSize;
     private final Duration eventExecutorKeepAlive;
     private final java.util.Map<OverrideKey, java.util.function.Supplier<?>> overrides;
-    private final java.util.Map<Class<?>, java.util.function.Function<TransportBootstrap, TransportBootstrap>>
-            transportReplacements;
+    private final java.util.Map<Class<?>, java.util.function.UnaryOperator<TransportBootstrap>> transportReplacements;
 
     /** Sentinel for an unset pool-size knob: the framework derives the default from {@code availableProcessors()}. */
     static final int UNSET_POOL_SIZE = -1;
@@ -209,8 +208,7 @@ public final class TikoOptions {
      * marker classes passed to {@link Builder#replaceTransport}; values are the decorators,
      * pre-wrapped so the framework can apply them to any discovered {@code TransportBootstrap}.
      */
-    java.util.Map<Class<?>, java.util.function.Function<TransportBootstrap, TransportBootstrap>>
-            transportReplacements() {
+    java.util.Map<Class<?>, java.util.function.UnaryOperator<TransportBootstrap>> transportReplacements() {
         return transportReplacements;
     }
 
@@ -262,8 +260,7 @@ public final class TikoOptions {
         private int eventExecutorMaxSize = UNSET_POOL_SIZE;
         private Duration eventExecutorKeepAlive;
         private java.util.Map<OverrideKey, java.util.function.Supplier<?>> overrides;
-        private java.util.Map<Class<?>, java.util.function.Function<TransportBootstrap, TransportBootstrap>>
-                transportReplacements;
+        private java.util.Map<Class<?>, java.util.function.UnaryOperator<TransportBootstrap>> transportReplacements;
 
         private Builder() {}
 

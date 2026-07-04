@@ -505,7 +505,7 @@ public final class Tiko {
         java.util.List<TransportBootstrap> result = new java.util.ArrayList<>(discovered);
         for (var entry : replacements.entrySet()) {
             Class<?> key = entry.getKey();
-            var decorator = entry.getValue();
+            java.util.function.UnaryOperator<TransportBootstrap> decorator = entry.getValue();
             boolean matched = false;
             for (int i = 0; i < result.size(); i++) {
                 TransportBootstrap current = result.get(i);
@@ -523,24 +523,33 @@ public final class Tiko {
                 }
             }
             if (!matched) {
-                java.util.List<String> discoveredNames = result.stream()
-                        .filter(java.util.Objects::nonNull)
-                        .map(tb -> tb.getClass().getName())
-                        .toList();
-                throw new ContainerInitializationException("replaceTransport(" + key.getName()
-                        + ", ...) matched no discovered transport.\n"
-                        + "Discovered transports: "
-                        + (discoveredNames.isEmpty() ? "(none)" : discoveredNames)
-                        + "\n"
-                        + "Suggested fixes:\n"
-                        + "1. Check the transport module (runtime + annotation processor) is on the classpath.\n"
-                        + "2. Remove the replaceTransport(...) registration if the transport is not part of this app.");
+                throw unmatchedTransportKey(key, result);
             }
         }
         // Nulls are kept in place during the loop so indexes stay stable and later entries
         // still see the surviving transports; removed once at the end.
         result.removeIf(java.util.Objects::isNull);
         return result;
+    }
+
+    /**
+     * Builds the fail-fast exception for a {@link TikoOptions.Builder#replaceTransport} key that
+     * matched none of the discovered transports, naming what was actually discovered.
+     */
+    private static ContainerInitializationException unmatchedTransportKey(
+            Class<?> key, java.util.List<TransportBootstrap> result) {
+        java.util.List<String> discoveredNames = result.stream()
+                .filter(java.util.Objects::nonNull)
+                .map(tb -> tb.getClass().getName())
+                .toList();
+        return new ContainerInitializationException("replaceTransport(" + key.getName()
+                + ", ...) matched no discovered transport.\n"
+                + "Discovered transports: "
+                + (discoveredNames.isEmpty() ? "(none)" : discoveredNames)
+                + "\n"
+                + "Suggested fixes:\n"
+                + "1. Check the transport module (runtime + annotation processor) is on the classpath.\n"
+                + "2. Remove the replaceTransport(...) registration if the transport is not part of this app.");
     }
 
     /** Best-effort container teardown on a failing bootstrap path — never masks the original failure. */

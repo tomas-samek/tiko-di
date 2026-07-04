@@ -15,19 +15,27 @@ class TransportReplacementTest {
     /** Stands in for a generated transport; the marker subtype is the substitution key. */
     static class StubTransport implements TransportBootstrap {
         @Override
-        public void start(Container container) {}
+        public void start(Container container) {
+            /* no-op test fixture */
+        }
 
         @Override
-        public void shutdown() {}
+        public void shutdown() {
+            /* no-op test fixture */
+        }
     }
 
     /** A second, unrelated transport type to prove matching is selective. */
     static class OtherTransport implements TransportBootstrap {
         @Override
-        public void start(Container container) {}
+        public void start(Container container) {
+            /* no-op test fixture */
+        }
 
         @Override
-        public void shutdown() {}
+        public void shutdown() {
+            /* no-op test fixture */
+        }
     }
 
     @Test
@@ -73,8 +81,9 @@ class TransportReplacementTest {
         var options = TikoOptions.builder()
                 .replaceTransport(OtherTransport.class, t -> t)
                 .build();
+        var discovered = List.<TransportBootstrap>of(new StubTransport());
 
-        assertThatThrownBy(() -> Tiko.applyTransportReplacements(List.of(new StubTransport()), options))
+        assertThatThrownBy(() -> Tiko.applyTransportReplacements(discovered, options))
                 .isInstanceOf(ContainerInitializationException.class)
                 .hasMessageContaining("OtherTransport")
                 .hasMessageContaining("StubTransport")
@@ -99,8 +108,9 @@ class TransportReplacementTest {
                     throw new IllegalStateException("boom");
                 })
                 .build();
+        var discovered = List.<TransportBootstrap>of(new StubTransport());
 
-        assertThatThrownBy(() -> Tiko.applyTransportReplacements(List.of(new StubTransport()), options))
+        assertThatThrownBy(() -> Tiko.applyTransportReplacements(discovered, options))
                 .isInstanceOf(ContainerInitializationException.class)
                 .hasMessageContaining("StubTransport")
                 .hasCauseInstanceOf(IllegalStateException.class);
