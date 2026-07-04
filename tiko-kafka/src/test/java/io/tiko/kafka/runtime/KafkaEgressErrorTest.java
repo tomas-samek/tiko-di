@@ -29,7 +29,8 @@ class KafkaEgressErrorTest {
                 "",
                 OrderPlaced.class,
                 KafkaSerializer.Default.class,
-                (container, event) -> container.get(ThrowingPublisher.class).toKafka((OrderPlaced) event)));
+                (container, event) -> container.get(ThrowingPublisher.class).toKafka((OrderPlaced) event),
+                p -> null));
 
         try (Container container = Tiko.create(opts);
                 TestKafkaBootstrap bootstrap = TestKafkaBootstrap.start(container, broker, List.of(), sinks)) {

@@ -79,6 +79,13 @@ public final class KafkaTransportBootstrapGenerator {
         for (int i = 0; i < sinks.size(); i++) {
             cls.addMethod(buildSinkDispatcher(sinks.get(i), i));
         }
+        // Per-sink key extractor: compile-time replacement for the former runtime reflection
+        // on @KafkaSink(partitionKey) — the accessor was already validated by PartitionKeyValidator.
+        for (int i = 0; i < sinks.size(); i++) {
+            if (!sinks.get(i).partitionKey().isEmpty()) {
+                cls.addMethod(buildSinkKeyExtractor(sinks.get(i), i));
+            }
+        }
 
         JavaFile.builder(GENERATED_PACKAGE, cls.build()).build().writeTo(env.getFiler());
 
@@ -159,14 +166,27 @@ public final class KafkaTransportBootstrapGenerator {
                 "$T<$T> list = new $T<>()", java.util.List.class, KAFKA_SINK_DESCRIPTOR, java.util.ArrayList.class);
         for (int i = 0; i < sinks.size(); i++) {
             KafkaSinkDescriptor s = sinks.get(i);
-            b.addStatement(
-                    "list.add(new $T($S, $S, $T.class, $T.class, this::sink$L))",
-                    KAFKA_SINK_DESCRIPTOR,
-                    s.topic(),
-                    s.partitionKey(),
-                    TypeName.get(s.eventType()),
-                    TypeName.get(s.serializerClass()),
-                    i);
+            if (s.partitionKey().isEmpty()) {
+                b.addStatement(
+                        "list.add(new $T($S, $S, $T.class, $T.class, this::sink$L, p -> null))",
+                        KAFKA_SINK_DESCRIPTOR,
+                        s.topic(),
+                        s.partitionKey(),
+                        TypeName.get(s.eventType()),
+                        TypeName.get(s.serializerClass()),
+                        i);
+            } else {
+                b.addStatement(
+                        "list.add(new $T($S, $S, $T.class, $T.class, this::sink$L, $L::key$L))",
+                        KAFKA_SINK_DESCRIPTOR,
+                        s.topic(),
+                        s.partitionKey(),
+                        TypeName.get(s.eventType()),
+                        TypeName.get(s.serializerClass()),
+                        i,
+                        CLASS_NAME,
+                        i);
+            }
         }
         b.addStatement("return list");
         return b.build();
@@ -205,6 +225,19 @@ public final class KafkaTransportBootstrapGenerator {
         b.addStatement("$T bridge = container.get($T.class)", bridgeClass, bridgeClass);
         b.addStatement("return bridge.$L(($T) event)", s.method().getSimpleName(), eventName);
         return b.build();
+    }
+
+    private MethodSpec buildSinkKeyExtractor(KafkaSinkDescriptor s, int index) {
+        TypeName payloadName = TypeName.get(s.producedPayloadType());
+        return MethodSpec.methodBuilder("key" + index)
+                .addModifiers(Modifier.PRIVATE, Modifier.STATIC)
+                .returns(String.class)
+                .addParameter(Object.class, "p")
+                // Object (not var): the accessor may return a primitive, which must box
+                // before the null check.
+                .addStatement("$T v = (($T) p).$L()", Object.class, payloadName, s.partitionKey())
+                .addStatement("return v == null ? null : $T.valueOf(v)", String.class)
+                .build();
     }
 
     private void writeServiceLoaderEntry(Filer filer) throws IOException {
