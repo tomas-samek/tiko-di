@@ -104,6 +104,18 @@ class KafkaTransportBootstrapGeneratorTest {
                 .doesNotContain("key0(");
     }
 
+    @Test
+    void generatedBootstrapImplementsKafkaTransportWithPublicDescriptors() throws IOException {
+        Compilation compilation = compileOrderFixtures();
+
+        String normalized = bootstrapSource(compilation).replaceAll("\\s", "");
+        org.assertj.core.api.Assertions.assertThat(normalized)
+                .as("generated bootstrap is substitutable via KafkaTransport and exposes its wiring")
+                .contains("implementsKafkaTransport")
+                .contains("@OverridepublicList<GeneratedSourceDescriptor>sources()")
+                .contains("@OverridepublicList<GeneratedSinkDescriptor>sinks()");
+    }
+
     private Compilation compileOrderFixtures() {
         Compilation compilation = Compiler.javac()
                 .withProcessors(new TikoAnnotationProcessor(), new KafkaAnnotationProcessor())
