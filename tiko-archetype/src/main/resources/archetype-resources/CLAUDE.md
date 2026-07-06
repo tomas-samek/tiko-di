@@ -74,6 +74,25 @@ the reverse (short into long) is the case that needs the interface.
 | `@TestComponent(value, scope, name)`    | Shadow a production `@Component` in tests.      |
 | `@RequestScopeTest` / `@EventScopeTest` | Wrap a `@Test` in a scope.                       |
 
+### Exact packages (import from here, not from memory)
+
+| Type | Package |
+|---|---|
+| `@Component` `@Inject` `@Named` `@Pick` `@Produces` `@PostConstruct` `@PreDestroy` `@EventHandler` `@EventTrigger` `@Configuration` `@Default` `@Key` | `io.tiko.annotations` |
+| `@KafkaSource` `@KafkaSink` | `io.tiko.kafka.annotations` — **NOT** `io.tiko.annotations` |
+| `Container` `EventBus` `Scope` `Provider` | `io.tiko` |
+| `Tiko` `TikoOptions` `TikoDaemon` | `io.tiko.runtime` |
+| `ConfigSources` | `io.tiko.config` |
+| `KafkaTransport` / `JsonKafkaSerializer` / `FakeKafkaBroker` `FakeKafkaTransport` | `io.tiko.kafka` / `io.tiko.kafka.serializer` / `io.tiko.kafka.test` |
+
+A `cannot find symbol` on an import means a wrong package, not a missing
+feature — check this table, then `javap` the resolved jar; never conclude
+an annotation does not exist because one import guess failed. Kafka types
+need the `tiko-kafka` dependency + `tiko-kafka-processor` processor path —
+both ship commented out in this pom; enable them first. Full signatures:
+the API signature sheet in
+[`.ai-skills/tiko-build/SKILL.md`](.ai-skills/tiko-build/SKILL.md).
+
 ## Rules
 
 - **Constructor injection only.** `@Inject` on the constructor, never on fields or setters.
@@ -211,7 +230,7 @@ try (Container container = Tiko.create(
 }
 ```
 
-> **Imports & file name.** `@Configuration` / `@Key` / `@Default` are in `io.tiko.annotations`; `ConfigSources` is `io.tiko.config.ConfigSources` (the `tiko-config` module). The config file name is **your choice** — whatever you pass to `ConfigSources.classpath(...)`; pick one and use it consistently. Keys bind **exact** (camelCase as declared — `poolSize`, never `pool-size`). Separately, each Tiko module merges its own defaults from its jar's `META-INF/tiko/defaults.yaml` (e.g. `tiko-kafka` ships `tiko.kafka.*` defaults).
+> **Imports & file name.** `@Configuration` / `@Key` / `@Default` are in `io.tiko.annotations`; `ConfigSources` is `io.tiko.config.ConfigSources` (the `tiko-config` module). The config file name is **your choice** — whatever you pass to `ConfigSources.classpath(...)`; pick one and use it consistently. Keys bind **exact** (camelCase as declared — `poolSize`, never `pool-size`). Module-shipped keys may differ: a record component annotated `@Key("...")` binds that literal key instead — `tiko.kafka.*` keys are kebab-case for exactly this reason (`bootstrap-servers`, see the key table in the tiko-build skill). Separately, each Tiko module merges its own defaults from its jar's `META-INF/tiko/defaults.yaml` (e.g. `tiko-kafka` ships `tiko.kafka.*` defaults).
 
 ### Events
 
