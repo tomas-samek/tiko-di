@@ -222,3 +222,46 @@ TikoOptions opts = TikoOptions.builder()
 ```
 
 Override keys are matched by the *declared* type at the lookup site, not the concrete `@Component` class. Code that wants to override should mock the same type consumers depend on — usually the interface.
+
+## Faking the Kafka transport — `replaceTransport` + `FakeKafkaTransport`
+
+To integration-test a `@KafkaSource` / `@KafkaSink` app without a broker, replace the
+generated Kafka transport with one backed by the in-memory `FakeKafkaBroker`:
+
+```java
+FakeKafkaBroker broker = new FakeKafkaBroker();
+try (Container c = Tiko.create(TikoOptions.builder()
+        .configSource(ConfigSources.classpath("application.yaml"))
+        .replaceTransport(KafkaTransport.class, t -> FakeKafkaTransport.over(t, broker))
+        .build())) {
+
+    // Outbound: publish the local event; assert the sink produced a record.
+    c.getEventBus().publish(new OrderPlaced("o-42", amount, Instant.now()));
+    assertThat(broker.produced("orders")).hasSize(1);
+
+    // Inbound: produce onto the fake broker; the @KafkaSource bridge consumes it.
+    broker.produce("orders", new JsonKafkaSerializer().serialize(order));
+    // consumption is async (a background poll thread) — use Awaitility, not Thread.sleep
+}
+```
+
+- `replaceTransport` is a **test affordance** in the `override(...)` family: class-keyed,
+  applied between ServiceLoader discovery and transport start. The container owns the
+  fake's lifecycle — no separate resource to close.
+- Returning `null` from the decorator drops the transport instead
+  (`.replaceTransport(TransportBootstrap.class, t -> null)` disables all transports).
+- A key that matches no discovered transport fails fast at `Tiko.create(...)` — if you hit
+  that in a unit-test module, the generated transport isn't on the test classpath.
+- `configSource(...)` is still required if the app declares any `@Configuration` (including
+  `tiko-kafka`'s own config) — set it exactly like the app's `Main` does, or `Tiko.create`
+  fails config validation before the transport substitution ever runs.
+- If the module packages a shaded/fat runnable jar, point `maven-failsafe-plugin` at
+  `<classesDirectory>${project.build.outputDirectory}</classesDirectory>` — otherwise
+  failsafe defaults to running ITs against the packaged jar, which puts bundled
+  dependency classes on the classpath twice and fails container boot with
+  `duplicate @Configuration prefix 'tiko.kafka'`.
+
+Runnable reference: `tiko-examples/08_kafka_order_warehouse` —
+`FakeBrokerOrderPublishIT` (outbound) and `FakeBrokerWarehouseConsumeIT` (inbound), both
+Docker-free. Both ITs demonstrate the `configSource` requirement above, and both modules'
+poms carry the `maven-failsafe-plugin` `classesDirectory` override.

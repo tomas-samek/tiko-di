@@ -1,0 +1,178 @@
+package io.tiko.runtime;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import io.tiko.Container;
+import io.tiko.ContainerInitializationException;
+import io.tiko.TransportBootstrap;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import org.junit.jupiter.api.Test;
+
+class TransportReplacementTest {
+
+    /** Stands in for a generated transport; the marker subtype is the substitution key. */
+    static class StubTransport implements TransportBootstrap {
+        @Override
+        public void start(Container container) {
+            /* no-op test fixture */
+        }
+
+        @Override
+        public void shutdown() {
+            /* no-op test fixture */
+        }
+    }
+
+    /** A second, unrelated transport type to prove matching is selective. */
+    static class OtherTransport implements TransportBootstrap {
+        @Override
+        public void start(Container container) {
+            /* no-op test fixture */
+        }
+
+        @Override
+        public void shutdown() {
+            /* no-op test fixture */
+        }
+    }
+
+    @Test
+    void matchingTransportIsReplaced() {
+        var discovered = new StubTransport();
+        var replacement = new OtherTransport();
+        var options = TikoOptions.builder()
+                .replaceTransport(StubTransport.class, t -> replacement)
+                .build();
+
+        List<TransportBootstrap> result = Tiko.applyTransportReplacements(List.of(discovered), options);
+
+        assertThat(result).containsExactly(replacement);
+    }
+
+    @Test
+    void nullResultDropsTheTransport() {
+        var options = TikoOptions.builder()
+                .replaceTransport(StubTransport.class, t -> null)
+                .build();
+
+        List<TransportBootstrap> result =
+                Tiko.applyTransportReplacements(List.of(new StubTransport(), new OtherTransport()), options);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0)).isInstanceOf(OtherTransport.class);
+    }
+
+    @Test
+    void baseInterfaceKeyMatchesEveryTransport() {
+        var options = TikoOptions.builder()
+                .replaceTransport(TransportBootstrap.class, t -> null)
+                .build();
+
+        List<TransportBootstrap> result =
+                Tiko.applyTransportReplacements(List.of(new StubTransport(), new OtherTransport()), options);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void unmatchedKeyFailsFastNamingDiscoveredTransports() {
+        var options = TikoOptions.builder()
+                .replaceTransport(OtherTransport.class, t -> t)
+                .build();
+        var discovered = List.<TransportBootstrap>of(new StubTransport());
+
+        assertThatThrownBy(() -> Tiko.applyTransportReplacements(discovered, options))
+                .isInstanceOf(ContainerInitializationException.class)
+                .hasMessageContaining("OtherTransport")
+                .hasMessageContaining("StubTransport")
+                .hasMessageContaining("Suggested fixes");
+    }
+
+    @Test
+    void unmatchedKeyWithNoTransportsAtAllStillFailsFast() {
+        var options = TikoOptions.builder()
+                .replaceTransport(StubTransport.class, t -> t)
+                .build();
+
+        assertThatThrownBy(() -> Tiko.applyTransportReplacements(List.of(), options))
+                .isInstanceOf(ContainerInitializationException.class)
+                .hasMessageContaining("(none)");
+    }
+
+    @Test
+    void throwingDecoratorIsWrappedWithTheKeyName() {
+        var options = TikoOptions.builder()
+                .replaceTransport(StubTransport.class, t -> {
+                    throw new IllegalStateException("boom");
+                })
+                .build();
+        var discovered = List.<TransportBootstrap>of(new StubTransport());
+
+        assertThatThrownBy(() -> Tiko.applyTransportReplacements(discovered, options))
+                .isInstanceOf(ContainerInitializationException.class)
+                .hasMessageContaining("StubTransport")
+                .hasCauseInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void noReplacementsReturnsTheDiscoveredListUnchanged() {
+        var discovered = List.<TransportBootstrap>of(new StubTransport());
+
+        assertThat(Tiko.applyTransportReplacements(
+                        discovered, TikoOptions.builder().build()))
+                .isSameAs(discovered);
+    }
+
+    @Test
+    void duplicateKeyRegistrationThrowsAtBuilderTime() {
+        var builder = TikoOptions.builder().replaceTransport(StubTransport.class, t -> t);
+
+        assertThatThrownBy(() -> builder.replaceTransport(StubTransport.class, t -> null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("StubTransport");
+    }
+
+    /**
+     * Records start/shutdown so the test can assert both ran without depending on the
+     * {@code TransportBootstrapDiscoveryTest} fixture's own static counters.
+     */
+    static final class RecordingReplacementTransport implements TransportBootstrap {
+        final AtomicBoolean started = new AtomicBoolean();
+        final AtomicBoolean shutdown = new AtomicBoolean();
+
+        @Override
+        public void start(Container container) {
+            started.set(true);
+        }
+
+        @Override
+        public void shutdown() {
+            shutdown.set(true);
+        }
+    }
+
+    @Test
+    void replacementRunsThroughRealContainerLifecycleInsteadOfTheDiscoveredTransport() {
+        // Same reset convention as TransportBootstrapDiscoveryTest: the ServiceLoader fixture's
+        // counters are static, so each test that depends on them starts from a known zero.
+        TransportBootstrapDiscoveryTest.RecordingTransportBootstrap.STARTS.set(0);
+        TransportBootstrapDiscoveryTest.RecordingTransportBootstrap.SHUTDOWNS.set(0);
+
+        var replacement = new RecordingReplacementTransport();
+        var options = TikoOptions.builder()
+                .replaceTransport(TransportBootstrapDiscoveryTest.RecordingTransportBootstrap.class, t -> replacement)
+                .build();
+
+        try (Container container = Tiko.create(options)) {
+            assertThat(replacement.started).isTrue();
+            assertThat(TransportBootstrapDiscoveryTest.RecordingTransportBootstrap.STARTS.get())
+                    .isZero();
+        }
+
+        assertThat(replacement.shutdown).isTrue();
+        assertThat(TransportBootstrapDiscoveryTest.RecordingTransportBootstrap.SHUTDOWNS.get())
+                .isZero();
+    }
+}
