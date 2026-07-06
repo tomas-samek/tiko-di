@@ -13,8 +13,6 @@ import io.tiko.kafka.client.ApacheKafkaConsumerClient;
 import io.tiko.kafka.client.ApacheKafkaProducerClient;
 import io.tiko.kafka.client.KafkaConsumerClient;
 import io.tiko.kafka.client.KafkaProducerClient;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -117,7 +115,7 @@ public final class KafkaBootstrapSupport {
             try {
                 Object payload = sink.dispatcher().dispatch(container, event);
                 byte[] bytes = serializer.serialize(payload);
-                String key = sink.partitionKey().isEmpty() ? null : resolvePartitionKey(payload, sink.partitionKey());
+                String key = sink.keyExtractor().extract(payload);
                 // The send callback surfaces broker-side failures (record-too-large, topic
                 // authorization, delivery timeout) that never throw synchronously — without
                 // it the rejection is silent egress loss (#342).
@@ -145,16 +143,6 @@ public final class KafkaBootstrapSupport {
                     System.Logger.Level.WARNING,
                     "ErrorHandler threw while handling a Kafka egress error",
                     handlerFailure);
-        }
-    }
-
-    private static String resolvePartitionKey(Object payload, String accessor) {
-        try {
-            Method m = payload.getClass().getMethod(accessor);
-            Object v = m.invoke(payload);
-            return v == null ? null : v.toString();
-        } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
-            throw new IllegalStateException("partitionKey '" + accessor + "' could not be resolved at runtime", e);
         }
     }
 

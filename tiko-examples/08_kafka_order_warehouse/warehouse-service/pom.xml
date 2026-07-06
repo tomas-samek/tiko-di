@@ -22,6 +22,22 @@
         <dependency><groupId>io.github.tomas-samek</groupId><artifactId>tiko-runtime</artifactId></dependency>
         <dependency><groupId>io.github.tomas-samek</groupId><artifactId>tiko-config</artifactId></dependency>
         <dependency><groupId>io.github.tomas-samek</groupId><artifactId>tiko-kafka</artifactId></dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>4.2.2</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -62,6 +78,18 @@
                         </configuration>
                     </execution>
                 </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <configuration>
+                    <!-- This module's main artifact is the shaded fat jar; running ITs against
+                         it puts every bundled dependency class on the classpath twice (fat jar
+                         + the dependency's own jar), which trips duplicate-declaration checks
+                         like tiko's @Configuration prefix uniqueness. Test the module's own
+                         classes instead. -->
+                    <classesDirectory>${project.build.outputDirectory}</classesDirectory>
+                </configuration>
             </plugin>
         </plugins>
     </build>

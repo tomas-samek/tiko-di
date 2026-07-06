@@ -234,6 +234,39 @@ Broker config binds to `tiko.kafka.*` (exact-key, camelCase —
 `bootstrapServers`, not `bootstrap-servers`). Full contract, configuration, and
 the poison-record story: [`docs/cookbooks/kafka.md`](../../docs/cookbooks/kafka.md).
 
+### Testing Kafka bridges: use the fake broker, never a real one in unit/IT scope
+
+Do NOT try to disable the transport by deleting `META-INF/services` files, hiding the SPI
+with classloader tricks, or hand-rebuilding `KafkaBootstrapSupport`. The supported seam is
+one option + one helper:
+
+```java
+FakeKafkaBroker broker = new FakeKafkaBroker();
+try (Container c = Tiko.create(TikoOptions.builder()
+        .configSource(ConfigSources.classpath("application.yaml"))
+        .replaceTransport(KafkaTransport.class, t -> FakeKafkaTransport.over(t, broker))
+        .build())) {
+    broker.produce("orders", new JsonKafkaSerializer().serialize(event)); // drive @KafkaSource
+    c.getEventBus().publish(outboundEvent);                               // drive @KafkaSink
+    assertThat(broker.produced("notifications")).hasSize(1);
+}
+```
+
+- `configSource(...)` is still required if the app declares any `@Configuration`
+  (including `tiko-kafka`'s own) — set it exactly like the app's `Main` does, or
+  `Tiko.create` fails config validation before the transport substitution runs.
+
+Inbound consumption is asynchronous (background poll thread): assert with Awaitility
+(`await().atMost(...)`), never `Thread.sleep`. Reference ITs:
+`tiko-examples/08_kafka_order_warehouse/*/src/test/java/.../FakeBroker*IT.java`.
+
+**If your module builds a shaded jar:** failsafe defaults to running ITs against the
+packaged fat jar, which duplicates bundled dependency classes on the classpath and fails
+container boot with `duplicate @Configuration prefix 'tiko.kafka'`. Add
+`<classesDirectory>${project.build.outputDirectory}</classesDirectory>` to the
+`maven-failsafe-plugin` configuration — see the poms under
+`tiko-examples/08_kafka_order_warehouse/*/pom.xml` for the exact block.
+
 ## Anti-pattern redirect table
 
 When the user reaches for a Spring reflex, route them here instead. The

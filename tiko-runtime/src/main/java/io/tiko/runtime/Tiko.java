@@ -195,7 +195,7 @@ public final class Tiko {
             // 6. Discover transport modules (tiko-kafka, future tiko-http, ...) and start them.
             //    A failure discovering or starting any transport must not leak the
             //    already-started container (#348) — tear it down before the exception escapes.
-            return startTransportsOrShutdown(container, classLoader);
+            return startTransportsOrShutdown(container, classLoader, options);
         } catch (RuntimeException e) {
             throw e;
         } catch (ClassNotFoundException e) {
@@ -470,21 +470,86 @@ public final class Tiko {
     }
 
     /**
-     * Discovers transports via {@code ServiceLoader} and hands off to {@link #startTransports}.
-     * A {@link java.util.ServiceConfigurationError} raised while iterating providers shuts the
-     * already-started container down before propagating (#348).
+     * Discovers transports via {@code ServiceLoader}, applies any {@link TikoOptions.Builder#replaceTransport}
+     * registrations, and hands off to {@link #startTransports}. A {@link java.util.ServiceConfigurationError}
+     * raised while iterating providers, or a failure applying a replacement, shuts the already-started
+     * container down before propagating (#348).
      */
-    private static Container startTransportsOrShutdown(Container container, ClassLoader classLoader) {
+    private static Container startTransportsOrShutdown(
+            Container container, ClassLoader classLoader, TikoOptions options) {
         java.util.List<TransportBootstrap> bootstraps = new java.util.ArrayList<>();
         try {
             for (TransportBootstrap tb : java.util.ServiceLoader.load(TransportBootstrap.class, classLoader)) {
                 bootstraps.add(tb);
             }
+            bootstraps = applyTransportReplacements(bootstraps, options);
         } catch (RuntimeException | java.util.ServiceConfigurationError e) {
             shutdownQuietly(container);
             throw e;
         }
         return startTransports(container, bootstraps);
+    }
+
+    /**
+     * Applies {@link TikoOptions.Builder#replaceTransport} registrations to the discovered
+     * transports, in registration order. Each entry must match at least one discovered
+     * transport ({@code Class.isInstance}); a {@code null} decorator result drops the
+     * transport. An entry may match several transports — the decorator runs for each.
+     */
+    static java.util.List<TransportBootstrap> applyTransportReplacements(
+            java.util.List<TransportBootstrap> discovered, TikoOptions options) {
+        var replacements = options.transportReplacements();
+        if (replacements.isEmpty()) {
+            return discovered;
+        }
+        java.util.List<TransportBootstrap> result = new java.util.ArrayList<>(discovered);
+        for (var entry : replacements.entrySet()) {
+            Class<?> key = entry.getKey();
+            java.util.function.UnaryOperator<TransportBootstrap> decorator = entry.getValue();
+            boolean matched = false;
+            for (int i = 0; i < result.size(); i++) {
+                TransportBootstrap current = result.get(i);
+                if (current == null || !key.isInstance(current)) {
+                    continue;
+                }
+                matched = true;
+                try {
+                    result.set(i, decorator.apply(current));
+                } catch (RuntimeException e) {
+                    throw new ContainerInitializationException(
+                            "replaceTransport(" + key.getName() + ", ...) threw while replacing "
+                                    + current.getClass().getName(),
+                            e);
+                }
+            }
+            if (!matched) {
+                throw unmatchedTransportKey(key, result);
+            }
+        }
+        // Nulls are kept in place during the loop so indexes stay stable and later entries
+        // still see the surviving transports; removed once at the end.
+        result.removeIf(java.util.Objects::isNull);
+        return result;
+    }
+
+    /**
+     * Builds the fail-fast exception for a {@link TikoOptions.Builder#replaceTransport} key that
+     * matched none of the discovered transports, naming what was actually discovered.
+     */
+    private static ContainerInitializationException unmatchedTransportKey(
+            Class<?> key, java.util.List<TransportBootstrap> result) {
+        java.util.List<String> discoveredNames = result.stream()
+                .filter(java.util.Objects::nonNull)
+                .map(tb -> tb.getClass().getName())
+                .toList();
+        return new ContainerInitializationException("replaceTransport(" + key.getName()
+                + ", ...) matched no discovered transport.\n"
+                + "Discovered transports: "
+                + (discoveredNames.isEmpty() ? "(none)" : discoveredNames)
+                + "\n"
+                + "Suggested fixes:\n"
+                + "1. Check the transport module (runtime + annotation processor) is on the classpath.\n"
+                + "2. Remove the replaceTransport(...) registration if the transport is not part of this app.");
     }
 
     /** Best-effort container teardown on a failing bootstrap path — never masks the original failure. */

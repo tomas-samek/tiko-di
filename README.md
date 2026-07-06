@@ -11,8 +11,6 @@
 
 **Status: 0.3.0 on Maven Central.** Suitable for early-adopter experimentation. See [docs/roadmap.md](./docs/roadmap.md) for what ships today and what's next.
 
-**Benchmarked for AI-friendliness** → [llm-framework-benchmark](https://github.com/tomas-samek/llm-framework-benchmark): on an external-oracle-graded build task (a Kafka → H2 → merged-notification service), run across three models (Claude Sonnet 4.6 / Fable 5 / Opus 4.8, n=5). tiko — *absent from the models' training data* — reaches **86–100% median compliance**, on par with Spring on versions the models know, and clears the brand-new Spring Boot 4.0.6 wall that broke Sonnet 4.6 (median 0%). See the benchmark for the full picture, per-build token cost, and caveats.
-
 ## What Tiko is
 
 A **compile-time orchestrator** with an integrated event model and full compile-time validation.
@@ -58,6 +56,10 @@ Lookup-table answer to "does tiko support X?":
 | Configuration | Typed `@Configuration` records | `tiko-config`, example `02_config` |
 | Metrics / tracing | Plug in your library; expose via routes on your HTTP layer | — |
 
+## Benchmarked for AI-friendliness
+
+[llm-framework-benchmark](https://github.com/tomas-samek/llm-framework-benchmark): on an external-oracle-graded build task (a Kafka → H2 → merged-notification service), run across three models (Claude Sonnet 4.6 / Fable 5 / Opus 4.8, n=5). tiko — *absent from the models' training data* — reaches **86–100% median compliance**, on par with Spring on versions the models know, and clears the brand-new Spring Boot 4.0.6 wall that broke Sonnet 4.6 (median 0%). See the benchmark for the full picture, per-build token cost, and caveats.
+
 ## Start building
 
 - **New service?** Read [`.ai-skills/tiko-build/SKILL.md`](./.ai-skills/tiko-build/SKILL.md) — decision tree, `@Produces` cookbook, anti-pattern redirect table so an agent reaches for the tiko-native primitive.
@@ -100,7 +102,7 @@ public class Main {
 }
 ```
 
-The annotation processor validates all dependencies at compile-time and generates the wiring code. Nothing runs by reflection.
+The annotation processor validates all dependencies at compile-time and generates the wiring code — plain Java you can read and step through. No reflection, no classpath scanning in your wiring.
 
 **Lifecycle & imperative publish.** `Tiko.create(...)` returns an `AutoCloseable` container you manage (try-with-resources above). For a long-lived headless process — a Kafka consumer or scheduler with no foreground server — use `Tiko.daemon(...)` (it installs a graceful-shutdown hook so `@PreDestroy` runs on `Ctrl+C` / `SIGTERM`) and keep the process alive with the one canonical idiom `daemon.awaitShutdown()`. To publish events imperatively from inside a component, inject `EventBus` as a constructor dependency — it is built-in, no plain-class workaround. Details: the [`tiko-build`](./.ai-skills/tiko-build/SKILL.md) skill and [events.md](./docs/events.md).
 
@@ -298,9 +300,9 @@ policy — a different layer than framework logging.
 | [docs/di-and-scopes.md](./docs/di-and-scopes.md)      | Full DI reference — scopes, cross-scope proxies, lifecycle hooks, qualifiers, `@Produces`.  |
 | [docs/configuration.md](./docs/configuration.md)      | `@Configuration` deep-dive — nested records, layered sources, module-baked defaults.        |
 | [docs/events.md](./docs/events.md)                    | Event bus, error handling, async executor, lifecycle events, `@EventTrigger` chains.        |
-| [docs/testing.md](./docs/testing.md)                  | `tiko-test` JUnit 5 extension — `@TikoTest`, parameter resolution, `RecordingEventBus`, scope helpers, known limitations. |
+| [docs/testing.md](./docs/testing.md)                  | `tiko-test` JUnit 5 extension — `@TikoTest`, parameter resolution, `RecordingEventBus`, scope helpers, boundary notes. |
 | [docs/jdk-23-setup.md](./docs/jdk-23-setup.md)        | Annotation processing on JDK 23+ — Maven / Gradle / plain `javac`.                          |
-| [docs/roadmap.md](./docs/roadmap.md)                  | What ships today, what's planned per phase, known limitations.                              |
+| [docs/roadmap.md](./docs/roadmap.md)                  | What ships today and what's planned per phase.                                              |
 | [docs/release-process.md](./docs/release-process.md)  | Release engineering notes (maintainers).                                                    |
 | [docs/qa-playbook.md](./docs/qa-playbook.md)          | Structured QA passes over the framework + examples; issue body template; rules for what to file and what not to. |
 | [docs/issue-fix-playbook.md](./docs/issue-fix-playbook.md) | Counterpart to the QA playbook — how to work a filed issue without anchoring on its framing. Four-phase fix workflow + common traps. |
@@ -317,7 +319,7 @@ policy — a different layer than framework logging.
 - **Phase 6 — MCP enrichment.** `get_generated_artifact`, a lifecycle-hook query tool, and richer proxy topology — deeper introspection of the compile-time graph.
 - **Phase 7 — Resiliency layer.** Timeouts, retries, bounded-queue backpressure, executor pool knobs, DLQ for failed/timed-out events.
 - **Phase 8 — Distributed transports.** RabbitMQ + JMS adapters, `TransportBootstrap` SPI audit, pluggable serializer SPI.
-- **Phase 9 — Examples & docs polish.** Advanced-feature example gaps (`@EventTriggers`, scoped suppliers, origin chain, `TikoOptions`) plus public-docs tightening.
+- **Phase 9 — Examples & docs polish.** Advanced-feature examples still to be written (`@EventTriggers`, scoped suppliers, origin chain, `TikoOptions`) plus public-docs tightening.
 
 Full detail in [docs/roadmap.md](./docs/roadmap.md).
 
@@ -336,10 +338,10 @@ Requires Java 21+ and Maven 3.8+.
 
 ## Philosophy
 
-1. **Compile-time safety.** Catch all errors the compiler can see. The only runtime exceptions Tiko throws fire at container startup — never during `container.get(...)` in a running application.
+1. **Compile-time safety.** Wiring errors — unresolved dependencies, circular dependencies, scope violations — are compile-time errors and never survive the build. Runtime failures are reserved for what the compiler cannot see: requesting a component that is not in the graph, or touching an EVENT-scoped dependency outside an open unit of work.
 2. **Simplicity.** Minimal concepts, intuitive API.
 3. **Explicitness.** No magic, generated code is readable.
-4. **Performance.** Zero reflection, fast startup, low memory.
+4. **Performance.** No reflection in wiring — generated code, fast startup, low memory.
 5. **Modularity.** Use only what you need.
 6. **Event-driven.** First-class support for decoupled communication.
 
