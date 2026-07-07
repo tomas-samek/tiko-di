@@ -44,7 +44,16 @@ app:               # @Configuration(prefix = "app")
 ```
 
 Read it with `Tiko.create(ConfigSources.classpath("application.yml"))` and
-inject `AppConfig` (or a nested record) as a constructor parameter.
+inject `AppConfig` (or a nested record) as a constructor parameter:
+
+```java
+try (Container container = Tiko.create(
+        TikoOptions.builder()
+            .configSource(ConfigSources.classpath("application.yml"))
+            .build())) {
+    // ...
+}
+```
 
 **Packages & file name.** `@Configuration` / `@Key` / `@Default` live in
 `io.tiko.annotations`; `ConfigSources` is `io.tiko.config.ConfigSources` (the

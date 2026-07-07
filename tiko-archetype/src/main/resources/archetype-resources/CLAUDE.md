@@ -8,17 +8,13 @@ zero reflection and zero classpath scanning.
 > **Building a service on this scaffold?** Read
 > [`.ai-skills/tiko-build/SKILL.md`](./.ai-skills/tiko-build/SKILL.md)
 > first — decision tree, `@Produces` cookbook, anti-pattern redirects.
-> This `CLAUDE.md` is a framework reference; the skill is the procedure
-> for building with it.
 >
 > **Hit a library the cookbook doesn't cover?** Read
 > [`.ai-skills/tiko-cookbook-extension/SKILL.md`](./.ai-skills/tiko-cookbook-extension/SKILL.md) —
-> the procedural skill for adding a new recipe. Load-bearing rule:
-> **ask, don't fabricate.**
+> ask, don't fabricate a recipe.
 
-The first half of this file is a Tiko DI reference. The second half
-(["About this project"](#about-this-project)) is a template for the
-project's own documentation — fill it in as the project grows.
+The first half below is a Tiko DI reference; the second half is a template for
+this project's own documentation.
 
 ---
 
@@ -28,51 +24,44 @@ project's own documentation — fill it in as the project grows.
 
 Three scopes, longest to shortest lifetime:
 
-| Scope         | Lifetime                           | Typical use                                |
-| ------------- | ---------------------------------- | ------------------------------------------ |
-| `SINGLETON`   | application lifetime               | stateless services, repositories           |
-| `EVENT`       | one unit of work — HTTP request, message, job, async dispatch | per-unit context (txn, JDBC connection, correlation ID) |
-| `PROTOTYPE`   | new instance per injection (default) | short-lived value objects                |
+| Scope | Lifetime | Typical use |
+|---|---|---|
+| `SINGLETON` | application lifetime | stateless services, repositories |
+| `EVENT` | one unit of work — request, message, job, async dispatch | per-unit context (txn, connection, correlation ID) |
+| `PROTOTYPE` | new instance per injection (default) | short-lived value objects |
 
-**Default scope is `PROTOTYPE`** — declare `Scope.SINGLETON` (or another)
-explicitly when you want a different lifetime.
+**Default is `PROTOTYPE`** — declare `Scope.SINGLETON` explicitly for a longer lifetime.
 
-**Cross-scope injection** (e.g. `SINGLETON` depending on `EVENT`) is
-allowed — the framework generates an auto-proxy at compile time, but
-**the shorter-scoped bean must implement an interface** for the proxy
-to bind to. Cross-scope from longer-lived to shorter-lived is fine;
-the reverse (short into long) is the case that needs the interface.
+**Cross-scope injection** (e.g. `SINGLETON` depending on `EVENT`) is allowed via a
+compile-time auto-proxy, but **the shorter-scoped bean must implement an interface**
+for the proxy to bind to. Longer-into-shorter is direct; shorter-into-longer needs
+the interface.
 
 ## Annotations cheat-sheet
 
 ### Core (from `io.tiko.annotations`)
 
-| Annotation                              | Purpose                                          |
-| --------------------------------------- | ------------------------------------------------ |
-| `@Component(scope, name, profiles)`     | Marks a class for DI. `SOURCE` retention.       |
-| `@Inject`                               | Marks the constructor to wire. Constructor-only — no field injection. |
-| `@Named("qualifier")`                   | Disambiguates when multiple impls exist.        |
-| `@Pick(SomeImpl.class)`                 | Picks a specific impl by class.                  |
-| `@Produces(scope, name, profiles)`      | Factory method on a `@Component` class.          |
-| `@PostConstruct` / `@PreDestroy`        | Lifecycle hooks.                                 |
-| `@EventHandler(async, eventType)`       | Subscribe to events.                             |
-| `@EventTrigger(eventName, ...)`         | Declarative event chains (return-as-payload).    |
+| Annotation | Purpose |
+|---|---|
+| `@Component(scope, name, profiles)` | Marks a class for DI (`SOURCE` retention). |
+| `@Inject` | Marks the constructor to wire (constructor-only). |
+| `@Named("qualifier")` | Disambiguates impls (worked example: `docs/di-and-scopes.md`). |
+| `@Pick(SomeImpl.class)` | Picks a specific impl by class. |
+| `@Produces(scope, name, profiles)` | Factory method on a `@Component` class. |
+| `@PostConstruct` / `@PreDestroy` | Lifecycle hooks. |
+| `@EventHandler(async, eventType)` | Subscribe to events. |
+| `@EventTrigger(eventName, ...)` | Declarative event chains (return-as-payload). |
 
-### Config (optional, from `tiko-config`)
+### Optional modules (`tiko-config` / `tiko-test`)
 
-| Annotation                  | Purpose                                          |
-| --------------------------- | ------------------------------------------------ |
-| `@Configuration(prefix)`    | Marks a record as a YAML-backed config root.    |
-| `@Key("yaml.path")`         | Override the YAML key name.                      |
-| `@Default("value")`         | Default for optional config fields.              |
-
-### Test (optional, from `tiko-test`)
-
-| Annotation                              | Purpose                                          |
-| --------------------------------------- | ------------------------------------------------ |
-| `@TikoTest`                             | JUnit 5 extension; class-level.                 |
-| `@TestComponent(value, scope, name)`    | Shadow a production `@Component` in tests.      |
-| `@RequestScopeTest` / `@EventScopeTest` | Wrap a `@Test` in a scope.                       |
+| Annotation | Purpose |
+|---|---|
+| `@Configuration(prefix)` | YAML-backed config root record. |
+| `@Key("yaml.path")` | Override the YAML key name. |
+| `@Default("value")` | Default for optional config fields. |
+| `@TikoTest` | JUnit 5 extension; class-level. |
+| `@TestComponent(value, scope, name)` | Shadow a `@Component` in tests. |
+| `@RequestScopeTest` / `@EventScopeTest` | Wrap a `@Test` in a scope. |
 
 ### Exact packages (import from here, not from memory)
 
@@ -85,22 +74,29 @@ the reverse (short into long) is the case that needs the interface.
 | `ConfigSources` | `io.tiko.config` |
 | `KafkaTransport` / `JsonKafkaSerializer` / `FakeKafkaBroker` `FakeKafkaTransport` | `io.tiko.kafka` / `io.tiko.kafka.serializer` / `io.tiko.kafka.test` |
 
-A `cannot find symbol` on an import means a wrong package, not a missing
-feature — check this table, then `javap` the resolved jar; never conclude
-an annotation does not exist because one import guess failed. Kafka types
-need the `tiko-kafka` dependency + `tiko-kafka-processor` processor path —
-both ship commented out in this pom; enable them first. Full signatures:
-the API signature sheet in
+A `cannot find symbol` on an import means a wrong package — check this table, then
+`javap` the jar. Kafka types need `tiko-kafka` + `tiko-kafka-processor` (both ship
+commented out; enable first). Full signatures:
 [`.ai-skills/tiko-build/SKILL.md`](.ai-skills/tiko-build/SKILL.md).
+
+### Where the depth lives (read on demand)
+
+| file | read when |
+|---|---|
+| [`.ai-skills/tiko-build/SKILL.md`](./.ai-skills/tiko-build/SKILL.md) | starting new service work — decision tree, cookbook, anti-patterns |
+| [`reference/api-signatures.md`](./.ai-skills/tiko-build/reference/api-signatures.md) | any import, signature, attribute, or config key |
+| [`reference/kafka.md`](./.ai-skills/tiko-build/reference/kafka.md) | consuming/producing Kafka, or the Kafka IT |
+| [`reference/config.md`](./.ai-skills/tiko-build/reference/config.md) | `@Configuration` records or override YAML |
+| [`reference/events.md`](./.ai-skills/tiko-build/reference/events.md) | imperative publish, lifecycle hooks, daemon keep-alive |
 
 ## Rules
 
-- **Constructor injection only.** `@Inject` on the constructor, never on fields or setters.
-- **Every `@Component` declares a scope** (or accepts the `PROTOTYPE` default).
-- **`AutoCloseable.close()` is implicitly a `@PreDestroy`** when the component implements `AutoCloseable` and has no explicit `@PreDestroy` method.
-- **Lifecycle hooks run LIFO at scope teardown** — last constructed, first destroyed.
-- **Annotation processing runs in `mvn compile`.** Code generation lives in `target/generated-sources/annotations/io/tiko/generated/` — readable, debuggable, no magic.
-- **`Container` is `AutoCloseable`** — use try-with-resources, or call `container.shutdown()` explicitly.
+- **Constructor injection only** — `@Inject` on the constructor, never fields or setters.
+- **Every `@Component` declares a scope** (or accepts `PROTOTYPE` default).
+- **`AutoCloseable.close()` is implicitly a `@PreDestroy`** for a component implementing it with no explicit `@PreDestroy`.
+- **Lifecycle hooks run LIFO at teardown** — last constructed, first destroyed.
+- **Annotation processing runs in `mvn compile`** — generated code lives under `target/generated-sources/annotations/io/tiko/generated/`.
+- **`Container` is `AutoCloseable`** — try-with-resources, or call `container.shutdown()`.
 
 ## Common patterns
 
@@ -127,151 +123,12 @@ public class OrderService {
 }
 ```
 
-### Disambiguating with `@Named`
-
-```java
-@Component(scope = Scope.SINGLETON, name = "primary")
-public class PrimaryDataSource implements DataSource { /* ... */ }
-
-@Component(scope = Scope.SINGLETON, name = "audit")
-public class AuditDataSource implements DataSource { /* ... */ }
-
-@Component(scope = Scope.SINGLETON)
-public class UserRepository {
-    @Inject
-    public UserRepository(@Named("primary") DataSource ds) { /* ... */ }
-}
-```
-
-### Factory methods with `@Produces`
-
-```java
-@Component(scope = Scope.SINGLETON)
-public class CacheConfig {
-
-    @Produces(scope = Scope.SINGLETON, name = "userCache")
-    public Cache<String, User> userCache() {
-        return Caffeine.newBuilder().maximumSize(10_000).build();
-    }
-}
-```
-
-### Lifecycle hooks
-
-```java
-@Component(scope = Scope.SINGLETON)
-public class HttpServer implements AutoCloseable {
-
-    private Server server;
-
-    @PostConstruct
-    public void start() { server = new Server(8080); server.start(); }
-
-    @Override
-    public void close() { if (server != null) server.stop(); }
-    // No explicit @PreDestroy needed — AutoCloseable.close() runs at shutdown.
-}
-```
-
-### Cross-scope proxy
-
-```java
-public interface RequestContext { String requestId(); }
-
-@Component(scope = Scope.EVENT)
-public class RequestContextImpl implements RequestContext {
-    private final String id = UUID.randomUUID().toString();
-    public String requestId() { return id; }
-}
-
-@Component(scope = Scope.SINGLETON)
-public class AuditLogger {
-    @Inject
-    public AuditLogger(RequestContext ctx) {
-        // ctx is auto-proxied — each call resolves the current EVENT scope's instance.
-    }
-}
-```
-
 ### YAML configuration (requires `tiko-config`)
 
-```java
-@Configuration(prefix = "database")
-public record DbConfig(
-        String url,
-        String username,
-        @Default("10") int poolSize,
-        @Default("PT30S") Duration connectTimeout) {}
+See [`reference/config.md`](./.ai-skills/tiko-build/reference/config.md) for the
+record + YAML walkthrough, imports, and file-name conventions.
 
-@Component(scope = Scope.SINGLETON)
-public class DataSourceFactory {
-    @Inject
-    public DataSourceFactory(DbConfig config) { /* ... */ }
-}
-```
-
-`config.yaml` at the classpath root:
-
-```yaml
-database:
-  url: jdbc:postgresql://localhost/app
-  username: app
-  poolSize: 20
-```
-
-Bootstrap with:
-
-```java
-try (Container container = Tiko.create(
-        TikoOptions.builder()
-            .configSource(ConfigSources.classpath("config.yaml"))
-            .build())) {
-    // ...
-}
-```
-
-> **Imports & file name.** `@Configuration` / `@Key` / `@Default` are in `io.tiko.annotations`; `ConfigSources` is `io.tiko.config.ConfigSources` (the `tiko-config` module). The config file name is **your choice** — whatever you pass to `ConfigSources.classpath(...)`; pick one and use it consistently. Keys bind **exact** (camelCase as declared — `poolSize`, never `pool-size`). Module-shipped keys may differ: a record component annotated `@Key("...")` binds that literal key instead — `tiko.kafka.*` keys are kebab-case for exactly this reason (`bootstrap-servers`, see the key table in the tiko-build skill). Separately, each Tiko module merges its own defaults from its jar's `META-INF/tiko/defaults.yaml` (e.g. `tiko-kafka` ships `tiko.kafka.*` defaults).
-
-### Events
-
-```java
-public record OrderPlaced(String orderId, long amountCents) {}
-
-@Component(scope = Scope.SINGLETON)
-public class OrderListener {
-    @EventHandler
-    public void onOrderPlaced(OrderPlaced event) {
-        // Synchronous by default.
-    }
-
-    @EventHandler(async = true)
-    public void notifyAsync(OrderPlaced event) {
-        // Off the publisher thread, bounded executor.
-    }
-}
-
-@Component(scope = Scope.SINGLETON)
-public class OrderService {
-    private final EventBus bus;
-
-    @Inject
-    public OrderService(EventBus bus) { this.bus = bus; }
-
-    public void create(String orderId, long amountCents) {
-        bus.publish(new OrderPlaced(orderId, amountCents));
-    }
-}
-```
-
-### Declarative chains with `@EventTrigger`
-
-```java
-@EventHandler
-@EventTrigger(eventName = "OrderValidated")
-public ValidationResult onOrderCreated(OrderCreated event) {
-    return validate(event);  // return value becomes the next event's payload
-}
-```
+> Module-shipped keys may differ: a record component annotated `@Key("...")` binds that literal key instead — `tiko.kafka.*` keys are kebab-case for exactly this reason (`bootstrap-servers`, see the key table in the tiko-build skill).
 
 ### Testing with `@TikoTest` (requires `tiko-test`)
 
@@ -307,77 +164,50 @@ public class FixedClock extends Clock {
 
 ## Common pitfalls
 
-- **Field injection doesn't work** — Tiko rejects it at compile time. Use the constructor.
-- **`@Component` with no scope is `PROTOTYPE`** — a new instance per injection. Usually you want `SINGLETON`. Be explicit.
-- **`SINGLETON` injecting `EVENT` requires an interface on the shorter-scoped bean** — the framework generates the proxy via that interface.
-- **`Container.get(...)` after `shutdown()` throws** — the container is one-shot. Use try-with-resources or careful manual lifecycle.
-- **Annotation processing is silently skipped on JDK 23+ without `<proc>full</proc>`** — the archetype's `pom.xml` already sets this.
-- **Override the *consumer's* declared type, not the impl's concrete class** — `TikoOptions.override(PaymentGateway.class, mock)` matches injection sites typed `PaymentGateway`. Overriding `HttpPaymentGateway.class` only matches sites typed at that concrete class.
+- **Field injection doesn't work** — rejected at compile time; use the constructor.
+- **`@Component` with no scope is `PROTOTYPE`** — usually you want `SINGLETON`; be explicit.
+- **`SINGLETON` injecting `EVENT` requires an interface** on the shorter-scoped bean.
+- **`Container.get(...)` after `shutdown()` throws** — one-shot container.
+- **JDK 23+ silently skips annotation processing without `<proc>full</proc>`** — already set in this `pom.xml`.
+- **Override the *consumer's* declared type, not the impl's** — `TikoOptions.override(PaymentGateway.class, mock)` matches sites typed `PaymentGateway`, not `HttpPaymentGateway`.
 
 ## Build and run
 
 ```bash
-mvn compile                       # runs annotation processing → generated container
-mvn test                          # runs tests
-mvn exec:java                     # runs Main (pom.xml sets the mainClass)
-mvn clean install                 # full clean build
+mvn compile          # runs annotation processing → generated container
+mvn test             # runs tests
+mvn exec:java        # runs Main (pom.xml sets the mainClass)
+mvn clean install    # full clean build
 ```
 
-To inspect what the processor generated:
-
-```bash
-ls target/generated-sources/annotations/io/tiko/generated/
-```
-
-You'll see `TikoContainerImpl_<hash>.java` (the wiring), `<Component>Factory.java` per component, `EventRegistry.java` if you use events, and optional config binders.
+Generated code lives under `target/generated-sources/annotations/io/tiko/generated/`
+(`TikoContainerImpl_<hash>.java`, per-component factories, `EventRegistry.java`).
 
 ### Long-running services (Kafka consumers, schedulers)
 
-`Tiko.create(...)` with try-with-resources **shuts the container down at the end of the block** — correct for a one-shot task, but a transport-driven app (e.g. a `@KafkaSource` consumer) must stay alive or it connects and immediately exits. Use the daemon idiom instead:
-
-```java
-public static void main(String[] args) {
-    TikoDaemon daemon = Tiko.daemon(ConfigSources.classpath("application.yaml"));
-    daemon.awaitShutdown();   // blocks main until Ctrl+C / SIGTERM; @PreDestroy runs gracefully
-}
-```
-
-`Tiko.daemon(...)` installs a JVM shutdown hook and auto-starts discovered `TransportBootstrap` services (Kafka consumers, etc.) via `ServiceLoader`. Don't improvise `Thread.join()` / `CountDownLatch`. An app that runs its own foreground server (e.g. Javalin `app.start()`) doesn't need this — that thread already keeps the JVM up; use `Tiko.create(...)` there.
+`Tiko.create(...)` try-with-resources shuts the container down at block end — a
+transport-driven app (e.g. `@KafkaSource`) needs `Tiko.daemon(...).awaitShutdown()`
+instead. Full idiom, shutdown-hook and `TransportBootstrap` auto-start details:
+[`reference/events.md`](./.ai-skills/tiko-build/reference/events.md).
 
 ## Optional Tiko modules
 
-The starter `pom.xml` already wires the core (`tiko-api`, `tiko-runtime`) and the annotation processor. To opt into more:
+The starter `pom.xml` already wires the core (`tiko-api`, `tiko-runtime`) and the processor. To opt into more (each is opt-in — uncomment its block in `pom.xml`):
 
-| Module                     | Purpose                                                                  | Scope |
-| -------------------------- | ------------------------------------------------------------------------ | ----- |
-| `tiko-config`              | Typed YAML configuration injection via `@Configuration` records.        | compile |
-| `tiko-test`                | JUnit 5 extension, `@TestComponent` shadow overrides, `RecordingEventBus`. | test  |
-| `tiko-kafka` + `tiko-kafka-processor` | Kafka transport — `@KafkaSource` / `@KafkaSink` bridges, `tiko.kafka.*` config, JSON serializer. See `.ai-skills/tiko-build/SKILL.md` for the bridge-method contract + poison-record policy. | compile |
+| Module | Purpose | Scope |
+|---|---|---|
+| `tiko-config` | Typed YAML configuration via `@Configuration` records. | compile |
+| `tiko-test` | JUnit 5 extension, `@TestComponent`, `RecordingEventBus`. | test |
+| `tiko-kafka` + `tiko-kafka-processor` | `@KafkaSource` / `@KafkaSink` bridges — see [`reference/kafka.md`](./.ai-skills/tiko-build/reference/kafka.md). | compile |
 
-Each is opt-in. Uncomment the corresponding block in `pom.xml` to enable.
-
-For logging, Tiko routes through `java.lang.System.Logger` — works with JUL out of the box, or add `slf4j-jdk-platform-logging` + your slf4j backend to route through slf4j.
+Logging routes through `java.lang.System.Logger` (JUL by default; add `slf4j-jdk-platform-logging` to bridge to slf4j).
 
 ## MCP topology server
 
-This project ships a `.mcp.json` in the repo root. Any MCP-aware coding agent (Claude Code, Cursor, …) auto-connects to the `tiko-mcp` topology server on open and gets read access to your generated component graph, scopes, event topology, and config schema — straight from the compiled artifacts under `META-INF/tiko/`. No setup beyond running the build once so the metadata is on disk.
-
-The `.mcp.json` invokes the server via **[jbang](https://www.jbang.dev/)**, a small Java-script runner that resolves Maven artifacts on first use. If you don't have jbang yet:
-
-```bash
-# macOS/Linux
-curl -Ls https://sh.jbang.dev | bash -s - app setup
-
-# Windows (PowerShell)
-iex "& { $(iwr -useb https://ps.jbang.dev) } app setup"
-
-# Or via SDKMAN
-sdk install jbang
-```
-
-After that the first agent session downloads the `tiko-mcp` jar from Maven Central and caches it. Subsequent sessions reuse the cache.
-
-**No MCP server (or no jbang)?** The same data is on disk after a build — read the JSON directly under `target/classes/META-INF/tiko/`: `topology.json` (component graph, scopes, event topology), `config-schema.json`, `wiring-errors.json`, plus `topology-kafka.json` if you use the Kafka transport. For the API of a dependency (e.g. the `@KafkaSource` contract), `javap` the relevant jar. No MCP required.
+This project ships a `.mcp.json`; MCP-aware agents auto-connect on open to the
+`tiko-mcp` topology server for read access to the generated component graph, scopes,
+event topology, and config schema — via [jbang](https://www.jbang.dev/).
+Setup, no-jbang/no-MCP fallback, cache behavior: <https://github.com/tomas-samek/tiko-di/tree/main/tiko-examples/13_mcp_introspection>.
 
 ## Where to dig deeper
 

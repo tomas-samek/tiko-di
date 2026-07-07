@@ -1,8 +1,8 @@
-# tiko-build reference — imperative publish & process lifetime
+# tiko-build reference — events, lifecycle & process lifetime
 
-> Read this when: publishing events imperatively, or writing a headless/daemon main.
+> Read this when: publishing/subscribing to events, declaring lifecycle hooks, or writing a headless/daemon main.
 
-## Imperative publish & keeping the process alive
+## Imperative publish
 
 **To publish events from inside a component, inject `EventBus`** — it is a built-in
 dependency, resolved by the container like any bean. No plain-class workaround:
@@ -22,10 +22,59 @@ it into a hand-constructed class after bootstrap, as `ThingRoutes` does in the
 bootstrap pattern in [`SKILL.md`](../SKILL.md). Prefer injecting `EventBus` (or the
 specific collaborators) over reaching for `Container`.
 
+## Subscribing with `@EventHandler`
+
+```java
+public record OrderPlaced(String orderId, long amountCents) {}
+
+@Component(scope = Scope.SINGLETON)
+public class OrderListener {
+    @EventHandler
+    public void onOrderPlaced(OrderPlaced event) {
+        // Synchronous by default.
+    }
+
+    @EventHandler(async = true)
+    public void notifyAsync(OrderPlaced event) {
+        // Off the publisher thread, bounded executor.
+    }
+}
+```
+
+## Declarative chains with `@EventTrigger`
+
+```java
+@EventHandler
+@EventTrigger(eventName = "OrderValidated")
+public ValidationResult onOrderCreated(OrderCreated event) {
+    return validate(event);  // return value becomes the next event's payload
+}
+```
+
+## Lifecycle hooks
+
+```java
+@Component(scope = Scope.SINGLETON)
+public class HttpServer implements AutoCloseable {
+
+    private Server server;
+
+    @PostConstruct
+    public void start() { server = new Server(8080); server.start(); }
+
+    @Override
+    public void close() { if (server != null) server.stop(); }
+    // No explicit @PreDestroy needed — AutoCloseable.close() runs at shutdown.
+}
+```
+
+## Keeping the process alive
+
 **Keep a headless process alive with one idiom: `Tiko.daemon(...).awaitShutdown()`.**
 `daemon(...)` installs a JVM shutdown hook (graceful `@PreDestroy` on `Ctrl+C` /
-`SIGTERM`); `awaitShutdown()` blocks `main` until then. Do **not** improvise
-`Thread.join()` / `CountDownLatch`.
+`SIGTERM`) and auto-starts discovered `TransportBootstrap` services (Kafka consumers,
+etc.) via `ServiceLoader`; `awaitShutdown()` blocks `main` until then. Do **not**
+improvise `Thread.join()` / `CountDownLatch`.
 
 ```java
 public static void main(String[] args) {

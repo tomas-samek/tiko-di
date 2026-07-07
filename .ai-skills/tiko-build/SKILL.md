@@ -37,7 +37,7 @@ not read them all upfront.
 | [`reference/api-signatures.md`](reference/api-signatures.md) | writing any import, or unsure of a signature / annotation attribute / config key |
 | [`reference/kafka.md`](reference/kafka.md) | consuming or producing Kafka, or writing the Kafka integration test |
 | [`reference/config.md`](reference/config.md) | declaring `@Configuration` records or writing override YAML |
-| [`reference/events.md`](reference/events.md) | publishing events imperatively, or a headless/daemon main |
+| [`reference/events.md`](reference/events.md) | publishing/subscribing events, lifecycle hooks, or a headless/daemon main |
 
 A `cannot find symbol` on an import means a wrong package, not a missing
 feature — `reference/api-signatures.md` first, then `javap`.
@@ -88,6 +88,18 @@ app.start(container.get(AppConfig.class).server().port());
 
 Reference shape:
 [`tiko-examples/15_quickstart`](../../tiko-examples/15_quickstart).
+
+`<Library>Factory.java` is a `@Produces` method on a `@Component` class:
+
+```java
+@Component(scope = Scope.SINGLETON)
+public class CacheConfig {
+    @Produces(scope = Scope.SINGLETON, name = "userCache")
+    public Cache<String, User> userCache() {
+        return Caffeine.newBuilder().maximumSize(10_000).build();
+    }
+}
+```
 
 ## Cookbook table
 
