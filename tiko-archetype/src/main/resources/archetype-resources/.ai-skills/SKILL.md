@@ -9,12 +9,13 @@ operational distillation of the orchestrator-model doc: the decision tree
 for Core / Plug in / Open, the `@Produces` cookbook table, and the
 anti-pattern redirect table so you reach for the tiko-native primitive
 instead of searching for a Spring equivalent.
+Depth (API signatures, Kafka, config, events) lives in `tiko-build/reference/` — the skill's navigation map says when to open each file.
 
 ## Hit a library the cookbook doesn't cover?
 
-Read [`tiko-cookbook-extension/SKILL.md`](./tiko-cookbook-extension/SKILL.md) —
-the procedural skill for adding a new recipe to the cookbook.
-Load-bearing rule: **ask, don't fabricate.**
+Ask the user for the missing facts rather than fabricating an integration
+(**ask, don't fabricate**). To contribute the recipe upstream, follow
+[the cookbook-extension skill on GitHub](https://github.com/tomas-samek/tiko-di/blob/main/.ai-skills/tiko-cookbook-extension/SKILL.md).
 
 ## Where to find framework documentation
 

@@ -9,9 +9,10 @@ classpath scanning.
 > [`.ai-skills/tiko-build/SKILL.md`](./.ai-skills/tiko-build/SKILL.md)
 > first — decision tree, `@Produces` cookbook, anti-pattern redirects.
 >
-> **Library the cookbook doesn't cover?** Read
-> [`.ai-skills/tiko-cookbook-extension/SKILL.md`](./.ai-skills/tiko-cookbook-extension/SKILL.md) —
-> ask, don't fabricate.
+> **Library the cookbook doesn't cover?** Ask the user for the missing
+> facts rather than fabricating an integration. To contribute the recipe
+> upstream, follow [the cookbook-extension skill on
+> GitHub](https://github.com/tomas-samek/tiko-di/blob/main/.ai-skills/tiko-cookbook-extension/SKILL.md).
 
 First half: Tiko DI reference. Second half: template for this project's own docs.
 
