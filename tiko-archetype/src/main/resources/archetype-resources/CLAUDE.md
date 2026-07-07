@@ -1,20 +1,19 @@
 # Project context for Claude Code (and other coding agents)
 
 This project uses **[Tiko DI](https://github.com/tomas-samek/tiko-di)** —
-a compile-time dependency injection framework for Java 21+. All wiring
-is validated and generated at build time; the runtime container does
-zero reflection and zero classpath scanning.
+a compile-time dependency injection framework for Java 21+. Wiring is
+validated and generated at build time — zero runtime reflection, zero
+classpath scanning.
 
-> **Building a service on this scaffold?** Read
+> **Building a service here?** Read
 > [`.ai-skills/tiko-build/SKILL.md`](./.ai-skills/tiko-build/SKILL.md)
 > first — decision tree, `@Produces` cookbook, anti-pattern redirects.
 >
-> **Hit a library the cookbook doesn't cover?** Read
+> **Library the cookbook doesn't cover?** Read
 > [`.ai-skills/tiko-cookbook-extension/SKILL.md`](./.ai-skills/tiko-cookbook-extension/SKILL.md) —
-> ask, don't fabricate a recipe.
+> ask, don't fabricate.
 
-The first half below is a Tiko DI reference; the second half is a template for
-this project's own documentation.
+First half: Tiko DI reference. Second half: template for this project's own docs.
 
 ---
 
@@ -75,17 +74,18 @@ the interface.
 | `KafkaTransport` / `JsonKafkaSerializer` / `FakeKafkaBroker` `FakeKafkaTransport` | `io.tiko.kafka` / `io.tiko.kafka.serializer` / `io.tiko.kafka.test` |
 
 A `cannot find symbol` on an import means a wrong package — check this table, then
-`javap` the jar. Kafka types need `tiko-kafka` + `tiko-kafka-processor` (both ship
-commented out; enable first). Full signatures:
+`javap` the jar; never conclude an annotation or class does not exist because one
+import guess failed. Kafka types need `tiko-kafka` + `tiko-kafka-processor` (both
+ship commented out; enable first). Signatures:
 [`.ai-skills/tiko-build/SKILL.md`](.ai-skills/tiko-build/SKILL.md).
 
 ### Where the depth lives (read on demand)
 
 | file | read when |
 |---|---|
-| [`.ai-skills/tiko-build/SKILL.md`](./.ai-skills/tiko-build/SKILL.md) | starting new service work — decision tree, cookbook, anti-patterns |
-| [`reference/api-signatures.md`](./.ai-skills/tiko-build/reference/api-signatures.md) | any import, signature, attribute, or config key |
-| [`reference/kafka.md`](./.ai-skills/tiko-build/reference/kafka.md) | consuming/producing Kafka, or the Kafka IT |
+| [`.ai-skills/tiko-build/SKILL.md`](./.ai-skills/tiko-build/SKILL.md) | starting any new service work — decision tree, cookbook, anti-patterns |
+| [`reference/api-signatures.md`](./.ai-skills/tiko-build/reference/api-signatures.md) | writing any import, or unsure of a signature / attribute / config key |
+| [`reference/kafka.md`](./.ai-skills/tiko-build/reference/kafka.md) | consuming or producing Kafka, or the Kafka integration test |
 | [`reference/config.md`](./.ai-skills/tiko-build/reference/config.md) | `@Configuration` records or override YAML |
 | [`reference/events.md`](./.ai-skills/tiko-build/reference/events.md) | imperative publish, lifecycle hooks, daemon keep-alive |
 
@@ -185,14 +185,14 @@ Generated code lives under `target/generated-sources/annotations/io/tiko/generat
 
 ### Long-running services (Kafka consumers, schedulers)
 
-`Tiko.create(...)` try-with-resources shuts the container down at block end — a
+`Tiko.create(...)` try-with-resources shuts the container down at block end; a
 transport-driven app (e.g. `@KafkaSource`) needs `Tiko.daemon(...).awaitShutdown()`
-instead. Full idiom, shutdown-hook and `TransportBootstrap` auto-start details:
+instead — full idiom in
 [`reference/events.md`](./.ai-skills/tiko-build/reference/events.md).
 
 ## Optional Tiko modules
 
-The starter `pom.xml` already wires the core (`tiko-api`, `tiko-runtime`) and the processor. To opt into more (each is opt-in — uncomment its block in `pom.xml`):
+The starter `pom.xml` wires the core (`tiko-api`, `tiko-runtime`) + the processor; opt into more by uncommenting its block:
 
 | Module | Purpose | Scope |
 |---|---|---|
@@ -200,50 +200,51 @@ The starter `pom.xml` already wires the core (`tiko-api`, `tiko-runtime`) and th
 | `tiko-test` | JUnit 5 extension, `@TestComponent`, `RecordingEventBus`. | test |
 | `tiko-kafka` + `tiko-kafka-processor` | `@KafkaSource` / `@KafkaSink` bridges — see [`reference/kafka.md`](./.ai-skills/tiko-build/reference/kafka.md). | compile |
 
-Logging routes through `java.lang.System.Logger` (JUL by default; add `slf4j-jdk-platform-logging` to bridge to slf4j).
+Logging: `java.lang.System.Logger` (JUL default; add `slf4j-jdk-platform-logging` to bridge to slf4j).
 
 ## MCP topology server
 
-This project ships a `.mcp.json`; MCP-aware agents auto-connect on open to the
-`tiko-mcp` topology server for read access to the generated component graph, scopes,
-event topology, and config schema — via [jbang](https://www.jbang.dev/).
-Setup, no-jbang/no-MCP fallback, cache behavior: <https://github.com/tomas-samek/tiko-di/tree/main/tiko-examples/13_mcp_introspection>.
+Ships a `.mcp.json`; MCP-aware agents auto-connect to the `tiko-mcp` topology
+server for read access to the component graph, scopes, events, and config
+schema, via [jbang](https://www.jbang.dev/). Setup/cache:
+<https://github.com/tomas-samek/tiko-di/tree/main/tiko-examples/13_mcp_introspection>.
+
+**No MCP (or no jbang)?** After a build, the same data is on disk under
+`target/classes/META-INF/tiko/`: `topology.json`, `config-schema.json`,
+`wiring-errors.json`, plus `topology-kafka.json` with the Kafka transport. For a
+dependency's API, `javap` its jar.
 
 ## Where to dig deeper
 
-- Framework README: <https://github.com/tomas-samek/tiko-di/blob/main/README.md>
-- Worked examples (12 modules): <https://github.com/tomas-samek/tiko-di/tree/main/tiko-examples>
-- Documentation index: <https://github.com/tomas-samek/tiko-di/tree/main/docs>
+- README: <https://github.com/tomas-samek/tiko-di/blob/main/README.md>
+- Examples (12 modules): <https://github.com/tomas-samek/tiko-di/tree/main/tiko-examples>
+- Docs index: <https://github.com/tomas-samek/tiko-di/tree/main/docs>
 
 ---
 
 # About this project
 
-*The sections below are for the project's own documentation. Fill them
-in as the project grows; delete this notice when done.*
+*Fill in as the project grows; delete this notice when done.*
 
 ## Project overview
 
-*Describe what this project does, in one or two paragraphs.*
+*What this project does, in one or two paragraphs.*
 
 ## Architecture
 
-*High-level architecture: modules, layers, key boundaries. Link to ADRs
-or design docs if any.*
+*Modules, layers, key boundaries. Link ADRs/design docs if any.*
 
 ## Conventions
 
-*Project-specific coding conventions. Naming, layering rules, anything
-that isn't obvious from looking at one file.*
+*Naming, layering, anything not obvious from one file.*
 
 ## Patterns to follow
 
-*Project-specific patterns. (For framework-level patterns see the
-"Common patterns" section above.)*
+*Project-specific patterns (see "Common patterns" above for framework-level).*
 
 ## Patterns to avoid
 
-*Anti-patterns or things tried and rejected.*
+*Anti-patterns or rejected approaches.*
 
 ## External dependencies
 
