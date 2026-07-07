@@ -54,7 +54,7 @@ public class OrderKafkaPublisher {
 Broker config binds to `tiko.kafka.*` with **kebab-case** keys
 (`bootstrap-servers`, not `bootstrapServers`) — they are `@Key`-declared;
 see the key table in [`reference/api-signatures.md`](api-signatures.md). Full contract, configuration, and
-the poison-record story: [`docs/cookbooks/kafka.md`](../../docs/cookbooks/kafka.md).
+the poison-record story: [`docs/cookbooks/kafka.md`](../../../docs/cookbooks/kafka.md).
 
 ### Testing Kafka bridges: use the fake broker, never a real one in unit/IT scope
 

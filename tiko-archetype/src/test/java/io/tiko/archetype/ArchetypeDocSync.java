@@ -30,8 +30,8 @@ public final class ArchetypeDocSync {
 
     private static final String GITHUB = "https://github.com/tomas-samek/tiko-di";
 
-    /** A markdown link target of the form {@code ](../../<path>)}. */
-    private static final Pattern REPO_RELATIVE = Pattern.compile("]\\(\\.\\./\\.\\./([^)]+)\\)");
+    /** A markdown link target with two or more leading {@code ../} segments (repo-relative from any nesting depth). */
+    private static final Pattern REPO_RELATIVE = Pattern.compile("]\\(\\.\\./\\.\\./(?:\\.\\./)*([^)]+)\\)");
 
     private ArchetypeDocSync() {}
 
