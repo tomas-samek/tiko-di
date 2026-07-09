@@ -9,7 +9,7 @@
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=tomas-samek_tiko-di&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=tomas-samek_tiko-di)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=tomas-samek_tiko-di&metric=coverage)](https://sonarcloud.io/summary/new_code?id=tomas-samek_tiko-di)
 
-**Status: 0.3.0 on Maven Central.** Suitable for early-adopter experimentation. See [docs/roadmap.md](./docs/roadmap.md) for what ships today and what's next.
+**Status: 0.4.0 on Maven Central.** Suitable for early-adopter experimentation. See [docs/roadmap.md](./docs/roadmap.md) for what ships today and what's next.
 
 ## What Tiko is
 
@@ -116,7 +116,7 @@ Tiko ships to Maven Central. Import the BOM once — then declare the artifacts 
         <dependency>
             <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-bom</artifactId>
-            <version>0.3.0</version>
+            <version>0.4.0</version>
             <type>pom</type>
             <scope>import</scope>
         </dependency>
@@ -170,7 +170,7 @@ The fastest way to start a fresh project — generates a runnable single-module 
 mvn archetype:generate \
     -DarchetypeGroupId=io.github.tomas-samek \
     -DarchetypeArtifactId=tiko-archetype \
-    -DarchetypeVersion=0.3.0 \
+    -DarchetypeVersion=0.4.0 \
     -DgroupId=com.example \
     -DartifactId=my-app \
     -DinteractiveMode=false
