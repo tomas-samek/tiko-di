@@ -30,6 +30,7 @@ public final class ArchetypeDocSync {
 
     private static final String GITHUB = "https://github.com/tomas-samek/tiko-di";
 
+    // Trap: ../../ inside reference/ reaches .ai-skills/, not repo root — chunk links need ../../../.
     /** A markdown link target with two or more leading {@code ../} segments (repo-relative from any nesting depth). */
     private static final Pattern REPO_RELATIVE = Pattern.compile("]\\(\\.\\./\\.\\./(?:\\.\\./)*([^)]+)\\)");
 

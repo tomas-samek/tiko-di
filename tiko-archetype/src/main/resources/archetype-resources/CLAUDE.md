@@ -61,7 +61,7 @@ the interface.
 | `@Default("value")` | Default for optional config fields. |
 | `@TikoTest` | JUnit 5 extension; class-level. |
 | `@TestComponent(value, scope, name)` | Shadow a `@Component` in tests. |
-| `@RequestScopeTest` / `@EventScopeTest` | Wrap a `@Test` in a scope. |
+| `@EventScopeTest` | Wrap a `@Test` in a scope. |
 
 ### Exact packages (import from here, not from memory)
 
@@ -77,8 +77,7 @@ the interface.
 A `cannot find symbol` on an import means a wrong package — check this table, then
 `javap` the jar; never conclude an annotation or class does not exist because one
 import guess failed. Kafka types need `tiko-kafka` + `tiko-kafka-processor` (both
-ship commented out; enable first). Signatures:
-[`.ai-skills/tiko-build/SKILL.md`](.ai-skills/tiko-build/SKILL.md).
+ship commented out; enable first).
 
 ### Where the depth lives (read on demand)
 
@@ -88,7 +87,7 @@ ship commented out; enable first). Signatures:
 | [`reference/api-signatures.md`](./.ai-skills/tiko-build/reference/api-signatures.md) | writing any import, or unsure of a signature / attribute / config key |
 | [`reference/kafka.md`](./.ai-skills/tiko-build/reference/kafka.md) | consuming or producing Kafka, or the Kafka integration test |
 | [`reference/config.md`](./.ai-skills/tiko-build/reference/config.md) | `@Configuration` records or override YAML |
-| [`reference/events.md`](./.ai-skills/tiko-build/reference/events.md) | imperative publish, lifecycle hooks, daemon keep-alive |
+| [`reference/events.md`](./.ai-skills/tiko-build/reference/events.md) | publishing/subscribing events, lifecycle hooks, daemon keep-alive |
 
 ## Rules
 
@@ -129,7 +128,7 @@ public class OrderService {
 See [`reference/config.md`](./.ai-skills/tiko-build/reference/config.md) for the
 record + YAML walkthrough, imports, and file-name conventions.
 
-> Module-shipped keys may differ: a record component annotated `@Key("...")` binds that literal key instead — `tiko.kafka.*` keys are kebab-case for exactly this reason (`bootstrap-servers`, see the key table in the tiko-build skill).
+> Module-shipped keys may differ: a record component annotated `@Key("...")` binds that literal key instead — `tiko.kafka.*` keys are kebab-case for exactly this reason (`bootstrap-servers`, see the key table in [`reference/api-signatures.md`](./.ai-skills/tiko-build/reference/api-signatures.md)).
 
 ### Testing with `@TikoTest` (requires `tiko-test`)
 
@@ -218,14 +217,14 @@ dependency's API, `javap` its jar.
 ## Where to dig deeper
 
 - README: <https://github.com/tomas-samek/tiko-di/blob/main/README.md>
-- Examples (12 modules): <https://github.com/tomas-samek/tiko-di/tree/main/tiko-examples>
+- Examples (15 modules): <https://github.com/tomas-samek/tiko-di/tree/main/tiko-examples>
 - Docs index: <https://github.com/tomas-samek/tiko-di/tree/main/docs>
 
 ---
 
 # About this project
 
-*Fill in as the project grows; delete this notice when done.*
+*Fill in as the project grows.*
 
 ## Project overview
 
@@ -233,7 +232,7 @@ dependency's API, `javap` its jar.
 
 ## Architecture
 
-*Modules, layers, key boundaries. Link ADRs/design docs if any.*
+*Modules, layers, key boundaries.*
 
 ## Conventions
 
@@ -241,7 +240,7 @@ dependency's API, `javap` its jar.
 
 ## Patterns to follow
 
-*Project-specific patterns (see "Common patterns" above for framework-level).*
+*Project-specific patterns.*
 
 ## Patterns to avoid
 
