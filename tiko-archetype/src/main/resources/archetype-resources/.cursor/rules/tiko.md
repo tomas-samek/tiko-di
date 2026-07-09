@@ -8,7 +8,9 @@ Read [`.ai-skills/tiko-build/SKILL.md`](../../.ai-skills/tiko-build/SKILL.md) fi
 
 ## Hit a library the cookbook doesn't cover?
 
-Read [`.ai-skills/tiko-cookbook-extension/SKILL.md`](../../.ai-skills/tiko-cookbook-extension/SKILL.md) — the procedural skill for adding a new recipe. Load-bearing rule: **ask, don't fabricate.**
+Ask the user for the missing facts rather than fabricating an integration
+(**ask, don't fabricate**). To contribute the recipe upstream, follow
+[the cookbook-extension skill on GitHub](https://github.com/tomas-samek/tiko-di/blob/main/.ai-skills/tiko-cookbook-extension/SKILL.md).
 
 ## Where to find framework documentation
 
