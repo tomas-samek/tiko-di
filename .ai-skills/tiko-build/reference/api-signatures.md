@@ -31,7 +31,10 @@ both ship **commented out** in the scaffolded pom; enable them first.
 ```java
 // Bootstrap (io.tiko.runtime)
 static Container Tiko.create()
+static Container Tiko.create(ConfigSource source)
 static Container Tiko.create(TikoOptions options)
+static TikoDaemon Tiko.daemon()
+static TikoDaemon Tiko.daemon(ConfigSource source)
 static TikoDaemon Tiko.daemon(TikoOptions options)
 void TikoDaemon.awaitShutdown()
 

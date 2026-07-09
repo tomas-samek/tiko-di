@@ -16,7 +16,7 @@ the recipe upstream, follow
 ## Rules
 
 - Constructor injection only — `@Inject` on the constructor.
-- Every `@Component` declares a scope: SINGLETON, REQUEST, EVENT, or PROTOTYPE.
+- `@Component` scope is optional: SINGLETON, EVENT, or PROTOTYPE (the default).
 - Configuration uses `@Configuration` records bound from YAML.
 - Event handlers use `@EventHandler` on methods of `@Component` classes.
 - Test fakes use `@TestComponent` from `tiko-test`.

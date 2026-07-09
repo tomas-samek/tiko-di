@@ -21,7 +21,7 @@ Ask the user for the missing facts rather than fabricating an integration
 The canonical conventions live in [`CLAUDE.md`](./CLAUDE.md) at the project
 root. It covers:
 
-- Component scopes (SINGLETON / REQUEST / EVENT / PROTOTYPE)
+- Component scopes (SINGLETON / EVENT / PROTOTYPE)
 - Annotation cheat-sheet (`@Component`, `@Inject`, `@Produces`,
   `@Configuration`, `@EventHandler`, `@EventTrigger`)
 - Constructor-injection rule (no field injection)
