@@ -32,7 +32,7 @@ public final class ArchetypeDocSync {
 
     // Trap: ../../ inside reference/ reaches .ai-skills/, not repo root — chunk links need ../../../.
     /** A markdown link target with two or more leading {@code ../} segments (repo-relative from any nesting depth). */
-    private static final Pattern REPO_RELATIVE = Pattern.compile("]\\(\\.\\./\\.\\./(?:\\.\\./)*([^)]+)\\)");
+    private static final Pattern REPO_RELATIVE = Pattern.compile("]\\(\\.\\./\\.\\./(?:\\.\\./)*+([^)]+)\\)");
 
     private ArchetypeDocSync() {}
 
