@@ -174,10 +174,15 @@ public final class EventRegistryGenerator {
         // Build the wrapper for this delivery and run the handler under it. Generated code
         // uses an explicit try/finally rather than EventChainContext.runWith so we don't
         // have to introduce a lambda — keeps the generated source readable.
+        boolean lifecycleEvent = handler.getEventTypeName().startsWith("io.tiko.events.");
+        boolean detachedUnit = handler.isAsync() && !lifecycleEvent;
+
         method.addStatement("$T<$T> __wrapper = $T.wrap(event)", Event.class, eventClass, CHAIN_CONTEXT);
         method.addStatement("$T<?> __previous = $T.enter(__wrapper)", Event.class, CHAIN_CONTEXT);
         method.beginControlFlow("try");
-        method.addStatement("$T __handler = container.$L()", declaringClass, getterName);
+        if (!detachedUnit) {
+            method.addStatement("$T __handler = container.$L()", declaringClass, getterName);
+        }
 
         TypeMirror returnType = handler.getMethodElement().getReturnType();
         boolean hasTriggers = !handler.getEventTriggers().isEmpty();
@@ -205,6 +210,9 @@ public final class EventRegistryGenerator {
 
             // Build the runAsync body
             CodeBlock.Builder runBody = CodeBlock.builder();
+            if (detachedUnit) {
+                runBody.addStatement("$T __handler = container.$L()", declaringClass, getterName);
+            }
             runBody.addStatement("$T<?> __asyncPrev = $T.enter(__asyncWrapper)", Event.class, CHAIN_CONTEXT);
             runBody.beginControlFlow("try");
             if (captureResult) {
@@ -219,6 +227,12 @@ public final class EventRegistryGenerator {
             runBody.addStatement("$T.exit(__asyncPrev)", CHAIN_CONTEXT);
             runBody.endControlFlow();
 
+            CodeBlock asyncBody = detachedUnit
+                    ? CodeBlock.builder()
+                            .add("container.runInDetachedEventScope(() -> {\n$L});\n", runBody.build())
+                            .build()
+                    : runBody.build();
+
             if (handler.hasRetries()) {
                 // Retry dispatch (#108): re-invoke on failure up to the budget, with backoff
                 // scheduled between attempts and (when a timeout is also set) each attempt
@@ -228,7 +242,7 @@ public final class EventRegistryGenerator {
                         .add(
                                 "$T.runAsyncWithRetry(() -> {\n$L}, new $T($L, $LL, $T.$L, $LL), __exec, __err, HANDLER_INFO_$L, event);\n",
                                 CHAIN_CONTEXT,
-                                runBody.build(),
+                                asyncBody,
                                 ClassName.get("io.tiko.runtime", "RetryPolicy"),
                                 handler.getRetries(),
                                 handler.getBackoffNanos(),
@@ -247,7 +261,7 @@ public final class EventRegistryGenerator {
                         .add(
                                 "$T.runAsyncWithTimeout(() -> {\n$L}, $LL, __exec, __err, HANDLER_INFO_$L, event);\n",
                                 CHAIN_CONTEXT,
-                                runBody.build(),
+                                asyncBody,
                                 handler.getTimeoutNanos(),
                                 index)
                         .build());
@@ -262,7 +276,7 @@ public final class EventRegistryGenerator {
                         .add(
                                 "$T.runAsyncWithTimeout(() -> {\n$L}, 0L, __exec, __err, HANDLER_INFO_$L, event);\n",
                                 CHAIN_CONTEXT,
-                                runBody.build(),
+                                asyncBody,
                                 index)
                         .build());
             }
