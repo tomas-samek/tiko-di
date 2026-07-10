@@ -253,8 +253,11 @@ gets the same shape). Concretely:
   `retries`, **each attempt is its own unit** (fresh beans, its own lifecycle pair) — a
   retried attempt never sees the failed attempt's EVENT state.
 - Handlers subscribed to the framework lifecycle events (`io.tiko.events.*`) dispatch
-  *without* a unit — they observe units and must not mint new ones (this also makes
-  lifecycle-observer recursion structurally impossible).
+  *without* a unit — they observe units and must not mint new ones (this makes *direct*
+  lifecycle-observer recursion structurally impossible). One loop remains the user's
+  responsibility: an observer that publishes a business event handled *asynchronously*
+  re-enters unit minting (new unit → new `EventStartedEvent` → observer → …) — don't
+  close that loop, e.g. don't emit a per-unit audit event to an async handler.
 - The timeout budget (`timeout = ...`) covers the whole unit, including scope open and
   lifecycle publishes.
 - One boundary case: when the overflow policy runs a dispatch inline on the publishing

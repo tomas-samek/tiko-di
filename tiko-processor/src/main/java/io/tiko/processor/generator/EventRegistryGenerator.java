@@ -176,7 +176,9 @@ public final class EventRegistryGenerator {
         // have to introduce a lambda — keeps the generated source readable.
         // Recursion guard (#220): handlers of framework lifecycle events must NOT open a unit —
         // runInDetachedEventScope publishes EventStartedEvent, so wrapping an async
-        // EventStartedEvent handler would recurse (new unit -> new started event -> ...).
+        // EventStartedEvent handler would recurse DIRECTLY (new unit -> new started event -> ...).
+        // Indirect loops (an observer publishing a business event with an async handler) remain
+        // the user's responsibility — documented in docs/events.md.
         // Lifecycle events are signals ABOUT units, not units of work. Trailing dot is load-bearing.
         boolean lifecycleEvent = handler.getEventTypeName().startsWith("io.tiko.events.");
         boolean detachedUnit = handler.isAsync() && !lifecycleEvent;
