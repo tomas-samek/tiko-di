@@ -1,4 +1,4 @@
-package com.example.asyncscope;
+package io.tiko.examples.asyncscope;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;

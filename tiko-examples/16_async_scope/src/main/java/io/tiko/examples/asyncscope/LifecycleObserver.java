@@ -1,4 +1,4 @@
-package com.example.asyncscope;
+package io.tiko.examples.asyncscope;
 
 import io.tiko.Scope;
 import io.tiko.annotations.Component;

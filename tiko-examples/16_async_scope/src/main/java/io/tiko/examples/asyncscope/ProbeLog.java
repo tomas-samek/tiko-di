@@ -1,4 +1,4 @@
-package com.example.asyncscope;
+package io.tiko.examples.asyncscope;
 
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;

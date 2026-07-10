@@ -41,7 +41,7 @@
              every example module (inherited by all submodules). Their JaCoCo reports are likewise
              left out of the tiko-coverage aggregate. -->
         <sonar.skip>true</sonar.skip>
-        <!-- Examples are demos, not published artifacts. All 13 child modules inherit this property
+        <!-- Examples are demos, not published artifacts. All 16 child modules inherit this property
              and so stay out of the Central Portal bundle (central-publishing-maven-plugin reads it
              per module). -->
         <skipPublishing>true</skipPublishing>
