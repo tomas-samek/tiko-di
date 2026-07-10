@@ -74,6 +74,28 @@ class EventRegistryAsyncScopeTest {
         assertThat(registry).doesNotContain("runInDetachedEventScope");
     }
 
+    @Test
+    void prefixSharingUserPackageIsNotExcluded() throws IOException {
+        String registry = compileAndReadRegistry(
+                JavaFileObjects.forSourceLines(
+                        "io.tiko.eventsutil.CustomEvent",
+                        "package io.tiko.eventsutil;",
+                        "public record CustomEvent() {}"),
+                JavaFileObjects.forSourceLines(
+                        "io.example.PrefixHandler",
+                        "package io.example;",
+                        "import io.tiko.annotations.Component;",
+                        "import io.tiko.annotations.EventHandler;",
+                        "import io.tiko.Scope;",
+                        "@Component(scope = Scope.SINGLETON)",
+                        "public class PrefixHandler {",
+                        "    @EventHandler(async = true)",
+                        "    public void onCustom(io.tiko.eventsutil.CustomEvent event) {}",
+                        "}"));
+
+        assertThat(registry).contains("container.runInDetachedEventScope(");
+    }
+
     private String compileAndReadRegistry(JavaFileObject... sources) throws IOException {
         Compilation c =
                 Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(sources);
