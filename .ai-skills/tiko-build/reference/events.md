@@ -41,6 +41,11 @@ public class OrderListener {
 }
 ```
 
+Async handlers own their unit: an `@EventHandler(async = true)` runs in a fresh EVENT
+unit per invocation (per attempt with retries) — EVENT-scoped beans resolve inside it and
+tear down when it completes, and each invocation publishes its own
+`EventStartedEvent`/`EventEndingEvent` pair.
+
 ## Declarative chains with `@EventTrigger`
 
 ```java

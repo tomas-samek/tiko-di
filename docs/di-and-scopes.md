@@ -60,6 +60,11 @@ container.runInEventScope(() -> {
 
 Genuinely independent events — those that need to be retryable, distributed, or re-ordered relative to the batch — each own their own unit of work and their own transaction; cross-event consistency is an outbox/saga concern above the DI layer.
 
+Async `@EventHandler` dispatch is a scope boundary: the handler runs in its own fresh
+EVENT unit (per attempt, when retries are configured), so EVENT-scoped dependencies of an
+async handler resolve to that unit and are torn down when it ends. The publishing side's
+unit — if any — is left behind at the async hop.
+
 ## Constructor injection
 
 The preferred and recommended form. All dependencies are wired before the constructor body runs, so initialization belongs there.
