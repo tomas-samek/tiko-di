@@ -196,6 +196,7 @@ public final class ContainerGenerator {
 
         // Add scope management methods
         containerBuilder.addMethod(createRunInEventScopeMethod());
+        containerBuilder.addMethod(createRunInDetachedEventScopeMethod());
         containerBuilder.addMethod(createSupplyInEventScopeMethod());
         containerBuilder.addMethod(createPublishUnitLifecycleMethod());
         containerBuilder.addMethod(createCloseEventScopeMethod());
@@ -1008,6 +1009,32 @@ public final class ContainerGenerator {
                 .addStatement("$T __eventEnd = $T.now()", Instant.class, Instant.class);
         emitGatedUnitEndingPublish(method);
         method.addStatement("__closeEventScope()").endControlFlow();
+        return method.build();
+    }
+
+    /**
+     * Creates the package-private {@code runInDetachedEventScope} method (#220). Async
+     * {@code @EventHandler} dispatch runs inside its own EVENT unit; when the overflow policy
+     * runs the task inline on a borrowed publisher thread ({@code CALLER_RUNS}), the caller's
+     * open frame is suspended (saved and cleared) for the duration and restored afterwards —
+     * detachment, not nesting. The public {@code runInEventScope} still throws on re-entry,
+     * so the single-frame invariant (ARCH-5) is untouched.
+     */
+    private MethodSpec createRunInDetachedEventScopeMethod() {
+        ParameterizedTypeName scopeMapType = ParameterizedTypeName.get(
+                ClassName.get(Map.class), ClassName.get(String.class), ClassName.get(Object.class));
+        MethodSpec.Builder method =
+                MethodSpec.methodBuilder("runInDetachedEventScope").addParameter(Runnable.class, "task");
+        method.addStatement("$T __savedScope = eventScoped.get()", scopeMapType)
+                .addStatement("$T __savedFrameOpen = __unitFrameOpen.get()", Boolean.class)
+                .addStatement("eventScoped.set(new $T<>())", LinkedHashMap.class)
+                .addStatement("__unitFrameOpen.set($T.FALSE)", Boolean.class);
+        method.beginControlFlow("try")
+                .addStatement("runInEventScope(task)")
+                .nextControlFlow("finally")
+                .addStatement("eventScoped.set(__savedScope)")
+                .addStatement("__unitFrameOpen.set(__savedFrameOpen)")
+                .endControlFlow();
         return method.build();
     }
 
