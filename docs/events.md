@@ -263,7 +263,8 @@ gets the same shape). Concretely:
 
 Multi-module note: in aggregated (multi-module) containers, async units get correct frames,
 per-module bean isolation, and teardown — but publish no lifecycle events (module
-containers are constructed silent; the aggregator is not in the async dispatch path — see the follow-up issue linked from the #220 PR).
+containers are constructed silent; the aggregator is not in the async dispatch path —
+tracked by [#433](https://github.com/tomas-samek/tiko-di/issues/433)).
 
 ## Graceful shutdown drain
 
