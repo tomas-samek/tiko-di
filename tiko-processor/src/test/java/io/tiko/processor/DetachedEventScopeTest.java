@@ -33,13 +33,17 @@ class DetachedEventScopeTest {
                 .orElseThrow(() -> new AssertionError("container not generated"));
         String content = new String(container.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
 
-        assertThat(content).contains("void runInDetachedEventScope(Runnable task)");
-        // Detachment: save both ThreadLocals, clear, delegate, restore in finally.
-        assertThat(content).contains("eventScoped.get()");
-        assertThat(content).contains("eventScoped.set(new LinkedHashMap<>())");
-        assertThat(content).contains("runInEventScope(task)");
-        assertThat(content).contains("__unitFrameOpen.set(__savedFrameOpen)");
-        // Package-private: the signature line must not carry public/protected.
-        assertThat(content).doesNotContain("public void runInDetachedEventScope");
+        // One chain: method present; detachment saves both ThreadLocals (the __savedScope
+        // prefix pins the SAVE, not an incidental getter), clears to a fresh map, delegates,
+        // restores in finally; and the signature stays package-private.
+        assertThat(content)
+                .contains("void runInDetachedEventScope(Runnable task)")
+                .contains("__savedScope = eventScoped.get()")
+                .contains("__savedFrameOpen = __unitFrameOpen.get()")
+                .contains("eventScoped.set(new LinkedHashMap<>())")
+                .contains("runInEventScope(task)")
+                .contains("eventScoped.set(__savedScope)")
+                .contains("__unitFrameOpen.set(__savedFrameOpen)")
+                .doesNotContain("public void runInDetachedEventScope");
     }
 }
