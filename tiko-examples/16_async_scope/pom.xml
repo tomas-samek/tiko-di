@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.tomas-samek.examples</groupId>
+        <artifactId>tiko-examples</artifactId>
+        <version>0.4.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>16_async_scope</artifactId>
+    <packaging>jar</packaging>
+    <name>16 - Async EVENT Unit Semantics</name>
+    <description>Behavioral tests for #220: an async @EventHandler runs in its own fresh EVENT unit — per-attempt units with retries, lifecycle-event pairs, teardown on timeout, CALLER_RUNS detachment, and the lifecycle-observer recursion guard. Probe components live in main sources so the module builds exactly one container.</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.github.tomas-samek</groupId>
+            <artifactId>tiko-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>io.github.tomas-samek</groupId>
+            <artifactId>tiko-processor</artifactId>
+            <version>${project.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>io.github.tomas-samek</groupId>
+            <artifactId>tiko-runtime</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Not BOM-managed (mirrors tiko-runtime's own test dependency, which pins the same
+             explicit version for the same reason). -->
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>4.2.2</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>

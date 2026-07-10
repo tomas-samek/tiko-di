@@ -33,6 +33,7 @@
         <module>13_mcp_introspection</module>
         <module>14_profiles</module>
         <module>15_quickstart</module>
+        <module>16_async_scope</module>
     </modules>
 
     <properties>
