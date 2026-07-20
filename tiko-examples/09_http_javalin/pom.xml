@@ -64,6 +64,14 @@
             <artifactId>assertj-core</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Not BOM-managed (mirrors tiko-runtime's own test dependency, which pins the same
+             explicit version for the same reason). -->
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>4.2.2</version>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>

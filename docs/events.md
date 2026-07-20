@@ -240,6 +240,35 @@ TikoOptions.builder()
 
 As with every overflow policy, `ROUTE_TO_DLQ` degrades to a logged drop once the container is shutting down — a dead-letter routing never blocks or fails teardown.
 
+### Async handlers own their unit of work
+
+An `@EventHandler(async = true)` invocation runs inside its **own fresh EVENT unit** on the
+executor thread — the in-process mirror of transport consumption (a Kafka-consumed message
+gets the same shape). Concretely:
+
+- EVENT-scoped beans resolve inside the handler and bind to that invocation's unit;
+  they are torn down (`@PreDestroy`, LIFO) when the handler completes — success, failure,
+  or timeout.
+- One `EventStartedEvent` / `EventEndingEvent` pair is published per invocation. With
+  `retries`, **each attempt is its own unit** (fresh beans, its own lifecycle pair) — a
+  retried attempt never sees the failed attempt's EVENT state.
+- Handlers subscribed to the framework lifecycle events (`io.tiko.events.*`) dispatch
+  *without* a unit — they observe units and must not mint new ones (this makes *direct*
+  lifecycle-observer recursion structurally impossible). One loop remains the user's
+  responsibility: an observer that publishes a business event handled *asynchronously*
+  re-enters unit minting (new unit → new `EventStartedEvent` → observer → …) — don't
+  close that loop, e.g. don't emit a per-unit audit event to an async handler.
+- The timeout budget (`timeout = ...`) covers the whole unit, including scope open and
+  lifecycle publishes.
+- One boundary case: when the overflow policy runs a dispatch inline on the publishing
+  thread (`CALLER_RUNS`), the `timeout` budget cannot bound it — the time-box arms only
+  after the inline run completes. The unit itself (fresh beans, teardown) still applies.
+
+Multi-module note: in aggregated (multi-module) containers, async units get correct frames,
+per-module bean isolation, and teardown — but publish no lifecycle events (module
+containers are constructed silent; the aggregator is not in the async dispatch path —
+tracked by [#433](https://github.com/tomas-samek/tiko-di/issues/433)).
+
 ## Graceful shutdown drain
 
 When `Container.shutdown()` runs, in-flight async event handlers are allowed to

@@ -149,12 +149,8 @@ public final class EventRegistryGenerator {
         // Proxied EVENT components: the plain getter returns the interface-typed proxy, which
         // cannot be assigned to the concrete handler variable — resolve the current unit's
         // instance via the concrete-typed getCurrentXxx delegate instead (#331).
-        String getterPrefix = isProxiedComponent(handler) ? "getCurrent" : "get";
-        String getterName = getterPrefix + handler.getDeclaringClass().getSimpleName();
-
-        ClassName errorHandler = ClassName.get("io.tiko", "ErrorHandler");
-        ClassName eventHandlerError = ClassName.get("io.tiko", "EventHandlerError");
-        ClassName executorServiceClass = ClassName.get(ExecutorService.class);
+        String getterName = (isProxiedComponent(handler) ? "getCurrent" : "get")
+                + handler.getDeclaringClass().getSimpleName();
 
         MethodSpec.Builder method = MethodSpec.methodBuilder(dispatcherName(handler, index))
                 .addModifiers(Modifier.PRIVATE, Modifier.STATIC)
@@ -174,118 +170,35 @@ public final class EventRegistryGenerator {
         // Build the wrapper for this delivery and run the handler under it. Generated code
         // uses an explicit try/finally rather than EventChainContext.runWith so we don't
         // have to introduce a lambda — keeps the generated source readable.
+        // Recursion guard (#220): handlers of framework lifecycle events must NOT open a unit —
+        // runInDetachedEventScope publishes EventStartedEvent, so wrapping an async
+        // EventStartedEvent handler would recurse DIRECTLY (new unit -> new started event -> ...).
+        // Indirect loops (an observer publishing a business event with an async handler) remain
+        // the user's responsibility — documented in docs/events.md.
+        // Lifecycle events are signals ABOUT units, not units of work. Trailing dot is load-bearing.
+        boolean lifecycleEvent = handler.getEventTypeName().startsWith("io.tiko.events.");
+        boolean detachedUnit = handler.isAsync() && !lifecycleEvent;
+
         method.addStatement("$T<$T> __wrapper = $T.wrap(event)", Event.class, eventClass, CHAIN_CONTEXT);
         method.addStatement("$T<?> __previous = $T.enter(__wrapper)", Event.class, CHAIN_CONTEXT);
         method.beginControlFlow("try");
-        method.addStatement("$T __handler = container.$L()", declaringClass, getterName);
-
-        TypeMirror returnType = handler.getMethodElement().getReturnType();
-        boolean hasTriggers = !handler.getEventTriggers().isEmpty();
-        boolean returnsValue = returnType.getKind() != TypeKind.VOID;
-        boolean captureResult = hasTriggers && returnsValue;
-
-        if (hasTriggers && !returnsValue) {
-            context.getMessager()
-                    .printMessage(
-                            Diagnostic.Kind.WARNING,
-                            "@EventTrigger on a void-returning @EventHandler has no payload to publish — ignored",
-                            handler.getMethodElement());
+        if (!detachedUnit) {
+            method.addStatement("$T __handler = container.$L()", declaringClass, getterName);
         }
 
-        String invocation = handler.hasEventWrapper()
-                ? "__handler." + handler.getMethodName() + "(event, __wrapper)"
-                : "__handler." + handler.getMethodName() + "(event)";
+        DispatchPlan plan = new DispatchPlan(
+                detachedUnit,
+                declaringClass,
+                getterName,
+                shouldCaptureResult(handler),
+                handler.hasEventWrapper()
+                        ? "__handler." + handler.getMethodName() + "(event, __wrapper)"
+                        : "__handler." + handler.getMethodName() + "(event)");
 
         if (handler.isAsync()) {
-            // Async dispatch: submit handler invocation to executor, route exceptional
-            // completion to ErrorHandler via whenComplete.
-            method.addStatement("$T __exec = container.getEventExecutor()", executorServiceClass);
-            method.addStatement("$T __err = container.getErrorHandler()", errorHandler);
-            method.addStatement("final $T<?> __asyncWrapper = __wrapper", Event.class);
-
-            // Build the runAsync body
-            CodeBlock.Builder runBody = CodeBlock.builder();
-            runBody.addStatement("$T<?> __asyncPrev = $T.enter(__asyncWrapper)", Event.class, CHAIN_CONTEXT);
-            runBody.beginControlFlow("try");
-            if (captureResult) {
-                runBody.addStatement("$T __result = $L", TypeName.get(returnType), invocation);
-                for (EventTriggerModel trigger : handler.getEventTriggers()) {
-                    emitTriggerInto(runBody, trigger, index);
-                }
-            } else {
-                runBody.addStatement(invocation);
-            }
-            runBody.nextControlFlow("finally");
-            runBody.addStatement("$T.exit(__asyncPrev)", CHAIN_CONTEXT);
-            runBody.endControlFlow();
-
-            if (handler.hasRetries()) {
-                // Retry dispatch (#108): re-invoke on failure up to the budget, with backoff
-                // scheduled between attempts and (when a timeout is also set) each attempt
-                // time-boxed. The helper routes a single EventHandlerError carrying the attempt
-                // count once the budget is exhausted. Composes the #107 timeout per attempt.
-                method.addCode(CodeBlock.builder()
-                        .add(
-                                "$T.runAsyncWithRetry(() -> {\n$L}, new $T($L, $LL, $T.$L, $LL), __exec, __err, HANDLER_INFO_$L, event);\n",
-                                CHAIN_CONTEXT,
-                                runBody.build(),
-                                ClassName.get("io.tiko.runtime", "RetryPolicy"),
-                                handler.getRetries(),
-                                handler.getBackoffNanos(),
-                                ClassName.get("io.tiko.annotations", "BackoffStrategy"),
-                                handler.getBackoffStrategy().name(),
-                                handler.getTimeoutNanos(),
-                                index)
-                        .build());
-            } else if (handler.hasTimeout()) {
-                // Timed dispatch (#107): run the invocation under a wall-clock budget. The runtime
-                // helper submits the body to the executor as an interruptible Future, interrupts it
-                // on breach (best-effort), frees the slot, and routes an EventHandlerError whose
-                // cause is a TimeoutException. It applies the same Error-vs-Exception routing as the
-                // plain async path below, so no whenComplete block is generated here.
-                method.addCode(CodeBlock.builder()
-                        .add(
-                                "$T.runAsyncWithTimeout(() -> {\n$L}, $LL, __exec, __err, HANDLER_INFO_$L, event);\n",
-                                CHAIN_CONTEXT,
-                                runBody.build(),
-                                handler.getTimeoutNanos(),
-                                index)
-                        .build());
-            } else {
-                // Plain async dispatch (#111): route through runAsyncWithTimeout with a zero budget so
-                // the base async path shares the executor-submit, ROUTE_TO_DLQ overflow handling, and
-                // Error-vs-Exception routing of the timeout path. timeout = 0 means no time-boxing —
-                // runOnce degrades to a bare runAsync — so behaviour matches the former inline
-                // runAsync(...).whenComplete(...), minus the duplicated wiring (and now DLQ-covered: the
-                // inline form bypassed EventChainContext and so leaked the overflow signal to the publisher).
-                method.addCode(CodeBlock.builder()
-                        .add(
-                                "$T.runAsyncWithTimeout(() -> {\n$L}, 0L, __exec, __err, HANDLER_INFO_$L, event);\n",
-                                CHAIN_CONTEXT,
-                                runBody.build(),
-                                index)
-                        .build());
-            }
-
+            emitAsyncDispatch(method, handler, index, plan);
         } else {
-            // Sync dispatch: inline try/catch, error routed immediately.
-            method.beginControlFlow("try");
-            if (captureResult) {
-                method.addStatement("$T __result = $L", TypeName.get(returnType), invocation);
-                for (EventTriggerModel trigger : handler.getEventTriggers()) {
-                    emitTrigger(method, trigger, index);
-                }
-            } else {
-                method.addStatement(invocation);
-            }
-            method.nextControlFlow("catch ($T __t)", Exception.class);
-            method.addStatement("$T __err = container.getErrorHandler()", errorHandler);
-            method.beginControlFlow("try");
-            method.addStatement("__err.onError(new $T(HANDLER_INFO_$L, event, __t))", eventHandlerError, index);
-            method.nextControlFlow("catch ($T __inner)", Exception.class);
-            method.addStatement("$T.logErrorHandlerFailure(__inner)", CHAIN_CONTEXT);
-            method.endControlFlow();
-            method.endControlFlow();
+            emitSyncDispatch(method, handler, index, plan);
         }
 
         method.nextControlFlow("finally");
@@ -293,6 +206,157 @@ public final class EventRegistryGenerator {
         method.endControlFlow();
 
         return method.build();
+    }
+
+    /**
+     * True when the handler's return value must be captured to feed {@code @EventTrigger}
+     * payloads. Also emits the "void handler + trigger" warning as a side effect, so the
+     * diagnostic fires exactly once per handler regardless of the sync/async branch taken.
+     */
+    private boolean shouldCaptureResult(EventHandlerModel handler) {
+        boolean hasTriggers = !handler.getEventTriggers().isEmpty();
+        boolean returnsValue = handler.getMethodElement().getReturnType().getKind() != TypeKind.VOID;
+        if (hasTriggers && !returnsValue) {
+            context.getMessager()
+                    .printMessage(
+                            Diagnostic.Kind.WARNING,
+                            "@EventTrigger on a void-returning @EventHandler has no payload to publish — ignored",
+                            handler.getMethodElement());
+        }
+        return hasTriggers && returnsValue;
+    }
+
+    /**
+     * Derived per-handler facts shared by the sync and async dispatch emitters — computed once in
+     * {@link #createDispatcherMethod} so the emitters take one cohesive argument instead of a long
+     * parameter list.
+     */
+    private record DispatchPlan(
+            boolean detachedUnit,
+            ClassName declaringClass,
+            String getterName,
+            boolean captureResult,
+            String invocation) {}
+
+    /**
+     * Emits the async dispatch body: submit the handler invocation to the container's event
+     * executor and route exceptional completion to the {@link io.tiko.ErrorHandler}. A detached
+     * unit ({@code @EventHandler(async = true)} on a non-lifecycle event) wraps the invocation in
+     * {@code runInDetachedEventScope} so it owns a fresh EVENT unit (#220). Retry (#108) and
+     * timeout (#107) variants time-box each attempt; the plain path routes through
+     * {@code runAsyncWithTimeout} with a zero budget so all three share overflow handling and
+     * Error-vs-Exception routing (#111).
+     */
+    private void emitAsyncDispatch(MethodSpec.Builder method, EventHandlerModel handler, int index, DispatchPlan plan) {
+        ClassName errorHandler = ClassName.get("io.tiko", "ErrorHandler");
+        ClassName executorServiceClass = ClassName.get(ExecutorService.class);
+        TypeMirror returnType = handler.getMethodElement().getReturnType();
+
+        method.addStatement("$T __exec = container.getEventExecutor()", executorServiceClass);
+        method.addStatement("$T __err = container.getErrorHandler()", errorHandler);
+        method.addStatement("final $T<?> __asyncWrapper = __wrapper", Event.class);
+
+        // Build the runAsync body
+        CodeBlock.Builder runBody = CodeBlock.builder();
+        if (plan.detachedUnit()) {
+            runBody.addStatement("$T __handler = container.$L()", plan.declaringClass(), plan.getterName());
+        }
+        runBody.addStatement("$T<?> __asyncPrev = $T.enter(__asyncWrapper)", Event.class, CHAIN_CONTEXT);
+        runBody.beginControlFlow("try");
+        if (plan.captureResult()) {
+            runBody.addStatement("$T __result = $L", TypeName.get(returnType), plan.invocation());
+            for (EventTriggerModel trigger : handler.getEventTriggers()) {
+                emitTriggerInto(runBody, trigger, index);
+            }
+        } else {
+            runBody.addStatement(plan.invocation());
+        }
+        runBody.nextControlFlow("finally");
+        runBody.addStatement("$T.exit(__asyncPrev)", CHAIN_CONTEXT);
+        runBody.endControlFlow();
+
+        CodeBlock asyncBody = plan.detachedUnit()
+                ? CodeBlock.builder()
+                        .add("container.runInDetachedEventScope(() -> {\n$L});\n", runBody.build())
+                        .build()
+                : runBody.build();
+
+        if (handler.hasRetries()) {
+            // Retry dispatch (#108): re-invoke on failure up to the budget, with backoff
+            // scheduled between attempts and (when a timeout is also set) each attempt
+            // time-boxed. The helper routes a single EventHandlerError carrying the attempt
+            // count once the budget is exhausted. Composes the #107 timeout per attempt.
+            method.addCode(CodeBlock.builder()
+                    .add(
+                            "$T.runAsyncWithRetry(() -> {\n$L}, new $T($L, $LL, $T.$L, $LL), __exec, __err, HANDLER_INFO_$L, event);\n",
+                            CHAIN_CONTEXT,
+                            asyncBody,
+                            ClassName.get("io.tiko.runtime", "RetryPolicy"),
+                            handler.getRetries(),
+                            handler.getBackoffNanos(),
+                            ClassName.get("io.tiko.annotations", "BackoffStrategy"),
+                            handler.getBackoffStrategy().name(),
+                            handler.getTimeoutNanos(),
+                            index)
+                    .build());
+        } else if (handler.hasTimeout()) {
+            // Timed dispatch (#107): run the invocation under a wall-clock budget. The runtime
+            // helper submits the body to the executor as an interruptible Future, interrupts it
+            // on breach (best-effort), frees the slot, and routes an EventHandlerError whose
+            // cause is a TimeoutException. It applies the same Error-vs-Exception routing as the
+            // plain async path below, so no whenComplete block is generated here.
+            method.addCode(CodeBlock.builder()
+                    .add(
+                            "$T.runAsyncWithTimeout(() -> {\n$L}, $LL, __exec, __err, HANDLER_INFO_$L, event);\n",
+                            CHAIN_CONTEXT,
+                            asyncBody,
+                            handler.getTimeoutNanos(),
+                            index)
+                    .build());
+        } else {
+            // Plain async dispatch (#111): route through runAsyncWithTimeout with a zero budget so
+            // the base async path shares the executor-submit, ROUTE_TO_DLQ overflow handling, and
+            // Error-vs-Exception routing of the timeout path. timeout = 0 means no time-boxing —
+            // runOnce degrades to a bare runAsync — so behaviour matches the former inline
+            // runAsync(...).whenComplete(...), minus the duplicated wiring (and now DLQ-covered: the
+            // inline form bypassed EventChainContext and so leaked the overflow signal to the publisher).
+            method.addCode(CodeBlock.builder()
+                    .add(
+                            "$T.runAsyncWithTimeout(() -> {\n$L}, 0L, __exec, __err, HANDLER_INFO_$L, event);\n",
+                            CHAIN_CONTEXT,
+                            asyncBody,
+                            index)
+                    .build());
+        }
+    }
+
+    /**
+     * Emits the sync dispatch body: an inline try/catch that invokes the handler and routes any
+     * failure to the {@link io.tiko.ErrorHandler} immediately, with a nested catch that logs an
+     * ErrorHandler that itself throws.
+     */
+    private void emitSyncDispatch(MethodSpec.Builder method, EventHandlerModel handler, int index, DispatchPlan plan) {
+        ClassName errorHandler = ClassName.get("io.tiko", "ErrorHandler");
+        ClassName eventHandlerError = ClassName.get("io.tiko", "EventHandlerError");
+        TypeMirror returnType = handler.getMethodElement().getReturnType();
+
+        method.beginControlFlow("try");
+        if (plan.captureResult()) {
+            method.addStatement("$T __result = $L", TypeName.get(returnType), plan.invocation());
+            for (EventTriggerModel trigger : handler.getEventTriggers()) {
+                emitTrigger(method, trigger, index);
+            }
+        } else {
+            method.addStatement(plan.invocation());
+        }
+        method.nextControlFlow("catch ($T __t)", Exception.class);
+        method.addStatement("$T __err = container.getErrorHandler()", errorHandler);
+        method.beginControlFlow("try");
+        method.addStatement("__err.onError(new $T(HANDLER_INFO_$L, event, __t))", eventHandlerError, index);
+        method.nextControlFlow("catch ($T __inner)", Exception.class);
+        method.addStatement("$T.logErrorHandlerFailure(__inner)", CHAIN_CONTEXT);
+        method.endControlFlow();
+        method.endControlFlow();
     }
 
     /**

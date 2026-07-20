@@ -143,8 +143,9 @@ class TicketHttpIT {
         int startedBefore = timer.startedCount();
         int endedBefore = timer.endedCount();
 
-        // Three requests: 1 POST, 1 GET success, 1 GET 404. The framework
-        // publishes RequestStarted + RequestEnding for each — three of each.
+        // Three requests: 1 POST, 1 GET success, 1 GET 404 — one unit each. The POST's
+        // TicketCreated event has two async handlers (NotificationSender, SlowAuditService),
+        // and each async invocation owns its own EVENT unit (#220) — five units total.
         HttpResponse<String> post = client.send(
                 HttpRequest.newBuilder()
                         .uri(URI.create("http://localhost:" + port + "/tickets"))
@@ -171,7 +172,12 @@ class TicketHttpIT {
                 HttpResponse.BodyHandlers.ofString());
         assertThat(get404.statusCode()).isEqualTo(404);
 
-        assertThat(timer.startedCount() - startedBefore).isEqualTo(3);
-        assertThat(timer.endedCount() - endedBefore).isEqualTo(3);
+        // The two async units complete off-thread — wait for the full drain before pinning
+        // the exact counts.
+        org.awaitility.Awaitility.await()
+                .atMost(java.time.Duration.ofSeconds(5))
+                .until(() -> timer.endedCount() - endedBefore >= 5);
+        assertThat(timer.startedCount() - startedBefore).isEqualTo(5);
+        assertThat(timer.endedCount() - endedBefore).isEqualTo(5);
     }
 }
