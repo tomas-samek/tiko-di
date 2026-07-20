@@ -474,7 +474,7 @@ public final class ContainerGenerator {
      * the aggregator can publish exactly once on the shared bus (#45).
      */
     private FieldSpec createPublishLifecycleEventsField() {
-        return FieldSpec.builder(TypeName.BOOLEAN, "publishLifecycleEvents", Modifier.PRIVATE, Modifier.FINAL)
+        return FieldSpec.builder(TypeName.BOOLEAN, PUBLISH_LIFECYCLE_FIELD, Modifier.PRIVATE, Modifier.FINAL)
                 .build();
     }
 
@@ -560,7 +560,7 @@ public final class ContainerGenerator {
                 .addParameter(EventBus.class, "eventBus")
                 .addParameter(ClassName.get("io.tiko", "ErrorHandler"), "errorHandler")
                 .addParameter(ClassName.get("java.util.concurrent", "ExecutorService"), "userEventExecutor")
-                .addParameter(TypeName.BOOLEAN, "publishLifecycleEvents")
+                .addParameter(TypeName.BOOLEAN, PUBLISH_LIFECYCLE_FIELD)
                 .addParameter(Duration.class, "shutdownTimeout")
                 .addParameter(ClassName.get("io.tiko.runtime", "TikoOptions"), "options")
                 .addStatement("this.eventBus = eventBus")
@@ -971,6 +971,12 @@ public final class ContainerGenerator {
     /** Lifecycle-publish gate shared by start/shutdown and both scope brackets (#45, #339). */
     private static final String IF_PUBLISH_LIFECYCLE = "if (publishLifecycleEvents)";
 
+    /** Standing per-container lifecycle-publish flag: field and constructor-parameter name (S1192). */
+    private static final String PUBLISH_LIFECYCLE_FIELD = "publishLifecycleEvents";
+
+    /** Per-call gate parameter of the {@code __runInEventScope} core (#433, S1192). */
+    private static final String PUBLISH_LIFECYCLE_PARAM = "__publishLifecycle";
+
     private static final String RETURN_EXISTING = "return __existing";
 
     private static final ClassName NO_SUCH_COMPONENT = ClassName.get("io.tiko", "NoSuchComponentException");
@@ -1016,7 +1022,7 @@ public final class ContainerGenerator {
         MethodSpec.Builder method = MethodSpec.methodBuilder("__runInEventScope")
                 .addModifiers(Modifier.PRIVATE)
                 .addParameter(Runnable.class, "task")
-                .addParameter(TypeName.BOOLEAN, "__publishLifecycle");
+                .addParameter(TypeName.BOOLEAN, PUBLISH_LIFECYCLE_PARAM);
         method.beginControlFlow("if ($T.TRUE.equals(__unitFrameOpen.get()))", Boolean.class);
         method.addStatement(
                 THROW_TYPE_WITH_MESSAGE,
@@ -1027,12 +1033,12 @@ public final class ContainerGenerator {
         method.addStatement("__unitFrameOpen.set($T.TRUE)", Boolean.class)
                 .addStatement("$T __eventId = $T.randomUUID().toString()", String.class, UUID.class)
                 .addStatement("$T __eventStart = $T.now()", Instant.class, Instant.class);
-        emitGatedUnitStartedPublish(method, "__publishLifecycle");
+        emitGatedUnitStartedPublish(method, PUBLISH_LIFECYCLE_PARAM);
         method.beginControlFlow("try")
                 .addStatement("task.run()")
                 .nextControlFlow("finally")
                 .addStatement("$T __eventEnd = $T.now()", Instant.class, Instant.class);
-        emitGatedUnitEndingPublish(method, "__publishLifecycle");
+        emitGatedUnitEndingPublish(method, PUBLISH_LIFECYCLE_PARAM);
         method.addStatement("__closeEventScope()").endControlFlow();
         return method.build();
     }
@@ -1087,12 +1093,12 @@ public final class ContainerGenerator {
         method.addStatement("__unitFrameOpen.set($T.TRUE)", Boolean.class)
                 .addStatement("$T __eventId = $T.randomUUID().toString()", String.class, UUID.class)
                 .addStatement("$T __eventStart = $T.now()", Instant.class, Instant.class);
-        emitGatedUnitStartedPublish(method, "publishLifecycleEvents");
+        emitGatedUnitStartedPublish(method, PUBLISH_LIFECYCLE_FIELD);
         method.beginControlFlow("try")
                 .addStatement("return supplier.get()")
                 .nextControlFlow("finally")
                 .addStatement("$T __eventEnd = $T.now()", Instant.class, Instant.class);
-        emitGatedUnitEndingPublish(method, "publishLifecycleEvents");
+        emitGatedUnitEndingPublish(method, PUBLISH_LIFECYCLE_FIELD);
         method.addStatement("__closeEventScope()").endControlFlow();
         return method.build();
     }
