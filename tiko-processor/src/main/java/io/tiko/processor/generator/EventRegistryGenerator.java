@@ -186,16 +186,19 @@ public final class EventRegistryGenerator {
             method.addStatement("$T __handler = container.$L()", declaringClass, getterName);
         }
 
-        boolean captureResult = shouldCaptureResult(handler);
-        String invocation = handler.hasEventWrapper()
-                ? "__handler." + handler.getMethodName() + "(event, __wrapper)"
-                : "__handler." + handler.getMethodName() + "(event)";
+        DispatchPlan plan = new DispatchPlan(
+                detachedUnit,
+                declaringClass,
+                getterName,
+                shouldCaptureResult(handler),
+                handler.hasEventWrapper()
+                        ? "__handler." + handler.getMethodName() + "(event, __wrapper)"
+                        : "__handler." + handler.getMethodName() + "(event)");
 
         if (handler.isAsync()) {
-            emitAsyncDispatch(
-                    method, handler, index, detachedUnit, declaringClass, getterName, captureResult, invocation);
+            emitAsyncDispatch(method, handler, index, plan);
         } else {
-            emitSyncDispatch(method, handler, index, captureResult, invocation);
+            emitSyncDispatch(method, handler, index, plan);
         }
 
         method.nextControlFlow("finally");
@@ -224,6 +227,18 @@ public final class EventRegistryGenerator {
     }
 
     /**
+     * Derived per-handler facts shared by the sync and async dispatch emitters — computed once in
+     * {@link #createDispatcherMethod} so the emitters take one cohesive argument instead of a long
+     * parameter list.
+     */
+    private record DispatchPlan(
+            boolean detachedUnit,
+            ClassName declaringClass,
+            String getterName,
+            boolean captureResult,
+            String invocation) {}
+
+    /**
      * Emits the async dispatch body: submit the handler invocation to the container's event
      * executor and route exceptional completion to the {@link io.tiko.ErrorHandler}. A detached
      * unit ({@code @EventHandler(async = true)} on a non-lifecycle event) wraps the invocation in
@@ -232,15 +247,7 @@ public final class EventRegistryGenerator {
      * {@code runAsyncWithTimeout} with a zero budget so all three share overflow handling and
      * Error-vs-Exception routing (#111).
      */
-    private void emitAsyncDispatch(
-            MethodSpec.Builder method,
-            EventHandlerModel handler,
-            int index,
-            boolean detachedUnit,
-            ClassName declaringClass,
-            String getterName,
-            boolean captureResult,
-            String invocation) {
+    private void emitAsyncDispatch(MethodSpec.Builder method, EventHandlerModel handler, int index, DispatchPlan plan) {
         ClassName errorHandler = ClassName.get("io.tiko", "ErrorHandler");
         ClassName executorServiceClass = ClassName.get(ExecutorService.class);
         TypeMirror returnType = handler.getMethodElement().getReturnType();
@@ -251,24 +258,24 @@ public final class EventRegistryGenerator {
 
         // Build the runAsync body
         CodeBlock.Builder runBody = CodeBlock.builder();
-        if (detachedUnit) {
-            runBody.addStatement("$T __handler = container.$L()", declaringClass, getterName);
+        if (plan.detachedUnit()) {
+            runBody.addStatement("$T __handler = container.$L()", plan.declaringClass(), plan.getterName());
         }
         runBody.addStatement("$T<?> __asyncPrev = $T.enter(__asyncWrapper)", Event.class, CHAIN_CONTEXT);
         runBody.beginControlFlow("try");
-        if (captureResult) {
-            runBody.addStatement("$T __result = $L", TypeName.get(returnType), invocation);
+        if (plan.captureResult()) {
+            runBody.addStatement("$T __result = $L", TypeName.get(returnType), plan.invocation());
             for (EventTriggerModel trigger : handler.getEventTriggers()) {
                 emitTriggerInto(runBody, trigger, index);
             }
         } else {
-            runBody.addStatement(invocation);
+            runBody.addStatement(plan.invocation());
         }
         runBody.nextControlFlow("finally");
         runBody.addStatement("$T.exit(__asyncPrev)", CHAIN_CONTEXT);
         runBody.endControlFlow();
 
-        CodeBlock asyncBody = detachedUnit
+        CodeBlock asyncBody = plan.detachedUnit()
                 ? CodeBlock.builder()
                         .add("container.runInDetachedEventScope(() -> {\n$L});\n", runBody.build())
                         .build()
@@ -328,20 +335,19 @@ public final class EventRegistryGenerator {
      * failure to the {@link io.tiko.ErrorHandler} immediately, with a nested catch that logs an
      * ErrorHandler that itself throws.
      */
-    private void emitSyncDispatch(
-            MethodSpec.Builder method, EventHandlerModel handler, int index, boolean captureResult, String invocation) {
+    private void emitSyncDispatch(MethodSpec.Builder method, EventHandlerModel handler, int index, DispatchPlan plan) {
         ClassName errorHandler = ClassName.get("io.tiko", "ErrorHandler");
         ClassName eventHandlerError = ClassName.get("io.tiko", "EventHandlerError");
         TypeMirror returnType = handler.getMethodElement().getReturnType();
 
         method.beginControlFlow("try");
-        if (captureResult) {
-            method.addStatement("$T __result = $L", TypeName.get(returnType), invocation);
+        if (plan.captureResult()) {
+            method.addStatement("$T __result = $L", TypeName.get(returnType), plan.invocation());
             for (EventTriggerModel trigger : handler.getEventTriggers()) {
                 emitTrigger(method, trigger, index);
             }
         } else {
-            method.addStatement(invocation);
+            method.addStatement(plan.invocation());
         }
         method.nextControlFlow("catch ($T __t)", Exception.class);
         method.addStatement("$T __err = container.getErrorHandler()", errorHandler);
