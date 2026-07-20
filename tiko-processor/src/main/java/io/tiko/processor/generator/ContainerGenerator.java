@@ -567,7 +567,8 @@ public final class ContainerGenerator {
                 .addStatement("this.errorHandler = errorHandler")
                 .addStatement("this.eventExecutor = userEventExecutor != null ? userEventExecutor : "
                         + "io.tiko.runtime.DefaultEventExecutorFactory.create(options.queueCapacity(), "
-                        + "options.onOverflow())")
+                        + "options.onOverflow(), options.eventExecutorCoreSize(), options.eventExecutorMaxSize(), "
+                        + "options.eventExecutorKeepAlive())")
                 .addStatement("this.ownsEventExecutor = (userEventExecutor == null)")
                 .addStatement("this.publishLifecycleEvents = publishLifecycleEvents")
                 .addStatement("this.shutdownTimeout = shutdownTimeout")
