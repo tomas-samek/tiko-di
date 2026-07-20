@@ -40,9 +40,13 @@ class ContainerGeneratorEventExecutorTest {
         assertThat(content).contains("EventBus eventBus, ErrorHandler errorHandler");
         assertThat(content).contains("ExecutorService userEventExecutor");
         // Default executor wired when user-supplied is null, parameterized by the configured
-        // queue capacity and overflow policy (#109).
+        // queue capacity and overflow policy (#109) AND the pool-sizing knobs (#435): the
+        // single-module container must call the five-arg factory overload so
+        // eventExecutorCoreSize/MaxSize/KeepAlive are honored, not silently dropped.
         assertThat(content)
-                .contains("DefaultEventExecutorFactory.create(options.queueCapacity(), options.onOverflow())");
+                .contains("DefaultEventExecutorFactory.create(options.queueCapacity(), options.onOverflow(), "
+                        + "options.eventExecutorCoreSize(), options.eventExecutorMaxSize(), "
+                        + "options.eventExecutorKeepAlive())");
         assertThat(content).contains("userEventExecutor != null ? userEventExecutor");
         // ownsEventExecutor flag
         assertThat(content).contains("this.ownsEventExecutor = (userEventExecutor == null)");

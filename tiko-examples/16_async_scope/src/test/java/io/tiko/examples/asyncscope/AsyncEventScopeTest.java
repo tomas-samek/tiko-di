@@ -78,9 +78,11 @@ class AsyncEventScopeTest {
     @Test
     void callerRunsDetachmentPreservesTheOuterUnit() throws Exception {
         // A user-supplied executor pins the saturation shape deterministically: one worker,
-        // a queue of one, JDK CallerRunsPolicy running overflow inline on the caller.
-        // (Deliberately NOT the TikoOptions pool-sizing knobs: the generated single-module
-        // constructor currently drops eventExecutorCoreSize/MaxSize — filed as a follow-up.)
+        // a queue of one, JDK CallerRunsPolicy running overflow inline on the caller. The
+        // TikoOptions pool-sizing knobs now feed the single-module pool too (#435, see
+        // PoolSizingKnobsTest); an explicit executor is kept here only to fix the exact
+        // queue/rejection shape this detachment test depends on, independent of the framework's
+        // overflow-policy wiring.
         var executor = new java.util.concurrent.ThreadPoolExecutor(
                 1,
                 1,
