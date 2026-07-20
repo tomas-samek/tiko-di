@@ -8,10 +8,13 @@ import io.tiko.events.ApplicationEndingEvent;
 import io.tiko.events.ApplicationStartedEvent;
 import io.tiko.events.EventEndingEvent;
 import io.tiko.events.EventStartedEvent;
+import io.tiko.examples.multimodule.modulea.UserCreatedEvent;
 import io.tiko.runtime.AggregatingContainer;
 import io.tiko.runtime.LocalEventBus;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
@@ -100,6 +103,40 @@ class MultiModuleLifecycleEventsTest {
         try {
             container.start();
             assertThat(container.supplyInEventScope(() -> "value")).isEqualTo("value");
+        } finally {
+            container.shutdown();
+        }
+
+        assertThat(started).hasSize(1);
+        assertThat(ending).hasSize(1);
+        assertThat(ending.get(0).eventId()).isEqualTo(started.get(0).eventId());
+    }
+
+    @Test
+    void asyncHandlerDispatchPublishesExactlyOneLifecyclePairAcrossModules() throws InterruptedException {
+        // #433: async @EventHandler dispatch under an aggregator opens its own EVENT unit on a
+        // per-module container built with publishLifecycleEvents=false. The aggregator is not on
+        // the async dispatch path (generated dispatch calls the module container directly), so the
+        // module container is the sole publisher of the detached unit's pair — exactly one
+        // EventStarted/EventEnding pair, one eventId, must reach the shared bus.
+        EventBus eventBus = newLocalEventBus();
+        List<EventStartedEvent> started = new CopyOnWriteArrayList<>();
+        List<EventEndingEvent> ending = new CopyOnWriteArrayList<>();
+        CountDownLatch pairComplete = new CountDownLatch(1);
+        eventBus.subscribe(EventStartedEvent.class, started::add);
+        eventBus.subscribe(EventEndingEvent.class, e -> {
+            ending.add(e);
+            pairComplete.countDown();
+        });
+
+        Container container = new AggregatingContainer(eventBus, ctx -> {}, null);
+        try {
+            container.start();
+            // AsyncUserAuditor (module-a) handles this async → detached EVENT unit on the executor.
+            eventBus.publish(new UserCreatedEvent(1L, "Alice", "alice@example.com"));
+            assertThat(pairComplete.await(5, TimeUnit.SECONDS))
+                    .as("async detached unit must complete and publish its EventEndingEvent")
+                    .isTrue();
         } finally {
             container.shutdown();
         }

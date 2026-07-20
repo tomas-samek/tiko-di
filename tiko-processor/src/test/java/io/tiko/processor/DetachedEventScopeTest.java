@@ -34,14 +34,16 @@ class DetachedEventScopeTest {
         String content = new String(container.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
 
         // One chain: method present; detachment saves both ThreadLocals (the __savedScope
-        // prefix pins the SAVE, not an incidental getter), clears to a fresh map, delegates,
-        // restores in finally; and the signature stays package-private.
+        // prefix pins the SAVE, not an incidental getter), clears to a fresh map, delegates to
+        // the scope core with the publish flag forced true (#433 — a detached async unit is its
+        // own sole lifecycle publisher), restores in finally; and the signature stays
+        // package-private.
         assertThat(content)
                 .contains("void runInDetachedEventScope(Runnable task)")
                 .contains("__savedScope = eventScoped.get()")
                 .contains("__savedFrameOpen = __unitFrameOpen.get()")
                 .contains("eventScoped.set(new LinkedHashMap<>())")
-                .contains("runInEventScope(task)")
+                .contains("__runInEventScope(task, true)")
                 .contains("eventScoped.set(__savedScope)")
                 .contains("__unitFrameOpen.set(__savedFrameOpen)")
                 .doesNotContain("public void runInDetachedEventScope");
