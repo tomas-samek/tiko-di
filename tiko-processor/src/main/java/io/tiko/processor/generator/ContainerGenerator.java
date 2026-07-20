@@ -196,6 +196,7 @@ public final class ContainerGenerator {
 
         // Add scope management methods
         containerBuilder.addMethod(createRunInEventScopeMethod());
+        containerBuilder.addMethod(createRunInEventScopeCoreMethod());
         containerBuilder.addMethod(createRunInDetachedEventScopeMethod());
         containerBuilder.addMethod(createSupplyInEventScopeMethod());
         containerBuilder.addMethod(createPublishUnitLifecycleMethod());
@@ -473,7 +474,7 @@ public final class ContainerGenerator {
      * the aggregator can publish exactly once on the shared bus (#45).
      */
     private FieldSpec createPublishLifecycleEventsField() {
-        return FieldSpec.builder(TypeName.BOOLEAN, "publishLifecycleEvents", Modifier.PRIVATE, Modifier.FINAL)
+        return FieldSpec.builder(TypeName.BOOLEAN, PUBLISH_LIFECYCLE_FIELD, Modifier.PRIVATE, Modifier.FINAL)
                 .build();
     }
 
@@ -559,7 +560,7 @@ public final class ContainerGenerator {
                 .addParameter(EventBus.class, "eventBus")
                 .addParameter(ClassName.get("io.tiko", "ErrorHandler"), "errorHandler")
                 .addParameter(ClassName.get("java.util.concurrent", "ExecutorService"), "userEventExecutor")
-                .addParameter(TypeName.BOOLEAN, "publishLifecycleEvents")
+                .addParameter(TypeName.BOOLEAN, PUBLISH_LIFECYCLE_FIELD)
                 .addParameter(Duration.class, "shutdownTimeout")
                 .addParameter(ClassName.get("io.tiko.runtime", "TikoOptions"), "options")
                 .addStatement("this.eventBus = eventBus")
@@ -970,6 +971,12 @@ public final class ContainerGenerator {
     /** Lifecycle-publish gate shared by start/shutdown and both scope brackets (#45, #339). */
     private static final String IF_PUBLISH_LIFECYCLE = "if (publishLifecycleEvents)";
 
+    /** Standing per-container lifecycle-publish flag: field and constructor-parameter name (S1192). */
+    private static final String PUBLISH_LIFECYCLE_FIELD = "publishLifecycleEvents";
+
+    /** Per-call gate parameter of the {@code __runInEventScope} core (#433, S1192). */
+    private static final String PUBLISH_LIFECYCLE_PARAM = "__publishLifecycle";
+
     private static final String RETURN_EXISTING = "return __existing";
 
     private static final ClassName NO_SUCH_COMPONENT = ClassName.get("io.tiko", "NoSuchComponentException");
@@ -985,13 +992,37 @@ public final class ContainerGenerator {
             .build();
 
     /**
-     * Creates runInEventScope method.
+     * Creates the public {@code runInEventScope} method. Delegates to the
+     * {@code __runInEventScope(task, publishLifecycle)} core with the container's standing
+     * {@code publishLifecycleEvents} flag — so a per-module container under an
+     * AggregatingContainer (flag off) stays silent and the aggregator publishes the sole pair.
      */
     private MethodSpec createRunInEventScopeMethod() {
-        MethodSpec.Builder method = MethodSpec.methodBuilder("runInEventScope")
+        return MethodSpec.methodBuilder("runInEventScope")
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
-                .addParameter(Runnable.class, "task");
+                .addParameter(Runnable.class, "task")
+                .addStatement("__runInEventScope(task, publishLifecycleEvents)")
+                .build();
+    }
+
+    /**
+     * Creates the private {@code __runInEventScope(Runnable, boolean)} core (#433). Holds the
+     * single-frame guard, frame bookkeeping, and the unit-lifecycle bracket; the
+     * {@code __publishLifecycle} parameter — not the standing field — decides whether the
+     * {@code EventStartedEvent}/{@code EventEndingEvent} pair is published.
+     *
+     * <p>Public {@link #createRunInEventScopeMethod()} passes the standing
+     * {@code publishLifecycleEvents} flag (sync path: aggregator brackets the unit, module
+     * stays silent). {@link #createRunInDetachedEventScopeMethod()} forces {@code true}: an
+     * async detached unit is bracketed by no one else — the aggregator is not on the async
+     * dispatch path — so the module container is its sole lifecycle publisher.
+     */
+    private MethodSpec createRunInEventScopeCoreMethod() {
+        MethodSpec.Builder method = MethodSpec.methodBuilder("__runInEventScope")
+                .addModifiers(Modifier.PRIVATE)
+                .addParameter(Runnable.class, "task")
+                .addParameter(TypeName.BOOLEAN, PUBLISH_LIFECYCLE_PARAM);
         method.beginControlFlow("if ($T.TRUE.equals(__unitFrameOpen.get()))", Boolean.class);
         method.addStatement(
                 THROW_TYPE_WITH_MESSAGE,
@@ -1002,12 +1033,12 @@ public final class ContainerGenerator {
         method.addStatement("__unitFrameOpen.set($T.TRUE)", Boolean.class)
                 .addStatement("$T __eventId = $T.randomUUID().toString()", String.class, UUID.class)
                 .addStatement("$T __eventStart = $T.now()", Instant.class, Instant.class);
-        emitGatedUnitStartedPublish(method);
+        emitGatedUnitStartedPublish(method, PUBLISH_LIFECYCLE_PARAM);
         method.beginControlFlow("try")
                 .addStatement("task.run()")
                 .nextControlFlow("finally")
                 .addStatement("$T __eventEnd = $T.now()", Instant.class, Instant.class);
-        emitGatedUnitEndingPublish(method);
+        emitGatedUnitEndingPublish(method, PUBLISH_LIFECYCLE_PARAM);
         method.addStatement("__closeEventScope()").endControlFlow();
         return method.build();
     }
@@ -1030,7 +1061,7 @@ public final class ContainerGenerator {
                 .addStatement("eventScoped.set(new $T<>())", LinkedHashMap.class)
                 .addStatement("__unitFrameOpen.set($T.FALSE)", Boolean.class);
         method.beginControlFlow("try")
-                .addStatement("runInEventScope(task)")
+                .addStatement("__runInEventScope(task, true)")
                 .nextControlFlow("finally")
                 .addStatement("eventScoped.set(__savedScope)")
                 .addStatement("__unitFrameOpen.set(__savedFrameOpen)")
@@ -1062,12 +1093,12 @@ public final class ContainerGenerator {
         method.addStatement("__unitFrameOpen.set($T.TRUE)", Boolean.class)
                 .addStatement("$T __eventId = $T.randomUUID().toString()", String.class, UUID.class)
                 .addStatement("$T __eventStart = $T.now()", Instant.class, Instant.class);
-        emitGatedUnitStartedPublish(method);
+        emitGatedUnitStartedPublish(method, PUBLISH_LIFECYCLE_FIELD);
         method.beginControlFlow("try")
                 .addStatement("return supplier.get()")
                 .nextControlFlow("finally")
                 .addStatement("$T __eventEnd = $T.now()", Instant.class, Instant.class);
-        emitGatedUnitEndingPublish(method);
+        emitGatedUnitEndingPublish(method, PUBLISH_LIFECYCLE_FIELD);
         method.addStatement("__closeEventScope()").endControlFlow();
         return method.build();
     }
@@ -1079,15 +1110,15 @@ public final class ContainerGenerator {
      * published by the aggregator inside the innermost frame — instead of one pair per
      * nested module frame.
      */
-    private void emitGatedUnitStartedPublish(MethodSpec.Builder method) {
-        method.beginControlFlow(IF_PUBLISH_LIFECYCLE);
+    private void emitGatedUnitStartedPublish(MethodSpec.Builder method, String gateExpression) {
+        method.beginControlFlow("if ($L)", gateExpression);
         method.addStatement("__publishUnitLifecycle(new $T(__eventId, __eventStart))", EVENT_STARTED);
         method.endControlFlow();
     }
 
     /** EventEndingEvent counterpart of {@link #emitGatedUnitStartedPublish} (#339). */
-    private void emitGatedUnitEndingPublish(MethodSpec.Builder method) {
-        method.beginControlFlow(IF_PUBLISH_LIFECYCLE);
+    private void emitGatedUnitEndingPublish(MethodSpec.Builder method, String gateExpression) {
+        method.beginControlFlow("if ($L)", gateExpression);
         method.addStatement(
                 "__publishUnitLifecycle(new $T(__eventId, __eventEnd, $T.between(__eventStart, __eventEnd)))",
                 EVENT_ENDING,

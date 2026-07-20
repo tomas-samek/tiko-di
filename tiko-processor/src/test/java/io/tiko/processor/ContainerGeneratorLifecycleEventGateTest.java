@@ -59,32 +59,54 @@ class ContainerGeneratorLifecycleEventGateTest {
     }
 
     @Test
-    void runInEventScopeGatesUnitLifecyclePublishes() throws IOException {
-        assertUnitLifecyclePublishesGated("public void runInEventScope");
+    void runInEventScopeDelegatesToCoreWithStandingFlag() throws IOException {
+        // #433: the public sync bracket carries no publish of its own — it passes the container's
+        // standing publishLifecycleEvents flag to the __runInEventScope core, so a per-module
+        // container under an AggregatingContainer (flag off) stays silent for sync units and the
+        // aggregator remains the sole publisher.
+        String content = generateContainerSource();
+        assertThat(content).contains("__runInEventScope(task, publishLifecycleEvents)");
+    }
+
+    @Test
+    void detachedScopeForcesUnitLifecyclePublish() throws IOException {
+        // #433: an async detached unit is bracketed by no aggregator (async dispatch does not
+        // traverse the aggregator's scope path), so the module container is its sole lifecycle
+        // publisher — detached forces the core's publish flag true regardless of the standing flag.
+        String content = generateContainerSource();
+        assertThat(content).contains("__runInEventScope(task, true)");
+    }
+
+    @Test
+    void coreScopeGatesUnitLifecyclePublishesOnParameter() throws IOException {
+        assertUnitLifecyclePublishesGated("private void __runInEventScope", "__publishLifecycle");
     }
 
     @Test
     void supplyInEventScopeGatesUnitLifecyclePublishes() throws IOException {
-        assertUnitLifecyclePublishesGated("public <T> T supplyInEventScope");
+        assertUnitLifecyclePublishesGated("public <T> T supplyInEventScope", "publishLifecycleEvents");
     }
 
     /**
-     * #339: per-module containers under an AggregatingContainer are constructed with
-     * {@code publishLifecycleEvents=false}; their unit-of-work brackets must not publish
-     * their own EventStarted/EventEnding pair — the aggregator publishes exactly one.
+     * #339 / #433: unit-of-work brackets publish their EventStarted/EventEnding pair only when
+     * their gate is set. The sync core ({@code __runInEventScope}) gates on its
+     * {@code __publishLifecycle} parameter; {@code supplyInEventScope} gates on the standing
+     * {@code publishLifecycleEvents} field — so a module container under an AggregatingContainer
+     * (field off) does not double-publish the aggregator's single pair.
      */
-    private void assertUnitLifecyclePublishesGated(String methodSignature) throws IOException {
+    private void assertUnitLifecyclePublishesGated(String methodSignature, String gateExpression) throws IOException {
         String content = generateContainerSource();
+        String gate = "if (" + gateExpression + ")";
 
         int methodPos = content.indexOf(methodSignature);
         assertThat(methodPos).as("scope method present").isPositive();
 
-        int startedGate = content.indexOf("if (publishLifecycleEvents)", methodPos);
+        int startedGate = content.indexOf(gate, methodPos);
         int startedPublish = content.indexOf("__publishUnitLifecycle(new EventStartedEvent", methodPos);
         assertThat(startedGate).as("gate before EventStartedEvent publish").isPositive();
         assertThat(startedPublish).isGreaterThan(startedGate);
 
-        int endingGate = content.indexOf("if (publishLifecycleEvents)", startedPublish);
+        int endingGate = content.indexOf(gate, startedPublish);
         int endingPublish = content.indexOf("__publishUnitLifecycle(new EventEndingEvent", startedPublish);
         assertThat(endingGate).as("gate before EventEndingEvent publish").isPositive();
         assertThat(endingPublish).isGreaterThan(endingGate);

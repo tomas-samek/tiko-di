@@ -264,10 +264,12 @@ gets the same shape). Concretely:
   thread (`CALLER_RUNS`), the `timeout` budget cannot bound it — the time-box arms only
   after the inline run completes. The unit itself (fresh beans, teardown) still applies.
 
-Multi-module note: in aggregated (multi-module) containers, async units get correct frames,
-per-module bean isolation, and teardown — but publish no lifecycle events (module
-containers are constructed silent; the aggregator is not in the async dispatch path —
-tracked by [#433](https://github.com/tomas-samek/tiko-di/issues/433)).
+Multi-module note: in aggregated (multi-module) containers, async units behave exactly as
+single-module ones — correct frames, per-module bean isolation, teardown, **and** one
+`EventStartedEvent`/`EventEndingEvent` pair per dispatch (per retry attempt) on the shared
+bus. The aggregator is not on the async dispatch path, so the per-module container publishes
+its detached unit's lifecycle itself, even though it stays silent for the *sync* units the
+aggregator brackets (resolved in [#433](https://github.com/tomas-samek/tiko-di/issues/433)).
 
 ## Graceful shutdown drain
 
