@@ -287,8 +287,21 @@ public final class EventChainContext {
             ErrorHandler errorHandler,
             EventHandlerInfo info,
             Object event) {
-        CompletableFuture<Void> once =
-                submitOrDlq(() -> runOnce(body, policy.timeoutNanos(), executor), event, errorHandler);
+        CompletableFuture<Void> once;
+        try {
+            once = submitOrDlq(() -> runOnce(body, policy.timeoutNanos(), executor), event, errorHandler);
+        } catch (EventQueueOverflowException overflow) {
+            // THROW overflow on the body submit. The initial attempt runs on the publisher's thread,
+            // so its overflow must propagate (the THROW-to-publisher contract). A retried attempt
+            // (attemptIndex > 0) runs on a worker thread off that stack, where the exception has
+            // nowhere to go — degrade it to an observable logged drop instead of letting it vanish
+            // (#440), mirroring the re-submission handling in executeOrDlq (#395).
+            if (attemptIndex == 0) {
+                throw overflow;
+            }
+            logDroppedRetryOverflow(event);
+            return;
+        }
         if (once == null) return; // overflowed on submit → dead-lettered, loop abandoned
         once.whenComplete((ignored, throwable) -> {
             if (throwable == null) {
@@ -448,11 +461,13 @@ public final class EventChainContext {
     }
 
     /**
-     * Observability for an async retry re-submission dropped because the event queue overflowed
-     * under {@code OverflowPolicy.THROW} (#395). Unlike the initial dispatch, a retry re-submission
-     * runs off the publishing thread, so the {@link EventQueueOverflowException} has nowhere to
-     * propagate; this WARNING records the dropped event rather than letting it vanish on a scheduler
-     * thread, mirroring {@link #logDroppedDuringShutdown(Object)}.
+     * Observability for an async retry submission dropped because the event queue overflowed under
+     * {@code OverflowPolicy.THROW}. Covers both the backoff re-submission of the next attempt (#395,
+     * {@link #executeOrDlq}) and a retried attempt's own body submit (#440, {@link #attempt}). Unlike
+     * the initial dispatch, a retry runs off the publishing thread, so the
+     * {@link EventQueueOverflowException} has nowhere to propagate; this WARNING records the dropped
+     * event rather than letting it vanish on a scheduler or worker thread, mirroring
+     * {@link #logDroppedDuringShutdown(Object)}.
      */
     private static void logDroppedRetryOverflow(Object event) {
         String type = event == null ? "null" : event.getClass().getName();
