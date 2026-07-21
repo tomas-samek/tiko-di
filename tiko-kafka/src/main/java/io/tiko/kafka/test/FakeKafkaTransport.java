@@ -1,9 +1,11 @@
 package io.tiko.kafka.test;
 
 import io.tiko.Container;
-import io.tiko.TransportBootstrap;
 import io.tiko.kafka.KafkaTransport;
+import io.tiko.kafka.runtime.GeneratedSinkDescriptor;
+import io.tiko.kafka.runtime.GeneratedSourceDescriptor;
 import io.tiko.kafka.runtime.KafkaBootstrapSupport;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -23,7 +25,7 @@ import java.util.Objects;
  * }
  * }</pre>
  */
-public final class FakeKafkaTransport implements TransportBootstrap {
+public final class FakeKafkaTransport implements KafkaTransport {
 
     private final KafkaTransport original;
     private final FakeKafkaBroker broker;
@@ -39,6 +41,18 @@ public final class FakeKafkaTransport implements TransportBootstrap {
         Objects.requireNonNull(original, "original");
         Objects.requireNonNull(broker, "broker");
         return new FakeKafkaTransport(original, broker);
+    }
+
+    /** Delegates to the wrapped transport's generated {@code @KafkaSource} descriptors (#432). */
+    @Override
+    public List<GeneratedSourceDescriptor> sources() {
+        return original.sources();
+    }
+
+    /** Delegates to the wrapped transport's generated {@code @KafkaSink} descriptors (#432). */
+    @Override
+    public List<GeneratedSinkDescriptor> sinks() {
+        return original.sinks();
     }
 
     @Override
