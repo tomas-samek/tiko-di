@@ -6,6 +6,7 @@ import io.tiko.EventBus;
 import io.tiko.EventDispatchRejected;
 import io.tiko.EventHandlerError;
 import io.tiko.EventHandlerInfo;
+import io.tiko.EventQueueOverflowException;
 import io.tiko.annotations.BackoffStrategy;
 import java.lang.reflect.Array;
 import java.util.Collection;
@@ -436,7 +437,29 @@ public final class EventChainContext {
             executor.execute(task);
         } catch (DlqOverflowSignal ignored) {
             routeDispatchRejected(event, errorHandler);
+        } catch (EventQueueOverflowException overflow) {
+            // THROW policy, but off the publisher's stack: this re-submission runs on the backoff
+            // scheduler thread (or a worker thread), where no publisher can receive the exception.
+            // Degrade to an observable logged drop rather than letting it vanish (#395), mirroring
+            // the shutdown-degradation path. The synchronous initial submit still propagates THROW
+            // to the publisher — that path never routes through here.
+            logDroppedRetryOverflow(event);
         }
+    }
+
+    /**
+     * Observability for an async retry re-submission dropped because the event queue overflowed
+     * under {@code OverflowPolicy.THROW} (#395). Unlike the initial dispatch, a retry re-submission
+     * runs off the publishing thread, so the {@link EventQueueOverflowException} has nowhere to
+     * propagate; this WARNING records the dropped event rather than letting it vanish on a scheduler
+     * thread, mirroring {@link #logDroppedDuringShutdown(Object)}.
+     */
+    private static void logDroppedRetryOverflow(Object event) {
+        String type = event == null ? "null" : event.getClass().getName();
+        LoggerHolder.LOG.log(
+                System.Logger.Level.WARNING,
+                "Event of type " + type + " was dropped: an async retry re-submission overflowed the "
+                        + "event queue (overflow policy = THROW).");
     }
 
     /**
