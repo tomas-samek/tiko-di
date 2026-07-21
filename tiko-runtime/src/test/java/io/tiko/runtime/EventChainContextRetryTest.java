@@ -225,14 +225,10 @@ class EventChainContextRetryTest {
             }
         };
         List<ErrorContext> errors = new CopyOnWriteArrayList<>();
+        var policy = new RetryPolicy(2, Duration.ofMillis(20).toNanos(), BackoffStrategy.FIXED, 0L);
         try {
-            assertThatThrownBy(() -> EventChainContext.runAsyncWithRetry(
-                            () -> {},
-                            new RetryPolicy(2, Duration.ofMillis(20).toNanos(), BackoffStrategy.FIXED, 0L),
-                            pool,
-                            errors::add,
-                            INFO,
-                            "evt"))
+            assertThatThrownBy(
+                            () -> EventChainContext.runAsyncWithRetry(() -> {}, policy, pool, errors::add, INFO, "evt"))
                     .isInstanceOf(EventQueueOverflowException.class);
         } finally {
             pool.shutdownNow();
