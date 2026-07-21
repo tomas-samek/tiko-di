@@ -36,6 +36,10 @@ class ContainerGeneratorEventExecutorTest {
         assertThat(content).contains("ExecutorService eventExecutor");
         assertThat(content).contains("boolean ownsEventExecutor");
         assertThat(content).contains("ExecutorService getEventExecutor()");
+        // #438: the single-module container samples its framework-owned pool, mirroring
+        // AggregatingContainer — only when it owns a ThreadPoolExecutor, empty otherwise.
+        assertThat(content).contains("Optional<ExecutorMetrics> eventExecutorMetrics()");
+        assertThat(content).contains("ownsEventExecutor && eventExecutor instanceof ThreadPoolExecutor tpe");
         // Constructor takes EventBus, ErrorHandler, ExecutorService userEventExecutor, ...
         assertThat(content).contains("EventBus eventBus, ErrorHandler errorHandler");
         assertThat(content).contains("ExecutorService userEventExecutor");
