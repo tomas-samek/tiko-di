@@ -84,6 +84,48 @@ class FakeKafkaTransportTest {
     }
 
     @Test
+    void isAKafkaTransportAndDelegatesDescriptorsToTheWrapped() {
+        // #432: the fake must itself be a KafkaTransport (type symmetry — so it can be the target of
+        // a further replaceTransport(KafkaTransport.class, ...) match and satisfy code written
+        // against the interface), delegating the descriptor accessors to the wrapped transport.
+        List<GeneratedSourceDescriptor> sources = List.of();
+        List<GeneratedSinkDescriptor> sinks = List.of(new GeneratedSinkDescriptor(
+                "orders-out",
+                "orderId",
+                OrderPlaced.class,
+                KafkaSerializer.Default.class,
+                (container, event) -> container.get(OrderKafkaPublisher.class).toKafka((OrderPlaced) event),
+                p -> String.valueOf(((OrderPlaced) p).orderId())));
+        KafkaTransport original = new KafkaTransport() {
+            @Override
+            public List<GeneratedSourceDescriptor> sources() {
+                return sources;
+            }
+
+            @Override
+            public List<GeneratedSinkDescriptor> sinks() {
+                return sinks;
+            }
+
+            @Override
+            public void start(Container container) {
+                throw new AssertionError("the wrapped transport must never be started");
+            }
+
+            @Override
+            public void shutdown() {
+                /* no-op test fixture */
+            }
+        };
+
+        FakeKafkaTransport fake = FakeKafkaTransport.over(original, new FakeKafkaBroker());
+
+        assertThat(fake).isInstanceOf(KafkaTransport.class);
+        assertThat(fake.sources()).isSameAs(sources);
+        assertThat(fake.sinks()).isSameAs(sinks);
+    }
+
+    @Test
     void substitutionFailsFastWhenNoKafkaTransportIsDiscovered() {
         FakeKafkaBroker broker = new FakeKafkaBroker();
 
