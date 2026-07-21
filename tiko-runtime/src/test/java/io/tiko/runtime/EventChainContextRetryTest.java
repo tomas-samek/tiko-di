@@ -1,6 +1,7 @@
 package io.tiko.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
 import io.tiko.ErrorContext;
@@ -164,6 +165,75 @@ class EventChainContextRetryTest {
                             }));
             // THROW degrades to a logged drop off-thread — it is not routed to the ErrorHandler.
             assertThat(errors).isEmpty();
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void throwPolicyRetriedAttemptBodySubmitOverflowIsLoggedNotSilentlyLost() {
+        // #440: distinct from #395. Here the retry re-submission SUCCEEDS, but the retried attempt's
+        // own handler-body submit then overflows the queue under THROW — on a worker thread, off the
+        // publisher's stack. That EventQueueOverflowException must degrade to an observable logged
+        // drop instead of vanishing. The executor throws only on the 3rd execute: (1) initial body,
+        // (2) re-submission of the next attempt, (3) the retried attempt's body submit.
+        CapturingLoggerFinder.clear();
+        AtomicInteger executeCalls = new AtomicInteger();
+        var pool = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.SECONDS, new LinkedBlockingQueue<>()) {
+            @Override
+            public void execute(Runnable command) {
+                if (executeCalls.incrementAndGet() >= 3) {
+                    throw new EventQueueOverflowException("Async event queue is full (THROW).");
+                }
+                super.execute(command);
+            }
+        };
+        List<ErrorContext> errors = new CopyOnWriteArrayList<>();
+        try {
+            EventChainContext.runAsyncWithRetry(
+                    () -> {
+                        throw new IllegalStateException("attempt fails → schedule retry");
+                    },
+                    new RetryPolicy(1, Duration.ofMillis(20).toNanos(), BackoffStrategy.FIXED, 0L),
+                    pool,
+                    errors::add,
+                    INFO,
+                    "evt");
+
+            await().atMost(Duration.ofSeconds(5))
+                    .untilAsserted(() -> assertThat(CapturingLoggerFinder.RECORDS)
+                            .filteredOn(r -> "io.tiko.events".equals(r.loggerName()))
+                            .anySatisfy(entry -> {
+                                assertThat(entry.level()).isEqualTo(System.Logger.Level.WARNING);
+                                assertThat(entry.message()).contains("dropped").contains("THROW");
+                            }));
+            assertThat(errors).isEmpty();
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void throwPolicyInitialAttemptSubmitOverflowPropagatesToPublisher() {
+        // #440 guard: the synchronous initial attempt (attemptIndex == 0) submits on the publisher's
+        // thread, so a THROW overflow there must still propagate to the caller — the retried-attempt
+        // log-drop must not swallow the initial-submit contract.
+        var pool = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.SECONDS, new LinkedBlockingQueue<>()) {
+            @Override
+            public void execute(Runnable command) {
+                throw new EventQueueOverflowException("Async event queue is full (THROW).");
+            }
+        };
+        List<ErrorContext> errors = new CopyOnWriteArrayList<>();
+        try {
+            assertThatThrownBy(() -> EventChainContext.runAsyncWithRetry(
+                            () -> {},
+                            new RetryPolicy(2, Duration.ofMillis(20).toNanos(), BackoffStrategy.FIXED, 0L),
+                            pool,
+                            errors::add,
+                            INFO,
+                            "evt"))
+                    .isInstanceOf(EventQueueOverflowException.class);
         } finally {
             pool.shutdownNow();
         }
