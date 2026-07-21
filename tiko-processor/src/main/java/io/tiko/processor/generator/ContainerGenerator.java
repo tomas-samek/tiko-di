@@ -228,6 +228,7 @@ public final class ContainerGenerator {
 
         // Add EventExecutor getter
         containerBuilder.addMethod(createGetEventExecutorMethod());
+        containerBuilder.addMethod(createEventExecutorMetricsMethod());
 
         // Add package-private options() accessor so generated factories in the same
         // io.tiko.generated package can consult per-call-site overrides without a
@@ -1830,6 +1831,31 @@ public final class ContainerGenerator {
                 .addAnnotation(Override.class)
                 .returns(ClassName.get("java.util.concurrent", "ExecutorService"))
                 .addStatement("return this.eventExecutor")
+                .build();
+    }
+
+    /**
+     * Creates {@code eventExecutorMetrics()} — a point-in-time snapshot of the framework-owned
+     * event pool (#110, #438). Mirrors {@code AggregatingContainer.eventExecutorMetrics()}: only a
+     * framework-owned {@link java.util.concurrent.ThreadPoolExecutor} is sampleable; a user-supplied
+     * executor is the user's to observe, so this reports {@code empty()} for it. Without this override
+     * a single-module container inherits {@code Container}'s {@code empty()} default and reports no
+     * metrics even though it owns a sampleable pool.
+     */
+    private MethodSpec createEventExecutorMetricsMethod() {
+        ClassName optional = ClassName.get("java.util", "Optional");
+        ClassName executorMetrics = ClassName.get("io.tiko", "ExecutorMetrics");
+        ClassName threadPoolExecutor = ClassName.get("java.util.concurrent", "ThreadPoolExecutor");
+        return MethodSpec.methodBuilder("eventExecutorMetrics")
+                .addModifiers(Modifier.PUBLIC)
+                .addAnnotation(Override.class)
+                .returns(ParameterizedTypeName.get(optional, executorMetrics))
+                .addStatement(
+                        "return ownsEventExecutor && eventExecutor instanceof $T tpe ? $T.of($T.from(tpe)) : $T.empty()",
+                        threadPoolExecutor,
+                        optional,
+                        executorMetrics,
+                        optional)
                 .build();
     }
 
