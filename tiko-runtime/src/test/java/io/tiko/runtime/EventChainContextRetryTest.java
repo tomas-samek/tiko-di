@@ -6,6 +6,7 @@ import static org.awaitility.Awaitility.await;
 import io.tiko.ErrorContext;
 import io.tiko.EventHandlerError;
 import io.tiko.EventHandlerInfo;
+import io.tiko.EventQueueOverflowException;
 import io.tiko.annotations.BackoffStrategy;
 import java.time.Duration;
 import java.util.List;
@@ -13,6 +14,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
@@ -118,6 +121,52 @@ class EventChainContextRetryTest {
         await().pollDelay(Duration.ofMillis(300)).atMost(Duration.ofSeconds(1)).until(() -> true);
         assertThat(calls.get()).as("an Error is not retried").isEqualTo(1);
         assertThat(errors).as("an Error is logged, not routed to ErrorHandler").isEmpty();
+    }
+
+    @Test
+    void throwPolicyRetryResubmissionOverflowIsLoggedNotSilentlyLost() {
+        // #395: under OverflowPolicy.THROW, a retry re-submission that overflows the queue throws
+        // EventQueueOverflowException off the publisher's stack (on the backoff scheduler thread).
+        // It must degrade to an observable logged drop instead of vanishing. The executor runs the
+        // first attempt's body (which fails → schedules a retry) then throws on the re-submission.
+        CapturingLoggerFinder.clear();
+        AtomicInteger executeCalls = new AtomicInteger();
+        var pool = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.SECONDS, new LinkedBlockingQueue<>()) {
+            @Override
+            public void execute(Runnable command) {
+                // Call 1 = the initial attempt's body (must run so it fails and triggers a retry);
+                // call 2 = the backoff re-submission of the next attempt (overflow under THROW).
+                if (executeCalls.incrementAndGet() >= 2) {
+                    throw new EventQueueOverflowException("Async event queue is full (THROW).");
+                }
+                super.execute(command);
+            }
+        };
+        List<ErrorContext> errors = new CopyOnWriteArrayList<>();
+        try {
+            EventChainContext.runAsyncWithRetry(
+                    () -> {
+                        throw new IllegalStateException("attempt fails → schedule retry");
+                    },
+                    // retries = 1, non-zero backoff so the re-submission defers onto the scheduler thread.
+                    new RetryPolicy(1, Duration.ofMillis(20).toNanos(), BackoffStrategy.FIXED, 0L),
+                    pool,
+                    errors::add,
+                    INFO,
+                    "evt");
+
+            await().atMost(Duration.ofSeconds(5))
+                    .untilAsserted(() -> assertThat(CapturingLoggerFinder.RECORDS)
+                            .filteredOn(r -> "io.tiko.events".equals(r.loggerName()))
+                            .anySatisfy(entry -> {
+                                assertThat(entry.level()).isEqualTo(System.Logger.Level.WARNING);
+                                assertThat(entry.message()).contains("dropped").contains("THROW");
+                            }));
+            // THROW degrades to a logged drop off-thread — it is not routed to the ErrorHandler.
+            assertThat(errors).isEmpty();
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     @Test
