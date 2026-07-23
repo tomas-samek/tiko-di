@@ -116,6 +116,67 @@ class KafkaTransportBootstrapGeneratorTest {
                 .contains("@OverridepublicList<GeneratedSinkDescriptor>sinks()");
     }
 
+    @Test
+    void primitiveReturningPartitionKeyAccessorCompiles() throws IOException {
+        Compilation compilation = Compiler.javac()
+                .withProcessors(new TikoAnnotationProcessor(), new KafkaAnnotationProcessor())
+                .compile(
+                        JavaFileObjects.forSourceString(
+                                "demo.OrderPlaced",
+                                "package demo; public record OrderPlaced(String orderId, int amount) {}"),
+                        JavaFileObjects.forSourceString("demo.OrderPublisher", """
+                                package demo;
+                                import io.tiko.annotations.Component;
+                                import io.tiko.kafka.annotations.KafkaSink;
+                                import io.tiko.Scope;
+                                @Component(scope = Scope.SINGLETON)
+                                public class OrderPublisher {
+                                    @KafkaSink(topic = "orders", partitionKey = "amount")
+                                    public OrderPlaced toKafka(OrderPlaced e) { return e; }
+                                }
+                                """));
+
+        assertThat(compilation).succeeded();
+        String normalized = bootstrapSource(compilation).replaceAll("\\s", "");
+        // int autoboxes to Object before the null check — the extractor must compile.
+        org.assertj.core.api.Assertions.assertThat(normalized)
+                .as("a primitive-returning accessor autoboxes into the Object-typed null check")
+                .contains("Objectv=((OrderPlaced)p).amount()")
+                .contains("returnv==null?null:String.valueOf(v)");
+    }
+
+    @Test
+    void mixedKeylessAndKeyedSinksPairKeyMethodsWithTheCorrectSinkIndex() throws IOException {
+        Compilation compilation = Compiler.javac()
+                .withProcessors(new TikoAnnotationProcessor(), new KafkaAnnotationProcessor())
+                .compile(
+                        JavaFileObjects.forSourceString(
+                                "demo.OrderPlaced", "package demo; public record OrderPlaced(String orderId) {}"),
+                        JavaFileObjects.forSourceString("demo.OrderPublisher", """
+                                package demo;
+                                import io.tiko.annotations.Component;
+                                import io.tiko.kafka.annotations.KafkaSink;
+                                import io.tiko.Scope;
+                                @Component(scope = Scope.SINGLETON)
+                                public class OrderPublisher {
+                                    @KafkaSink(topic = "audit")
+                                    public OrderPlaced toAudit(OrderPlaced e) { return e; }
+                                    @KafkaSink(topic = "orders", partitionKey = "orderId")
+                                    public OrderPlaced toOrders(OrderPlaced e) { return e; }
+                                }
+                                """));
+
+        assertThat(compilation).succeeded();
+        String normalized = bootstrapSource(compilation).replaceAll("\\s", "");
+        // Keyless sink0 → null extractor, no key method; keyed sink1 → key1. The key-method index
+        // must track the sink's position, not a separate keyed-only counter.
+        org.assertj.core.api.Assertions.assertThat(normalized)
+                .contains("this::sink0,p->null")
+                .doesNotContain("key0(")
+                .contains("this::sink1,KafkaTransportBootstrap::key1")
+                .contains("privatestaticStringkey1(Objectp)");
+    }
+
     private Compilation compileOrderFixtures() {
         Compilation compilation = Compiler.javac()
                 .withProcessors(new TikoAnnotationProcessor(), new KafkaAnnotationProcessor())
