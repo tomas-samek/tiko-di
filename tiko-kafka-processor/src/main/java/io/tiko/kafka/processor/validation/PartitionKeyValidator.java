@@ -23,6 +23,8 @@ import javax.tools.Diagnostic;
  */
 public final class PartitionKeyValidator {
 
+    private static final String KEY_PREFIX = "@KafkaSink partitionKey '";
+
     private PartitionKeyValidator() {}
 
     public static boolean validate(ProcessingEnvironment env, Messager messager, List<KafkaSinkDescriptor> sinks) {
@@ -53,7 +55,7 @@ public final class PartitionKeyValidator {
             if (accessor == null) {
                 messager.printMessage(
                         Diagnostic.Kind.ERROR,
-                        "@KafkaSink partitionKey '"
+                        KEY_PREFIX
                                 + s.partitionKey()
                                 + "' does not resolve to a zero-arg "
                                 + "method on "
@@ -64,7 +66,7 @@ public final class PartitionKeyValidator {
             } else if (accessor.getReturnType().getKind() == TypeKind.VOID) {
                 messager.printMessage(
                         Diagnostic.Kind.ERROR,
-                        "@KafkaSink partitionKey '"
+                        KEY_PREFIX
                                 + s.partitionKey()
                                 + "' resolves to "
                                 + returnElement.getQualifiedName()
@@ -78,7 +80,7 @@ public final class PartitionKeyValidator {
             } else if (!accessor.getModifiers().contains(Modifier.PUBLIC)) {
                 messager.printMessage(
                         Diagnostic.Kind.ERROR,
-                        "@KafkaSink partitionKey '"
+                        KEY_PREFIX
                                 + s.partitionKey()
                                 + "' resolves to "
                                 + returnElement.getQualifiedName()
