@@ -83,6 +83,12 @@ public class CountingThreadPoolExecutor extends ThreadPoolExecutor {
         return inFlight.get();
     }
 
+    // S1181 (do not catch Error): deliberately caught and re-thrown, never swallowed. A submit-time
+    // failure — RejectedExecutionException (queue full / shut down) or the OutOfMemoryError that
+    // addWorker throws when it cannot start a native thread — means the wrapper below never runs, so
+    // the increment must be undone before the throwable propagates. Cleanup-then-rethrow keeps the
+    // in-flight count honest without hiding the failure, the legitimate exception to the rule.
+    @SuppressWarnings("java:S1181")
     @Override
     public void execute(Runnable command) {
         inFlight.incrementAndGet();
@@ -95,8 +101,6 @@ public class CountingThreadPoolExecutor extends ThreadPoolExecutor {
                 }
             });
         } catch (RuntimeException | Error e) {
-            // Rejected (queue full / shut down) or any submit-time failure: the wrapper never runs,
-            // so undo the increment here to keep the count honest.
             inFlight.decrementAndGet();
             throw e;
         }
