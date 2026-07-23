@@ -23,4 +23,9 @@ class TikoTestExtensionTest {
     void recordingBusCanBeRequestedDirectly(RecordingEventBus bus) {
         assertThat(bus).isNotNull();
     }
+
+    @Test
+    void eventExecutorIsTheCountingVariantForDeterministicDrain(Container container) {
+        assertThat(container.getEventExecutor()).isInstanceOf(CountingThreadPoolExecutor.class);
+    }
 }

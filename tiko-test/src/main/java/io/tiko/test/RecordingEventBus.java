@@ -11,6 +11,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
 
 /**
  * Spy {@link EventBus} that records every published event before forwarding to a delegate bus.
@@ -129,21 +131,44 @@ public final class RecordingEventBus implements EventBus {
                     "awaitAsyncDispatch requires the event executor to be wired (setEventExecutor). "
                             + "Under @TikoTest this happens automatically; outside @TikoTest call setEventExecutor first.");
         }
-        if (!(exec instanceof ThreadPoolExecutor tpe)) {
-            // Custom executors can't be polled — fall back to a fixed sleep capped at 1s.
-            try {
-                Thread.sleep(Math.min(timeout.toMillis(), 1_000L));
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-            }
+        if (exec instanceof CountingThreadPoolExecutor cte) {
+            // Deterministic: in-flight is counted at submit time, so a task is never uncounted
+            // while it sits between the queue and a worker lock — the window that flaked #443.
+            pollUntilDrained(() -> cte.inFlight() > 0, () -> "inFlight=" + cte.inFlight(), timeout);
             return;
         }
+        if (exec instanceof ThreadPoolExecutor tpe) {
+            // Best-effort for a directly-wired ThreadPoolExecutor: getActiveCount() and the queue are
+            // approximate, unsynchronized samples (see CountingThreadPoolExecutor for why that races).
+            pollUntilDrained(
+                    () -> tpe.getActiveCount() > 0 || !tpe.getQueue().isEmpty(),
+                    () -> "activeCount=" + tpe.getActiveCount() + ", queue="
+                            + tpe.getQueue().size(),
+                    timeout);
+            return;
+        }
+        // Custom executors can't be polled — fall back to a fixed sleep capped at 1s.
+        try {
+            Thread.sleep(Math.min(timeout.toMillis(), 1_000L));
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * Polls {@code inFlight} every 10ms until it reports drained or {@code timeout} elapses.
+     *
+     * @param inFlight true while work remains outstanding
+     * @param detail lazily renders the outstanding-work snapshot for the timeout message
+     * @throws TimeoutException if work is still outstanding when {@code timeout} elapses
+     */
+    private static void pollUntilDrained(BooleanSupplier inFlight, Supplier<String> detail, Duration timeout)
+            throws TimeoutException {
         var deadline = System.nanoTime() + timeout.toNanos();
-        while (tpe.getActiveCount() > 0 || !tpe.getQueue().isEmpty()) {
+        while (inFlight.getAsBoolean()) {
             if (System.nanoTime() > deadline) {
-                throw new TimeoutException("Async event dispatch did not drain within " + timeout + " (activeCount="
-                        + tpe.getActiveCount() + ", queue="
-                        + tpe.getQueue().size() + ")");
+                throw new TimeoutException(
+                        "Async event dispatch did not drain within " + timeout + " (" + detail.get() + ")");
             }
             try {
                 Thread.sleep(10);
