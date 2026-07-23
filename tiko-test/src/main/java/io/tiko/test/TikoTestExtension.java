@@ -149,8 +149,14 @@ public final class TikoTestExtension
     }
 
     private void bootContainer(ExtensionContext ctx) {
-        TikoOptions opts =
-                TikoOptions.builder().eventBusDecorator(RecordingEventBus::new).build();
+        // Supply a CountingThreadPoolExecutor so awaitAsyncDispatch(Duration) detects drain
+        // deterministically (#443). Because it is supplied, the container does not own it
+        // (ownsEventExecutor = false) — closeContainer shuts it down.
+        CountingThreadPoolExecutor executor = CountingThreadPoolExecutor.withFrameworkDefaults();
+        TikoOptions opts = TikoOptions.builder()
+                .eventBusDecorator(RecordingEventBus::new)
+                .eventExecutor(executor)
+                .build();
         Container container = Tiko.create(opts);
         RecordingEventBus bus = (RecordingEventBus) container.getEventBus();
         // Wire the executor in so RecordingEventBus.awaitAsyncDispatch(Duration) works.
@@ -162,7 +168,13 @@ public final class TikoTestExtension
     private void closeContainer(ExtensionContext ctx) {
         Container container = store(ctx).remove(KEY_CONTAINER, Container.class);
         store(ctx).remove(KEY_BUS);
-        if (container != null) container.close();
+        if (container == null) return;
+        // Capture the supplied executor before close(); the container will not shut it down for us.
+        var executor = container.getEventExecutor();
+        container.close();
+        if (executor instanceof CountingThreadPoolExecutor cte) {
+            cte.shutdownNow();
+        }
     }
 
     private static Store store(ExtensionContext ctx) {

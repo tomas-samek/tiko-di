@@ -208,6 +208,59 @@ class RecordingEventBusTest {
         }
     }
 
+    @Test
+    void awaitAsyncDispatchWaitsOnInFlightAcrossTheDequeueToLockWindow() throws InterruptedException, TimeoutException {
+        var rec = newRec();
+        // Reproduce the ThreadPoolExecutor flake window (#443): a task has been dequeued (queue
+        // empty) but the worker has not yet locked, so getActiveCount() momentarily reads 0 while
+        // the task is still in flight. Forcing getActiveCount() to 0 makes that window deterministic.
+        var cte =
+                new CountingThreadPoolExecutor(
+                        1,
+                        1,
+                        0L,
+                        TimeUnit.MILLISECONDS,
+                        new LinkedBlockingQueue<Runnable>(),
+                        Executors.defaultThreadFactory(),
+                        new ThreadPoolExecutor.CallerRunsPolicy()) {
+                    @Override
+                    public int getActiveCount() {
+                        return 0;
+                    }
+                };
+        var release = new CountDownLatch(1);
+        var running = new CountDownLatch(1);
+        try {
+            rec.setEventExecutor(cte);
+            cte.execute(() -> {
+                running.countDown();
+                awaitQuietly(release);
+            });
+            running.await();
+
+            // Task is in flight, real queue is empty, and getActiveCount() reads 0: the old
+            // active-count/queue check would exit here. The in-flight counter must keep it waiting.
+            assertThatThrownBy(() -> rec.awaitAsyncDispatch(Duration.ofMillis(120)))
+                    .isInstanceOf(TimeoutException.class)
+                    .hasMessageContaining("did not drain");
+
+            release.countDown();
+            rec.awaitAsyncDispatch(Duration.ofSeconds(2));
+            assertThat(cte.inFlight()).isZero();
+        } finally {
+            release.countDown();
+            cte.shutdownNow();
+        }
+    }
+
+    private static void awaitQuietly(CountDownLatch latch) {
+        try {
+            latch.await();
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     private static RecordingEventBus newRec() {
         return new RecordingEventBus(new EventBus() {
             @Override
