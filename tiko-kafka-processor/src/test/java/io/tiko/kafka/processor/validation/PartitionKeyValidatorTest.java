@@ -57,6 +57,66 @@ class PartitionKeyValidatorTest {
     }
 
     @Test
+    void nonPublicPartitionKeyAccessorFailsWithDiagnosticOnSinkMethod() {
+        Compilation compilation = Compiler.javac()
+                .withProcessors(new TikoAnnotationProcessor(), new KafkaAnnotationProcessor())
+                .compile(
+                        JavaFileObjects.forSourceString("demo.OrderPlaced", """
+                                package demo;
+                                public class OrderPlaced {
+                                    private final String orderId;
+                                    public OrderPlaced(String orderId) { this.orderId = orderId; }
+                                    String orderId() { return orderId; }
+                                }
+                                """),
+                        JavaFileObjects.forSourceString("demo.Publisher", """
+                                package demo;
+                                import io.tiko.annotations.Component;
+                                import io.tiko.kafka.annotations.KafkaSink;
+                                import io.tiko.Scope;
+                                @Component(scope = Scope.SINGLETON)
+                                public class Publisher {
+                                    @KafkaSink(topic = "orders", partitionKey = "orderId")
+                                    public OrderPlaced toKafka(OrderPlaced e) { return e; }
+                                }
+                                """));
+        assertThat(compilation).failed();
+        assertThat(compilation).hadErrorContaining("partitionKey 'orderId'");
+        assertThat(compilation).hadErrorContaining("not public");
+        // The clean diagnostic replaces the raw generated-code error (has private access).
+        assertThat(compilation).hadErrorCount(1);
+    }
+
+    @Test
+    void voidPartitionKeyAccessorFailsWithDiagnosticOnSinkMethod() {
+        Compilation compilation = Compiler.javac()
+                .withProcessors(new TikoAnnotationProcessor(), new KafkaAnnotationProcessor())
+                .compile(
+                        JavaFileObjects.forSourceString("demo.OrderPlaced", """
+                                package demo;
+                                public class OrderPlaced {
+                                    public void orderId() {}
+                                }
+                                """),
+                        JavaFileObjects.forSourceString("demo.Publisher", """
+                                package demo;
+                                import io.tiko.annotations.Component;
+                                import io.tiko.kafka.annotations.KafkaSink;
+                                import io.tiko.Scope;
+                                @Component(scope = Scope.SINGLETON)
+                                public class Publisher {
+                                    @KafkaSink(topic = "orders", partitionKey = "orderId")
+                                    public OrderPlaced toKafka(OrderPlaced e) { return e; }
+                                }
+                                """));
+        assertThat(compilation).failed();
+        assertThat(compilation).hadErrorContaining("partitionKey 'orderId'");
+        assertThat(compilation).hadErrorContaining("returns void");
+        // The clean diagnostic replaces the raw generated-code error (void cannot be converted).
+        assertThat(compilation).hadErrorCount(1);
+    }
+
+    @Test
     void empty_partition_key_compiles() {
         Compilation compilation = Compiler.javac()
                 .withProcessors(new TikoAnnotationProcessor(), new KafkaAnnotationProcessor())
