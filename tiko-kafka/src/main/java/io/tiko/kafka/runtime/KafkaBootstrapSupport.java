@@ -7,6 +7,7 @@ import io.tiko.EventBus;
 import io.tiko.EventCallback;
 import io.tiko.kafka.KafkaConfig;
 import io.tiko.kafka.KafkaEgressError;
+import io.tiko.kafka.KafkaIngestErrorDecider;
 import io.tiko.kafka.KafkaSerializer;
 import io.tiko.kafka.NamedKafkaSerializer;
 import io.tiko.kafka.client.ApacheKafkaConsumerClient;
@@ -65,6 +66,7 @@ public final class KafkaBootstrapSupport {
         KafkaConfig config = container.get(KafkaConfig.class);
         EventBus eventBus = container.getEventBus();
         ErrorHandler errorHandler = resolveErrorHandler(container);
+        KafkaIngestErrorDecider decider = resolveDecider(container.getAll(KafkaIngestErrorDecider.class));
         Map<String, KafkaSerializer> named = loadNamedSerializers();
 
         // Outbound — subscribe one callback per @KafkaSink.
@@ -81,8 +83,8 @@ public final class KafkaBootstrapSupport {
             String group = source.consumerGroup().isEmpty() ? config.consumerGroup() : source.consumerGroup();
             KafkaSerializer serializer = resolveSerializer(source.serializerClass(), config, named);
             KafkaConsumerClient client = consumerFactory.apply(config, group);
-            KafkaConsumerRunner runner =
-                    new ThreadPerTopicRunner(source, client, container, eventBus, errorHandler, serializer, config);
+            KafkaConsumerRunner runner = new ThreadPerTopicRunner(
+                    source, client, container, eventBus, errorHandler, serializer, config, decider);
             runners.add(runner);
             runner.start();
         }
@@ -192,6 +194,21 @@ public final class KafkaBootstrapSupport {
      */
     private static ErrorHandler resolveErrorHandler(Container container) {
         return container.getErrorHandler();
+    }
+
+    /**
+     * Resolves the optional ingest-error decider (#385). Zero registered components → {@code null}
+     * (the static {@code poison-record-policy} path runs); exactly one → that decider; more than one
+     * → fail fast, since the runner can honour only one.
+     */
+    static KafkaIngestErrorDecider resolveDecider(List<KafkaIngestErrorDecider> deciders) {
+        return switch (deciders.size()) {
+            case 0 -> null;
+            case 1 -> deciders.get(0);
+            default ->
+                throw new IllegalStateException("Multiple KafkaIngestErrorDecider components registered ("
+                        + deciders.size() + "); register at most one.");
+        };
     }
 
     /** Lazy holder: defers System.LoggerFinder resolution until the first failure path runs. */
