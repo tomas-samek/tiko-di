@@ -188,6 +188,60 @@ the default `SEEK` when every record matters. A *safe* auto-skip that rides out 
 failures before giving up needs bounded retry, tracked separately (#108), as does a
 dead-letter destination (#111).
 
+## Programmatic ingest-error decisions (`KafkaIngestErrorDecider`)
+
+`tiko.kafka.poison-record-policy` (`SEEK`/`SKIP`) is a uniform, zero-config
+switch: every ingest failure is either sought back or skipped. When you need to
+branch on *what* failed — retry a transient blip a few times, dead-letter a
+known-bad shape, skip the rest — register a `KafkaIngestErrorDecider`.
+
+Register **at most one** as a singleton component. When present, it overrides the
+static policy for every ingest failure; when absent, the static
+`poison-record-policy` runs unchanged (this feature is purely additive).
+
+```java
+@Component(scope = Scope.SINGLETON)
+public class OrderIngestPolicy implements KafkaIngestErrorDecider {
+    @Override
+    public IngestDecision decide(KafkaIngestError error, int attempt) {
+        if (attempt < 3 && error.cause() instanceof java.io.IOException) {
+            return IngestDecision.SEEK;        // transient — retry (redelivered next poll)
+        }
+        if (error.cause() instanceof com.example.SchemaMismatch) {
+            return IngestDecision.DEAD_LETTER; // known-bad shape — hand off, then advance
+        }
+        return IngestDecision.SKIP;            // log and move on
+    }
+}
+```
+
+`attempt` is the consecutive failure count for the record's offset, starting at
+`1`; bounding the retry is your code's job. The outcomes:
+
+| Outcome       | Effect |
+|---------------|--------|
+| `SEEK`        | Seek back; the record is redelivered on the next poll. No offset committed. |
+| `SKIP`        | Route the `KafkaIngestError`; commit past the record. |
+| `DEAD_LETTER` | Route a `KafkaRecordDeadLettered` (carrying `attempts`) instead of `KafkaIngestError`; commit past. Forward it from your `ErrorHandler` to whatever dead-letter sink you run. |
+| `FAIL`        | Route the `KafkaIngestError`; stop **this topic's** consumer (the record is left uncommitted and redelivers if the consumer restarts). |
+
+There is no dead-letter *topic* — `DEAD_LETTER` routes a distinct
+`ErrorContext` through your `ErrorHandler`, which is where you decide what to do
+with it:
+
+```java
+TikoOptions.builder().errorHandler(ctx -> {
+    switch (ctx) {
+        case KafkaRecordDeadLettered dl -> dlqSink.send(dl);
+        case KafkaIngestError e -> log.warn("ingest failure on {}", e.topic());
+        default -> { /* other contexts */ }
+    }
+}).build();
+```
+
+A decider that throws falls back to `SEEK` (no data loss) and logs a warning; it
+never kills the consumer thread.
+
 ## Trade-offs (MVP)
 
 - Per-record commit only (`commitMode = PER_RECORD`).
