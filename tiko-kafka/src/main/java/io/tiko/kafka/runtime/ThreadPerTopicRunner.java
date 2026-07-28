@@ -109,15 +109,10 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
 
     @Override
     public void stop() {
-        if (!running.compareAndSet(true, false)) {
-            // Was never started or already stopped — still close the client.
-            try {
-                consumer.close();
-            } catch (Exception ignored) {
-                /* best-effort */
-            }
-            return;
-        }
+        // running may already be false if a FAIL decision stopped the loop from the consumer
+        // thread (#385); still wake and join before close so we never close the client while a
+        // poll() is in flight — KafkaConsumer is single-thread-access.
+        running.set(false);
         consumer.wakeup();
         try {
             if (thread != null) thread.join(config.shutdownTimeout().toMillis());
@@ -244,7 +239,7 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
         return count;
     }
 
-    /** Invokes the decider under a guard: a throw or null falls back to SEEK (safest — no data loss). */
+    /** Invokes the decider under a guard: an exception or a null return falls back to SEEK (safest — no data loss). */
     private IngestDecision decide(KafkaIngestError error, int attempt) {
         try {
             IngestDecision decision = decider.decide(error, attempt);

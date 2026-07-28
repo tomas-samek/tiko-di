@@ -91,7 +91,11 @@ class KafkaIngestErrorDeciderTest {
 
     @Test
     void failDecisionStopsTheRunnerAndLeavesTheOffsetUncommitted() {
-        ScriptedConsumerClient client = new ScriptedConsumerClient(List.of(poisonBatch(0)));
+        // A good record at offset 1 in a second batch would commit(offset+1=2) if the runner kept
+        // going — so empty commits proves FAIL stopped the loop before that batch was ever polled.
+        ScriptedConsumerClient client = new ScriptedConsumerClient(List.of(
+                poisonBatch(0),
+                new ConsumerRecords<>(Map.of(P0, List.of(RunnerTestSupport.consumerRecord("t", 0, 1, "ok"))))));
         List<ErrorContext> routed = new CopyOnWriteArrayList<>();
 
         try (Container container = Tiko.create()) {
@@ -104,7 +108,9 @@ class KafkaIngestErrorDeciderTest {
             }
         }
 
-        assertThat(client.commits).as("FAIL leaves the record uncommitted").isEmpty();
+        assertThat(client.commits)
+                .as("FAIL stops the runner: the offset is uncommitted AND the next batch is never processed")
+                .isEmpty();
         assertThat(client.seeks).as("FAIL does not seek").isEmpty();
         assertThat(routed).allSatisfy(e -> assertThat(e).isInstanceOf(KafkaIngestError.class));
     }

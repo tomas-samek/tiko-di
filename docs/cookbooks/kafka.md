@@ -195,9 +195,10 @@ switch: every ingest failure is either sought back or skipped. When you need to
 branch on *what* failed — retry a transient blip a few times, dead-letter a
 known-bad shape, skip the rest — register a `KafkaIngestErrorDecider`.
 
-Register **at most one** as a singleton component. When present, it overrides the
-static policy for every ingest failure; when absent, the static
-`poison-record-policy` runs unchanged (this feature is purely additive).
+Register **at most one** as a singleton component — registering more than one
+fails fast at bootstrap. When present, it overrides the static policy for every
+ingest failure; when absent, the static `poison-record-policy` runs unchanged
+(this feature is purely additive).
 
 ```java
 @Component(scope = Scope.SINGLETON)
