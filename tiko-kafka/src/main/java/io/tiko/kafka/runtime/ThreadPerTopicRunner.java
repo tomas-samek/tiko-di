@@ -1,15 +1,20 @@
 package io.tiko.kafka.runtime;
 
 import io.tiko.Container;
+import io.tiko.ErrorContext;
 import io.tiko.ErrorHandler;
 import io.tiko.EventBus;
+import io.tiko.kafka.IngestDecision;
 import io.tiko.kafka.IngestErrorPolicy;
 import io.tiko.kafka.KafkaConfig;
 import io.tiko.kafka.KafkaContext;
 import io.tiko.kafka.KafkaIngestError;
+import io.tiko.kafka.KafkaIngestErrorDecider;
+import io.tiko.kafka.KafkaRecordDeadLettered;
 import io.tiko.kafka.KafkaSerializer;
 import io.tiko.kafka.client.KafkaConsumerClient;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -49,6 +54,15 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
     private final KafkaConfig config;
     private final IngestErrorPolicy poisonRecordPolicy;
 
+    // Null when no @Component decider is registered — the static poison-record-policy path runs (#313).
+    private final KafkaIngestErrorDecider decider;
+
+    // Per-partition consecutive-failure tracking for the decider's `attempt` argument (#385).
+    // Only ever touched from the single run() thread, so a plain HashMap is safe.
+    private final Map<TopicPartition, Attempt> attempts = new HashMap<>();
+
+    private record Attempt(long offset, int count) {}
+
     private final AtomicBoolean running = new AtomicBoolean(false);
     private Thread thread;
 
@@ -60,6 +74,18 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
             ErrorHandler errorHandler,
             KafkaSerializer serializer,
             KafkaConfig config) {
+        this(source, consumer, container, eventBus, errorHandler, serializer, config, null);
+    }
+
+    public ThreadPerTopicRunner(
+            GeneratedSourceDescriptor source,
+            KafkaConsumerClient consumer,
+            Container container,
+            EventBus eventBus,
+            ErrorHandler errorHandler,
+            KafkaSerializer serializer,
+            KafkaConfig config,
+            KafkaIngestErrorDecider decider) {
         this.source = source;
         this.consumer = consumer;
         this.container = container;
@@ -67,6 +93,7 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
         this.errorHandler = errorHandler;
         this.serializer = serializer;
         this.config = config;
+        this.decider = decider;
         // Parse eagerly so a typo'd policy fails fast at start() rather than per record.
         this.poisonRecordPolicy = IngestErrorPolicy.parse(config.poisonRecordPolicy());
     }
@@ -82,15 +109,10 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
 
     @Override
     public void stop() {
-        if (!running.compareAndSet(true, false)) {
-            // Was never started or already stopped — still close the client.
-            try {
-                consumer.close();
-            } catch (Exception ignored) {
-                /* best-effort */
-            }
-            return;
-        }
+        // running may already be false if a FAIL decision stopped the loop from the consumer
+        // thread (#385); still wake and join before close so we never close the client while a
+        // poll() is in flight — KafkaConsumer is single-thread-access.
+        running.set(false);
         consumer.wakeup();
         try {
             if (thread != null) thread.join(config.shutdownTimeout().toMillis());
@@ -118,8 +140,7 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
                 // Poll/transport failure (auth, fetch, rebalance fallout). The thread must
                 // never die silently (#340): surface the failure, back off one poll window
                 // so a persistent outage doesn't hot-spin, and keep consuming.
-                routeIngestError(
-                        new KafkaIngestError(source.topic(), -1, -1L, new RecordHeaders(), infrastructureFailure));
+                routeError(new KafkaIngestError(source.topic(), -1, -1L, new RecordHeaders(), infrastructureFailure));
                 LoggerHolder.LOG.log(
                         System.Logger.Level.WARNING,
                         "Kafka consumer loop failure on topic '" + source.topic() + "'; retrying",
@@ -152,27 +173,70 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
                     eventBus.publish(event);
                 });
                 consumer.commitSync(Map.of(tp, new OffsetAndMetadata(r.offset() + 1)));
+                attempts.remove(tp);
             } catch (WakeupException wakeup) {
                 throw wakeup; // orderly shutdown — handled by run()
             } catch (Exception ex) {
-                routeIngestError(new KafkaIngestError(r.topic(), r.partition(), r.offset(), r.headers(), ex));
-                if (poisonRecordPolicy == IngestErrorPolicy.SKIP) {
-                    // Opt-in (#313): the error is logged via the ErrorHandler above; commit
-                    // past the record so the partition advances instead of redelivering it.
-                    // Other records in this partition's slice keep flowing.
-                    commitSafely(tp, r.offset() + 1);
-                } else {
-                    // SEEK (default): rewind for redelivery — no data lost across a transient
-                    // failure, at the cost of a poison record blocking until removed.
-                    seekSafely(tp, r.offset());
-                    return;
-                }
+                if (!handleIngestFailure(tp, r, ex)) return;
             }
         }
     }
 
-    /** Routes an ingest error without letting a throwing ErrorHandler kill the consumer thread. */
-    private void routeIngestError(KafkaIngestError error) {
+    /**
+     * Applies the failure policy for one record. Returns {@code true} if this partition's
+     * remaining records should keep processing, {@code false} if the loop must stop — either
+     * because the position was rewound or because this runner is shutting down.
+     */
+    private boolean handleIngestFailure(TopicPartition tp, ConsumerRecord<String, byte[]> r, Exception ex) {
+        KafkaIngestError error = new KafkaIngestError(r.topic(), r.partition(), r.offset(), r.headers(), ex);
+        return decider == null ? applyStaticPolicy(tp, r, error) : applyDecision(tp, r, error, ex);
+    }
+
+    /** Static poison-record-policy path (#313), unchanged. */
+    private boolean applyStaticPolicy(TopicPartition tp, ConsumerRecord<String, byte[]> r, KafkaIngestError error) {
+        routeError(error);
+        if (poisonRecordPolicy == IngestErrorPolicy.SKIP) {
+            commitSafely(tp, r.offset() + 1);
+            return true;
+        }
+        seekSafely(tp, r.offset());
+        return false;
+    }
+
+    /** Programmatic per-error decision path (#385); overrides the static policy when a decider is registered. */
+    private boolean applyDecision(
+            TopicPartition tp, ConsumerRecord<String, byte[]> r, KafkaIngestError error, Exception ex) {
+        int attempt = nextAttempt(tp, r.offset());
+        return switch (decide(error, attempt)) {
+            case SEEK -> {
+                routeError(error);
+                seekSafely(tp, r.offset());
+                yield false;
+            }
+            case SKIP -> {
+                routeError(error);
+                attempts.remove(tp);
+                commitSafely(tp, r.offset() + 1);
+                yield true;
+            }
+            case DEAD_LETTER -> {
+                routeError(new KafkaRecordDeadLettered(r.topic(), r.partition(), r.offset(), r.headers(), ex, attempt));
+                attempts.remove(tp);
+                commitSafely(tp, r.offset() + 1);
+                yield true;
+            }
+            case FAIL -> {
+                routeError(error);
+                // Stop this topic's runner; the record is left uncommitted and
+                // redelivers if the consumer is restarted. Other topics are unaffected.
+                running.set(false);
+                yield false;
+            }
+        };
+    }
+
+    /** Routes an error context without letting a throwing ErrorHandler kill the consumer thread. */
+    private void routeError(ErrorContext error) {
         try {
             errorHandler.onError(error);
         } catch (Exception handlerFailure) {
@@ -180,6 +244,26 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
                     System.Logger.Level.WARNING,
                     "ErrorHandler threw while handling a Kafka ingest error",
                     handlerFailure);
+        }
+    }
+
+    /** Consecutive failure count for {@code offset} on {@code tp}, starting at 1; resets when the offset changes. */
+    private int nextAttempt(TopicPartition tp, long offset) {
+        Attempt prior = attempts.get(tp);
+        int count = (prior != null && prior.offset() == offset) ? prior.count() + 1 : 1;
+        attempts.put(tp, new Attempt(offset, count));
+        return count;
+    }
+
+    /** Invokes the decider under a guard: an exception or a null return falls back to SEEK (safest — no data loss). */
+    private IngestDecision decide(KafkaIngestError error, int attempt) {
+        try {
+            IngestDecision decision = decider.decide(error, attempt);
+            return decision != null ? decision : IngestDecision.SEEK;
+        } catch (Exception deciderFailure) {
+            LoggerHolder.LOG.log(
+                    System.Logger.Level.WARNING, "KafkaIngestErrorDecider threw; falling back to SEEK", deciderFailure);
+            return IngestDecision.SEEK;
         }
     }
 

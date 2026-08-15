@@ -66,11 +66,18 @@ jobs:
       # rebuild. Requires the SONAR_TOKEN secret and Automatic Analysis DISABLED in the SonarCloud
       # UI (the two analysis modes are mutually exclusive). Project key, org, host, coverage path,
       # and exclusions all come from the root pom's <properties>.
+      #
+      # Invoked by full groupId:artifactId:goal, not the `sonar:sonar` prefix. Prefix resolution
+      # only searches the pluginGroups (org.apache.maven.plugins, org.codehaus.mojo) plus plugins
+      # declared in <build><plugins>; this plugin lives in <pluginManagement>, so the prefix is not
+      # resolvable and the step fails with "No plugin found for prefix 'sonar'". The version is
+      # deliberately omitted — <pluginManagement> pins it (${sonar-maven-plugin.version}), keeping
+      # the root pom the single source of truth.
       - name: SonarCloud scan
         if: matrix.java == '21'
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: mvn -B sonar:sonar --file pom.xml
+        run: mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar --file pom.xml
       # `install` runs the verify phase, so JaCoCo's per-module `report` and the aggregate
       # `report-aggregate` have produced their XML by now. Upload them so coverage tooling
       # (e.g. a future SonarCloud CI scanner) can consume them without re-running the build.
