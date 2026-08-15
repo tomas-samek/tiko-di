@@ -5,7 +5,7 @@ Each invariant is a load-bearing rule for tiko-di's architecture — a constrain
 violated, erodes the compile-time-safety pitch, breaks the public contract, or introduces a
 class of runtime surprise the framework exists to prevent. The registry is independently
 citable: contributors, CLAUDE.md, and agent skills reference invariants by ID (ARCH-1 …
-ARCH-13). It is a living document — `tiko-architect` proposes additions in its step-5
+ARCH-14). It is a living document — `tiko-architect` proposes additions in its step-5
 self-audit whenever a release introduces a new rule that should be codified.
 
 ---
@@ -243,3 +243,28 @@ doc surface #408 does not reach automatically. Once #408 lands, its gate test un
 **Violation looks like.** CLAUDE.md describing an annotation, scope, or API that was removed
 or renamed without updating the doc; a cookbook showing an import path that no longer exists;
 README install snippets pinning a version that is no longer the current release.
+
+---
+
+### ARCH-14 — runtime test seams live in the `TikoOptions` override family
+
+**Statement.** Test affordances that need a runtime hand-off (holding a fake to assert on it)
+are class-keyed, opt-in, container-owned-lifecycle builder methods on `TikoOptions` — the
+`override(Class, ...)` / `replaceTransport(Class, Function)` shape. No global test flags, no
+system properties, no ambient test mode.
+
+**Rationale.** Codifies the tension resolved in #414: a transport's identity is fixed at
+compile time by the generated bootstrap, but a test needs to hold the fake it asserts on. A
+class-keyed builder method is the only shape that satisfies both — substitution stays explicit
+and typed at the call site, the container keeps owning the lifecycle, and nothing about the
+production path changes when no override is registered. Ambient switches (system properties,
+static flags, an env-driven "test mode") would move the decision off the call site, leak
+across tests through global state, and put a test-only branch in production wiring — the
+class of runtime surprise the framework exists to prevent.
+
+**Anchor.** `TikoOptions.Builder#replaceTransport` javadoc (`tiko-runtime`, applied by
+`Tiko`); `docs/superpowers/specs/2026-07-04-issue-414-transport-substitution-design.md`.
+
+**Violation looks like.** A new test knob added as a system property (`-Dtiko.test.*`), a
+static mutable flag, or an environment variable instead of a `TikoOptions` builder method; a
+production code path branching on whether tests are running.
