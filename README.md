@@ -2,6 +2,7 @@
 
 > A modern, compile-time dependency injection framework for Java 21+ with event-driven architecture
 
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.tomas-samek/tiko-bom?label=Maven%20Central&color=blue)](https://central.sonatype.com/artifact/io.github.tomas-samek/tiko-bom)
 [![Build](https://github.com/tomas-samek/tiko-di/actions/workflows/maven.yml/badge.svg?branch=main)](https://github.com/tomas-samek/tiko-di/actions/workflows/maven.yml)
 [![Java](https://img.shields.io/badge/Java-21%20%7C%2025%20%7C%2026-blue.svg)](https://www.oracle.com/java/)
 [![Maven](https://img.shields.io/badge/Maven-3.8+-red.svg)](https://maven.apache.org/)
@@ -9,7 +10,7 @@
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=tomas-samek_tiko-di&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=tomas-samek_tiko-di)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=tomas-samek_tiko-di&metric=coverage)](https://sonarcloud.io/summary/new_code?id=tomas-samek_tiko-di)
 
-**Status: 0.4.0 on Maven Central.** Suitable for early-adopter experimentation. See [docs/roadmap.md](./docs/roadmap.md) for what ships today and what's next.
+**Status: on Maven Central** (latest version in the badge above). Suitable for early-adopter experimentation. See [docs/roadmap.md](./docs/roadmap.md) for what ships today and what's next.
 
 ## What Tiko is
 
@@ -116,7 +117,7 @@ Tiko ships to Maven Central. Import the BOM once — then declare the artifacts 
         <dependency>
             <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-bom</artifactId>
-            <version>0.4.0</version>
+            <version>0.5.0</version>
             <type>pom</type>
             <scope>import</scope>
         </dependency>
@@ -170,7 +171,7 @@ The fastest way to start a fresh project — generates a runnable single-module 
 mvn archetype:generate \
     -DarchetypeGroupId=io.github.tomas-samek \
     -DarchetypeArtifactId=tiko-archetype \
-    -DarchetypeVersion=0.4.0 \
+    -DarchetypeVersion=0.5.0 \
     -DgroupId=com.example \
     -DartifactId=my-app \
     -DinteractiveMode=false

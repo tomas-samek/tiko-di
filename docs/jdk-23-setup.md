@@ -21,7 +21,7 @@ If you are on an older plugin version and cannot upgrade, force processing expli
             <path>
                 <groupId>io.github.tomas-samek</groupId>
                 <artifactId>tiko-processor</artifactId>
-                <version>0.4.0</version>
+                <version>0.5.0</version>
             </path>
         </annotationProcessorPaths>
     </configuration>
@@ -32,9 +32,9 @@ If you are on an older plugin version and cannot upgrade, force processing expli
 
 ```groovy
 dependencies {
-    implementation "io.github.tomas-samek:tiko-api:0.4.0"
-    implementation "io.github.tomas-samek:tiko-runtime:0.4.0"
-    annotationProcessor "io.github.tomas-samek:tiko-processor:0.4.0"
+    implementation "io.github.tomas-samek:tiko-api:0.5.0"
+    implementation "io.github.tomas-samek:tiko-runtime:0.5.0"
+    annotationProcessor "io.github.tomas-samek:tiko-processor:0.5.0"
 }
 ```
 
@@ -44,8 +44,8 @@ The `annotationProcessor` configuration sets `--processor-path` for you, which i
 
 ```bash
 javac -proc:full \
-      --processor-path tiko-processor-0.4.0.jar \
-      -cp tiko-api-0.4.0.jar:tiko-runtime-0.4.0.jar \
+      --processor-path tiko-processor-0.5.0.jar \
+      -cp tiko-api-0.5.0.jar:tiko-runtime-0.5.0.jar \
       -d out \
       src/main/java/com/example/*.java
 ```
