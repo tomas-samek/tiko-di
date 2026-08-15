@@ -117,7 +117,7 @@ Tiko ships to Maven Central. Import the BOM once — then declare the artifacts 
         <dependency>
             <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-bom</artifactId>
-            <version>0.4.0</version>
+            <version>0.5.0</version>
             <type>pom</type>
             <scope>import</scope>
         </dependency>
@@ -171,7 +171,7 @@ The fastest way to start a fresh project — generates a runnable single-module 
 mvn archetype:generate \
     -DarchetypeGroupId=io.github.tomas-samek \
     -DarchetypeArtifactId=tiko-archetype \
-    -DarchetypeVersion=0.4.0 \
+    -DarchetypeVersion=0.5.0 \
     -DgroupId=com.example \
     -DartifactId=my-app \
     -DinteractiveMode=false
