@@ -34,4 +34,4 @@ Ask the user for the missing facts rather than fabricating an integration
 
 ## When in doubt
 
-Read the generated code under `target/generated-sources/annotations/io/tiko/generated/`. The framework's behaviour is fully visible in source — there is no runtime reflection or classpath scanning.
+Read the generated code under `target/generated-sources/annotations/io/tiko/generated/`. The framework's behaviour is fully visible in source — there is no reflection or classpath scanning in your wiring.

@@ -2,8 +2,8 @@
 
 This project uses **[Tiko DI](https://github.com/tomas-samek/tiko-di)** —
 a compile-time dependency injection framework for Java 21+. Wiring is
-validated and generated at build time — zero runtime reflection, zero
-classpath scanning.
+validated and generated at build time — no reflection, no classpath
+scanning in your wiring.
 
 > **Building a service here?** Read
 > [`.ai-skills/tiko-build/SKILL.md`](./.ai-skills/tiko-build/SKILL.md)
