@@ -65,6 +65,43 @@ public class OrderWorkflow {
         System.out.println("    chain: " + chain);
     }
 
+    /**
+     * Two {@code @EventTrigger} annotations on one handler — the repeatable form the
+     * compiler wraps in the {@code @EventTriggers} container. The return value is
+     * published <em>once per trigger</em>, so {@link #onNotice} below runs twice.
+     *
+     * <p>Both publishes reach the same handler because routing is keyed by the payload
+     * <em>type</em>: {@code eventName} is a trace / topology label, never a routing key.
+     * That is why naming the two triggers differently changes what a topology view shows
+     * but not which handlers fire — worth knowing before reaching for this to fan work
+     * out to two different consumers, which is not what it does.
+     */
+    @EventHandler
+    @EventTrigger(eventName = "ShipmentNotice.customer")
+    @EventTrigger(eventName = "ShipmentNotice.warehouse")
+    public ShipmentNotice onShippedFanOut(OrderShipped event) {
+        return new ShipmentNotice(event.orderId(), event.customer());
+    }
+
+    /**
+     * Consumes the fan-out notice and uses {@link Event#findInChain(Class)} to recover the
+     * event that started the pipeline, without threading it through every intermediate
+     * payload. {@code getOriginChain()} (see {@link #onShipped}) gives you the whole
+     * lineage; {@code findInChain} answers "was there an X back there, and what was it?".
+     */
+    @EventHandler
+    public void onNotice(ShipmentNotice notice, Event<?> wrapper) {
+        String origin = wrapper.findInChain(OrderPlaced.class)
+                .map(placed -> String.format(java.util.Locale.ROOT, "%.2f", placed.total()))
+                .orElse("<not in chain>");
+        System.out.printf(
+                java.util.Locale.ROOT,
+                "    notice for %s (%s) -> original order total: %s%n",
+                notice.orderId(),
+                notice.customer(),
+                origin);
+    }
+
     /** Spread: a batch envelope fans out into individual {@link OrderPlaced} events. */
     @EventHandler
     @EventTrigger(eventName = "OrderPlaced", spread = true)
