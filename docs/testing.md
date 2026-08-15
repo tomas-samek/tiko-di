@@ -1,6 +1,6 @@
 # Testing
 
-`tiko-test` is a small JUnit 5 extension that boots a Tiko `Container` around a `@Test` method (or a whole class), resolves test-method parameters out of that container, and gives you a spy `EventBus` for asserting on what was published. It also ships two scope-helper annotations for tests that need to run inside `runInEventScope` / `runInEventScope`.
+`tiko-test` is a small JUnit 5 extension that boots a Tiko `Container` around a `@Test` method (or a whole class), resolves test-method parameters out of that container, and gives you a spy `EventBus` for asserting on what was published. It also ships a scope-helper annotation for tests that need to run inside `runInEventScope`.
 
 For a runnable example, see [`tiko-examples/12_testing`](../tiko-examples/12_testing).
 
