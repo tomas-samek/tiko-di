@@ -39,7 +39,7 @@ compile round.
 | `qualifiedName`           | string          | FQN of the impl class |
 | `packageName`             | string          | |
 | `simpleName`              | string          | |
-| `scope`                   | string enum     | `SINGLETON` / `REQUEST` / `EVENT` / `PROTOTYPE` |
+| `scope`                   | string enum     | `SINGLETON` / `EVENT` / `PROTOTYPE` |
 | `qualifier`               | string \| null  | `@Component(name = "...")`, null when unset |
 | `profiles`                | string[]        | `@Component(profiles = ...)` |
 | `interfaces`              | string[]        | FQNs of every directly-declared interface |
