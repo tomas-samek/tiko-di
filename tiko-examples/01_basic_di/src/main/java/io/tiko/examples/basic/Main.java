@@ -9,7 +9,7 @@ import io.tiko.runtime.Tiko;
  *
  * 1. Constructor injection (MessageService -> MessageRepository)
  * 2. Lifecycle methods (@PostConstruct, @PreDestroy)
- * 3. Multiple scopes (SINGLETON, REQUEST, EVENT, PROTOTYPE)
+ * 3. Multiple scopes (SINGLETON, EVENT, PROTOTYPE)
  * 4. Cross-scope injection with automatic proxies
  * 5. Event handling with @EventHandler
  * 6. Lifecycle events (ApplicationStartedEvent, EventStartedEvent, etc.)
@@ -24,8 +24,7 @@ import io.tiko.runtime.Tiko;
  *   - Event handlers registered
  *   - ApplicationStartedEvent published
  * - Application logic
- *   - Request scope demonstrates transaction-like context (coarse-grained)
- *   - Event scope demonstrates fine-grained event context
+ *   - Each unit of work gets its own EVENT-scoped context, torn down on exit
  *   - Events published and handled
  *   - Lifecycle events track request/event timing
  * - Container shutdown
@@ -57,47 +56,39 @@ public class Main {
             AuditService auditService = container.get(AuditService.class);
             EventBus eventBus = container.getEventBus();
 
-            System.out.println("\n3. DEMONSTRATING REQUEST SCOPE");
+            System.out.println("\n3. DEMONSTRATING EVENT SCOPE (UNIT OF WORK)");
             System.out.println("-".repeat(70));
 
-            // Request 1: Process multiple events
+            // Each unit of work gets its own EVENT-scoped beans, torn down on exit.
+            // EVENT is single-frame in 0.x: opening a unit inside an open unit throws.
+            System.out.println("\n>>> Unit 1: first message");
             container.runInEventScope(() -> {
-                System.out.println("\n>>> Request 1: Creating multiple messages");
-
-                // Event 1
-                container.runInEventScope(() -> {
-                    Long msgId1 = messageService.createMessage("First message");
-                    eventBus.publish(new MessageCreatedEvent(msgId1, "First message", "user-123"));
-                });
-
-                // Event 2
-                container.runInEventScope(() -> {
-                    Long msgId2 = messageService.createMessage("Second message");
-                    eventBus.publish(new MessageCreatedEvent(msgId2, "Second message", "user-123"));
-                });
-
-                System.out.println(
-                        "Request 1 complete - processed " + messageService.getProcessedCount() + " messages");
+                Long msgId1 = messageService.createMessage("First message");
+                eventBus.publish(new MessageCreatedEvent(msgId1, "First message", "user-123"));
             });
 
-            // Request 2: Different request context
+            System.out.println("\n>>> Unit 2: second message");
             container.runInEventScope(() -> {
-                System.out.println("\n>>> Request 2: Creating another message");
-
-                container.runInEventScope(() -> {
-                    Long msgId3 = messageService.createMessage("Third message");
-                    eventBus.publish(new MessageCreatedEvent(msgId3, "Third message", "user-456"));
-                });
-
-                System.out.println("Request 2 complete - total messages: " + messageService.getProcessedCount());
+                Long msgId2 = messageService.createMessage("Second message");
+                eventBus.publish(new MessageCreatedEvent(msgId2, "Second message", "user-123"));
             });
+
+            System.out.println("Processed so far: " + messageService.getProcessedCount() + " messages");
+
+            // A unit for a different caller — a fresh EventContext, no state carried over.
+            System.out.println("\n>>> Unit 3: another caller's message");
+            container.runInEventScope(() -> {
+                Long msgId3 = messageService.createMessage("Third message");
+                eventBus.publish(new MessageCreatedEvent(msgId3, "Third message", "user-456"));
+            });
+
+            System.out.println("Total messages: " + messageService.getProcessedCount());
 
             System.out.println("\n4. DEMONSTRATING LIFECYCLE EVENTS");
             System.out.println("-".repeat(70));
             System.out.println("Lifecycle events are automatically published by the container:");
             System.out.println("  - ApplicationStartedEvent (on container start)");
-            System.out.println("  - EventStartedEvent/EventEndingEvent (on request scope)");
-            System.out.println("  - EventStartedEvent/EventEndingEvent (on event scope)");
+            System.out.println("  - EventStartedEvent/EventEndingEvent (one pair per unit of work)");
             System.out.println("  - ApplicationEndingEvent (on container shutdown)");
             System.out.println("\nThese enable metrics, logging, and tracing without cluttering business logic.");
 
@@ -113,7 +104,7 @@ public class Main {
             System.out.println("\n6. DEMONSTRATING EVENT CHAINING");
             System.out.println("-".repeat(70));
             System.out.println("@EventTrigger enables declarative event workflows:");
-            container.runInEventScope(() -> container.runInEventScope(() -> {
+            container.runInEventScope(() -> {
                 System.out.println("\n>>> Publishing OrderCreatedEvent...");
                 // With @EventTrigger, this would automatically trigger:
                 // OrderCreatedEvent -> ValidationResult -> PaymentProcessedEvent
@@ -124,7 +115,7 @@ public class Main {
                 System.out.println("    3. ValidationResult triggers next handler");
                 System.out.println("    4. Handler processes payment -> returns PaymentProcessedEvent");
                 System.out.println("    5. Origin chain: [OrderCreatedEvent, ValidationResult, PaymentProcessedEvent]");
-            }));
+            });
 
             System.out.println("\n7. AUDIT LOG");
             System.out.println("-".repeat(70));
@@ -134,12 +125,10 @@ public class Main {
             System.out.println("-".repeat(70));
             System.out.println("Scope hierarchy (longest to shortest lifetime):");
             System.out.println("  SINGLETON - Application lifetime (e.g., services, repositories)");
-            System.out.println("  REQUEST   - Transaction/batch scope (e.g., DB transaction, HTTP request)");
-            System.out.println("  EVENT     - Single event processing (e.g., one message, one event handler)");
+            System.out.println("  EVENT     - One unit of work (e.g., one HTTP request, message, job)");
             System.out.println("  PROTOTYPE - Per injection (e.g., DTOs, temporary objects)");
             System.out.println("\nCross-scope injection:");
-            System.out.println("  SINGLETON -> REQUEST/EVENT = Automatic proxy (requires interface)");
-            System.out.println("  REQUEST -> EVENT = Automatic proxy (requires interface)");
+            System.out.println("  SINGLETON -> EVENT = Automatic proxy (requires interface)");
             System.out.println("  Any scope -> PROTOTYPE = New instance each time");
 
             System.out.println("\n9. SHUTTING DOWN CONTAINER");
