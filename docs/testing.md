@@ -1,6 +1,6 @@
 # Testing
 
-`tiko-test` is a small JUnit 5 extension that boots a Tiko `Container` around a `@Test` method (or a whole class), resolves test-method parameters out of that container, and gives you a spy `EventBus` for asserting on what was published. It also ships two scope-helper annotations for tests that need to run inside `runInEventScope` / `runInEventScope`.
+`tiko-test` is a small JUnit 5 extension that boots a Tiko `Container` around a `@Test` method (or a whole class), resolves test-method parameters out of that container, and gives you a spy `EventBus` for asserting on what was published. It also ships a scope-helper annotation for tests that need to run inside `runInEventScope`.
 
 For a runnable example, see [`tiko-examples/12_testing`](../tiko-examples/12_testing).
 
@@ -127,16 +127,16 @@ void awaitAsyncDispatchBlocksUntilHandlersDrain(EventBus bus, RecordingEventBus 
 
 The extension wires the container's executor into the recorder during boot, so this works without any setup. If the executor does not drain inside the timeout a `TimeoutException` is thrown with the active count and queue size — much more informative than a bare `Thread.sleep` that races and flakes.
 
-## `@EventScopeTest` / `@EventScopeTest` — scope helpers
+## `@EventScopeTest` — scope helper
 
-When a test needs a `REQUEST`- or `EVENT`-scoped bean to be resolvable in the test body, annotate the `@Test` method:
+When a test needs an `EVENT`-scoped bean to be resolvable in the test body, annotate the `@Test` method:
 
 ```java
 @TikoTest
-class RequestScopedRepoTest {
+class EventScopedRepoTest {
     @Test
     @EventScopeTest
-    void requestScopedRepoResolvableInsideScopeWrapper(Container container) {
+    void eventScopedRepoResolvableInsideScopeWrapper(Container container) {
         var repo = container.get(AccountRepository.class);
         assertThat(repo.findCustomerName("alice")).isEqualTo("Customer-alice");
     }
@@ -211,7 +211,7 @@ try (Container container = Tiko.create(TikoOptions.builder()
 }
 ```
 
-The override applies at every injection site declared as `PaymentGateway`, at `container.get(PaymentGateway.class)`, and at `getProvider(PaymentGateway.class).get()`. It is consulted before the generated factory and at every scope (`SINGLETON`, `REQUEST`, `EVENT`).
+The override applies at every injection site declared as `PaymentGateway`, at `container.get(PaymentGateway.class)`, and at `getProvider(PaymentGateway.class).get()`. It is consulted before the generated factory and at every scope (`SINGLETON`, `EVENT`, `PROTOTYPE`).
 
 For qualified injection (`@Named("primary") PaymentGateway`), use the named form:
 
