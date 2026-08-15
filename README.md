@@ -2,6 +2,7 @@
 
 > A modern, compile-time dependency injection framework for Java 21+ with event-driven architecture
 
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.tomas-samek/tiko-bom?label=Maven%20Central&color=blue)](https://central.sonatype.com/artifact/io.github.tomas-samek/tiko-bom)
 [![Build](https://github.com/tomas-samek/tiko-di/actions/workflows/maven.yml/badge.svg?branch=main)](https://github.com/tomas-samek/tiko-di/actions/workflows/maven.yml)
 [![Java](https://img.shields.io/badge/Java-21%20%7C%2025%20%7C%2026-blue.svg)](https://www.oracle.com/java/)
 [![Maven](https://img.shields.io/badge/Maven-3.8+-red.svg)](https://maven.apache.org/)
