@@ -25,7 +25,8 @@ class KafkaBootstrapDeciderResolutionTest {
     void multipleDecidersFailFast() {
         KafkaIngestErrorDecider a = (error, attempt) -> IngestDecision.SKIP;
         KafkaIngestErrorDecider b = (error, attempt) -> IngestDecision.SEEK;
-        assertThatThrownBy(() -> KafkaBootstrapSupport.resolveDecider(List.of(a, b)))
+        var both = List.of(a, b);
+        assertThatThrownBy(() -> KafkaBootstrapSupport.resolveDecider(both))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("at most one");
     }

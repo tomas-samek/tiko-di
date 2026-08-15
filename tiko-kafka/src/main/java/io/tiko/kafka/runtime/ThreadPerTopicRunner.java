@@ -177,46 +177,62 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
             } catch (WakeupException wakeup) {
                 throw wakeup; // orderly shutdown — handled by run()
             } catch (Exception ex) {
-                KafkaIngestError error = new KafkaIngestError(r.topic(), r.partition(), r.offset(), r.headers(), ex);
-                if (decider == null) {
-                    // Static poison-record-policy path (#313), unchanged.
-                    routeError(error);
-                    if (poisonRecordPolicy == IngestErrorPolicy.SKIP) {
-                        commitSafely(tp, r.offset() + 1);
-                    } else {
-                        seekSafely(tp, r.offset());
-                        return;
-                    }
-                } else {
-                    int attempt = nextAttempt(tp, r.offset());
-                    switch (decide(error, attempt)) {
-                        case SEEK -> {
-                            routeError(error);
-                            seekSafely(tp, r.offset());
-                            return;
-                        }
-                        case SKIP -> {
-                            routeError(error);
-                            attempts.remove(tp);
-                            commitSafely(tp, r.offset() + 1);
-                        }
-                        case DEAD_LETTER -> {
-                            routeError(new KafkaRecordDeadLettered(
-                                    r.topic(), r.partition(), r.offset(), r.headers(), ex, attempt));
-                            attempts.remove(tp);
-                            commitSafely(tp, r.offset() + 1);
-                        }
-                        case FAIL -> {
-                            routeError(error);
-                            // Stop this topic's runner; the record is left uncommitted and
-                            // redelivers if the consumer is restarted. Other topics are unaffected.
-                            running.set(false);
-                            return;
-                        }
-                    }
-                }
+                if (!handleIngestFailure(tp, r, ex)) return;
             }
         }
+    }
+
+    /**
+     * Applies the failure policy for one record. Returns {@code true} if this partition's
+     * remaining records should keep processing, {@code false} if the loop must stop — either
+     * because the position was rewound or because this runner is shutting down.
+     */
+    private boolean handleIngestFailure(TopicPartition tp, ConsumerRecord<String, byte[]> r, Exception ex) {
+        KafkaIngestError error = new KafkaIngestError(r.topic(), r.partition(), r.offset(), r.headers(), ex);
+        return decider == null ? applyStaticPolicy(tp, r, error) : applyDecision(tp, r, error, ex);
+    }
+
+    /** Static poison-record-policy path (#313), unchanged. */
+    private boolean applyStaticPolicy(TopicPartition tp, ConsumerRecord<String, byte[]> r, KafkaIngestError error) {
+        routeError(error);
+        if (poisonRecordPolicy == IngestErrorPolicy.SKIP) {
+            commitSafely(tp, r.offset() + 1);
+            return true;
+        }
+        seekSafely(tp, r.offset());
+        return false;
+    }
+
+    /** Programmatic per-error decision path (#385); overrides the static policy when a decider is registered. */
+    private boolean applyDecision(
+            TopicPartition tp, ConsumerRecord<String, byte[]> r, KafkaIngestError error, Exception ex) {
+        int attempt = nextAttempt(tp, r.offset());
+        return switch (decide(error, attempt)) {
+            case SEEK -> {
+                routeError(error);
+                seekSafely(tp, r.offset());
+                yield false;
+            }
+            case SKIP -> {
+                routeError(error);
+                attempts.remove(tp);
+                commitSafely(tp, r.offset() + 1);
+                yield true;
+            }
+            case DEAD_LETTER -> {
+                routeError(new KafkaRecordDeadLettered(r.topic(), r.partition(), r.offset(), r.headers(), ex, attempt));
+                attempts.remove(tp);
+                commitSafely(tp, r.offset() + 1);
+                yield true;
+            }
+            case FAIL -> {
+                routeError(error);
+                // Stop this topic's runner; the record is left uncommitted and
+                // redelivers if the consumer is restarted. Other topics are unaffected.
+                running.set(false);
+                yield false;
+            }
+        };
     }
 
     /** Routes an error context without letting a throwing ErrorHandler kill the consumer thread. */
