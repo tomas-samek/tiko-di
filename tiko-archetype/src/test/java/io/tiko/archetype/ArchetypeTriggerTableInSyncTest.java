@@ -37,9 +37,11 @@ class ArchetypeTriggerTableInSyncTest {
     private static final Path ARCHETYPE_CLAUDE_MD =
             Path.of("src", "main", "resources", "archetype-resources", "CLAUDE.md");
 
-    /** A markdown table row whose first cell is a link with a code-span label: {@code | [`label`](target) | text |}. */
-    private static final Pattern TRIGGER_ROW =
-            Pattern.compile("^\\|\\s*\\[`([^`]+)`]\\([^)]*\\)\\s*\\|\\s*(.+?)\\s*\\|\\s*$");
+    /** A link with a code-span label: {@code [`label`](target)}. Matched against a single already-split cell. */
+    private static final Pattern CHUNK_LINK = Pattern.compile("\\[`([^`]+)`]\\([^)]*\\)");
+
+    /** Cell count of a two-column row once split on {@code |}: the empty lead-in plus both cells. */
+    private static final int TWO_COLUMN_ROW = 3;
 
     /** Only rows describing a {@code reference/} chunk are shared between the two tables. */
     private static final String CHUNK_PREFIX = "reference/";
@@ -77,9 +79,15 @@ class ArchetypeTriggerTableInSyncTest {
     private static Map<String, String> triggers(Path markdown) throws IOException {
         var found = new LinkedHashMap<String, String>();
         for (String line : Files.readString(markdown).split("\r?\n")) {
-            Matcher m = TRIGGER_ROW.matcher(line);
-            if (m.matches() && m.group(1).startsWith(CHUNK_PREFIX)) {
-                found.put(m.group(1), m.group(2));
+            // Split the row into cells first, then match a simple link per cell — matching the whole
+            // row with one pattern needs a lazy quantifier next to \s* and backtracks super-linearly.
+            String[] cells = line.strip().split("\\|");
+            if (cells.length != TWO_COLUMN_ROW) {
+                continue;
+            }
+            Matcher link = CHUNK_LINK.matcher(cells[1].strip());
+            if (link.matches() && link.group(1).startsWith(CHUNK_PREFIX)) {
+                found.put(link.group(1), cells[2].strip());
             }
         }
         assertThat(found)
