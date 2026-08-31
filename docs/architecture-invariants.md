@@ -5,7 +5,7 @@ Each invariant is a load-bearing rule for tiko-di's architecture — a constrain
 violated, erodes the compile-time-safety pitch, breaks the public contract, or introduces a
 class of runtime surprise the framework exists to prevent. The registry is independently
 citable: contributors, CLAUDE.md, and agent skills reference invariants by ID (ARCH-1 …
-ARCH-14). It is a living document — `tiko-architect` proposes additions in its step-5
+ARCH-15). It is a living document — `tiko-architect` proposes additions in its step-5
 self-audit whenever a release introduces a new rule that should be codified.
 
 ---
@@ -268,3 +268,27 @@ class of runtime surprise the framework exists to prevent.
 **Violation looks like.** A new test knob added as a system property (`-Dtiko.test.*`), a
 static mutable flag, or an environment variable instead of a `TikoOptions` builder method; a
 production code path branching on whether tests are running.
+
+---
+
+### ARCH-15 — async dispatch detaches, never nests
+
+**Statement.** An async `@EventHandler` runs in its own fresh EVENT unit, created by saving,
+clearing, and restoring the publisher's frame around the dispatch — detachment, not nesting.
+The public scope API (`runInEventScope` / `supplyInEventScope`) keeps throwing on re-entry, so
+the single-frame rule of ARCH-5 is unaffected.
+
+**Rationale.** Codifies the model shipped by #220. An async handler must not observe or mutate
+the publisher's EVENT-scoped beans: the detached unit publishes its own lifecycle events and
+runs its own teardown, which is the same contract a distributed consumer gets. This has to hold
+even when the `CALLER_RUNS` overflow policy inlines the task on a borrowed publisher thread —
+that case is what forces save/restore of the caller's frame rather than a plain new frame.
+ARCH-5 owns the scope count and the single-frame rule; ARCH-15 owns how async dispatch obtains
+its unit without violating either.
+
+**Anchor.** `ContainerGenerator.createRunInDetachedEventScopeMethod` javadoc (`tiko-processor`);
+`docs/superpowers/specs/2026-07-10-issue-220-async-event-scope-design.md`.
+
+**Violation looks like.** Async dispatch reusing the publisher's open frame; a detached path that
+fails to restore the caller's frame in a `finally`; or `runInEventScope` made re-entrant or
+silently nesting.

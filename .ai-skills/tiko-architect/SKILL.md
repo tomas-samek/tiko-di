@@ -19,7 +19,7 @@ NO-GO is a hard, specific stop.
 | `tiko-release` pre-flight | release mechanics — BOM entries, secrets, NOTICE, version inputs |
 | **`tiko-architect`** | **architecture** — abstraction coherence, invariant/VISION upholding, public-surface consistency, doc coherence |
 
-The invariants registry is `docs/architecture-invariants.md` (ARCH-1 … ARCH-13). This skill
+The invariants registry is `docs/architecture-invariants.md` (ARCH-1 … ARCH-15). This skill
 never duplicates invariant content — it references invariants by ID and directs agents to read
 their entry from the registry.
 

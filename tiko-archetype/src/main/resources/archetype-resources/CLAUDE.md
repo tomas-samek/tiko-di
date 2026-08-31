@@ -84,10 +84,10 @@ ship commented out; enable first).
 | file | read when |
 |---|---|
 | [`.ai-skills/tiko-build/SKILL.md`](./.ai-skills/tiko-build/SKILL.md) | starting any new service work — decision tree, cookbook, anti-patterns |
-| [`reference/api-signatures.md`](./.ai-skills/tiko-build/reference/api-signatures.md) | writing any import, or unsure of a signature / attribute / config key |
-| [`reference/kafka.md`](./.ai-skills/tiko-build/reference/kafka.md) | consuming or producing Kafka, or the Kafka integration test |
-| [`reference/config.md`](./.ai-skills/tiko-build/reference/config.md) | `@Configuration` records or override YAML |
-| [`reference/events.md`](./.ai-skills/tiko-build/reference/events.md) | publishing/subscribing events, lifecycle hooks, daemon keep-alive |
+| [`reference/api-signatures.md`](./.ai-skills/tiko-build/reference/api-signatures.md) | writing any import, or unsure of a signature / annotation attribute / config key |
+| [`reference/kafka.md`](./.ai-skills/tiko-build/reference/kafka.md) | consuming or producing Kafka, or writing the Kafka integration test |
+| [`reference/config.md`](./.ai-skills/tiko-build/reference/config.md) | declaring `@Configuration` records or writing override YAML |
+| [`reference/events.md`](./.ai-skills/tiko-build/reference/events.md) | publishing/subscribing events, lifecycle hooks, or a headless/daemon main |
 
 ## Rules
 
