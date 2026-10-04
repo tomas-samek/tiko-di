@@ -141,9 +141,11 @@ class AnnotationClaimTest {
             emitted = true;
             try (Writer w =
                     processingEnv.getFiler().createSourceFile("demo.Late").openWriter()) {
-                w.write("package demo;\n"
-                        + "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)\n"
-                        + "public class Late {}\n");
+                w.write("""
+                        package demo;
+                        @io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)
+                        public class Late {}
+                        """);
             } catch (IOException e) {
                 processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, e.getMessage());
             }
