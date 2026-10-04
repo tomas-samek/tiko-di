@@ -33,6 +33,7 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
     private ProcessorContext context;
     private TypeUtil typeUtil;
     private boolean processed = false;
+    private boolean sawTikoAnnotations = false;
 
     @Override
     public synchronized void init(ProcessingEnvironment processingEnv) {
@@ -53,6 +54,14 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
      */
     private static final String TEST_COMPONENT_FQN = "io.tiko.test.TestComponent";
 
+    /** Annotations that make a round Tiko-relevant: they drive collection and the late-round guard. */
+    private static final Set<String> ENTRY_POINT_ANNOTATIONS = Set.of(
+            Component.class.getCanonicalName(),
+            Produces.class.getCanonicalName(),
+            EventHandler.class.getCanonicalName(),
+            Configuration.class.getCanonicalName(),
+            TEST_COMPONENT_FQN);
+
     /**
      * Claims the compiling JDK's latest source version so users on newer JDKs compiling at
      * a higher {@code --release} don't get javac's "Supported source version ... less than
@@ -63,14 +72,14 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         return SourceVersion.latestSupported();
     }
 
+    /**
+     * Every Tiko annotation, not just the entry points, plus {@code @Generated} on the generated
+     * sources: javac's {@code -Xlint:processing} reports any annotation no processor supports and
+     * claims (returns {@code true} for), which fails {@code -Werror} builds.
+     */
     @Override
     public Set<String> getSupportedAnnotationTypes() {
-        return Set.of(
-                Component.class.getCanonicalName(),
-                Produces.class.getCanonicalName(),
-                EventHandler.class.getCanonicalName(),
-                Configuration.class.getCanonicalName(),
-                TEST_COMPONENT_FQN);
+        return Set.of("io.tiko.annotations.*", TEST_COMPONENT_FQN, Generated.class.getCanonicalName());
     }
 
     @Override
@@ -80,11 +89,15 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
 
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
+        var tikoAnnotated = annotations.stream()
+                .anyMatch(a ->
+                        ENTRY_POINT_ANNOTATIONS.contains(a.getQualifiedName().toString()));
+
         // After generation, later rounds only process OUR generated (annotation-free)
         // sources — unless another processor emits new Tiko-annotated sources, which the
         // single-shot container cannot wire anymore. Make that loud instead of silent.
         if (processed) {
-            if (!roundEnv.processingOver() && !annotations.isEmpty()) {
+            if (!roundEnv.processingOver() && tikoAnnotated) {
                 processingEnv
                         .getMessager()
                         .printMessage(
@@ -94,20 +107,29 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
                                         + " Tiko generates once per compilation — ensure all Tiko-annotated"
                                         + " sources are present in the original round.");
             }
-            return false;
+            return true; // Claim @Generated on the previous round's output (javac claims per type)
         }
 
         if (roundEnv.processingOver()) {
             // Nothing Tiko-relevant ever showed up. Generation happens in the round that
             // carries the annotations (#334): creating files here would trigger javac's
             // "created in the last round" warning per generated type and break -Werror.
-            processingEnv
-                    .getMessager()
-                    .printMessage(
-                            Diagnostic.Kind.WARNING,
-                            "Tiko DI: No components, factories, or configurations found to process!");
+            if (sawTikoAnnotations) {
+                processingEnv
+                        .getMessager()
+                        .printMessage(
+                                Diagnostic.Kind.WARNING,
+                                "Tiko DI: No components, factories, or configurations found to process!");
+            }
             return false;
         }
+
+        // No entry point this round (e.g. only another processor's @Generated output):
+        // nothing for Tiko to collect, and nothing of ours to claim.
+        if (!tikoAnnotated) {
+            return false;
+        }
+        sawTikoAnnotations = true;
 
         processingEnv
                 .getMessager()
