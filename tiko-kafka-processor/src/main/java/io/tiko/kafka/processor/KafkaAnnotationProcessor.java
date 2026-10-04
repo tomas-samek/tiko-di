@@ -13,7 +13,6 @@ import io.tiko.kafka.processor.validation.BridgeMethodShapeValidator;
 import io.tiko.kafka.processor.validation.PartitionKeyValidator;
 import io.tiko.kafka.processor.validation.RequiredSiblingValidator;
 import io.tiko.kafka.processor.validation.SingletonBridgeValidator;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import javax.annotation.processing.AbstractProcessor;
@@ -23,7 +22,6 @@ import javax.annotation.processing.RoundEnvironment;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.AnnotationValue;
-import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
@@ -78,15 +76,15 @@ public final class KafkaAnnotationProcessor extends AbstractProcessor {
         // Only foreign @Generated sources this round: nothing to bridge, and not ours to claim.
         if (annotations.stream().allMatch(a -> a.getQualifiedName().contentEquals(GENERATED_FQN))) return false;
 
-        List<KafkaSourceDescriptor> sources = new ArrayList<>();
-        for (Element e : roundEnv.getElementsAnnotatedWith(KafkaSource.class)) {
-            if (e instanceof ExecutableElement m) sources.add(buildSourceDescriptor(m));
-        }
+        List<KafkaSourceDescriptor> sources = roundEnv.getElementsAnnotatedWith(KafkaSource.class).stream()
+                .filter(ExecutableElement.class::isInstance)
+                .map(e -> buildSourceDescriptor((ExecutableElement) e))
+                .toList();
 
-        List<KafkaSinkDescriptor> sinks = new ArrayList<>();
-        for (Element e : roundEnv.getElementsAnnotatedWith(KafkaSink.class)) {
-            if (e instanceof ExecutableElement m) sinks.add(buildSinkDescriptor(m));
-        }
+        List<KafkaSinkDescriptor> sinks = roundEnv.getElementsAnnotatedWith(KafkaSink.class).stream()
+                .filter(ExecutableElement.class::isInstance)
+                .map(e -> buildSinkDescriptor((ExecutableElement) e))
+                .toList();
 
         if (!sources.isEmpty() || !sinks.isEmpty()) {
             boolean ok = true;
