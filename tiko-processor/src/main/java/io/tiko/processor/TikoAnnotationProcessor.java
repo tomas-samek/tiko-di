@@ -28,7 +28,6 @@ import javax.tools.Diagnostic;
  * 4. Generate code: factories, proxies, event registry, container
  */
 @AutoService(Processor.class)
-@SupportedSourceVersion(SourceVersion.RELEASE_21)
 public final class TikoAnnotationProcessor extends AbstractProcessor {
 
     private ProcessorContext context;
@@ -53,6 +52,16 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
      * processing time and silently ignored when absent.
      */
     private static final String TEST_COMPONENT_FQN = "io.tiko.test.TestComponent";
+
+    /**
+     * Claims the compiling JDK's latest source version so users on newer JDKs compiling at
+     * a higher {@code --release} don't get javac's "Supported source version ... less than
+     * -source" warning (fatal under {@code -Werror}).
+     */
+    @Override
+    public SourceVersion getSupportedSourceVersion() {
+        return SourceVersion.latestSupported();
+    }
 
     @Override
     public Set<String> getSupportedAnnotationTypes() {

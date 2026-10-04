@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        java: [ '21', '25', '26' ]
+        java: [ '21', '25', '26', '27' ]
 
     steps:
       - uses: actions/checkout@v4

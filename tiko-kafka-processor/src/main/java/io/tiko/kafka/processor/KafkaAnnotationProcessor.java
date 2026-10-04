@@ -19,7 +19,6 @@ import java.util.Set;
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Processor;
 import javax.annotation.processing.RoundEnvironment;
-import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.AnnotationValue;
@@ -44,10 +43,19 @@ import javax.lang.model.type.TypeMirror;
  * </ol>
  */
 @AutoService(Processor.class)
-@SupportedSourceVersion(SourceVersion.RELEASE_21)
 public final class KafkaAnnotationProcessor extends AbstractProcessor {
 
     private boolean done;
+
+    /**
+     * Claims the compiling JDK's latest source version so users on newer JDKs compiling at
+     * a higher {@code --release} don't get javac's "Supported source version ... less than
+     * -source" warning (fatal under {@code -Werror}).
+     */
+    @Override
+    public SourceVersion getSupportedSourceVersion() {
+        return SourceVersion.latestSupported();
+    }
 
     @Override
     public Set<String> getSupportedAnnotationTypes() {
