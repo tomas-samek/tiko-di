@@ -11,7 +11,24 @@
     <packaging>pom</packaging>
 
     <name>Tiko DI - BOM</name>
-    <description>Bill of Materials for Tiko DI framework - centralized dependency management</description>
+    <description>
+        Bill of Materials (BOM) for Tiko, a compile-time dependency injection and event framework
+        for Java 21+ (CI-tested on JDK 21, 25, 26 and 27). Tiko orchestrates, it doesn't bundle —
+        direct access, compile-time safe, nothing wrapped. Its annotation processor validates the
+        whole wiring graph at compile time (unresolved and ambiguous dependencies, cycles, scope
+        violations) and generates plain Java wiring code you can read and step through. No
+        reflection, no classpath scanning in your wiring.
+        Core: constructor injection, SINGLETON / EVENT / PROTOTYPE scopes, @Produces factory
+        methods for plugging in any library, lifecycle hooks, and an in-process event bus with
+        declarative event chaining (@EventHandler, @EventTrigger).
+        Import this BOM with scope "import" in dependencyManagement to align the versions of every
+        Tiko module: tiko-api (annotations and interfaces), tiko-processor (compile-time annotation
+        processor), tiko-runtime (container and event bus), tiko-config (YAML-backed typed
+        configuration), tiko-test (JUnit 5 extension and test overrides), tiko-kafka and
+        tiko-kafka-processor (Kafka transport with compile-time-validated @KafkaSource / @KafkaSink
+        bridges), and tiko-mcp (MCP server exposing the compiled topology to AI coding agents).
+        Documentation: https://github.com/tomas-samek/tiko-di
+    </description>
     <url>https://github.com/tomas-samek/tiko-di</url>
 
     <licenses>
