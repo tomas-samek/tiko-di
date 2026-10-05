@@ -160,19 +160,14 @@ Throwable)`.
 given as `args[0]`.
 
 **Enforced by.** Code: `TikoMcpServer.main` (`Paths.get(args[0])`), `McpStdioBridge`. No
-`ServerSocket` / `HttpServer` in `tiko-mcp/src/main`. Confinement to the root: not enforced.
+`ServerSocket` / `HttpServer` in `tiko-mcp/src/main`. Confinement: `ProjectFiles.isInside`
+(real path, links resolved, must be under the root's real path) gates every file
+`TopologyStore.findFiles` loads and every match in `GetGeneratedArtifactTool`, whose walks no
+longer pass `FOLLOW_LINKS`. Pinned by `TopologyStoreSymlinkTest` (all four files) and
+`GetGeneratedArtifactToolSymlinkTest`; both need symlink support and skip where the OS refuses
+one (Windows without Developer Mode), so CI on Linux is where they run.
 
-**Status.** stdio-only holds. Confinement is a gap:
-- `GetGeneratedArtifactTool` walks the root with `Files.walk(…, FileVisitOption.FOLLOW_LINKS)`,
-  so a symlinked directory inside the project leads the walk outside it. The tool returns
-  path, line count and last-modified time — not contents — for files whose path ends like a
-  generated Tiko source.
-- `TopologyStore.walkFileTree` doesn't follow directory links, but a symlinked *file* under
-  `target/classes/META-INF/tiko/` is matched and read through the link — this applies to all
-  four files it loads: `topology.json`, `topology-kafka.json`, `wiring-errors.json` and
-  `config-schema.json`.
-  The tools only read known topology keys from it, and parse errors report offsets, not
-  content. Tracked in #475.
+**Status.** Holds (fixed in #475; symlinks that stay inside the project still work).
 
 **Violation looks like.** A socket/HTTP transport, `FileVisitOption.FOLLOW_LINKS`, or a tool
 argument resolved into a path outside the root.

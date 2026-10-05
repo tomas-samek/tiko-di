@@ -1,8 +1,8 @@
 package io.tiko.mcp.tools;
 
+import io.tiko.mcp.ProjectFiles;
 import io.tiko.mcp.TopologyStore;
 import java.io.IOException;
-import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
@@ -111,7 +111,9 @@ public final class GetGeneratedArtifactTool {
         // match found; multi-module reactors with multiple containers surface only one
         // (acceptable limitation — the agent can ask again with componentFqn-keyed kinds
         // to drill into a specific module's components).
-        try (Stream<Path> walk = Files.walk(store.projectRoot(), FileVisitOption.FOLLOW_LINKS)) {
+        // No FOLLOW_LINKS, and every match must resolve under the root (#475).
+        var realRoot = ProjectFiles.realRoot(store.projectRoot());
+        try (Stream<Path> walk = Files.walk(store.projectRoot())) {
             var match = walk.filter(p -> {
                         var name = p.getFileName().toString();
                         if (!name.startsWith(filenamePrefix) || !name.endsWith(".java")) {
@@ -120,6 +122,8 @@ public final class GetGeneratedArtifactTool {
                         var pathStr = p.toString().replace('\\', '/');
                         return pathStr.contains("/generated-sources/annotations/io/tiko/generated/");
                     })
+                    // Resolve real paths only for name matches — cheap, and links leading out are dropped.
+                    .filter(p -> ProjectFiles.isInside(realRoot, p))
                     .findFirst();
             if (match.isEmpty()) {
                 return notFound(
@@ -137,13 +141,17 @@ public final class GetGeneratedArtifactTool {
 
     private Map<String, Object> locate(String kind, String fileName, String pkgDir, String componentFqn) {
         var expectedTail = "/generated-sources/annotations/" + pkgDir + "/" + fileName;
-        try (Stream<Path> walk = Files.walk(store.projectRoot(), FileVisitOption.FOLLOW_LINKS)) {
+        // No FOLLOW_LINKS, and every match must resolve under the root (#475).
+        var realRoot = ProjectFiles.realRoot(store.projectRoot());
+        try (Stream<Path> walk = Files.walk(store.projectRoot())) {
             var match = walk.filter(p -> {
                         if (!p.getFileName().toString().equals(fileName)) {
                             return false;
                         }
                         return p.toString().replace('\\', '/').endsWith(expectedTail);
                     })
+                    // Resolve real paths only for name matches — cheap, and links leading out are dropped.
+                    .filter(p -> ProjectFiles.isInside(realRoot, p))
                     .findFirst();
             if (match.isEmpty()) {
                 return notFound(

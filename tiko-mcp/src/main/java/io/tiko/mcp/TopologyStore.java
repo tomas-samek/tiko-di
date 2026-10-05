@@ -219,11 +219,13 @@ public final class TopologyStore {
         var result = new ArrayList<Path>();
         if (!Files.isDirectory(root)) return result;
         PathMatcher matcher = root.getFileSystem().getPathMatcher("glob:**/target/classes/META-INF/tiko/" + fileName);
+        Path realRoot = ProjectFiles.realRoot(root);
         try {
             Files.walkFileTree(root, new SimpleFileVisitor<>() {
                 @Override
                 public java.nio.file.FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                    if (matcher.matches(file)) {
+                    // A matching name that is a symlink leading outside the project is skipped (#475).
+                    if (matcher.matches(file) && ProjectFiles.isInside(realRoot, file)) {
                         result.add(file);
                     }
                     return java.nio.file.FileVisitResult.CONTINUE;
