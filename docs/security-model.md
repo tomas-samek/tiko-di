@@ -113,15 +113,13 @@ or, where a literal is assembled by hand, through `CodeLiterals.javaString` (the
   `list.add(new $T($S, $S, …))` statements); `$L` carries method names.
 - `ContainerGenerator` (qualifier lookups) and `ComponentFactoryGenerator` (qualifier
   arguments) build quoted strings by hand but escape them with `CodeLiterals.javaString`.
-- `ConfigBinderGenerator.quotedJoin` builds `"\"" + key + "\""` **without** escaping and passes
-  the result through `$L` (`checkUnknownKeys(node, $S, $T.of($L))`, top-level and nested
-  records).
+- `ConfigBinderGenerator.quotedJoin` joins the `@Key` values as `$S` code blocks; the joined
+  block goes through `$L` (`checkUnknownKeys(node, $S, $T.of($L))`, top-level and nested
+  records). `KeyLiteralEscapingTest` pins quote, backslash, line-break, unicode-escape and
+  code-injection keys at both call sites.
 
-**Status.** Gap: `@Key` values are spliced into generated binders unescaped. A key containing
-`"` or `\` breaks the user's build; a crafted key compiles into extra statements (reproduced
-during review: `@Key("x\")); System.out.println(\"INJECTED\"); java.util.Set.of(java.util.Set.of(\"y")`
-produced a binder that compiled with the injected call). The annotation's author already
-controls the source, so no privilege boundary is crossed. Tracked in #479.
+**Status.** Holds (fixed in #479; before it, a crafted `@Key` compiled into extra statements in
+the generated binder).
 
 **Violation looks like.** `$L` with an annotation string value, or hand-built quoting
 (`"\"" + value + "\""`) without `CodeLiterals.javaString`, in an `addStatement` / `addCode`
