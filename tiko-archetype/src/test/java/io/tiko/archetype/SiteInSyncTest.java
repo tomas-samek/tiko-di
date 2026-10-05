@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -28,18 +29,15 @@ class SiteInSyncTest {
     /** Paths relative to the {@code tiko-archetype} module directory. */
     private static final Path PAGE = Path.of("..", "site", "index.html");
 
+    private static final Path STYLESHEET = Path.of("..", "site", "style.css");
     private static final Path README = Path.of("..", "README.md");
     private static final Path CI_WORKFLOW = Path.of("..", ".github", "workflows", "maven.yml");
 
     private static final Pattern README_BOM_VERSION =
             Pattern.compile("<artifactId>tiko-bom</artifactId>\\s*<version>([^<]+)</version>");
     private static final Pattern README_JAVA_BADGE = Pattern.compile("img\\.shields\\.io/badge/Java-([^-]+)-");
-    /** The {@code build} job's key line; its matrix is the first {@code java: [...]} line after it. */
-    private static final Pattern CI_BUILD_JOB = Pattern.compile("(?m)^  build:");
 
-    private static final Pattern CI_JAVA_MATRIX = Pattern.compile("(?m)^[ \\t]+java: \\[([^\\]\\r\\n]*)]");
     private static final Pattern ARTIFACT_ID = Pattern.compile("<artifactId>([^<]+)</artifactId>");
-    private static final Pattern ROOT_RELATIVE_URL = Pattern.compile("(?:href|src)=\"/(?!/)");
 
     @Test
     void bomVersionMatchesReadme() throws IOException {
@@ -60,14 +58,15 @@ class SiteInSyncTest {
         assertThat(pageListings)
                 .as("site/index.html must state the JDK list in the hero and the install section")
                 .hasSizeGreaterThanOrEqualTo(2);
-        var rows = pageListings.stream().map(listing -> Arguments.of("site/index.html sync:jdks", split(listing, "·")));
+        var rows = IntStream.range(0, pageListings.size())
+                .mapToObj(i -> Arguments.of(pageJdkRowName(i), split(pageListings.get(i), "·")));
         return Stream.concat(rows, Stream.of(Arguments.of("README Java badge", split(badge, "\\|"))));
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("jdkListings")
     void jdkListMatchesCiBuildMatrix(String where, List<String> jdks) throws IOException {
-        var matrix = split(buildJobMatrix(Files.readString(CI_WORKFLOW)).replace("'", ""), ",");
+        var matrix = SiteChecks.buildJobJdks(Files.readString(CI_WORKFLOW));
 
         assertThat(jdks)
                 .as(
@@ -75,6 +74,15 @@ class SiteInSyncTest {
                                 + " LTS from 21 onward plus every GA since the latest LTS; update all three together.",
                         where)
                 .isEqualTo(matrix);
+    }
+
+    @Test
+    void jdkRowsNameWhereTheListLives() throws IOException {
+        var names = jdkListings().map(row -> (String) row.get()[0]).toList();
+
+        assertThat(names)
+                .as("Each JDK-list row must name its own location, so a failure says which one drifted")
+                .doesNotHaveDuplicates();
     }
 
     @Test
@@ -89,22 +97,21 @@ class SiteInSyncTest {
 
     @Test
     void pageUsesNoRootRelativeUrls() throws IOException {
-        assertThat(ROOT_RELATIVE_URL.matcher(Files.readString(PAGE)).find())
-                .as("The site is served under /tiko-di/, so a root-relative href/src (\"/...\") would 404."
+        assertThat(SiteChecks.rootRelativeReferences(Files.readString(PAGE), Files.readString(STYLESHEET)))
+                .as("The site is served under /tiko-di/, so a root-relative reference (\"/...\") would 404."
                         + " Use a relative path.")
-                .isFalse();
+                .isEmpty();
     }
 
-    private static String buildJobMatrix(String workflow) {
-        var job = CI_BUILD_JOB.matcher(workflow);
-        if (!job.find()) {
-            throw new IllegalStateException("No build job in .github/workflows/maven.yml");
-        }
-        var matrix = CI_JAVA_MATRIX.matcher(workflow);
-        if (!matrix.find(job.end())) {
-            throw new IllegalStateException("No java: [...] matrix after the build job in .github/workflows/maven.yml");
-        }
-        return matrix.group(1);
+    /** The page states the JDK list in the hero first, then in the install section. */
+    private static String pageJdkRowName(int index) {
+        var where =
+                switch (index) {
+                    case 0 -> "hero";
+                    case 1 -> "install section";
+                    default -> "occurrence " + (index + 1);
+                };
+        return "site/index.html " + where + " (sync:jdks #" + (index + 1) + ")";
     }
 
     /** The first {@code ```xml} block after README's {@code ## Installation} heading. */
