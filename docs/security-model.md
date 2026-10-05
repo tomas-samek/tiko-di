@@ -46,7 +46,7 @@ value is wrong, never the value itself.
 - `CompositeCoercers` (`Set<X>` coercer) logs `duplicate value '<value>' deduped` at WARNING.
 - Scalar coercers include the rejected string in `CoercionException` messages
   (`expected integer, got string "<value>"`), which reach the WARNING log through
-  `ConfigurationFailure`.
+  `ConfigurationFailure`. Tracked in #474.
 
 **Violation looks like.** A log call or exception message that concatenates a resolved
 configuration value.
@@ -159,7 +159,7 @@ given as `args[0]`.
 - `TopologyStore.walkFileTree` doesn't follow directory links, but a symlinked
   `target/classes/META-INF/tiko/topology.json` *file* is matched and read through the link.
   The tools only read known topology keys from it, and parse errors report offsets, not
-  content.
+  content. Tracked in #475.
 
 **Violation looks like.** A socket/HTTP transport, `FileVisitOption.FOLLOW_LINKS`, or a tool
 argument resolved into a path outside the root.
@@ -202,7 +202,7 @@ shipped dependency, shaded ones included, is covered by an advisory check before
 **Status.** Gap: GitHub's dependency graph lists `jackson-databind` and
 `jackson-datatype-jsr310` but not `jackson-core` / `jackson-annotations`, which
 `tiko-kafka` shades (`<include>com.fasterxml.jackson.core:*</include>`). Automated alerts
-don't cover them.
+don't cover them. Tracked in #476.
 
 **Violation looks like.** A new shaded or transitive dependency with no advisory coverage.
 
@@ -221,7 +221,7 @@ in `release.yml`; artifacts are GPG-signed; workflows run with least-privilege
 **Enforced by.** `.github/workflows/release.yml` (sole user of those secrets);
 `maven-gpg-plugin` in the root `pom.xml` `release` profile.
 
-**Status.** Gap: third-party actions are pinned by version tag (`@v4`), not by commit SHA.
+**Status.** Gap: third-party actions are pinned by version tag (`@v4`), not by commit SHA. Tracked in #477.
 
 **Violation looks like.** A release secret in another workflow, `permissions: write-all`,
 or an unpinned/new third-party action.
@@ -240,5 +240,7 @@ an unbounded tight loop.
 
 **Enforced by.** `TikoOptions` (`queueCapacity` default 1024, `OverflowPolicy`).
 
-**Status.** Async queue holds. Kafka `SEEK` redelivery cadence: unconfirmed —
-`ThreadPerTopicRunner.seekSafely` seeks back with no delay before the next `poll()`.
+**Status.** Async queue holds. Kafka `SEEK` redelivery: gap — `ThreadPerTopicRunner` seeks
+back with no delay before the next `poll()`; a scratch run with a consumer that returns the
+poison record immediately observed 36,886 redeliveries (and routed errors) in one second.
+Tracked in #478.
