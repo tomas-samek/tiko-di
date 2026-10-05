@@ -318,7 +318,7 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
      */
     static Duration seekBackoff(int attempt, Duration initial, Duration max) {
         if (initial.isZero() || initial.isNegative()) return Duration.ZERO;
-        int doublings = Math.min(Math.max(attempt - 1, 0), 30);
+        int doublings = Math.clamp(attempt - 1L, 0, 30);
         Duration grown = initial.multipliedBy(1L << doublings);
         return grown.compareTo(max) > 0 ? max : grown;
     }
