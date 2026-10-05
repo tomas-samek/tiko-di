@@ -22,6 +22,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # JDK support policy: every LTS from 21 onward plus every GA since the latest LTS.
+        # README Java badge and site/index.html list the same set (SiteInSyncTest enforces it).
         java: [ '21', '25', '26', '27' ]
 
     steps:

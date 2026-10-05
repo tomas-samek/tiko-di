@@ -272,11 +272,14 @@ Spots to bump to `<X.Y.Z>`:
 - `docs/jdk-23-setup.md` — the Maven `<version>`, the three Gradle
   coordinates, and the plain-`javac` jar names (still explicit pins, not
   BOM-managed).
+- `site/index.html` — the `tiko-bom` version between the
+  `<!-- sync:bom-version -->` markers in the Install snippet.
+  `SiteInSyncTest` fails the build if it disagrees with the README.
 
 Then sweep for stragglers (substitute the *prior* version):
 
 ```bash
-grep -n "<prior X.Y.Z>" README.md docs/jdk-23-setup.md
+grep -n "<prior X.Y.Z>" README.md docs/jdk-23-setup.md site/index.html
 ```
 
 **Do not** bump version strings in point-in-time records — they pin an

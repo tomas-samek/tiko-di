@@ -10,7 +10,7 @@
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=tomas-samek_tiko-di&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=tomas-samek_tiko-di)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=tomas-samek_tiko-di&metric=coverage)](https://sonarcloud.io/summary/new_code?id=tomas-samek_tiko-di)
 
-**Status: on Maven Central** (latest version in the badge above). Suitable for early-adopter experimentation. See [docs/roadmap.md](./docs/roadmap.md) for what ships today and what's next.
+**Website: [tomas-samek.github.io/tiko-di](https://tomas-samek.github.io/tiko-di/)** · **Status: on Maven Central** (latest version in the badge above). Suitable for early-adopter experimentation. See [docs/roadmap.md](./docs/roadmap.md) for what ships today and what's next.
 
 ## What Tiko is
 
