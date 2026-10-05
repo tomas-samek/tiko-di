@@ -15,8 +15,8 @@ Everything here is driven by the registry [`docs/security-model.md`](../../docs/
 |---|---|
 | `tiko-config/**` | SEC-1, SEC-2 |
 | `tiko-kafka/**/serializer/**`, `KafkaSerializer`, `EventSerializer` | SEC-3 |
-| `tiko-kafka/**/runtime/**`, `KafkaIngestError` | SEC-4, SEC-11 |
-| `**/processor/**/generator/**` | SEC-5 |
+| `tiko-kafka/**/runtime/**`, `KafkaIngestError` | SEC-3, SEC-4, SEC-11 |
+| `tiko-processor/**`, `tiko-kafka-processor/**` (generators, `CodeLiterals`) | SEC-5 |
 | any log call, `TikoLog` | SEC-6 |
 | `tiko-mcp/**` | SEC-7 |
 | `tiko-runtime/**` (`Class.forName`, `ServiceLoader`, `TikoOptions`) | SEC-8, SEC-11 |
@@ -37,14 +37,20 @@ Collect, then decide:
 ```bash
 last=$(git describe --tags --abbrev=0 --match 'v*')
 git diff --name-only "$last"..HEAD                                   # → Mode 1 over the delta
-gh api "repos/tomas-samek/tiko-di/dependabot/alerts?state=open" \
+gh api --paginate "repos/tomas-samek/tiko-di/dependabot/alerts?state=open&per_page=100" \
   --jq '.[] | "\(.security_advisory.severity) \(.dependency.package.name) \(.dependency.manifest_path)"'
-gh api "repos/tomas-samek/tiko-di/code-scanning/alerts?state=open&ref=refs/heads/main" \
+gh api --paginate "repos/tomas-samek/tiko-di/code-scanning/alerts?state=open&ref=refs/heads/main&per_page=100" \
   --jq '.[] | "\(.rule.security_severity_level) \(.rule.id) \(.most_recent_instance.location.path)"'
-v=$(mvn -q help:evaluate -Dexpression=jackson.version -DforceStdout)  # shaded Jackson (SEC-9 blind spot)
-for a in jackson-core jackson-annotations jackson-databind; do
-  gh api "/advisories?ecosystem=maven&affects=com.fasterxml.jackson.core:$a@$v" --jq '.[] | "\(.severity) \(.ghsa_id) \(.summary)"'
-done
+# Shaded Jackson (SEC-9 blind spot): query every artifact tiko-kafka ships, at its resolved
+# version — they differ (e.g. jackson-annotations 2.22 vs jackson-core 2.22.3).
+mvn -q -pl tiko-kafka dependency:list -DoutputFile=shaded-deps.txt \
+  -DincludeGroupIds=com.fasterxml.jackson.core,com.fasterxml.jackson.datatype
+grep -oE 'com\.fasterxml\.jackson\.[a-z]+:[a-z0-9-]+:jar:[^:]+' tiko-kafka/shaded-deps.txt \
+  | sed -E 's/:jar:/@/' | while read -r coord; do
+      gh api --paginate "/advisories?ecosystem=maven&affects=$coord&per_page=100" \
+        --jq '.[] | "\(.severity) \(.ghsa_id) \(.summary)"' | sed "s|^|$coord |"
+    done
+rm tiko-kafka/shaded-deps.txt
 ```
 
 | Verdict | When |
@@ -53,12 +59,19 @@ done
 | **CONDITIONAL** | medium/low alerts on shipped artifacts; a SEC gap touched by the delta that is already tracked by an issue |
 | **GO** | none of the above |
 
-Alerts only in `tiko-examples/` or `comparisons/` don't affect the verdict (not shipped). Name
-every blocker; the release waits until NO-GO blockers are fixed.
+Only shipped code counts: alerts in `tiko-examples/`, `comparisons/` or any `src/test/**`
+don't affect the verdict. Name every blocker; the release waits until NO-GO blockers are fixed.
 
-An alert that genuinely doesn't apply is resolved **in GitHub first** — dismiss it with a
-reason (`not used`, `inaccurate`, `tolerable risk`) — and only then is it no longer open. The
-gate reads alert state; it never waives an open alert in its own verdict.
+An alert that genuinely doesn't apply is resolved **in GitHub first** — the maintainer dismisses
+it with a reason — and only then is it no longer open. Dependabot reasons: `not used`,
+`inaccurate`, `tolerable risk`, `no bandwidth`, `fix started`. Code-scanning reasons: `false
+positive`, `won't fix`, `used in tests`. The gate reads alert state; it never waives an open
+alert in its own verdict.
+
+A **shaded-coordinate advisory** can't be dismissed (it isn't a repository alert). Resolve it by
+bumping the shaded version (`mvn versions:set-property -Dproperty=jackson.version …`) and
+re-running the gate. If no fixed upstream version exists, the release stays NO-GO until the
+maintainer decides; record that decision in a comment on the release PR, not in release notes.
 
 | Rationalization | Reality |
 |---|---|
@@ -98,13 +111,17 @@ exploitable flaw:
    Rate the impact the **code** allows, not the impact the report claims — read what the
    affected path actually returns, logs or executes, and reproduce it. A report's worst case
    and a first reading both tend to overstate. If the confirmed impact is a hardening gap
-   rather than an exploitable flaw, tell the maintainer and handle it as an audit gap (Mode 3).
+   rather than an exploitable flaw, the **maintainer decides** whether it moves to a public
+   issue. For an external report, tell the reporter in the advisory thread and close the draft
+   advisory before anything is filed publicly (SECURITY.md promises coordinated handling).
 3. **Fix privately**: from the draft advisory, *Start a temporary private fork*; fix there,
    with tests. Commit messages and branch names stay neutral (`fix(kafka): harden …`).
 4. **Release**: merge the private fork's PR from the advisory, then run `tiko-architect` →
    `tiko-security` (Mode 2) → `tiko-release`.
 5. **Publish** the advisory once the fixed version resolves on Maven Central (request a CVE
-   in the advisory if warranted); credit the reporter unless they decline.
+   in the advisory if warranted); credit the reporter unless they decline. Then add the advisory
+   link and the credit to the fixed version's GitHub Release notes (SECURITY.md promises credit
+   there too) — only after publication, never before.
 
 **Nothing about the vulnerability goes into a public issue, PR, discussion, commit message,
 branch name or release note before step 5.**

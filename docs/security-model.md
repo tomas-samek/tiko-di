@@ -104,17 +104,28 @@ call that renders `record.value()`.
 **Threat.** Code injection into a user's build through annotation string values (topic names,
 event names, qualifiers, configuration keys).
 
-**Rule.** String values are emitted with JavaPoet `$S`; `$L` is used only for Java
-identifiers and numbers taken from the compiler's element model.
+**Rule.** String values reach generated code as escaped Java literals — through JavaPoet `$S`,
+or, where a literal is assembled by hand, through `CodeLiterals.javaString` (the #333 fix).
+`$L` carries only identifiers, numbers and code assembled from escaped pieces.
 
-**Enforced by.** Code: `KafkaTransportBootstrapGenerator` emits topics and names via `$S`
-(descriptor `list.add(new $T($S, $S, …))` statements); `$L` carries method names. No
-`"\"" + value + "\""` string building in either processor's generators.
+**Enforced by.** Code, per call site (check every generator in both processors, not one):
+- `KafkaTransportBootstrapGenerator` emits topics and names via `$S` (descriptor
+  `list.add(new $T($S, $S, …))` statements); `$L` carries method names.
+- `ContainerGenerator` (qualifier lookups) and `ComponentFactoryGenerator` (qualifier
+  arguments) build quoted strings by hand but escape them with `CodeLiterals.javaString`.
+- `ConfigBinderGenerator.quotedJoin` builds `"\"" + key + "\""` **without** escaping and passes
+  the result through `$L` (`checkUnknownKeys(node, $S, $T.of($L))`, top-level and nested
+  records).
 
-**Status.** Holds.
+**Status.** Gap: `@Key` values are spliced into generated binders unescaped. A key containing
+`"` or `\` breaks the user's build; a crafted key compiles into extra statements (reproduced
+during review: `@Key("x\")); System.out.println(\"INJECTED\"); java.util.Set.of(java.util.Set.of(\"y")`
+produced a binder that compiled with the injected call). The annotation's author already
+controls the source, so no privilege boundary is crossed. Tracked in #479.
 
 **Violation looks like.** `$L` with an annotation string value, or hand-built quoting
-(`"\"" + value + "\""`) in an `addStatement` / `addCode` argument.
+(`"\"" + value + "\""`) without `CodeLiterals.javaString`, in an `addStatement` / `addCode`
+argument.
 
 ---
 
@@ -156,8 +167,10 @@ given as `args[0]`.
   so a symlinked directory inside the project leads the walk outside it. The tool returns
   path, line count and last-modified time — not contents — for files whose path ends like a
   generated Tiko source.
-- `TopologyStore.walkFileTree` doesn't follow directory links, but a symlinked
-  `target/classes/META-INF/tiko/topology.json` *file* is matched and read through the link.
+- `TopologyStore.walkFileTree` doesn't follow directory links, but a symlinked *file* under
+  `target/classes/META-INF/tiko/` is matched and read through the link — this applies to all
+  four files it loads: `topology.json`, `topology-kafka.json`, `wiring-errors.json` and
+  `config-schema.json`.
   The tools only read known topology keys from it, and parse errors report offsets, not
   content. Tracked in #475.
 
