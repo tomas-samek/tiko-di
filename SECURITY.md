@@ -6,8 +6,8 @@ Tiko is pre-1.0. Security fixes go into the next release of the latest minor lin
 
 | Version | Supported |
 |---|---|
-| 0.5.x (latest) | ✅ |
-| older | ❌ — upgrade to the latest release |
+| Latest minor release ([Maven Central](https://central.sonatype.com/artifact/io.github.tomas-samek/tiko-bom)) | ✅ |
+| Older minor lines | ❌ — upgrade to the latest release |
 
 ## Reporting a vulnerability
 
@@ -24,8 +24,8 @@ Include:
 ## What to expect
 
 - **Acknowledgement within 7 days.**
-- Triage and a fix on a best-effort basis, coordinated with you. Tiko is maintained by one person; we keep you informed rather than promise a date.
-- Public disclosure through a GitHub Security Advisory, with a CVE where warranted, once a fixed release is available on Maven Central. Disclosure happens at most 90 days after your report.
+- Triage and a fix on a best-effort basis, coordinated with you. Tiko is maintained by one person, so we keep you informed as the fix progresses.
+- Public disclosure through a GitHub Security Advisory, with a CVE where warranted, once a fixed release is available on Maven Central. We aim for that within 90 days of your report; if a fix needs longer, we agree the disclosure date with you.
 - Credit in the advisory and release notes, unless you'd rather not be named.
 
 ## Scope
@@ -44,3 +44,5 @@ Include:
 ## Bundled dependencies
 
 `tiko-kafka` shades Jackson (relocated under `io.tiko.kafka.internal.jackson`). A vulnerability there is fixed by a new Tiko release; upgrading Jackson in your own build doesn't change the shaded copy.
+
+GitHub's automated dependency alerts see only the dependencies declared in our poms. Shaded modules that aren't declared directly, such as `jackson-core` and `jackson-annotations`, aren't covered by them.

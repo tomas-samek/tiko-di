@@ -364,7 +364,7 @@ Security vulnerabilities are the exception: report them privately as described i
 
 Report vulnerabilities privately through GitHub's [private vulnerability reporting](https://github.com/tomas-samek/tiko-di/security/advisories/new), not in a public issue. [SECURITY.md](./SECURITY.md) covers supported versions, what to expect, and scope.
 
-Every pull request runs CodeQL code scanning and GitHub Dependency Review, and Dependabot watches the dependencies already in use. Untrusted input is handled conservatively by default:
+Every pull request runs CodeQL code scanning and GitHub Dependency Review, and Dependabot watches the dependencies declared in our poms (shaded transitive modules such as `jackson-core` are outside its view — see [SECURITY.md](./SECURITY.md)). Untrusted input is handled conservatively by default:
 
 - YAML configuration is loaded with SnakeYAML's `SafeConstructor`.
 - The Kafka JSON serializer reads each record into the bridge method's declared payload type, with Jackson default typing off.
