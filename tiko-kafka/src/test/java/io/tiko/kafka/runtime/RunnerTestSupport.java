@@ -31,6 +31,11 @@ final class RunnerTestSupport {
     }
 
     static KafkaConfig config(String poisonRecordPolicy) {
+        return config(poisonRecordPolicy, Duration.ZERO, Duration.ZERO);
+    }
+
+    /** Config with an explicit SEEK backoff (#478); {@code Duration.ZERO} redelivers immediately. */
+    static KafkaConfig config(String poisonRecordPolicy, Duration seekBackoff, Duration seekBackoffMax) {
         return new KafkaConfig(
                 "unused:9092",
                 "g",
@@ -40,7 +45,9 @@ final class RunnerTestSupport {
                 Duration.ofSeconds(2),
                 Map.of(),
                 Map.of(),
-                poisonRecordPolicy);
+                poisonRecordPolicy,
+                seekBackoff,
+                seekBackoffMax);
     }
 
     /**

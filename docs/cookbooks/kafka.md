@@ -174,7 +174,17 @@ tiko:
 - **`SEEK`** (default) — seek back to the failed offset and redeliver. No data is lost
   across a *transient* failure (a brief broker/schema-registry/DB blip rides through),
   but a genuinely bad ("poison") record blocks its partition until it is removed or the
-  consumer is reconfigured.
+  consumer is reconfigured. Before each redelivery the runner pauses **only that
+  partition** for a backoff that doubles per consecutive failure of the same record —
+  so a poison record settles to one retry (and one `ErrorHandler` call) per
+  `seek-backoff-max`, and the topic's other partitions keep flowing:
+
+  ```yaml
+  tiko:
+    kafka:
+      seek-backoff: PT0.5S      # first retry delay (default); PT0S redelivers immediately
+      seek-backoff-max: PT30S   # cap (default)
+  ```
 - **`SKIP`** — log via the `ErrorHandler` (above) and commit past the record so the
   partition advances. This is the first-class "log and skip a poison record" — no
   `null`-returning serializer workaround needed.

@@ -190,6 +190,16 @@ class KafkaRunnerFailureHandlingTest {
         }
 
         @Override
+        public void pause(Collection<TopicPartition> partitions) {
+            delegate.pause(partitions);
+        }
+
+        @Override
+        public void resume(Collection<TopicPartition> partitions) {
+            delegate.resume(partitions);
+        }
+
+        @Override
         public void wakeup() {
             delegate.wakeup();
         }

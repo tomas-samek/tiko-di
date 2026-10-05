@@ -55,6 +55,16 @@ class ScriptedConsumerClient implements KafkaConsumerClient {
     }
 
     @Override
+    public void pause(Collection<TopicPartition> partitions) {
+        // scripted — batches are served as given; subclasses model pausing when a test needs it
+    }
+
+    @Override
+    public void resume(Collection<TopicPartition> partitions) {
+        // scripted — see pause
+    }
+
+    @Override
     public void wakeup() {
         wakeup = true;
     }

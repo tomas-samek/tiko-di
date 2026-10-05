@@ -30,6 +30,16 @@ public interface KafkaConsumerClient extends AutoCloseable {
     void seek(TopicPartition partition, long offset);
 
     /**
+     * Stop returning records for the given partitions from {@link #poll} until they are
+     * {@link #resume resumed}. The runner pauses a partition while a failed record backs off
+     * before redelivery (#478), so other partitions keep flowing.
+     */
+    void pause(Collection<TopicPartition> partitions);
+
+    /** Return records for previously {@link #pause paused} partitions again. */
+    void resume(Collection<TopicPartition> partitions);
+
+    /**
      * Wake the consumer thread up out of a blocking {@code poll}, causing it to throw
      * {@code WakeupException}. Used at shutdown.
      */

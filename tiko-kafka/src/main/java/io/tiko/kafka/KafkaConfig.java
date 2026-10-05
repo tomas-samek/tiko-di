@@ -33,4 +33,6 @@ public record KafkaConfig(
         @Default("PT5S") @Key("shutdown-timeout") Duration shutdownTimeout,
         @Key("producer-properties") Map<String, String> producerProperties,
         @Key("consumer-properties") Map<String, String> consumerProperties,
-        @Default("SEEK") @Key("poison-record-policy") String poisonRecordPolicy) {}
+        @Default("SEEK") @Key("poison-record-policy") String poisonRecordPolicy,
+        @Default("PT0.5S") @Key("seek-backoff") Duration seekBackoff,
+        @Default("PT30S") @Key("seek-backoff-max") Duration seekBackoffMax) {}

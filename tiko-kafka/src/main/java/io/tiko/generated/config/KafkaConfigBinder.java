@@ -84,6 +84,18 @@ public final class KafkaConfigBinder implements ConfigBinder<KafkaConfig> {
                 "tiko.kafka.poison-record-policy",
                 Coercers.stringCoercer(),
                 Coercers.stringCoercer().coerce("SEEK"));
+        Duration seekBackoff = ctx.scalarOrDefault(
+                node,
+                "seek-backoff",
+                "tiko.kafka.seek-backoff",
+                Coercers.durationCoercer(),
+                Coercers.durationCoercer().coerce("PT0.5S"));
+        Duration seekBackoffMax = ctx.scalarOrDefault(
+                node,
+                "seek-backoff-max",
+                "tiko.kafka.seek-backoff-max",
+                Coercers.durationCoercer(),
+                Coercers.durationCoercer().coerce("PT30S"));
         ctx.checkUnknownKeys(
                 node,
                 "tiko.kafka",
@@ -96,7 +108,9 @@ public final class KafkaConfigBinder implements ConfigBinder<KafkaConfig> {
                         "shutdown-timeout",
                         "producer-properties",
                         "consumer-properties",
-                        "poison-record-policy"));
+                        "poison-record-policy",
+                        "seek-backoff",
+                        "seek-backoff-max"));
         return new KafkaConfig(
                 bootstrapServers,
                 consumerGroup,
@@ -106,6 +120,8 @@ public final class KafkaConfigBinder implements ConfigBinder<KafkaConfig> {
                 shutdownTimeout,
                 producerProperties,
                 consumerProperties,
-                poisonRecordPolicy);
+                poisonRecordPolicy,
+                seekBackoff,
+                seekBackoffMax);
     }
 }
