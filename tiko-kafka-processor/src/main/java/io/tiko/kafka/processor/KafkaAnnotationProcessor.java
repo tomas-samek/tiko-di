@@ -13,17 +13,15 @@ import io.tiko.kafka.processor.validation.BridgeMethodShapeValidator;
 import io.tiko.kafka.processor.validation.PartitionKeyValidator;
 import io.tiko.kafka.processor.validation.RequiredSiblingValidator;
 import io.tiko.kafka.processor.validation.SingletonBridgeValidator;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import javax.annotation.processing.AbstractProcessor;
+import javax.annotation.processing.Generated;
 import javax.annotation.processing.Processor;
 import javax.annotation.processing.RoundEnvironment;
-import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.AnnotationValue;
-import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
@@ -44,29 +42,49 @@ import javax.lang.model.type.TypeMirror;
  * </ol>
  */
 @AutoService(Processor.class)
-@SupportedSourceVersion(SourceVersion.RELEASE_21)
 public final class KafkaAnnotationProcessor extends AbstractProcessor {
 
     private boolean done;
 
+    /**
+     * Supported only so the processor can claim it on its generated bootstrap in the rounds
+     * after generation; javac's {@code -Xlint:processing} otherwise reports it as unclaimed,
+     * which fails {@code -Werror} builds.
+     */
+    private static final String GENERATED_FQN = Generated.class.getCanonicalName();
+
+    /**
+     * Claims the compiling JDK's latest source version so users on newer JDKs compiling at
+     * a higher {@code --release} don't get javac's "Supported source version ... less than
+     * -source" warning (fatal under {@code -Werror}).
+     */
+    @Override
+    public SourceVersion getSupportedSourceVersion() {
+        return SourceVersion.latestSupported();
+    }
+
     @Override
     public Set<String> getSupportedAnnotationTypes() {
-        return Set.of(KafkaSource.class.getCanonicalName(), KafkaSink.class.getCanonicalName());
+        return Set.of(KafkaSource.class.getCanonicalName(), KafkaSink.class.getCanonicalName(), GENERATED_FQN);
     }
 
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
-        if (done || roundEnv.processingOver()) return false;
+        if (roundEnv.processingOver()) return false;
+        // Rounds after generation: claim @Generated on the previous round's output.
+        if (done) return true;
+        // Only foreign @Generated sources this round: nothing to bridge, and not ours to claim.
+        if (annotations.stream().allMatch(a -> a.getQualifiedName().contentEquals(GENERATED_FQN))) return false;
 
-        List<KafkaSourceDescriptor> sources = new ArrayList<>();
-        for (Element e : roundEnv.getElementsAnnotatedWith(KafkaSource.class)) {
-            if (e instanceof ExecutableElement m) sources.add(buildSourceDescriptor(m));
-        }
+        List<KafkaSourceDescriptor> sources = roundEnv.getElementsAnnotatedWith(KafkaSource.class).stream()
+                .filter(ExecutableElement.class::isInstance)
+                .map(e -> buildSourceDescriptor((ExecutableElement) e))
+                .toList();
 
-        List<KafkaSinkDescriptor> sinks = new ArrayList<>();
-        for (Element e : roundEnv.getElementsAnnotatedWith(KafkaSink.class)) {
-            if (e instanceof ExecutableElement m) sinks.add(buildSinkDescriptor(m));
-        }
+        List<KafkaSinkDescriptor> sinks = roundEnv.getElementsAnnotatedWith(KafkaSink.class).stream()
+                .filter(ExecutableElement.class::isInstance)
+                .map(e -> buildSinkDescriptor((ExecutableElement) e))
+                .toList();
 
         if (!sources.isEmpty() || !sinks.isEmpty()) {
             boolean ok = true;
@@ -90,7 +108,7 @@ public final class KafkaAnnotationProcessor extends AbstractProcessor {
         }
 
         done = true;
-        return false;
+        return true; // Claim @KafkaSource / @KafkaSink
     }
 
     private KafkaSourceDescriptor buildSourceDescriptor(ExecutableElement method) {

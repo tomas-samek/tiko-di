@@ -404,6 +404,18 @@
     </build>
 
     <profiles>
+        <!-- palantir-java-format reads javac internals that JDK 27 changed, so Spotless cannot run
+             there yet (palantir/palantir-java-format#1785, #1786, #1799). The format gate stays
+             enforced on the JDK 21/25/26 CI legs; drop this profile once a fixed release lands. -->
+        <profile>
+            <id>jdk27-skip-spotless</id>
+            <activation>
+                <jdk>[27,)</jdk>
+            </activation>
+            <properties>
+                <spotless.check.skip>true</spotless.check.skip>
+            </properties>
+        </profile>
         <!-- Release-only artifact attachment. Maven Central requires a -sources.jar and a
              -javadoc.jar alongside every published jar; generating them on every `mvn install`
              would slow day-to-day builds, so they are gated behind `-Prelease`. pom-packaging
