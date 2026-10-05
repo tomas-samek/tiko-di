@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tiko — a compile-time orchestrator for Java</title>
+  <meta name="description" content="Tiko is a compile-time dependency injection and event framework for Java. Tiko orchestrates, it doesn't bundle — direct access, compile-time safe, nothing wrapped.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="grid-bg">
+  <div class="wrap site-header">
+    <a class="brand" href="./">TIKO</a>
+    <nav class="site-nav" aria-label="Main">
+      <a href="https://github.com/tomas-samek/tiko-di/blob/main/docs/orchestrator-model.md">Docs</a>
+      <a href="https://github.com/tomas-samek/tiko-di/tree/main/tiko-examples">Examples</a>
+      <a href="https://github.com/tomas-samek/tiko-di">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="grid-bg hero">
+  <div class="wrap">
+      <div class="hero-inner">
+        <div class="hero-copy">
+          <h1>A compile-time orchestrator for Java</h1>
+          <p class="pitch">Tiko orchestrates, it doesn't bundle — direct access, compile-time safe, nothing wrapped.</p>
+          <p class="support">Every Java LTS from 21, plus every GA since the latest LTS · today <!-- sync:jdks -->21 · 25 · 26 · 27<!-- /sync:jdks --></p>
+          <div class="actions">
+            <a class="button primary" href="#install">Get started</a>
+            <a class="button secondary" href="https://github.com/tomas-samek/tiko-di">GitHub</a>
+            <a href="https://central.sonatype.com/artifact/io.github.tomas-samek/tiko-bom"><img class="badge" src="https://img.shields.io/maven-central/v/io.github.tomas-samek/tiko-bom?label=Maven%20Central&amp;color=0e7490" alt="Latest version on Maven Central"></a>
+          </div>
+        </div>
+        <svg class="hero-graph" viewBox="0 0 110 96" role="img" aria-label="Wiring graph: a Service depends on a Repo, a Bus and a Pool; a dashed red edge marks a dependency the compiler cannot resolve">
+          <line class="graph-edge" x1="20" y1="18" x2="58" y2="48" stroke-width="1.5"/>
+          <line class="graph-edge" x1="20" y1="78" x2="58" y2="48" stroke-width="1.5"/>
+          <line class="graph-edge" x1="58" y1="48" x2="94" y2="22" stroke-width="1.5"/>
+          <line class="graph-edge broken" x1="58" y1="48" x2="94" y2="74" stroke-width="1.5"/>
+          <rect class="graph-node" x="4" y="10" width="32" height="16" rx="3"/>
+          <text class="graph-label" x="20" y="21" text-anchor="middle">Repo</text>
+          <rect class="graph-node" x="4" y="70" width="32" height="16" rx="3"/>
+          <text class="graph-label" x="20" y="81" text-anchor="middle">Bus</text>
+          <rect class="graph-node center" x="40" y="40" width="36" height="16" rx="3"/>
+          <text class="graph-label center" x="58" y="51" text-anchor="middle">Service</text>
+          <rect class="graph-node" x="78" y="14" width="30" height="16" rx="3"/>
+          <text class="graph-label" x="93" y="25" text-anchor="middle">Pool</text>
+          <rect class="graph-node broken" x="78" y="66" width="30" height="16" rx="3"/>
+          <text class="graph-label broken" x="93" y="77" text-anchor="middle">???</text>
+        </svg>
+      </div>
+  </div>
+</div>
+
+<section id="what" class="plain-bg">
+  <div class="wrap">
+    <p class="label">What Tiko is</p>
+    <h2>The three buckets</h2>
+    <p class="lede">The container, the scopes, the event bus and the wiring graph ship as the framework. Every concern in a Tiko-built service lands in exactly one bucket.</p>
+    <div class="cards">
+      <div class="card">
+        <h3>Core — what Tiko ships</h3>
+        <p>DI container, scopes (<code>SINGLETON</code> / <code>EVENT</code> / <code>PROTOTYPE</code>), event bus, <code>@EventHandler</code> + <code>@EventTrigger</code>, compile-time validation, lifecycle hooks, typed <code>@Configuration</code> records.</p>
+      </div>
+      <div class="card">
+        <h3>Plug in — you bring the library</h3>
+        <p>HTTP, DataSource, migrations, caching, templates, security, any SDK client. Declare a <code>@Produces</code> method, return the library's value, consume it as a constructor parameter. No wrapper, no adapter layer.</p>
+      </div>
+      <div class="card">
+        <h3>Open design questions</h3>
+        <p>Async generalisation, scheduling as a tick event, retry as an event loop — the small set of unresolved questions about extending the event model itself.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="taste" class="grid-bg">
+  <div class="wrap">
+    <p class="label">30-second taste</p>
+    <h2>Plain classes, constructor injection</h2>
+    <p class="lede">The annotation processor validates all dependencies at compile time and generates the wiring code — plain Java you can read and step through. No reflection, no classpath scanning in your wiring.</p>
+<pre><code><span class="a">@Component</span>(scope = Scope.SINGLETON)
+<span class="k">public class</span> UserRepository {
+    <span class="k">public</span> User findById(String id) { <span class="c">/* ... */</span> <span class="k">return null</span>; }
+}
+
+<span class="a">@Component</span>(scope = Scope.SINGLETON)
+<span class="k">public class</span> UserService {
+    <span class="k">private final</span> UserRepository repository;
+
+    <span class="a">@Inject</span>
+    <span class="k">public</span> UserService(UserRepository repository) {
+        <span class="k">this</span>.repository = repository;
+    }
+}
+
+<span class="k">try</span> (Container container = Tiko.create()) {
+    UserService service = container.get(UserService.<span class="k">class</span>);
+}</code></pre>
+  </div>
+</section>
+
+<section id="safe" class="plain-bg">
+  <div class="wrap">
+    <p class="label">Compile-time safe</p>
+    <h2>Wiring mistakes fail the build, not production</h2>
+    <p class="lede">The processor checks the whole graph — unresolved and ambiguous dependencies, cycles, scope violations — and tells you how to fix it. This is the real output for the code on the left.</p>
+    <div class="panels">
+      <div class="panel">
+        <p class="panel-title">OrderService.java</p>
+<pre><code><!-- sync:order-service --><span class="k">package</span> demo;
+
+<span class="k">import</span> io.tiko.Scope;
+<span class="k">import</span> io.tiko.annotations.Component;
+<span class="k">import</span> io.tiko.annotations.Inject;
+
+<span class="a">@Component</span>(scope = Scope.SINGLETON)
+<span class="k">public class</span> OrderService {
+    <span class="a">@Inject</span>
+    <span class="k">public</span> OrderService(PaymentGateway gateway) {}
+}<!-- /sync:order-service --></code></pre>
+        <p class="panel-title">PaymentGateway.java</p>
+<pre><code><!-- sync:payment-gateway --><span class="k">package</span> demo;
+
+<span class="k">public interface</span> PaymentGateway {
+    <span class="k">void</span> charge(String orderId, <span class="k">long</span> cents);
+}<!-- /sync:payment-gateway --></code></pre>
+      </div>
+      <div class="panel">
+        <p class="panel-title">javac</p>
+<pre class="error"><code><!-- sync:compile-error -->OrderService.java:8: <span class="e">error:</span> Cannot resolve dependency: demo.PaymentGateway
+
+  Suggested fixes:
+  1. Add a @Component class of type demo.PaymentGateway
+  2. Create a @Produces factory method that returns demo.PaymentGateway
+  3. Check if the dependency has the correct qualifier (@Named)<!-- /sync:compile-error --></code></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="plugin" class="grid-bg">
+  <div class="wrap">
+    <p class="label">Plug in any library</p>
+    <h2>Tiko owns the seam, never the library</h2>
+    <p class="lede">A <code>@Produces</code> method hands the container a real HikariCP pool; your repository takes a plain <code>javax.sql.DataSource</code>. Nothing is wrapped — you call the driver directly. From <a href="https://github.com/tomas-samek/tiko-di/tree/main/tiko-examples/15_quickstart">tiko-examples/15_quickstart</a>.</p>
+    <div class="panels">
+      <div class="panel">
+        <p class="panel-title">DataSourceFactory.java</p>
+<pre><code><span class="a">@Component</span>(scope = Scope.SINGLETON)
+<span class="k">public class</span> DataSourceFactory {
+
+    <span class="k">private final</span> AppConfig config;
+
+    <span class="a">@Inject</span>
+    <span class="k">public</span> DataSourceFactory(AppConfig config) {
+        <span class="k">this</span>.config = config;
+    }
+
+    <span class="a">@Produces</span>(scope = Scope.SINGLETON)
+    <span class="k">public</span> DataSource dataSource() {
+        <span class="k">var</span> hc = <span class="k">new</span> HikariConfig();
+        hc.setJdbcUrl(config.db().url());
+        hc.setUsername(config.db().user());
+        hc.setPassword(config.db().password());
+        hc.setMaximumPoolSize(config.db().poolSize());
+        <span class="k">return new</span> HikariDataSource(hc);
+    }
+}</code></pre>
+      </div>
+      <div class="panel">
+        <p class="panel-title">NoteRepository.java</p>
+<pre><code><span class="a">@Component</span>(scope = Scope.SINGLETON)
+<span class="k">public class</span> NoteRepository {
+
+    <span class="k">private final</span> DataSource ds;
+
+    <span class="a">@Inject</span>
+    <span class="k">public</span> NoteRepository(DataSource ds) {
+        <span class="k">this</span>.ds = ds;
+    }
+
+    <span class="c">// raw JDBC against the pool: ds.getConnection() ...</span>
+}</code></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="events" class="plain-bg">
+  <div class="wrap">
+    <p class="label">Events chain</p>
+    <h2>A handler's return value is the next event</h2>
+    <p class="lede"><code>@EventTrigger</code> publishes what the handler returns; a guard decides whether the chain continues. Routing is by payload type, checked at compile time. From <a href="https://github.com/tomas-samek/tiko-di/tree/main/tiko-examples/03_events">tiko-examples/03_events</a> (logging trimmed).</p>
+<pre><code><span class="a">@Component</span>(scope = Scope.SINGLETON)
+<span class="k">public class</span> OrderWorkflow {
+
+    <span class="a">@EventHandler</span>
+    <span class="a">@EventTrigger</span>(eventName = <span class="s">"OrderValidated"</span>)
+    <span class="k">public</span> OrderValidated onPlaced(OrderPlaced event) {
+        <span class="k">boolean</span> valid = event.total() &gt; 0;
+        <span class="k">return new</span> OrderValidated(event.orderId(), event.customer(), event.total(), valid);
+    }
+
+    <span class="a">@EventHandler</span>
+    <span class="a">@EventTrigger</span>(eventName = <span class="s">"OrderShipped"</span>, guard = ValidOrderGuard.<span class="k">class</span>)
+    <span class="k">public</span> OrderShipped onValidated(OrderValidated event) {
+        <span class="k">return new</span> OrderShipped(event.orderId(), event.customer(), event.total());
+    }
+}</code></pre>
+  </div>
+</section>
+
+<section id="under-the-hood" class="grid-bg">
+  <div class="wrap">
+    <p class="label">Under the hood</p>
+    <h2>Generated code you can step through</h2>
+    <p class="lede">For the 30-second taste above, the processor emits a factory like this (excerpt). It's ordinary Java — set a breakpoint in it.</p>
+<pre><code><span class="a">@Generated</span>(<span class="s">"io.tiko.processor.generator.ComponentFactoryGenerator"</span>)
+<span class="k">public final class</span> UserServiceFactory {
+  <span class="c">// ...</span>
+  <span class="k">public</span> UserService create() {
+    UserRepository repository = container.options().resolveOverride(UserRepository.<span class="k">class</span>, () -&gt; container.getUserRepository());
+    UserService instance = <span class="k">new</span> UserService(repository);
+    <span class="k">return</span> instance;
+  }
+}</code></pre>
+
+    <h3 style="margin-top:40px">Measured cold start</h3>
+    <p class="note">The same four-singleton, two-module workload in eight setups. Median of 10 cold JVM invocations, default JVM and GC, Java 21, on a development laptop. These numbers move on different hardware — re-run locally before drawing conclusions. <code>total_ns</code> sums create + first gets + close.</p>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>Setup</th><th class="num">Wall-clock (ms)</th><th class="num"><code>total_ns</code> (ms)</th><th>Style</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>jvm baseline (<code>java -version</code>)</td><td class="num">104</td><td class="num">—</td><td>—</td></tr>
+          <tr><td>plain (no DI)</td><td class="num">172</td><td class="num">36</td><td>floor reference</td></tr>
+          <tr><td>dagger</td><td class="num">186</td><td class="num">44</td><td>compile-time, lazy</td></tr>
+          <tr class="tiko"><td>tiko</td><td class="num">202</td><td class="num">61</td><td>compile-time, lazy</td></tr>
+          <tr><td>avaje</td><td class="num">228</td><td class="num">105</td><td>compile-time, eager</td></tr>
+          <tr><td>hk2</td><td class="num">307</td><td class="num">159</td><td>runtime, reflection, lazy</td></tr>
+          <tr><td>guice</td><td class="num">373</td><td class="num">230</td><td>runtime, reflection, lazy</td></tr>
+          <tr><td>micronaut (inject-only)</td><td class="num">459</td><td class="num">308</td><td>compile-time, eager + AOP</td></tr>
+          <tr><td>spring</td><td class="num">529</td><td class="num">368</td><td>runtime, reflection, eager</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">The honest reading: the dominant axis is <strong>lazy vs eager init</strong>, not "compile-time vs runtime." Four clusters emerge — lean compile-time-lazy (plain, Dagger, Tiko at 36–61 ms <code>total_ns</code>), compile-time-eager (Avaje at 105 ms), runtime-reflection-lazy (HK2, Guice at 159–230 ms), and eager-with-overhead (Micronaut, Spring at 308–368 ms). Within each laziness class the compile-time framework is cheaper (Tiko &lt; Guice; Avaje &lt; Spring), but Avaje (compile-time + eager) is slower than HK2 and Guice (runtime + lazy) — eagerness costs more than reflection saves at this scale.</p>
+    <p class="note">Methodology, per-phase tables and reproduction: <a href="https://github.com/tomas-samek/tiko-di/blob/main/comparisons/README.md">comparisons/README.md</a>.</p>
+  </div>
+</section>
+
+<section id="install" class="plain-bg">
+  <div class="wrap">
+    <p class="label">Get started</p>
+    <h2>Install from Maven Central</h2>
+    <p class="lede">Import the BOM once; the modules and the annotation processor take their version from it. Supported JDKs: every Java LTS from 21, plus every GA since the latest LTS — today <!-- sync:jdks -->21 · 25 · 26 · 27<!-- /sync:jdks -->.</p>
+<pre><code>&lt;dependencyManagement&gt;
+    &lt;dependencies&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;io.github.tomas-samek&lt;/groupId&gt;
+            &lt;artifactId&gt;tiko-bom&lt;/artifactId&gt;
+            &lt;version&gt;<!-- sync:bom-version -->0.5.0<!-- /sync:bom-version -->&lt;/version&gt;
+            &lt;type&gt;pom&lt;/type&gt;
+            &lt;scope&gt;import&lt;/scope&gt;
+        &lt;/dependency&gt;
+    &lt;/dependencies&gt;
+&lt;/dependencyManagement&gt;
+
+&lt;dependencies&gt;
+    &lt;dependency&gt;
+        &lt;groupId&gt;io.github.tomas-samek&lt;/groupId&gt;
+        &lt;artifactId&gt;tiko-api&lt;/artifactId&gt;
+    &lt;/dependency&gt;
+    &lt;dependency&gt;
+        &lt;groupId&gt;io.github.tomas-samek&lt;/groupId&gt;
+        &lt;artifactId&gt;tiko-runtime&lt;/artifactId&gt;
+    &lt;/dependency&gt;
+&lt;/dependencies&gt;
+
+&lt;build&gt;
+    &lt;plugins&gt;
+        &lt;plugin&gt;
+            &lt;groupId&gt;org.apache.maven.plugins&lt;/groupId&gt;
+            &lt;artifactId&gt;maven-compiler-plugin&lt;/artifactId&gt;
+            &lt;version&gt;3.13.0&lt;/version&gt;
+            &lt;configuration&gt;
+                &lt;annotationProcessorPaths&gt;
+                    &lt;path&gt;
+                        &lt;groupId&gt;io.github.tomas-samek&lt;/groupId&gt;
+                        &lt;artifactId&gt;tiko-processor&lt;/artifactId&gt;
+                    &lt;/path&gt;
+                &lt;/annotationProcessorPaths&gt;
+            &lt;/configuration&gt;
+        &lt;/plugin&gt;
+    &lt;/plugins&gt;
+&lt;/build&gt;</code></pre>
+    <p class="note">On JDK 23+, <code>javac</code> runs annotation processing only when asked — the snippet above already does (it needs <code>maven-compiler-plugin</code> ≥ 3.13.0). Gradle and plain <code>javac</code>: <a href="https://github.com/tomas-samek/tiko-di/blob/main/docs/jdk-23-setup.md">jdk-23-setup.md</a>. Starting fresh? The <a href="https://github.com/tomas-samek/tiko-di#scaffold-a-new-project-archetype">Maven archetype</a> scaffolds a runnable project.</p>
+  </div>
+</section>
+</main>
+
+<footer class="grid-bg">
+  <div class="wrap site-footer">
+    <ul class="footer-links">
+      <li><a href="https://github.com/tomas-samek/tiko-di/blob/main/docs/orchestrator-model.md">Orchestrator model</a></li>
+      <li><a href="https://github.com/tomas-samek/tiko-di/blob/main/docs/di-and-scopes.md">DI &amp; scopes</a></li>
+      <li><a href="https://github.com/tomas-samek/tiko-di/blob/main/docs/events.md">Events</a></li>
+      <li><a href="https://github.com/tomas-samek/tiko-di/tree/main/tiko-examples">Examples</a></li>
+      <li><a href="https://github.com/tomas-samek/tiko-di#scaffold-a-new-project-archetype">Archetype</a></li>
+      <li><a href="https://central.sonatype.com/artifact/io.github.tomas-samek/tiko-bom">Maven Central</a></li>
+      <li><a href="https://github.com/tomas-samek/tiko-di">GitHub</a></li>
+    </ul>
+    <p>Tiko is open source under the <a href="https://github.com/tomas-samek/tiko-di/blob/main/LICENSE">MIT license</a>.</p>
+  </div>
+</footer>
+
+</body>
+</html>
