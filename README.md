@@ -4,7 +4,7 @@
 
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.tomas-samek/tiko-bom?label=Maven%20Central&color=blue)](https://central.sonatype.com/artifact/io.github.tomas-samek/tiko-bom)
 [![Build](https://github.com/tomas-samek/tiko-di/actions/workflows/maven.yml/badge.svg?branch=main)](https://github.com/tomas-samek/tiko-di/actions/workflows/maven.yml)
-[![Java](https://img.shields.io/badge/Java-21%20%7C%2025%20%7C%2026-blue.svg)](https://www.oracle.com/java/)
+[![Java](https://img.shields.io/badge/Java-21%20%7C%2025%20%7C%2026%20%7C%2027-blue.svg)](https://www.oracle.com/java/)
 [![Maven](https://img.shields.io/badge/Maven-3.8+-red.svg)](https://maven.apache.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=tomas-samek_tiko-di&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=tomas-samek_tiko-di)
@@ -335,7 +335,7 @@ mvn clean install -DskipTests  # build without tests
 mvn clean install -pl tiko-api # build specific module
 ```
 
-Requires Java 21+ and Maven 3.8+.
+Requires Java 21+ and Maven 3.8+. CI builds on JDK 21, 25, 26 and 27. On JDK 27 the Spotless format check is skipped until palantir-java-format supports it ([#465](https://github.com/tomas-samek/tiko-di/issues/465)), so run `mvn spotless:apply` on an earlier JDK before committing.
 
 ## Philosophy
 
