@@ -8,6 +8,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
+import javax.tools.Diagnostic;
+import javax.tools.JavaFileObject;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -37,12 +39,37 @@ class SiteCompileErrorDemoTest {
         assertThat(errors)
                 .as("the page's sample must produce exactly one error")
                 .hasSize(1);
-        var error = errors.get(0);
-        var actual = "OrderService.java:" + error.getLineNumber() + ": error: " + error.getMessage(Locale.ROOT);
-
         assertThat(SitePage.normalize(shownError))
                 .as("site/index.html shows a different compile error than Tiko reports for the page's own sample."
                         + " Update the sync:compile-error block to the actual output.")
-                .isEqualTo(SitePage.normalize(actual));
+                .isEqualTo(SitePage.normalize(reportedAs(errors.get(0))));
+    }
+
+    @Test
+    void reportedErrorNamesTheFileTheProcessorReportedItIn() {
+        var other = JavaFileObjects.forSourceString("demo.Other", """
+                package demo;
+
+                @io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)
+                public class Other {
+                    @io.tiko.annotations.Inject
+                    public Other(Runnable unresolved) {}
+                }
+                """);
+
+        var errors = Compiler.javac()
+                .withProcessors(new TikoAnnotationProcessor())
+                .compile(other)
+                .errors();
+
+        assertThat(errors).hasSize(1);
+        assertThat(reportedAs(errors.get(0))).startsWith("Other.java:");
+    }
+
+    /** The diagnostic as javac's first line prints it: {@code File.java:line: error: message}. */
+    static String reportedAs(Diagnostic<? extends JavaFileObject> error) {
+        var path = error.getSource().getName();
+        var file = path.substring(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1);
+        return file + ":" + error.getLineNumber() + ": error: " + error.getMessage(Locale.ROOT);
     }
 }
