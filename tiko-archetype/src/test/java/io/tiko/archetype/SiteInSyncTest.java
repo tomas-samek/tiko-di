@@ -33,7 +33,10 @@ class SiteInSyncTest {
     private static final Pattern README_BOM_VERSION =
             Pattern.compile("<artifactId>tiko-bom</artifactId>\\s*<version>([^<]+)</version>");
     private static final Pattern README_JAVA_BADGE = Pattern.compile("img\\.shields\\.io/badge/Java-([^-]+)-");
-    private static final Pattern CI_BUILD_MATRIX = Pattern.compile("(?s)\\bbuild:.*?java: \\[([^\\]]*)]");
+    /** The {@code build} job's key line; its matrix is the first {@code java: [...]} line after it. */
+    private static final Pattern CI_BUILD_JOB = Pattern.compile("(?m)^  build:");
+
+    private static final Pattern CI_JAVA_MATRIX = Pattern.compile("(?m)^[ \\t]+java: \\[([^\\]\\r\\n]*)]");
     private static final Pattern ROOT_RELATIVE_URL = Pattern.compile("(?:href|src)=\"/(?!/)");
 
     @Test
@@ -62,8 +65,7 @@ class SiteInSyncTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("jdkListings")
     void jdkListMatchesCiBuildMatrix(String where, List<String> jdks) throws IOException {
-        var matrix =
-                split(firstGroup(CI_BUILD_MATRIX, Files.readString(CI_WORKFLOW)).replace("'", ""), ",");
+        var matrix = split(buildJobMatrix(Files.readString(CI_WORKFLOW)).replace("'", ""), ",");
 
         assertThat(jdks)
                 .as(
@@ -79,6 +81,18 @@ class SiteInSyncTest {
                 .as("The site is served under /tiko-di/, so a root-relative href/src (\"/...\") would 404."
                         + " Use a relative path.")
                 .isFalse();
+    }
+
+    private static String buildJobMatrix(String workflow) {
+        var job = CI_BUILD_JOB.matcher(workflow);
+        if (!job.find()) {
+            throw new IllegalStateException("No build job in .github/workflows/maven.yml");
+        }
+        var matrix = CI_JAVA_MATRIX.matcher(workflow);
+        if (!matrix.find(job.end())) {
+            throw new IllegalStateException("No java: [...] matrix after the build job in .github/workflows/maven.yml");
+        }
+        return matrix.group(1);
     }
 
     private static String firstGroup(Pattern pattern, String text) {
