@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>site probe</title></head>
+<body>
+<!-- Loaded by check-site.sh from a server rooted at the repo: renders site/ in a 375px frame
+     and writes the layout checks as JSON into #out for headless Chrome's --dump-dom. -->
+<iframe id="f" src="/site/" style="width:375px;height:800px;border:0"></iframe>
+<pre id="out">pending</pre>
+<script>
+document.getElementById('f').addEventListener('load', () => {
+  const d = document.getElementById('f').contentDocument;
+  const w = d.defaultView;
+  const left = sel => Math.round(d.querySelector(sel).getBoundingClientRect().left);
+  const r = {
+    pageOverflow: d.documentElement.scrollWidth > w.innerWidth,
+    installRendersXml: d.querySelector('#install pre').textContent.includes('<dependencyManagement>'),
+    h1Count: d.querySelectorAll('h1').length,
+    brandLeft: left('.brand'),
+    footerLeft: left('.footer-links'),
+    colorScheme: w.getComputedStyle(d.documentElement).colorScheme,
+    darkScheme: w.matchMedia('(prefers-color-scheme: dark)').matches
+  };
+  r.ok = !r.pageOverflow && r.installRendersXml && r.h1Count === 1
+      && r.brandLeft >= 16 && r.footerLeft >= 16 && r.colorScheme === 'light dark';
+  document.getElementById('out').textContent = JSON.stringify(r);
+});
+</script>
+</body>
+</html>

@@ -33,6 +33,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > never pick `release_version` or `next_snapshot` silently.** Long-form
 > companion: [`docs/release-skill.md`](./docs/release-skill.md).
 > Comprehensive reference: [`docs/releasing.md`](./docs/releasing.md).
+>
+> **Touching the landing page (`site/`), adding a JDK, or a site deploy
+> looks stale?** Read
+> [`.ai-skills/tiko-site-maintainer/SKILL.md`](./.ai-skills/tiko-site-maintainer/SKILL.md) —
+> the framing rule for page copy, every place the JDK list lives, the
+> verification script, and deploy troubleshooting. **Load-bearing rule:
+> no "coming from Spring" mappings on the page — surface the conflict
+> instead of writing one.**
 
 ## Project Overview
 
