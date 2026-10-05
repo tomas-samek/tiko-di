@@ -55,6 +55,19 @@ a { color: var(--accent); }
 
 .wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
 
+/* Read by assistive technology and search engines, not shown. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .grid-bg {
   background-color: var(--bg);
   background-image:
