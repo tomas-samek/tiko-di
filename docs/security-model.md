@@ -148,11 +148,18 @@ Throwable)`.
 **Rule.** stdio transport only, no network listener; file reads stay under the project root
 given as `args[0]`.
 
-**Enforced by.** Code: `TikoMcpServer.main` (`Paths.get(args[0])`), `McpStdioBridge`;
-`TopologyStore` walks `root` with `Files.walkFileTree` (links not followed). No
-`ServerSocket` / `HttpServer` in `tiko-mcp/src/main`.
+**Enforced by.** Code: `TikoMcpServer.main` (`Paths.get(args[0])`), `McpStdioBridge`. No
+`ServerSocket` / `HttpServer` in `tiko-mcp/src/main`. Confinement to the root: not enforced.
 
-**Status.** Holds.
+**Status.** stdio-only holds. Confinement is a gap:
+- `GetGeneratedArtifactTool` walks the root with `Files.walk(…, FileVisitOption.FOLLOW_LINKS)`,
+  so a symlinked directory inside the project leads the walk outside it. The tool returns
+  path, line count and last-modified time — not contents — for files whose path ends like a
+  generated Tiko source.
+- `TopologyStore.walkFileTree` doesn't follow directory links, but a symlinked
+  `target/classes/META-INF/tiko/topology.json` *file* is matched and read through the link.
+  The tools only read known topology keys from it, and parse errors report offsets, not
+  content.
 
 **Violation looks like.** A socket/HTTP transport, `FileVisitOption.FOLLOW_LINKS`, or a tool
 argument resolved into a path outside the root.
