@@ -1,0 +1,20 @@
+# Fails a PR that adds or upgrades to a dependency with a known high/critical vulnerability
+# (GitHub Advisory Database). Dependabot alerts cover dependencies already on main.
+name: Dependency Review
+
+on:
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: high
