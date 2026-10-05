@@ -1,5 +1,6 @@
 # Fails a PR that adds or upgrades to a dependency with a known high/critical vulnerability
-# (GitHub Advisory Database). Dependabot alerts cover dependencies already on main.
+# (GitHub Advisory Database). Like Dependabot alerts, it sees only dependencies declared in the poms,
+# not modules shaded in transitively (e.g. jackson-core inside tiko-kafka).
 name: Dependency Review
 
 on:
