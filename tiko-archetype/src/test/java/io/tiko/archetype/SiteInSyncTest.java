@@ -7,6 +7,7 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -37,6 +38,7 @@ class SiteInSyncTest {
     private static final Pattern CI_BUILD_JOB = Pattern.compile("(?m)^  build:");
 
     private static final Pattern CI_JAVA_MATRIX = Pattern.compile("(?m)^[ \\t]+java: \\[([^\\]\\r\\n]*)]");
+    private static final Pattern ARTIFACT_ID = Pattern.compile("<artifactId>([^<]+)</artifactId>");
     private static final Pattern ROOT_RELATIVE_URL = Pattern.compile("(?:href|src)=\"/(?!/)");
 
     @Test
@@ -76,6 +78,16 @@ class SiteInSyncTest {
     }
 
     @Test
+    void installSnippetListsTheReadmeArtifacts() throws IOException {
+        var pageSnippet = SitePage.section(Files.readString(PAGE), "install");
+
+        assertThat(artifactIds(pageSnippet))
+                .as("site/index.html install snippet lists different artifacts than README.md's Installation"
+                        + " snippet. A visitor copying the page's snippet must get everything the README lists.")
+                .isEqualTo(artifactIds(readmeInstallSnippet(Files.readString(README))));
+    }
+
+    @Test
     void pageUsesNoRootRelativeUrls() throws IOException {
         assertThat(ROOT_RELATIVE_URL.matcher(Files.readString(PAGE)).find())
                 .as("The site is served under /tiko-di/, so a root-relative href/src (\"/...\") would 404."
@@ -93,6 +105,26 @@ class SiteInSyncTest {
             throw new IllegalStateException("No java: [...] matrix after the build job in .github/workflows/maven.yml");
         }
         return matrix.group(1);
+    }
+
+    /** The first {@code ```xml} block after README's {@code ## Installation} heading. */
+    private static String readmeInstallSnippet(String readme) {
+        var heading = readme.indexOf("## Installation");
+        var open = heading < 0 ? -1 : readme.indexOf("```xml", heading);
+        var close = open < 0 ? -1 : readme.indexOf("```", open + "```xml".length());
+        if (close < 0) {
+            throw new IllegalStateException("No ```xml block under '## Installation' in README.md");
+        }
+        return readme.substring(open, close);
+    }
+
+    private static List<String> artifactIds(String xml) {
+        var matcher = ARTIFACT_ID.matcher(xml);
+        var ids = new ArrayList<String>();
+        while (matcher.find()) {
+            ids.add(matcher.group(1));
+        }
+        return ids;
     }
 
     private static String firstGroup(Pattern pattern, String text) {

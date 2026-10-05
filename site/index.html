@@ -27,7 +27,7 @@
   <div class="wrap">
       <div class="hero-inner">
         <div class="hero-copy">
-          <h1>A compile-time orchestrator for Java</h1>
+          <h1><span class="visually-hidden">Tiko: </span>A compile-time orchestrator for Java</h1>
           <p class="pitch">Tiko orchestrates, it doesn't bundle — direct access, compile-time safe, nothing wrapped.</p>
           <p class="support">Every Java LTS from 21, plus every GA since the latest LTS · today <!-- sync:jdks -->21 · 25 · 26 · 27<!-- /sync:jdks --></p>
           <div class="actions">
@@ -108,7 +108,7 @@
   <div class="wrap">
     <p class="label">Compile-time safe</p>
     <h2>Wiring mistakes fail the build, not production</h2>
-    <p class="lede">The processor checks the whole graph — unresolved and ambiguous dependencies, cycles, scope violations — and tells you how to fix it. This is the real output for exactly this code.</p>
+    <p class="lede">The processor checks the whole graph — unresolved and ambiguous dependencies, cycles, scope violations — and tells you how to fix it. This is the error Tiko reports for exactly this code, trimmed to the message and its suggested fixes.</p>
     <div class="panels">
       <div class="panel">
         <p class="panel-title">OrderService.java</p>
@@ -260,7 +260,7 @@
     <p class="label">Get started</p>
     <h2>Install from Maven Central</h2>
     <p class="lede">Import the BOM once; the modules and the annotation processor take their version from it. Supported JDKs: every Java LTS from 21, plus every GA since the latest LTS — today <!-- sync:jdks -->21 · 25 · 26 · 27<!-- /sync:jdks -->.</p>
-<pre><code>&lt;dependencyManagement&gt;
+<pre><code><!-- sync:install -->&lt;dependencyManagement&gt;
     &lt;dependencies&gt;
         &lt;dependency&gt;
             &lt;groupId&gt;io.github.tomas-samek&lt;/groupId&gt;
@@ -281,6 +281,11 @@
         &lt;groupId&gt;io.github.tomas-samek&lt;/groupId&gt;
         &lt;artifactId&gt;tiko-runtime&lt;/artifactId&gt;
     &lt;/dependency&gt;
+    <span class="c">&lt;!-- Optional, only if you use @Configuration --&gt;</span>
+    &lt;dependency&gt;
+        &lt;groupId&gt;io.github.tomas-samek&lt;/groupId&gt;
+        &lt;artifactId&gt;tiko-config&lt;/artifactId&gt;
+    &lt;/dependency&gt;
 &lt;/dependencies&gt;
 
 &lt;build&gt;
@@ -299,7 +304,7 @@
             &lt;/configuration&gt;
         &lt;/plugin&gt;
     &lt;/plugins&gt;
-&lt;/build&gt;</code></pre>
+&lt;/build&gt;<!-- /sync:install --></code></pre>
     <p class="note">On JDK 23+, <code>javac</code> runs annotation processing only when asked — the snippet above already does (it needs <code>maven-compiler-plugin</code> ≥ 3.13.0). Gradle and plain <code>javac</code>: <a href="https://github.com/tomas-samek/tiko-di/blob/main/docs/jdk-23-setup.md">jdk-23-setup.md</a>. Starting fresh? The <a href="https://github.com/tomas-samek/tiko-di#scaffold-a-new-project-archetype">Maven archetype</a> scaffolds a runnable project.</p>
   </div>
 </section>
