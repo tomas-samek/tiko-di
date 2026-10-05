@@ -65,7 +65,7 @@ a { color: var(--accent); }
 .plain-bg { background: var(--surface); }
 
 /* Header */
-.site-header { display: flex; justify-content: space-between; align-items: center; padding: 20px 0; font-size: 14px; }
+.site-header { display: flex; justify-content: space-between; align-items: center; padding-block: 20px; font-size: 14px; }
 .brand { font-weight: 700; letter-spacing: .08em; color: var(--text); text-decoration: none; }
 .site-nav a { color: var(--text-3); text-decoration: none; margin-left: 20px; }
 .site-nav a:hover { color: var(--accent); }
@@ -135,7 +135,7 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
 tr.tiko td { font-weight: 700; }
 
 /* Footer */
-.site-footer { padding: 40px 0 56px; font-size: 14px; color: var(--text-3); }
+.site-footer { padding-block: 40px 56px; font-size: 14px; color: var(--text-3); }
 .footer-links { display: flex; flex-wrap: wrap; gap: 8px 24px; padding: 0; margin: 0 0 16px; list-style: none; }
 
 @media (max-width: 720px) {
