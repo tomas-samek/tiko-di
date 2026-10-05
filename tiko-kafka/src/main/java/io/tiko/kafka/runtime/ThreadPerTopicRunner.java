@@ -13,6 +13,7 @@ import io.tiko.kafka.KafkaIngestErrorDecider;
 import io.tiko.kafka.KafkaRecordDeadLettered;
 import io.tiko.kafka.KafkaSerializer;
 import io.tiko.kafka.client.KafkaConsumerClient;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
@@ -57,11 +58,16 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
     // Null when no @Component decider is registered — the static poison-record-policy path runs (#313).
     private final KafkaIngestErrorDecider decider;
 
-    // Per-partition consecutive-failure tracking for the decider's `attempt` argument (#385).
-    // Only ever touched from the single run() thread, so a plain HashMap is safe.
+    // Per-partition consecutive-failure tracking for the decider's `attempt` argument (#385)
+    // and the SEEK backoff (#478). Only ever touched from the single run() thread, so a plain
+    // HashMap is safe.
     private final Map<TopicPartition, Attempt> attempts = new HashMap<>();
 
     private record Attempt(long offset, int count) {}
+
+    // Partitions paused after a SEEK, mapped to the System.nanoTime() at which they resume (#478).
+    // run()-thread only, like attempts.
+    private final Map<TopicPartition, Long> resumeAt = new HashMap<>();
 
     private final AtomicBoolean running = new AtomicBoolean(false);
     private Thread thread;
@@ -129,6 +135,7 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
     private void run() {
         while (running.get()) {
             try {
+                resumeDuePartitions();
                 ConsumerRecords<String, byte[]> records = consumer.poll(config.pollTimeout());
                 for (TopicPartition tp : records.partitions()) {
                     processPartition(tp, records.records(tp));
@@ -196,10 +203,11 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
     private boolean applyStaticPolicy(TopicPartition tp, ConsumerRecord<String, byte[]> r, KafkaIngestError error) {
         routeError(error);
         if (poisonRecordPolicy == IngestErrorPolicy.SKIP) {
+            attempts.remove(tp);
             commitSafely(tp, r.offset() + 1);
             return true;
         }
-        seekSafely(tp, r.offset());
+        seekWithBackoff(tp, r.offset(), nextAttempt(tp, r.offset()));
         return false;
     }
 
@@ -210,7 +218,7 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
         return switch (decide(error, attempt)) {
             case SEEK -> {
                 routeError(error);
-                seekSafely(tp, r.offset());
+                seekWithBackoff(tp, r.offset(), attempt);
                 yield false;
             }
             case SKIP -> {
@@ -265,6 +273,54 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
                     System.Logger.Level.WARNING, "KafkaIngestErrorDecider threw; falling back to SEEK", deciderFailure);
             return IngestDecision.SEEK;
         }
+    }
+
+    /**
+     * Seeks back to the failed record and pauses only its partition for the backoff (#478), so
+     * a permanently failing record redelivers at the backoff pace instead of on every poll while
+     * the topic's other partitions keep flowing. {@code seek-backoff: PT0S} redelivers immediately.
+     */
+    private void seekWithBackoff(TopicPartition tp, long offset, int attempt) {
+        seekSafely(tp, offset);
+        Duration delay = seekBackoff(attempt, config.seekBackoff(), config.seekBackoffMax());
+        if (delay.isZero()) return;
+        try {
+            consumer.pause(List.of(tp));
+            resumeAt.put(tp, System.nanoTime() + delay.toNanos());
+        } catch (Exception pauseFailure) {
+            // Revoked between the failure and the pause: the uncommitted record redelivers to its
+            // new assignee, which applies its own backoff. Nothing to resume here.
+            resumeAt.remove(tp);
+        }
+    }
+
+    /** Resumes every paused partition whose backoff has elapsed, one at a time (#478). */
+    private void resumeDuePartitions() {
+        if (resumeAt.isEmpty()) return;
+        long now = System.nanoTime();
+        List<TopicPartition> due = resumeAt.entrySet().stream()
+                .filter(e -> now - e.getValue() >= 0)
+                .map(Map.Entry::getKey)
+                .toList();
+        for (TopicPartition tp : due) {
+            resumeAt.remove(tp);
+            try {
+                consumer.resume(List.of(tp));
+            } catch (Exception resumeFailure) {
+                // Revoked by a rebalance while paused — the new assignment starts unpaused.
+            }
+        }
+    }
+
+    /**
+     * The SEEK backoff for the {@code attempt}-th consecutive failure of one record: {@code initial}
+     * doubled per further attempt, never above {@code max}. A zero {@code initial} disables it.
+     */
+    static Duration seekBackoff(int attempt, Duration initial, Duration max) {
+        if (initial.isZero() || initial.isNegative()) return Duration.ZERO;
+        int doublings = Math.min(Math.max(attempt - 1, 0), 30);
+        Duration grown = initial.multipliedBy(1L << doublings);
+        return grown.compareTo(max) > 0 ? max : grown;
     }
 
     /**

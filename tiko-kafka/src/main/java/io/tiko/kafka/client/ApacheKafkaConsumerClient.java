@@ -61,6 +61,16 @@ public final class ApacheKafkaConsumerClient implements KafkaConsumerClient {
     }
 
     @Override
+    public void pause(Collection<TopicPartition> partitions) {
+        consumer.pause(partitions);
+    }
+
+    @Override
+    public void resume(Collection<TopicPartition> partitions) {
+        consumer.resume(partitions);
+    }
+
+    @Override
     public void wakeup() {
         consumer.wakeup();
     }

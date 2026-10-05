@@ -252,8 +252,11 @@ CPU.
 an unbounded tight loop.
 
 **Enforced by.** `TikoOptions` (`queueCapacity` default 1024, `OverflowPolicy`).
+`ThreadPerTopicRunner.seekWithBackoff` pauses only the failing partition after a `SEEK` for
+`tiko.kafka.seek-backoff` (default `PT0.5S`), doubling per consecutive failure up to
+`seek-backoff-max` (default `PT30S`); pinned by `KafkaSeekBackoffTest` and
+`SeekBackoffDelayTest`.
 
-**Status.** Async queue holds. Kafka `SEEK` redelivery: gap — `ThreadPerTopicRunner` seeks
-back with no delay before the next `poll()`; a scratch run with a consumer that returns the
-poison record immediately observed 36,886 redeliveries (and routed errors) in one second.
-Tracked in #478.
+**Status.** Holds (fixed in #478: a poison record that redelivered ~37,000 times per second
+now redelivers at the backoff pace). Setting `seek-backoff: PT0S` opts back into immediate
+redelivery.

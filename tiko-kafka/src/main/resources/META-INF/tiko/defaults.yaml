@@ -16,3 +16,9 @@ tiko:
     # record blocks its partition). SKIP: log via the ErrorHandler and commit past
     # it (opt-in; also drops records that failed for a transient reason). See #313.
     poison-record-policy: SEEK
+    # Under SEEK, a failed record's partition is paused before redelivery, for
+    # seek-backoff doubling on each consecutive failure of the same record, capped
+    # at seek-backoff-max; other partitions keep flowing. PT0S redelivers
+    # immediately. See #478.
+    seek-backoff: PT0.5S
+    seek-backoff-max: PT30S

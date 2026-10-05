@@ -182,6 +182,7 @@ public final class FakeKafkaBroker {
 
         private Collection<String> subscribed = List.of();
         private final Map<TopicPartition, AtomicLong> positions = new HashMap<>();
+        private final java.util.Set<TopicPartition> paused = ConcurrentHashMap.newKeySet();
         private volatile boolean wakeup;
 
         FakeConsumerClient(FakeKafkaBroker broker, String consumerGroup) {
@@ -204,6 +205,7 @@ public final class FakeKafkaBroker {
             Map<TopicPartition, List<ConsumerRecord<String, byte[]>>> out = new HashMap<>();
             for (String topic : subscribed) {
                 TopicPartition tp = new TopicPartition(topic, 0);
+                if (paused.contains(tp)) continue;
                 long pos = positions.computeIfAbsent(tp, k -> new AtomicLong(0)).get();
                 List<StoredRecord> stored = broker.recordsFor(topic);
                 List<ConsumerRecord<String, byte[]>> batch = new ArrayList<>();
@@ -239,6 +241,16 @@ public final class FakeKafkaBroker {
         @Override
         public void seek(TopicPartition partition, long offset) {
             positions.computeIfAbsent(partition, k -> new AtomicLong()).set(offset);
+        }
+
+        @Override
+        public void pause(Collection<TopicPartition> partitions) {
+            paused.addAll(partitions);
+        }
+
+        @Override
+        public void resume(Collection<TopicPartition> partitions) {
+            paused.removeAll(partitions);
         }
 
         @Override

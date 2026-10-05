@@ -113,6 +113,8 @@ byte[] JsonKafkaSerializer.serialize(Object value)
 | `producer-properties` | `{}` |
 | `consumer-properties` | `{}` |
 | `poison-record-policy` | `SEEK` (`SKIP` opt-in) |
+| `seek-backoff` | `PT0.5S` (SEEK retry delay, doubles per failure; `PT0S` = immediate) |
+| `seek-backoff-max` | `PT30S` |
 
 Write these keys kebab-case exactly as above (they are `@Key`-declared;
 `serializer` is the one plain camelCase-free field name). A key that
