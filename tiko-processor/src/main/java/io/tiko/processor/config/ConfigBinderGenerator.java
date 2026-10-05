@@ -483,14 +483,8 @@ public final class ConfigBinderGenerator {
         return el.getQualifiedName().toString().equals("java.util.Optional");
     }
 
-    private static String quotedJoin(Set<String> keys) {
-        StringBuilder sb = new StringBuilder();
-        boolean first = true;
-        for (String k : keys) {
-            if (!first) sb.append(", ");
-            sb.append("\"").append(k).append("\"");
-            first = false;
-        }
-        return sb.toString();
+    /** The keys as comma-separated string literals, each escaped by JavaPoet's {@code $S} (#479). */
+    private static CodeBlock quotedJoin(Set<String> keys) {
+        return keys.stream().map(k -> CodeBlock.of("$S", k)).collect(CodeBlock.joining(", "));
     }
 }
