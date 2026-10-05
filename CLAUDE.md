@@ -41,6 +41,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > verification script, and deploy troubleshooting. **Load-bearing rule:
 > no "coming from Spring" mappings on the page — surface the conflict
 > instead of writing one.**
+>
+> **Security-relevant change, a release, an audit, or a vulnerability report?** Read
+> [`.ai-skills/tiko-security/SKILL.md`](./.ai-skills/tiko-security/SKILL.md) — PR review
+> against the [security model](./docs/security-model.md), the release gate (after
+> `tiko-architect`), periodic audit, and advisory handling. **Load-bearing rule: nothing about
+> an undisclosed vulnerability goes public before its advisory is published.**
 
 ## Project Overview
 

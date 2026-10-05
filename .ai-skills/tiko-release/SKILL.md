@@ -52,6 +52,10 @@ past a **NO-GO** without resolving the named architectural blockers. A **CONDITI
 file the listed follow-ups, then proceed. A **GO** clears this step. See
 [`.ai-skills/tiko-architect/SKILL.md`](../tiko-architect/SKILL.md).
 
+**Gate order:** run `tiko-architect`, then the `tiko-security` release gate
+([`.ai-skills/tiko-security/SKILL.md`](../tiko-security/SKILL.md), Mode 2), and only then
+this skill. A NO-GO from either gate stops the release.
+
 ## Step 1 — pre-flight checks
 
 Before asking for the version inputs, verify these. If any fail, fix
