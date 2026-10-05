@@ -251,8 +251,11 @@ react when sync lands.
 
 ## Step 6 — bump the README + install-doc version pins
 
-The release workflow sets every **POM** to the new version, but it does
-**not** touch the prose docs. These advertise the install coordinate as
+The release workflow sets every **POM** to the new version, plus the
+archetype's `archetype-resources/pom.xml` `<tiko.version>` and its
+`mcp.json` `tiko-mcp:X.Y.Z` coordinate (`release.yml`, "Set release
+version in all poms" step) — those need no manual bump. It does **not** touch the
+prose docs. These advertise the install coordinate as
 literal text and go stale silently — exactly what left the README saying
 `Status: 0.1.0` while Central was already at `0.2.2` across three releases
 (fixed in `#316`). Do this once Step 5 confirms the version resolves on
