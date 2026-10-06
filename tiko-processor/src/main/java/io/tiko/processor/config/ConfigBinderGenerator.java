@@ -106,7 +106,7 @@ public final class ConfigBinderGenerator {
             String fullPath = cfg.prefix() + "." + f.yamlKey();
             TypeMirror inner = unwrapOptional(f.type());
 
-            CodeBlock coercer = coercerExpr(inner);
+            CodeBlock coercer = coercerExpr(inner, fullPath);
             TypeName javaType = TypeName.get(f.type());
 
             switch (f.cardinality()) {
@@ -257,7 +257,7 @@ public final class ConfigBinderGenerator {
             boolean isOptional = isOptional(raw);
             String defaultValue = readDefaultAnnotation(record, comp).orElse(null);
 
-            CodeBlock coercer = coercerExpr(inner);
+            CodeBlock coercer = coercerExpr(inner, recordSimpleName + "." + yamlKey);
             TypeName javaType = TypeName.get(raw);
             String varName = "f_" + i;
 
@@ -379,7 +379,11 @@ public final class ConfigBinderGenerator {
 
     // ---- Coercer expression building ---------------------------------------
 
-    private CodeBlock coercerExpr(TypeMirror type) {
+    /**
+     * @param field how the field is named in coercer diagnostics: the dot-path for a top-level
+     *     {@code @Configuration} field, {@code Record.key} inside a nested record (#485)
+     */
+    private CodeBlock coercerExpr(TypeMirror type, String field) {
         if (type.getKind().isPrimitive()) {
             return primitiveCoercer(type.getKind().name());
         }
@@ -389,11 +393,11 @@ public final class ConfigBinderGenerator {
             if (fqn.equals("java.util.List") || fqn.equals("java.util.Set") || fqn.equals("java.util.Map")) {
                 DeclaredType dt = (DeclaredType) type;
                 int valueArgIdx = fqn.equals("java.util.Map") ? 1 : 0;
-                CodeBlock elemCoercer = coercerExpr(dt.getTypeArguments().get(valueArgIdx));
+                CodeBlock elemCoercer = coercerExpr(dt.getTypeArguments().get(valueArgIdx), field);
                 ClassName helper = ClassName.get(CompositeCoercers.class);
                 return switch (fqn) {
                     case "java.util.List" -> CodeBlock.of("$T.list($L)", helper, elemCoercer);
-                    case "java.util.Set" -> CodeBlock.of("$T.set($L)", helper, elemCoercer);
+                    case "java.util.Set" -> CodeBlock.of("$T.set($S, $L)", helper, field, elemCoercer);
                     default -> CodeBlock.of("$T.map($L)", helper, elemCoercer);
                 };
             }

@@ -82,4 +82,16 @@ class CompositeCoercersTest {
                         "@Configuration Set<X> field: duplicate element at index 2 deduped",
                         "@Configuration Set<X> field: duplicate element at index 4 deduped");
     }
+
+    @Test
+    void labelledSetCoercerWarningNamesTheField() {
+        TypeCoercer<Set<String>> c = CompositeCoercers.set("db.allowedHosts", Coercers.stringCoercer());
+        c.coerce(List.of("a", "b", "a"));
+
+        assertThat(CapturingLoggerFinder.RECORDS)
+                .filteredOn(r -> r.level() == System.Logger.Level.WARNING)
+                .filteredOn(r -> "io.tiko.config".equals(r.loggerName()))
+                .extracting(CapturingLoggerFinder.LogEntry::message)
+                .containsExactly("@Configuration db.allowedHosts: duplicate element at index 2 deduped");
+    }
 }
