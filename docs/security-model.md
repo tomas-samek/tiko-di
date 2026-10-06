@@ -228,9 +228,13 @@ in `release.yml`; artifacts are GPG-signed; workflows run with least-privilege
 `permissions`.
 
 **Enforced by.** `.github/workflows/release.yml` (sole user of those secrets);
-`maven-gpg-plugin` in the root `pom.xml` `release` profile.
+`maven-gpg-plugin` in the root `pom.xml` `release` profile. Every third-party action is pinned
+to a full commit SHA with its version in a trailing `# vX.Y.Z` comment;
+`WorkflowActionPinningTest` (in `tiko-archetype`) fails the build on a tag reference or a
+missing version comment, and `.github/dependabot.yml` proposes the updates.
 
-**Status.** Gap: third-party actions are pinned by version tag (`@v4`), not by commit SHA. Tracked in #477.
+**Status.** Holds (fixed in #477; before it, actions were referenced by movable tags such as
+`@v4`).
 
 **Violation looks like.** A release secret in another workflow, `permissions: write-all`,
 or an unpinned/new third-party action.
