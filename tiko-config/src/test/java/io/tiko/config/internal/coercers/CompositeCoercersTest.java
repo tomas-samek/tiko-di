@@ -79,7 +79,7 @@ class CompositeCoercersTest {
                 .filteredOn(r -> "io.tiko.config".equals(r.loggerName()))
                 .extracting(CapturingLoggerFinder.LogEntry::message)
                 .containsExactly(
-                        "@Configuration Set<X> field: duplicate value 'a' deduped",
-                        "@Configuration Set<X> field: duplicate value 'b' deduped");
+                        "@Configuration Set<X> field: duplicate element at index 2 deduped",
+                        "@Configuration Set<X> field: duplicate element at index 4 deduped");
     }
 }

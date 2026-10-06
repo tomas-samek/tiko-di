@@ -30,14 +30,14 @@ public final class Coercers {
                 try {
                     return Math.toIntExact(l);
                 } catch (ArithmeticException e) {
-                    throw new CoercionException("expected integer, got long " + l + " (out of int range)");
+                    throw new CoercionException("expected integer, got long (out of int range)");
                 }
             }
             if (v instanceof String s)
                 try {
                     return Integer.parseInt(s.trim());
                 } catch (NumberFormatException e) {
-                    throw new CoercionException("expected integer, got string \"" + s + "\"");
+                    throw unparseable("integer");
                 }
             throw new CoercionException("expected integer, got " + describe(v));
         };
@@ -51,7 +51,7 @@ public final class Coercers {
                 try {
                     return Long.parseLong(s.trim());
                 } catch (NumberFormatException e) {
-                    throw new CoercionException("expected long, got string \"" + s + "\"");
+                    throw unparseable("long");
                 }
             throw new CoercionException("expected long, got " + describe(v));
         };
@@ -64,7 +64,7 @@ public final class Coercers {
                 String t = s.trim().toLowerCase();
                 if (t.equals("true")) return Boolean.TRUE;
                 if (t.equals("false")) return Boolean.FALSE;
-                throw new CoercionException("expected boolean, got string \"" + s + "\"");
+                throw unparseable("boolean");
             }
             throw new CoercionException("expected boolean, got " + describe(v));
         };
@@ -78,7 +78,7 @@ public final class Coercers {
                 try {
                     return Double.parseDouble(s.trim());
                 } catch (NumberFormatException e) {
-                    throw new CoercionException("expected double, got string \"" + s + "\"");
+                    throw unparseable("double");
                 }
             throw new CoercionException("expected double, got " + describe(v));
         };
@@ -92,7 +92,7 @@ public final class Coercers {
                 try {
                     return Float.parseFloat(s.trim());
                 } catch (NumberFormatException e) {
-                    throw new CoercionException("expected float, got string \"" + s + "\"");
+                    throw unparseable("float");
                 }
             throw new CoercionException("expected float, got " + describe(v));
         };
@@ -102,7 +102,7 @@ public final class Coercers {
         return v -> {
             int i = intCoercer().coerce(v);
             if (i < Short.MIN_VALUE || i > Short.MAX_VALUE)
-                throw new CoercionException("value " + i + " out of short range");
+                throw new CoercionException("expected short, got integer out of short range");
             return (short) i;
         };
     }
@@ -111,7 +111,7 @@ public final class Coercers {
         return v -> {
             int i = intCoercer().coerce(v);
             if (i < Byte.MIN_VALUE || i > Byte.MAX_VALUE)
-                throw new CoercionException("value " + i + " out of byte range");
+                throw new CoercionException("expected byte, got integer out of byte range");
             return (byte) i;
         };
     }
@@ -214,7 +214,7 @@ public final class Coercers {
                     if (i > 0) names.append(", ");
                     names.append(constants[i].name());
                 }
-                throw new CoercionException("expected one of [" + names + "], got \"" + s + "\"");
+                throw new CoercionException("expected one of [" + names + "], got an unrecognised string");
             }
         };
     }
@@ -225,9 +225,14 @@ public final class Coercers {
             try {
                 return parser.apply(s);
             } catch (RuntimeException e) {
-                throw new CoercionException("expected " + label + ", got \"" + s + "\"");
+                throw unparseable(label);
             }
         };
+    }
+
+    /** Never quotes the rejected input: configuration values may be secrets (SEC-2, #474). */
+    private static CoercionException unparseable(String expected) {
+        return new CoercionException("expected " + expected + ", got a string that does not parse as one");
     }
 
     private static String describe(Object v) {
