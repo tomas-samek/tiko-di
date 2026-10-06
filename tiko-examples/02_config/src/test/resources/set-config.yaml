@@ -13,3 +13,5 @@ app:
 
 allow:
   hosts: [alpha, beta, alpha, gamma, beta]
+  group:
+    members: [ops, ops]

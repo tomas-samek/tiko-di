@@ -129,9 +129,35 @@ class ConfigBinderGeneratorTest {
                 .orElseThrow(() -> new AssertionError("AllowlistConfigBinder not generated"));
 
         String content = new String(binder.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        assertThat(content).contains("CompositeCoercers.set(");
+        assertThat(content).contains("CompositeCoercers.set(\"allow.hosts\", ");
         assertThat(content).contains("stringCoercer()");
         assertThat(content).contains("ctx.requireScalar(node, \"hosts\"");
+    }
+
+    @Test
+    void setInsideNestedRecordIsLabelledWithRecordAndField() throws IOException {
+        JavaFileObject outer = JavaFileObjects.forSourceLines(
+                "io.example.ClusterConfig",
+                "package io.example;",
+                "import io.tiko.annotations.Configuration;",
+                "@Configuration(prefix = \"cluster\")",
+                "public record ClusterConfig(Node primary) {}");
+        JavaFileObject inner = JavaFileObjects.forSourceLines(
+                "io.example.Node",
+                "package io.example;",
+                "import java.util.Set;",
+                "import io.tiko.annotations.Key;",
+                "public record Node(@Key(\"tag-set\") Set<String> tags) {}");
+        Compilation c =
+                Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(outer, inner);
+        com.google.testing.compile.CompilationSubject.assertThat(c).succeeded();
+
+        JavaFileObject coercer = c.generatedSourceFiles().stream()
+                .filter(f -> f.getName().contains("NodeNestedCoercer_"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("NodeNestedCoercer not generated"));
+        String content = new String(coercer.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        assertThat(content).contains("CompositeCoercers.set(\"Node.tag-set\", ");
     }
 
     @Test

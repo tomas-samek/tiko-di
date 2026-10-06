@@ -1,6 +1,7 @@
 package io.tiko.examples.config;
 
 import io.tiko.annotations.Configuration;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -10,4 +11,4 @@ import java.util.Set;
  * {@code PackageElement}.
  */
 @Configuration(prefix = "allow")
-public record AllowlistConfig(Set<String> hosts) {}
+public record AllowlistConfig(Set<String> hosts, Optional<AllowlistGroup> group) {}
