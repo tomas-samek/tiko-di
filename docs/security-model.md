@@ -205,13 +205,14 @@ string from config, a record, or an HTTP request.
 **Rule.** Versions are managed in `tiko-bom` and the root `dependencyManagement`; every
 shipped dependency, shaded ones included, is covered by an advisory check before release.
 
-**Enforced by.** Dependabot alerts and Dependency Review (declared dependencies); the
-`tiko-security` release gate's global-advisory query (shaded coordinates).
+**Enforced by.** Dependabot alerts and Dependency Review over declared dependencies.
+`tiko-kafka/pom.xml` declares every Jackson artifact it shades, transitive ones included, at the
+version the root `dependencyManagement` pins; `ShadedDependenciesDeclaredTest` fails the build
+when a shaded artifact is undeclared or pinned at a different version. The `tiko-security`
+release gate's global-advisory query cross-checks the shaded coordinates.
 
-**Status.** Gap: GitHub's dependency graph lists `jackson-databind` and
-`jackson-datatype-jsr310` but not `jackson-core` / `jackson-annotations`, which
-`tiko-kafka` shades (`<include>com.fasterxml.jackson.core:*</include>`). Automated alerts
-don't cover them. Tracked in #476.
+**Status.** Holds (fixed in #476; before it, the dependency graph listed `jackson-databind`
+and `jackson-datatype-jsr310` but not the shaded `jackson-core` / `jackson-annotations`).
 
 **Violation looks like.** A new shaded or transitive dependency with no advisory coverage.
 

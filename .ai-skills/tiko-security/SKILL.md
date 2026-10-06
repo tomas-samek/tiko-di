@@ -41,8 +41,9 @@ gh api --paginate "repos/tomas-samek/tiko-di/dependabot/alerts?state=open&per_pa
   --jq '.[] | "\(.security_advisory.severity) \(.dependency.package.name) \(.dependency.manifest_path)"'
 gh api --paginate "repos/tomas-samek/tiko-di/code-scanning/alerts?state=open&ref=refs/heads/main&per_page=100" \
   --jq '.[] | "\(.rule.security_severity_level) \(.rule.id) \(.most_recent_instance.location.path)"'
-# Shaded Jackson (SEC-9 blind spot): query every artifact tiko-kafka ships, at its resolved
-# version — they differ (e.g. jackson-annotations 2.22 vs jackson-core 2.22.3).
+# Shaded Jackson (SEC-9 cross-check): Dependabot covers what tiko-kafka declares (#476); this
+# queries what it actually shades, at the resolved versions — they differ (e.g.
+# jackson-annotations 2.22 vs jackson-core 2.22.3).
 mvn -q -pl tiko-kafka dependency:list -DoutputFile=shaded-deps.txt \
   -DincludeGroupIds=com.fasterxml.jackson.core,com.fasterxml.jackson.datatype
 grep -oE 'com\.fasterxml\.jackson\.[a-z]+:[a-z0-9-]+:jar:[^:]+' tiko-kafka/shaded-deps.txt \
@@ -69,7 +70,8 @@ positive`, `won't fix`, `used in tests`. The gate reads alert state; it never wa
 alert in its own verdict.
 
 A **shaded-coordinate advisory** can't be dismissed (it isn't a repository alert). Resolve it by
-bumping the shaded version (`mvn versions:set-property -Dproperty=jackson.version …`) and
+bumping the shaded version (`mvn versions:set-property -Dproperty=jackson.version …`, plus
+`jackson-annotations.version` to the same major.minor) and
 re-running the gate. If no fixed upstream version exists, the release stays NO-GO until the
 maintainer decides; record that decision in a comment on the release PR, not in release notes.
 
@@ -78,7 +80,7 @@ maintainer decides; record that decision in a comment on the release PR, not in 
 | "CONDITIONAL until it's triaged" | Untriaged is still open. Open high/critical on a shipped artifact = NO-GO. |
 | "SEC-3 makes it unexploitable for us" | Maybe — then dismiss the alert in GitHub with that reason. Until then it's open. |
 | "Ship with an accepted-risk note in the release notes" | Risk acceptance is a dismissal decision for the maintainer, recorded on the alert, not a line in the notes. |
-| "Dependabot shows nothing, so Jackson is clean" | Dependabot can't see the shaded `jackson-core`/`jackson-annotations` (SEC-9). Run the advisory query. |
+| "Dependabot shows nothing, so Jackson is clean" | Dependabot sees what `tiko-kafka` declares, not what it shades (SEC-9). Run the advisory query. |
 
 ## Mode 3 — Periodic audit
 

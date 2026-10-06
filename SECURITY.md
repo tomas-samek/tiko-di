@@ -45,4 +45,4 @@ Include:
 
 `tiko-kafka` shades Jackson (relocated under `io.tiko.kafka.internal.jackson`). A vulnerability there is fixed by a new Tiko release; upgrading Jackson in your own build doesn't change the shaded copy.
 
-GitHub's automated dependency alerts see only the dependencies declared in our poms. Shaded modules that aren't declared directly, such as `jackson-core` and `jackson-annotations`, aren't covered by them.
+Every Jackson module that `tiko-kafka` bundles is declared directly in its pom, so GitHub's automated dependency alerts cover the shaded copy as well.
