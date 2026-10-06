@@ -16,7 +16,7 @@ class ConfigValidationExceptionTest {
                 new ConfigIssue(ConfigIssueCode.MISSING_KEY, "config.yaml:5:7 db.url is required but missing"),
                 new ConfigIssue(
                         ConfigIssueCode.INVALID_VALUE,
-                        "config.yaml:6:18 db.maxConnections expected integer, got string \"ten\""));
+                        "config.yaml:6:18 db.maxConnections expected integer, got a string that does not parse as one"));
 
         var ex = new ConfigValidationException("config.yaml", issues);
 

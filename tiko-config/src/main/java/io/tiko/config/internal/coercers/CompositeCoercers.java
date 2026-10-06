@@ -40,12 +40,13 @@ public final class CompositeCoercers {
                         + (v == null ? "null" : v.getClass().getSimpleName()));
             }
             Set<X> out = new LinkedHashSet<>(raw.size());
-            for (Object e : raw) {
-                X coerced = elementCoercer.coerce(e);
-                if (!out.add(coerced)) {
+            for (int i = 0; i < raw.size(); i++) {
+                if (!out.add(elementCoercer.coerce(raw.get(i)))) {
+                    // The index, never the element: configuration values may be secrets (SEC-2, #474).
+                    int index = i;
                     LoggerHolder.LOG.log(
                             System.Logger.Level.WARNING,
-                            () -> "@Configuration Set<X> field: duplicate value '" + coerced + "' deduped");
+                            () -> "@Configuration Set<X> field: duplicate element at index " + index + " deduped");
                 }
             }
             // Collections.unmodifiableSet preserves the LinkedHashSet iteration order;

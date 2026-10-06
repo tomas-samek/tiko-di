@@ -40,13 +40,16 @@ handler (`DefaultErrorHandler`, `ConfigurationFailure` case, one WARNING per iss
 **Rule.** Framework log lines and validation messages describe *where* and *what kind* of
 value is wrong, never the value itself.
 
-**Enforced by.** Convention (not enforced).
+**Enforced by.** Code and test:
+- Scalar coercers (`Coercers`) say what kind of value was expected and never quote the
+  rejected input or out-of-range number. `BindContext` prefixes the field path and source
+  location.
+- The `Set<X>` coercer (`CompositeCoercers`) logs a duplicate's list index, not the element.
+- `ConfigValuesStayOutOfMessagesTest` checks, with a secret-shaped input, that each scalar
+  rejection path, the anchored type-mismatch issue and the duplicate warning omit the value.
 
-**Status.** Gap:
-- `CompositeCoercers` (`Set<X>` coercer) logs `duplicate value '<value>' deduped` at WARNING.
-- Scalar coercers include the rejected string in `CoercionException` messages
-  (`expected integer, got string "<value>"`), which reach the WARNING log through
-  `ConfigurationFailure`. Tracked in #474.
+**Status.** Holds (fixed in #474; before it, the duplicate warning and type-mismatch messages
+quoted the value).
 
 **Violation looks like.** A log call or exception message that concatenates a resolved
 configuration value.
