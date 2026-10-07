@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://tomas-samek.github.io/banners/dark/tiko-di.svg">
+  <img alt="tiko-di: Compile-time orchestrator for Java 21+" src="https://tomas-samek.github.io/banners/light/tiko-di.svg" width="100%">
+</picture>
+
 # Tiko DI
 
 > A modern, compile-time dependency injection framework for Java 21+ with event-driven architecture
