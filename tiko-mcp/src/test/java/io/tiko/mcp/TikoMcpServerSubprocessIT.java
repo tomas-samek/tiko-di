@@ -3,6 +3,7 @@ package io.tiko.mcp;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
@@ -10,23 +11,25 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Spawns the shaded {@code tiko-mcp.jar} as a subprocess, sends JSON-RPC
- * {@code initialize} + {@code tools/list} requests over stdin, asserts the
- * response advertises all expected tools.
+ * Spawns the shaded {@code tiko-mcp} jar as a subprocess and speaks JSON-RPC over stdin/stdout:
+ * {@code initialize}, {@code tools/list} (every expected tool is advertised) and two
+ * {@code tools/call}s whose {@code scope} argument must reach the tool, so a filter that excludes
+ * the fixture component returns it and one that matches does.
  *
- * <p>Skipped when {@code tiko-mcp/target/tiko-mcp-0.1.0.jar} is not built —
- * keeps {@code mvn test} green on freshly-cloned trees.
- *
- * <p>The reader loop runs on a daemon thread via {@link Future#get(long,
- * TimeUnit)} so the test has a hard deadline without any {@code Thread.sleep}.
+ * <p>Runs under failsafe ({@code mvn verify}), after {@code package} has built the shaded jar.
+ * The reader loop runs on a daemon thread via {@link Future#get(long, TimeUnit)} so the test has a
+ * hard deadline without any {@code Thread.sleep}.
  */
 class TikoMcpServerSubprocessIT {
 
@@ -43,14 +46,10 @@ class TikoMcpServerSubprocessIT {
     };
 
     @Test
-    void serverAdvertisesAllExpectedTools(@TempDir Path projectDir) throws Exception {
-        var jar = Paths.get("target/tiko-mcp-0.1.0.jar");
-        if (!Files.exists(jar)) {
-            // Shaded jar not built yet — run `mvn package` first. Treat as pass.
-            return;
-        }
+    void serverListsToolsAndPassesCallArgumentsThrough(@TempDir Path projectDir) throws Exception {
+        var jar = shadedJar();
 
-        // Minimal fixture so TopologyStore.loadFrom() finds at least one component.
+        // Minimal fixture so TopologyStore.loadFrom() finds one SINGLETON component.
         var topology = projectDir.resolve("m/target/classes/META-INF/tiko/topology.json");
         Files.createDirectories(topology.getParent());
         Files.writeString(topology, """
@@ -72,68 +71,99 @@ class TikoMcpServerSubprocessIT {
             t.setDaemon(true);
             return t;
         });
-        try (var stdin = new PrintWriter(new OutputStreamWriter(proc.getOutputStream(), StandardCharsets.UTF_8), true);
-                var stdout = new BufferedReader(new InputStreamReader(proc.getInputStream(), StandardCharsets.UTF_8))) {
-
-            // MCP handshake requires three steps before tools/list works:
-            //   1. initialize  → server responds
-            //   2. notifications/initialized (client notification) → server transitions to INITIALIZED
-            //   3. tools/list  → server can now fulfill the request via the exchangeSink
-            //
-            // The reader thread drives all I/O so Future.get(10s) is the only deadline —
-            // no Thread.sleep anywhere.
-            Future<String> accumulated = reader.submit(() -> {
-                var sb = new StringBuilder();
-
-                // Step 1: send initialize and read the response line.
-                stdin.println("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\","
-                        + "\"params\":{\"protocolVersion\":\"2024-11-05\","
-                        + "\"clientInfo\":{\"name\":\"it\",\"version\":\"0\"}}}");
-                String initLine = stdout.readLine(); // blocks until server replies
-                if (initLine != null) {
-                    sb.append(initLine).append('\n');
-                }
-
-                // Step 2: send notifications/initialized so the server enters INITIALIZED state.
+        // Responses keyed by JSON-RPC id; shared so a timeout can report what did arrive.
+        var byId = new ConcurrentHashMap<Integer, String>();
+        // No try-with-resources: closing a reader another thread is blocked on deadlocks. Killing
+        // the process in `finally` ends the blocked readLine() instead.
+        var stdin = new PrintWriter(new OutputStreamWriter(proc.getOutputStream(), StandardCharsets.UTF_8), true);
+        var stdout = new BufferedReader(new InputStreamReader(proc.getInputStream(), StandardCharsets.UTF_8));
+        try {
+            // MCP handshake: initialize → response, then notifications/initialized, after which
+            // requests are served. One request at a time: each waits for its response before the
+            // next is sent.
+            Future<?> responses = reader.submit(() -> {
+                exchange(
+                        stdin,
+                        stdout,
+                        byId,
+                        1,
+                        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\","
+                                + "\"params\":{\"protocolVersion\":\"2024-11-05\","
+                                + "\"clientInfo\":{\"name\":\"it\",\"version\":\"0\"}}}");
                 stdin.println("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}");
-
-                // Step 3: request the tools list.
-                stdin.println("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}");
-
-                // Read remaining lines until all expected tool names appear.
-                String line;
-                while ((line = stdout.readLine()) != null) {
-                    sb.append(line).append('\n');
-                    if (allToolsPresent(sb.toString())) {
-                        return sb.toString();
-                    }
-                }
-                return sb.toString();
+                exchange(stdin, stdout, byId, 2, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}");
+                exchange(
+                        stdin,
+                        stdout,
+                        byId,
+                        3,
+                        "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\","
+                                + "\"params\":{\"name\":\"list_components\",\"arguments\":{\"scope\":\"PROTOTYPE\"}}}");
+                exchange(
+                        stdin,
+                        stdout,
+                        byId,
+                        4,
+                        "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\","
+                                + "\"params\":{\"name\":\"list_components\",\"arguments\":{\"scope\":\"SINGLETON\"}}}");
+                return null;
             });
 
-            String result = accumulated.get(15, TimeUnit.SECONDS);
+            try {
+                responses.get(15, TimeUnit.SECONDS);
+            } catch (TimeoutException e) {
+                throw new AssertionError("no response to every request within 15 s; received: " + byId, e);
+            }
 
-            assertThat(result)
-                    .contains("list_components")
-                    .contains("list_events")
-                    .contains("get_config_schema")
-                    .contains("explain_wiring")
-                    .contains("reload")
-                    .contains("list_wiring_errors")
-                    .contains("find_dependents")
-                    .contains("trace_event_flow")
-                    .contains("list_profile_conflicts");
+            assertThat(byId.get(2)).as("tools/list").contains(EXPECTED_TOOLS);
+            assertThat(byId.get(3))
+                    .as("list_components with scope=PROTOTYPE excludes the SINGLETON fixture")
+                    .contains("\"result\"")
+                    .doesNotContain("io.example.X");
+            assertThat(byId.get(4))
+                    .as("list_components with scope=SINGLETON returns the fixture")
+                    .contains("io.example.X");
 
         } finally {
-            reader.shutdownNow();
             proc.destroyForcibly().waitFor(5, TimeUnit.SECONDS);
+            reader.shutdownNow();
+            stdin.close();
         }
     }
 
-    private static boolean allToolsPresent(String acc) {
-        for (var tool : EXPECTED_TOOLS) {
-            if (!acc.contains(tool)) return false;
+    /** The shaded jar {@code package} built for the current version (not {@code original-…}). */
+    private static Path shadedJar() throws IOException {
+        try (var files = Files.list(Paths.get("target"))) {
+            var jar = files.filter(p -> {
+                        var name = p.getFileName().toString();
+                        return name.startsWith("tiko-mcp-")
+                                && name.endsWith(".jar")
+                                && !name.endsWith("-sources.jar")
+                                && !name.endsWith("-javadoc.jar");
+                    })
+                    .sorted()
+                    .findFirst();
+            assertThat(jar)
+                    .as("shaded tiko-mcp jar in target/ (run under mvn verify)")
+                    .isPresent();
+            return jar.get();
         }
-        return true;
+    }
+
+    /** Sends one request and reads stdout until the response with the same id arrives. */
+    private static void exchange(
+            PrintWriter stdin, BufferedReader stdout, Map<Integer, String> byId, int id, String request)
+            throws IOException {
+        stdin.println(request);
+        String line;
+        while (!byId.containsKey(id) && (line = stdout.readLine()) != null) {
+            collect(byId, line);
+        }
+    }
+
+    private static void collect(Map<Integer, String> byId, String line) {
+        if (line == null) return;
+        var m = java.util.regex.Pattern.compile("\"id\":(\\d+)").matcher(line);
+        if (m.find()) byId.put(Integer.parseInt(m.group(1)), line);
     }
 }

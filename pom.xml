@@ -88,7 +88,7 @@
         <javalin.version>6.7.0</javalin.version>
         <hikari.version>6.2.1</hikari.version>
         <h2.version>2.3.232</h2.version>
-        <mcp-sdk.version>0.18.2</mcp-sdk.version>
+        <mcp-sdk.version>2.0.1</mcp-sdk.version>
 
         <!-- SonarCloud, CI-based analysis (the SonarCloud GitHub App's Automatic Analysis is
              disabled in the UI — the two modes are mutually exclusive). The Maven scanner reads
@@ -145,9 +145,16 @@
                 <artifactId>tiko-mcp</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <!-- mcp-core + the Jackson 2 binding instead of the `mcp` bundle, which brings Jackson 3:
+                 one Jackson stack in the tiko-mcp jar (#502). -->
             <dependency>
                 <groupId>io.modelcontextprotocol.sdk</groupId>
-                <artifactId>mcp</artifactId>
+                <artifactId>mcp-core</artifactId>
+                <version>${mcp-sdk.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
+                <artifactId>mcp-json-jackson2</artifactId>
                 <version>${mcp-sdk.version}</version>
             </dependency>
             <dependency>

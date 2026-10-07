@@ -72,9 +72,13 @@ public final class McpStdioBridge {
                 .description(r.description())
                 .inputSchema(mapper, r.schemaJson())
                 .build();
-        BiFunction<io.modelcontextprotocol.server.McpSyncServerExchange, Map<String, Object>, McpSchema.CallToolResult>
-                call = (exchange, args) -> {
+        BiFunction<
+                        io.modelcontextprotocol.server.McpSyncServerExchange,
+                        McpSchema.CallToolRequest,
+                        McpSchema.CallToolResult>
+                call = (exchange, request) -> {
                     try {
+                        var args = request.arguments();
                         var result = r.handler().apply(args == null ? Map.of() : args);
                         var json = mapper.writeValueAsString(result);
                         return McpSchema.CallToolResult.builder()
@@ -88,7 +92,10 @@ public final class McpStdioBridge {
                                 .build();
                     }
                 };
-        return new McpServerFeatures.SyncToolSpecification(tool, call);
+        return McpServerFeatures.SyncToolSpecification.builder()
+                .tool(tool)
+                .callHandler(call)
+                .build();
     }
 
     private static String escape(String s) {
