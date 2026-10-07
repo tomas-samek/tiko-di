@@ -41,6 +41,13 @@
             <groupId>org.apache.kafka</groupId>
             <artifactId>kafka-clients</artifactId>
         </dependency>
+        <!-- Declared directly so applications resolve the fixed lz4-java instead of the version
+             kafka-clients asks for: a parent's dependencyManagement doesn't reach consumers (#504). -->
+        <dependency>
+            <groupId>at.yawk.lz4</groupId>
+            <artifactId>lz4-java</artifactId>
+            <scope>runtime</scope>
+        </dependency>
 
         <!-- JSON serializer (shadow-bundled below; declared here for compile scope). Every Jackson
              artifact the shade plugin bundles is declared directly, transitive ones included, so
