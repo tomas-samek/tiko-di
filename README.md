@@ -12,6 +12,8 @@
 
 **Website: [tomas-samek.github.io/tiko-di](https://tomas-samek.github.io/tiko-di/)** · **Status: on Maven Central** (latest version in the badge above). Suitable for early-adopter experimentation. See [docs/roadmap.md](./docs/roadmap.md) for what ships today and what's next.
 
+🌐 **More projects and writing:** [tomas-samek.github.io](https://tomas-samek.github.io/)
+
 ## What Tiko is
 
 A **compile-time orchestrator** with an integrated event model and full compile-time validation.
