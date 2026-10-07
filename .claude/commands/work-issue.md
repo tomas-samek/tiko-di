@@ -50,7 +50,19 @@ If a memo is older than a couple of days, verify its claims against current code
 - `git push -u origin <branch>`.
 - `gh pr create` with:
   - **Title** mirroring the commit subject.
-  - **Body** containing `## Summary` (what changed and why), `## Test plan` (checklist of what was verified), and `Closes #$ARGUMENTS`.
+  - **Body** in exactly this shape, at most ~120 words:
+
+    ```markdown
+    ## Summary
+    - <what changed and why, one line per bullet, 1–3 bullets>
+
+    ## Test plan
+    - [x] <one line per check you actually ran, 2–4 items>
+
+    Closes #$ARGUMENTS
+    ```
+
+    The issue holds the background and the diff holds the detail, so the body names the change and the evidence, nothing more: one level of bullets, no tables or extra headings. A follow-up or open question goes in a PR comment or a new issue.
 - Return the PR URL.
 
 ## 6. Wait for the PR checks — they are part of the deliverable
