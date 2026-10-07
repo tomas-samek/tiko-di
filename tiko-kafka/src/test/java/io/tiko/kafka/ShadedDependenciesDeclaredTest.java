@@ -72,9 +72,9 @@ class ShadedDependenciesDeclaredTest {
         var props = properties(parse(ROOT_POM));
         var jackson = props.get("jackson.version");
 
-        assertThat(props.get("jackson-annotations.version"))
+        assertThat(props)
                 .as("jackson-annotations.version must be jackson.version's major.minor (%s)", jackson)
-                .isEqualTo(jackson.substring(0, jackson.lastIndexOf('.')));
+                .containsEntry("jackson-annotations.version", jackson.substring(0, jackson.lastIndexOf('.')));
     }
 
     private static Element parse(Path pom) throws Exception {
