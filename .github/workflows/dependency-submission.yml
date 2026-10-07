@@ -1,0 +1,38 @@
+# Submits the fully resolved Maven dependency tree of every module to GitHub's dependency
+# graph (SEC-9, #492). GitHub's static pom parsing only sees declared dependencies; the jars a
+# module bundles or pulls in transitively (e.g. tiko-mcp's fat jar: MCP SDK, reactor-core,
+# json-schema-validator, …) only reach Dependabot alerts through this snapshot.
+#
+# Runs on every push to main (keeps the default branch's graph current) and on pull requests
+# from this repository (Dependency Review then compares full trees). Pull requests from forks
+# get a read-only token, so the job is skipped for them.
+
+name: Dependency submission
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  submit:
+    name: Submit Maven dependency snapshot
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+      - name: Submit dependency snapshot
+        uses: advanced-security/maven-dependency-submission-action@a64327a7329c9939cf675e458452febe1894a70c # v6.0.1

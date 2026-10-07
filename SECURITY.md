@@ -45,4 +45,6 @@ Include:
 
 `tiko-kafka` shades Jackson (relocated under `io.tiko.kafka.internal.jackson`). A vulnerability there is fixed by a new Tiko release; upgrading Jackson in your own build doesn't change the shaded copy.
 
-Every Jackson module that `tiko-kafka` bundles is declared directly in its pom, so GitHub's automated dependency alerts cover the shaded copy as well.
+`tiko-mcp` is distributed as a self-contained jar that bundles its runtime dependencies (the MCP SDK, Reactor, a JSON-schema validator, Jackson, SnakeYAML). The same applies: a fix arrives with a new Tiko release.
+
+GitHub's automated dependency alerts cover both. `tiko-kafka` declares every Jackson module it bundles, and on every change to `main` the repository submits the fully resolved dependency tree of each module, bundled and transitive dependencies included, to GitHub's dependency graph.
