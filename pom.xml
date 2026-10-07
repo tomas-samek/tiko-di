@@ -63,7 +63,7 @@
         <auto-service.version>1.1.1</auto-service.version>
         <javapoet.version>0.1.0</javapoet.version>
         <slf4j.version>2.0.9</slf4j.version>
-        <logback.version>1.5.32</logback.version>
+        <logback.version>1.5.38</logback.version>
         <junit.version>5.10.1</junit.version>
         <compile-testing.version>0.21.0</compile-testing.version>
         <snakeyaml.version>2.3</snakeyaml.version>
@@ -82,6 +82,9 @@
         <central-publishing-maven-plugin.version>0.10.0</central-publishing-maven-plugin.version>
         <jacoco.version>0.8.13</jacoco.version>
         <testcontainers.version>1.20.4</testcontainers.version>
+        <!-- Testcontainers 1.x pulls commons-compress 1.24.0 (GHSA-4265-ccf5-phj5,
+             GHSA-4g9r-vxhx-9pgx); 1.26.0+ fixes both (#505). -->
+        <commons-compress.version>1.28.0</commons-compress.version>
         <javalin.version>6.7.0</javalin.version>
         <hikari.version>6.2.1</hikari.version>
         <h2.version>2.3.232</h2.version>
@@ -276,6 +279,11 @@
                 <groupId>org.testcontainers</groupId>
                 <artifactId>junit-jupiter</artifactId>
                 <version>${testcontainers.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-compress</artifactId>
+                <version>${commons-compress.version}</version>
             </dependency>
             <dependency>
                 <groupId>io.javalin</groupId>
