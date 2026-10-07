@@ -6,7 +6,7 @@ guards it, where the rule is enforced, and its current status. It covers Tiko it
 the security of applications built on it (authentication, authorization and the like are
 plug-ins). Disclosure policy lives in [`SECURITY.md`](../SECURITY.md).
 
-Facts verified against the code on 2026-10-05. Each anchor names a file and a symbol; line
+Facts verified against the code on 2026-10-07 (periodic audit). Each anchor names a file and a symbol; line
 numbers are a convenience and drift.
 
 ---
@@ -18,15 +18,21 @@ numbers are a convenience and drift.
 **Threat.** A YAML document with global tags (`!!java.…`, `!!javax.…`) instantiating
 arbitrary classes during load.
 
-**Rule.** YAML is parsed with SnakeYAML's `SafeConstructor` only — maps, lists and scalars.
+**Rule.** YAML is read as data only: maps, lists and scalars. No tag may select a Java class.
 
-**Enforced by.** Code: `tiko-config/src/main/java/io/tiko/config/internal/YamlLoader.java`,
-`new Yaml(new SafeConstructor(opts))` (line 46). No regression test pins it.
+**Enforced by.** Code: `tiko-config/src/main/java/io/tiko/config/internal/YamlLoader.java`.
+It parses with `yaml.compose(...)` and walks the node tree itself, so no SnakeYAML constructor
+runs. `new Yaml(new SafeConstructor(opts))` is a second line of defence that `compose` never
+reaches. Global tags (`!!java.…`) are rejected at compose time by the default `LoaderOptions`
+tag inspector, as a `ConfigValidationException` ("Global tag is not allowed"). No regression
+test pins it.
 
-**Status.** Holds.
+**Status.** Holds; reproduced in the 2026-10-07 audit. A recursive or exponentially expanding
+alias isn't bounded; tracked in #498.
 
-**Violation looks like.** `new Yaml()` without a constructor argument, a `Constructor` /
-custom `BaseConstructor`, or `LoaderOptions` allowing global tags.
+**Violation looks like.** `compose` swapped for `load` / `loadAs` together with a non-safe
+constructor; `new Yaml()` without a constructor argument; a `Constructor` / custom
+`BaseConstructor`; or `LoaderOptions.setTagInspector(...)` allowing global tags.
 
 ---
 
@@ -48,8 +54,12 @@ value is wrong, never the value itself.
 - `ConfigValuesStayOutOfMessagesTest` checks, with a secret-shaped input, that each scalar
   rejection path, the anchored type-mismatch issue and the duplicate warning omit the value.
 
-**Status.** Holds (fixed in #474; before it, the duplicate warning and type-mismatch messages
-quoted the value).
+**Status.** Gap. Coercion, binding and the duplicate warning hold; they were fixed in #474,
+before which the duplicate warning and type-mismatch messages quoted the value. Two messages
+still quote a value, tracked in #493:
+- The malformed-YAML message passes SnakeYAML's problem text through. An unquoted
+  `password: *secret` is read as an alias and reported as `found undefined alias secret`.
+- `tiko.shutdownTimeout` validation quotes the rejected duration.
 
 **Violation looks like.** A log call or exception message that concatenates a resolved
 configuration value.
@@ -89,23 +99,33 @@ type comes from the record (header, field) instead of the bridge.
 record value.
 
 **Enforced by.** Type: `KafkaIngestError(String topic, int partition, long offset, Headers
-headers, Throwable cause)` has no payload component. `DefaultErrorHandler` logs a
-`TransportError` as `Transport {0} error: {1}` (transport name + cause).
+headers, Throwable cause)` and `KafkaRecordDeadLettered` have no payload component.
+`DefaultErrorHandler` logs a `TransportError` as `Transport {0} error: {1}` (transport name +
+cause). Egress is different: `KafkaEgressError(topic, Object event, cause)` carries the
+outbound event. `DefaultErrorHandler` doesn't render it, but the record's `toString()`
+includes it.
 
-**Status.** Holds. Note: a parser's exception message (the `cause`) can quote a token from
-the rejected input.
+**Status.** Gap: the `cause` rendered in that WARNING is the deserializer's exception, and
+Jackson's message quotes the offending field value in full (`from String
+"SSN-123-45-6789"`). Under the default `SEEK` policy the line repeats on every redelivery.
+Tracked in #494.
 
-**Violation looks like.** A payload/`byte[]` component added to `KafkaIngestError`, or a log
-call that renders `record.value()`.
+**Violation looks like.** A payload/`byte[]` component added to `KafkaIngestError`, a log
+call that renders `record.value()` or a `KafkaEgressError` (its `toString()`), or a
+deserializer exception message passed to a log line unfiltered.
 
 ---
 
 ### SEC-5 — annotation values enter generated code as escaped literals
 
-**Surface.** `tiko-processor` and `tiko-kafka-processor` code generation.
+**Surface.** `tiko-processor` and `tiko-kafka-processor` code generation: Java sources, and
+the resource files written next to them (`META-INF/tiko/configs.txt`, `components.txt`,
+`test-shadows.properties`, `topology.json`, `topology-kafka.json`, `config-schema.json`,
+`META-INF/services/*`).
 
 **Threat.** Code injection into a user's build through annotation string values (topic names,
-event names, qualifiers, configuration keys).
+event names, qualifiers, configuration keys), or annotation text that rewrites a generated
+resource the runtime reads back.
 
 **Rule.** String values reach generated code as escaped Java literals — through JavaPoet `$S`,
 or, where a literal is assembled by hand, through `CodeLiterals.javaString` (the #333 fix).
@@ -113,7 +133,9 @@ or, where a literal is assembled by hand, through `CodeLiterals.javaString` (the
 
 **Enforced by.** Code, per call site (check every generator in both processors, not one):
 - `KafkaTransportBootstrapGenerator` emits topics and names via `$S` (descriptor
-  `list.add(new $T($S, $S, …))` statements); `$L` carries method names.
+  `list.add(new $T($S, $S, …))` statements). `$L` carries method names, plus `partitionKey`,
+  an annotation string that is safe only because `PartitionKeyValidator`
+  (`KafkaAnnotationProcessor`) rejects anything but an accessor chain before generation.
 - `ContainerGenerator` (qualifier lookups) and `ComponentFactoryGenerator` (qualifier
   arguments) build quoted strings by hand but escape them with `CodeLiterals.javaString`.
 - `ConfigBinderGenerator.quotedJoin` joins the `@Key` values as `$S` code blocks; the joined
@@ -121,12 +143,22 @@ or, where a literal is assembled by hand, through `CodeLiterals.javaString` (the
   records). `KeyLiteralEscapingTest` pins quote, backslash, line-break, unicode-escape and
   code-injection keys at both call sites.
 
-**Status.** Holds (fixed in #479; before it, a crafted `@Key` compiled into extra statements in
-the generated binder).
+- Resource files: `topology.json` / `topology-kafka.json` escape names. `ConfigManifestWriter`
+  (`configs.txt`) and `ConfigSchemaWriter` (`config-schema.json`) don't escape for their
+  format (see Status).
+
+**Status.** Generated Java holds (fixed in #479; before it, a crafted `@Key` compiled into
+extra statements in the generated binder). Gap in resources, tracked in #496:
+- A `prefix` containing a line break adds lines to `configs.txt`, which `AggregatingContainer`
+  reads back with `Class.forName`.
+- `@Default` control characters, and `NaN` / `Infinity` / hex `double` defaults, produce
+  invalid `config-schema.json`.
 
 **Violation looks like.** `$L` with an annotation string value, or hand-built quoting
 (`"\"" + value + "\""`) without `CodeLiterals.javaString`, in an `addStatement` / `addCode`
-argument.
+argument; or annotation text written to a generated resource without escaping it for that
+format (line-oriented files: line breaks and separators; JSON: control characters, non-finite
+numbers).
 
 ---
 
@@ -169,6 +201,8 @@ longer pass `FOLLOW_LINKS`. Pinned by `TopologyStoreSymlinkTest` (all four files
 one (Windows without Developer Mode), so CI on Linux is where they run.
 
 **Status.** Holds (fixed in #475; symlinks that stay inside the project still work).
+Re-checked 2026-10-07 with directory junctions and traversal arguments. A link cycle under
+the project root stops the server from starting, a robustness issue tracked in #499.
 
 **Violation looks like.** A socket/HTTP transport, `FileVisitOption.FOLLOW_LINKS`, or a tool
 argument resolved into a path outside the root.
@@ -177,7 +211,8 @@ argument resolved into a path outside the root.
 
 ### SEC-8 — no class loading driven by external input
 
-**Surface.** `tiko-runtime` container bootstrap and aggregation.
+**Surface.** `tiko-runtime` container bootstrap and aggregation; `tiko-kafka` serializer
+selection and client configuration.
 
 **Threat.** Attacker-chosen classes loaded or instantiated at runtime.
 
@@ -187,9 +222,16 @@ messages or network input.
 
 **Enforced by.** Code: `AggregatingContainer` and `Tiko` load generated container, registry
 and index classes named by build-generated resources; transports are discovered through
-`ServiceLoader<TransportBootstrap>`.
+`ServiceLoader<TransportBootstrap>`. `KafkaBootstrapSupport` instantiates the serializer class
+named by the `@KafkaSource` / `@KafkaSink` annotation, and `tiko.kafka.serializer` only picks
+among the serializers `ServiceLoader<NamedKafkaSerializer>` found.
 
-**Status.** Holds.
+**Status.** Holds. Two inputs are trusted by design rather than enforced:
+- Generated resources: `configs.txt` lines come from annotation text (SEC-5, #496).
+- `tiko.kafka.consumer-properties` / `producer-properties` go to the Kafka clients unchanged,
+  and the clients instantiate classes named there (`interceptor.classes`, `config.providers`,
+  …). Configuration is operator-controlled, so this is the operator's surface, not an
+  attacker's.
 
 **Violation looks like.** `Class.forName` / `getDeclaredConstructor().newInstance()` on a
 string from config, a record, or an HTTP request.
@@ -198,7 +240,7 @@ string from config, a record, or an HTTP request.
 
 ### SEC-9 — dependencies are managed and their advisories visible
 
-**Surface.** Maven dependencies; Jackson shaded into `tiko-kafka`.
+**Surface.** Maven dependencies; Jackson shaded into `tiko-kafka`; the `tiko-mcp` fat jar.
 
 **Threat.** Shipping a dependency with a known vulnerability.
 
@@ -211,8 +253,11 @@ version the root `dependencyManagement` pins; `ShadedDependenciesDeclaredTest` f
 when a shaded artifact is undeclared or pinned at a different version. The `tiko-security`
 release gate's global-advisory query cross-checks the shaded coordinates.
 
-**Status.** Holds (fixed in #476; before it, the dependency graph listed `jackson-databind`
-and `jackson-datatype-jsr310` but not the shaded `jackson-core` / `jackson-annotations`).
+**Status.** Gap. `tiko-kafka` holds (fixed in #476; before it, the dependency graph listed
+`jackson-databind` and `jackson-datatype-jsr310` but not the shaded `jackson-core` /
+`jackson-annotations`). The published `tiko-mcp` jar bundles its whole runtime tree (MCP SDK,
+`reactor-core`, `json-schema-validator`, `jackson-dataformat-yaml`, `snakeyaml`, …), most of
+which the dependency graph doesn't list. Tracked in #492.
 
 **Violation looks like.** A new shaded or transitive dependency with no advisory coverage.
 
@@ -258,6 +303,65 @@ an unbounded tight loop.
 `seek-backoff-max` (default `PT30S`); pinned by `KafkaSeekBackoffTest` and
 `SeekBackoffDelayTest`.
 
-**Status.** Holds (fixed in #478: a poison record that redelivered ~37,000 times per second
-now redelivers at the backoff pace). Setting `seek-backoff: PT0S` opts back into immediate
-redelivery.
+**Status.** Holds at the defaults (fixed in #478: a poison record that redelivered ~37,000
+times per second now redelivers at the backoff pace). Setting `seek-backoff: PT0S` opts back
+into immediate redelivery. Gap for misconfiguration, tracked in #495:
+- `seek-backoff-max: PT0S` silently turns the backoff off.
+- A negative `seek-backoff-max` spins.
+- `poll-timeout: PT0S` removes the pause after a failed `poll()`, which waits `poll-timeout`
+  (`ThreadPerTopicRunner`).
+
+None of these is rejected at startup.
+
+---
+
+### SEC-12 — test wiring never switches on in production by itself
+
+**Surface.** `tiko-runtime` test mode (`Tiko.create` detecting
+`META-INF/tiko/test-container.properties`; `AggregatingContainer` shadow overrides from
+`test-shadows.properties`) and the `tiko-processor` output that writes those files.
+
+**Threat.** A container in production silently resolving test doubles (fakes that skip
+checks, in-memory stores) because a test-component jar landed on the classpath.
+
+**Rule.** Test wiring only activates when the application opted into it explicitly, and a
+`@TestComponent` outside a test context is reported, not applied silently.
+
+**Enforced by.** Not yet enforced.
+
+**Status.** Gap: any `test-container.properties` on the classpath switches the container to
+test mode, and the processor writes these files for main sources too. Reproduced: a fixtures
+jar with a `@TestComponent` replaced a real component in a production container, with nothing
+logged. Tracked in #497. `replaceTransport` / `FakeKafkaTransport` are explicit code-level
+opt-ins and are not part of this gap.
+
+**Violation looks like.** Test-only behaviour selected by classpath presence alone, or a test
+seam reachable through configuration.
+
+---
+
+### SEC-13 — generated projects start safe
+
+**Surface.** `tiko-archetype` output: the project template, the `mcp.json` that
+`archetype-post-generate.groovy` turns into `.mcp.json` (which runs
+`jbang run io.github.tomas-samek:tiko-mcp:<version>` when an agent opens the project), and the
+agent-instruction files it copies (`.ai-skills`, `CLAUDE.md`, `AGENTS.md`, `.cursor`,
+`.junie`, `.github`).
+
+**Threat.** Every project created from the archetype inheriting an unpinned or unexpected
+executable, a secret, a permissive default, or agent instructions that don't come from the
+canonical repository sources.
+
+**Rule.** The template references only exact released coordinates from Maven Central, and
+contains no secrets or permissive defaults. The agent-instruction files are copies of the
+repository's canonical sources.
+
+**Enforced by.** `release.yml` bumps the `tiko-mcp` coordinate in `mcp.json` to the released
+version. `ArchetypeBundledSkillsInSyncTest` keeps the bundled skills identical to the
+repository's. The template declares no repositories besides Central.
+
+**Status.** Holds (2026-10-07 audit).
+
+**Violation looks like.** A `LATEST`/range/SNAPSHOT coordinate or a non-Central repository in
+the template, a credential or token in any template file, or an agent-instruction file edited
+in the archetype instead of at its canonical source.

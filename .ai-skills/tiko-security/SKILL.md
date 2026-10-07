@@ -7,7 +7,7 @@ description: Use when a change touches how tiko-di handles untrusted input, depe
 
 Security for **Tiko's own code and supply chain** — not for applications built on Tiko.
 Everything here is driven by the registry [`docs/security-model.md`](../../docs/security-model.md)
-(SEC-1 … SEC-11). Disclosure policy: [`SECURITY.md`](../../SECURITY.md).
+(SEC-1 … SEC-13). Disclosure policy: [`SECURITY.md`](../../SECURITY.md).
 
 ## Surface map
 
@@ -15,13 +15,16 @@ Everything here is driven by the registry [`docs/security-model.md`](../../docs/
 |---|---|
 | `tiko-config/**` | SEC-1, SEC-2 |
 | `tiko-kafka/**/serializer/**`, `KafkaSerializer`, `EventSerializer` | SEC-3 |
-| `tiko-kafka/**/runtime/**`, `KafkaIngestError` | SEC-3, SEC-4, SEC-11 |
-| `tiko-processor/**`, `tiko-kafka-processor/**` (generators, `CodeLiterals`) | SEC-5 |
+| `tiko-kafka/**/runtime/**`, `KafkaIngestError`, `KafkaEgressError` | SEC-3, SEC-4, SEC-11 |
+| `KafkaConfig`, `KafkaBootstrapSupport`, Kafka client properties | SEC-8, SEC-11 |
+| `tiko-processor/**`, `tiko-kafka-processor/**` (generators, `CodeLiterals`, generated resource writers) | SEC-5 |
+| test mode, `@TestComponent`, `test-*.properties`, `AggregatingContainer` overrides | SEC-12 |
 | any log call, `TikoLog` | SEC-6 |
 | `tiko-mcp/**` | SEC-7 |
 | `tiko-runtime/**` (`Class.forName`, `ServiceLoader`, `TikoOptions`) | SEC-8, SEC-11 |
-| `pom.xml`, `tiko-bom/pom.xml`, any `<dependency>` / shade config | SEC-9 |
+| `pom.xml`, `tiko-bom/pom.xml`, any `<dependency>` / shade config (incl. `tiko-mcp`) | SEC-9 |
 | `.github/workflows/**` | SEC-10 |
+| `tiko-archetype/**` (template, `mcp.json`, bundled agent files) | SEC-13 |
 
 ## Mode 1 — PR review
 
