@@ -240,26 +240,30 @@ string from config, a record, or an HTTP request.
 
 ### SEC-9 — dependencies are managed and their advisories visible
 
-**Surface.** Maven dependencies; Jackson shaded into `tiko-kafka`; the `tiko-mcp` fat jar.
+**Surface.** Maven dependencies, transitive ones included; Jackson shaded into `tiko-kafka`;
+the `tiko-mcp` fat jar.
 
 **Threat.** Shipping a dependency with a known vulnerability.
 
 **Rule.** Versions are managed in `tiko-bom` and the root `dependencyManagement`; every
 shipped dependency, shaded ones included, is covered by an advisory check before release.
 
-**Enforced by.** Dependabot alerts and Dependency Review over declared dependencies.
-`tiko-kafka/pom.xml` declares every Jackson artifact it shades, transitive ones included, at the
-version the root `dependencyManagement` pins; `ShadedDependenciesDeclaredTest` fails the build
-when a shaded artifact is undeclared or pinned at a different version. The `tiko-security`
-release gate's global-advisory query cross-checks the shaded coordinates.
+**Enforced by.** Dependabot alerts and Dependency Review over GitHub's dependency graph.
+`.github/workflows/dependency-submission.yml` submits every module's fully resolved Maven tree
+on each push to `main` (and on pull requests from this repository), so transitive and bundled
+artifacts appear at the version that ships. `DependencySubmissionWorkflowTest` fails the build
+if that workflow disappears, loses its `main` trigger or excludes a module. On top of that,
+`tiko-kafka/pom.xml` declares every Jackson artifact it shades, at the version the root
+`dependencyManagement` pins (`ShadedDependenciesDeclaredTest`). The `tiko-security` release
+gate's global-advisory query cross-checks the bundled coordinates of both modules.
 
-**Status.** Gap. `tiko-kafka` holds (fixed in #476; before it, the dependency graph listed
-`jackson-databind` and `jackson-datatype-jsr310` but not the shaded `jackson-core` /
-`jackson-annotations`). The published `tiko-mcp` jar bundles its whole runtime tree (MCP SDK,
-`reactor-core`, `json-schema-validator`, `jackson-dataformat-yaml`, `snakeyaml`, …), most of
-which the dependency graph doesn't list. Tracked in #492.
+**Status.** Holds. Fixed in #476 for `tiko-kafka`, whose shaded `jackson-core` /
+`jackson-annotations` the graph didn't list. Fixed in #492 for `tiko-mcp`, whose bundled
+runtime tree (MCP SDK, `reactor-core`, `json-schema-validator`, `jackson-dataformat-yaml`, …)
+the graph didn't list.
 
-**Violation looks like.** A new shaded or transitive dependency with no advisory coverage.
+**Violation looks like.** A new shaded or transitive dependency with no advisory coverage, or
+the dependency-submission workflow disabled, failing on `main`, or excluding a module.
 
 ---
 

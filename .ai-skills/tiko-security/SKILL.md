@@ -44,17 +44,19 @@ gh api --paginate "repos/tomas-samek/tiko-di/dependabot/alerts?state=open&per_pa
   --jq '.[] | "\(.security_advisory.severity) \(.dependency.package.name) \(.dependency.manifest_path)"'
 gh api --paginate "repos/tomas-samek/tiko-di/code-scanning/alerts?state=open&ref=refs/heads/main&per_page=100" \
   --jq '.[] | "\(.rule.security_severity_level) \(.rule.id) \(.most_recent_instance.location.path)"'
-# Shaded Jackson (SEC-9 cross-check): Dependabot covers what tiko-kafka declares (#476); this
-# queries what it actually shades, at the resolved versions — they differ (e.g.
-# jackson-annotations 2.22 vs jackson-core 2.22.3).
-mvn -q -pl tiko-kafka dependency:list -DoutputFile=shaded-deps.txt \
+# Bundled jars (SEC-9 cross-check): Dependabot sees them through the dependency-submission
+# workflow (#476, #492). This queries what tiko-kafka shades and tiko-mcp bundles, at the
+# resolved versions — they differ (e.g. jackson-annotations 2.22 vs jackson-core 2.22.3).
+mvn -q -pl tiko-kafka dependency:list -DoutputFile=bundled-deps.txt \
   -DincludeGroupIds=com.fasterxml.jackson.core,com.fasterxml.jackson.datatype
-grep -oE 'com\.fasterxml\.jackson\.[a-z]+:[a-z0-9-]+:jar:[^:]+' tiko-kafka/shaded-deps.txt \
-  | sed -E 's/:jar:/@/' | while read -r coord; do
+mvn -q -pl tiko-mcp dependency:list -DincludeScope=runtime -DoutputFile=bundled-deps.txt
+cat tiko-kafka/bundled-deps.txt tiko-mcp/bundled-deps.txt \
+  | grep -oE '[a-zA-Z0-9.-]+:[a-zA-Z0-9.-]+:jar:[^:]+' | grep -v '^io\.github\.tomas-samek:' \
+  | sed -E 's/:jar:/@/' | sort -u | while read -r coord; do
       gh api --paginate "/advisories?ecosystem=maven&affects=$coord&per_page=100" \
         --jq '.[] | "\(.severity) \(.ghsa_id) \(.summary)"' | sed "s|^|$coord |"
     done
-rm tiko-kafka/shaded-deps.txt
+rm tiko-kafka/bundled-deps.txt tiko-mcp/bundled-deps.txt
 ```
 
 | Verdict | When |
