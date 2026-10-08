@@ -317,8 +317,7 @@ public final class Tiko {
         java.time.Duration fromYaml = readYamlShutdownTimeout(options.configSource(), classLoader);
         if (fromYaml != null) {
             if (fromYaml.isNegative()) {
-                throw new ContainerInitializationException(
-                        "tiko.shutdownTimeout must not be negative; got " + fromYaml);
+                throw new ContainerInitializationException("tiko.shutdownTimeout must not be negative");
             }
             return fromYaml;
         }

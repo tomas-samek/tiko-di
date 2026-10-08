@@ -54,12 +54,14 @@ value is wrong, never the value itself.
 - `ConfigValuesStayOutOfMessagesTest` checks, with a secret-shaped input, that each scalar
   rejection path, the anchored type-mismatch issue and the duplicate warning omit the value.
 
-**Status.** Gap. Coercion, binding and the duplicate warning hold; they were fixed in #474,
-before which the duplicate warning and type-mismatch messages quoted the value. Two messages
-still quote a value, tracked in #493:
-- The malformed-YAML message passes SnakeYAML's problem text through. An unquoted
-  `password: *secret` is read as an alias and reported as `found undefined alias secret`.
-- `tiko.shutdownTimeout` validation quotes the rejected duration.
+**Status.** Holds. Coercion, binding and the duplicate warning were fixed in #474, before
+which the duplicate warning and type-mismatch messages quoted the value. #493 fixed two more
+messages, both now pinned by tests:
+- The malformed-YAML message passed an alias name through: an unquoted `password: *secret`
+  was reported as `found undefined alias secret`. `YamlLoader` now reports only `found
+  undefined alias` or `found duplicate anchor`; `ConfigValuesStayOutOfMessagesTest` covers it.
+- `tiko.shutdownTimeout` validation quoted the rejected duration;
+  `TikoResolveShutdownTimeoutTest` covers it.
 
 **Violation looks like.** A log call or exception message that concatenates a resolved
 configuration value.

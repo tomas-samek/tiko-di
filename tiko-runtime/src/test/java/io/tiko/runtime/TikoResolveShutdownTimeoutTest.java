@@ -63,6 +63,20 @@ class TikoResolveShutdownTimeoutTest {
                 .hasMessageContaining("negative");
     }
 
+    /** The rejected duration is configuration input; the message names the key, not the value (#493). */
+    @Test
+    void negativeYamlValueIsNotQuotedInTheMessage() {
+        ConfigSource source = new MapConfigSource(Map.of("tiko", Map.of("shutdownTimeout", "PT-7S")));
+        TikoOptions opts = TikoOptions.builder().configSource(source).build();
+
+        assertThatThrownBy(() -> Tiko.resolveShutdownTimeout(opts, CL))
+                .isInstanceOf(ContainerInitializationException.class)
+                .hasMessageContaining("tiko.shutdownTimeout")
+                .hasMessageContaining("negative")
+                .hasMessageNotContaining("PT-7S")
+                .hasMessageNotContaining("-7");
+    }
+
     @Test
     void unparseableYamlValueThrowsContainerInitialization() {
         // Neither friendly (#113) nor ISO-8601 — the coercer rejects it, and the bootstrap surfaces
