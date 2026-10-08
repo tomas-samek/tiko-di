@@ -14,9 +14,10 @@ import org.apache.kafka.common.utils.ByteBufferOutputStream;
 import org.junit.jupiter.api.Test;
 
 /**
- * {@code kafka-clients} 3.9.2 pulls {@code at.yawk.lz4:lz4-java} 1.10.1, which has three published
- * advisories (GHSA-4v53-57pg-c464, GHSA-6cx8-rjf8-pr8g, GHSA-xx22-p4ch-683r), so the root pom
- * manages it at a fixed version (#504). The round trip proves Kafka's own LZ4 streams still work
+ * {@code kafka-clients} 3.9.2 pulls {@code at.yawk.lz4:lz4-java} 1.10.1. Six advisories affect it
+ * (GHSA-4v53-57pg-c464, GHSA-6cx8-rjf8-pr8g, GHSA-xx22-p4ch-683r, fixed in 1.11.2; GHSA-mcr4-qmvw-px4g,
+ * GHSA-gm45-99xc-r7wv, GHSA-343h-94h5-c4wr, fixed in 1.11.4), so the root pom manages it at a fixed
+ * version (#504, #513). The round trip proves Kafka's own LZ4 streams still work
  * against that version.
  */
 class Lz4JavaVersionTest {
@@ -24,8 +25,8 @@ class Lz4JavaVersionTest {
     private static final Pattern LZ4_JAR = Pattern.compile(
             ".*[/\\\\]at[/\\\\]yawk[/\\\\]lz4[/\\\\]lz4-java[/\\\\]([^/\\\\]+)[/\\\\]lz4-java-\\1\\.jar$");
 
-    /** First release that fixes all three advisories. */
-    private static final int[] FIRST_FIXED = {1, 11, 2};
+    /** First release that fixes all six advisories. */
+    private static final int[] FIRST_FIXED = {1, 11, 4};
 
     @Test
     void lz4JavaOnTheRuntimeClasspathHasTheAdvisoryFixes() {
@@ -37,7 +38,7 @@ class Lz4JavaVersionTest {
 
         assertThat(versions).as("lz4-java resolved for tiko-kafka").hasSize(1);
         assertThat(atLeast(versions.get(0), FIRST_FIXED))
-                .as("lz4-java %s must be >= 1.11.2", versions.get(0))
+                .as("lz4-java %s must be >= 1.11.4", versions.get(0))
                 .isTrue();
     }
 
