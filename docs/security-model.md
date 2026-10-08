@@ -107,10 +107,12 @@ cause). Egress is different: `KafkaEgressError(topic, Object event, cause)` carr
 outbound event. `DefaultErrorHandler` doesn't render it, but the record's `toString()`
 includes it.
 
-**Status.** Gap: the `cause` rendered in that WARNING is the deserializer's exception, and
-Jackson's message quotes the offending field value in full (`from String
-"SSN-123-45-6789"`). Under the default `SEEK` policy the line repeats on every redelivery.
-Tracked in #494.
+**Status.** Holds. Fixed in #494: the `cause` in that WARNING used to be Jackson's exception,
+which quoted the offending field value in full (`from String "SSN-123-45-6789"`) on every
+`SEEK` redelivery. `JsonKafkaSerializer` now throws a message naming only the failure kind,
+field path and position, and doesn't chain Jackson's exception; `JsonKafkaSerializerPayloadLeakTest`
+checks the whole printed stack trace. A user-supplied `KafkaSerializer` controls its own
+messages. The log line doesn't yet name the record's topic, partition and offset (#516).
 
 **Violation looks like.** A payload/`byte[]` component added to `KafkaIngestError`, a log
 call that renders `record.value()` or a `KafkaEgressError` (its `toString()`), or a
