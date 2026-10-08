@@ -311,15 +311,12 @@ an unbounded tight loop.
 `seek-backoff-max` (default `PT30S`); pinned by `KafkaSeekBackoffTest` and
 `SeekBackoffDelayTest`.
 
-**Status.** Holds at the defaults (fixed in #478: a poison record that redelivered ~37,000
-times per second now redelivers at the backoff pace). Setting `seek-backoff: PT0S` opts back
-into immediate redelivery. Gap for misconfiguration, tracked in #495:
-- `seek-backoff-max: PT0S` silently turns the backoff off.
-- A negative `seek-backoff-max` spins.
-- `poll-timeout: PT0S` removes the pause after a failed `poll()`, which waits `poll-timeout`
-  (`ThreadPerTopicRunner`).
-
-None of these is rejected at startup.
+**Status.** Holds. #478 fixed the defaults: a poison record that redelivered ~37,000 times per
+second now redelivers at the backoff pace, and `seek-backoff: PT0S` still opts back into
+immediate redelivery. #495 closed the misconfiguration gap: `ThreadPerTopicRunner` rejects a
+non-positive `poll-timeout` (also the pause after a failed `poll()`), a negative
+`seek-backoff`, and a `seek-backoff-max` below `seek-backoff` when it is constructed at
+startup. `KafkaTimingValidationTest` pins each case.
 
 ---
 

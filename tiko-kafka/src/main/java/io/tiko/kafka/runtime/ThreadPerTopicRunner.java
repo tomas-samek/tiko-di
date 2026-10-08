@@ -102,6 +102,25 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
         this.decider = decider;
         // Parse eagerly so a typo'd policy fails fast at start() rather than per record.
         this.poisonRecordPolicy = IngestErrorPolicy.parse(config.poisonRecordPolicy());
+        requireBoundedTiming(config);
+    }
+
+    /**
+     * Rejects timing that would let a failing record or a failing poll repeat without a time
+     * bound (#495). {@code poll-timeout} also paces recovery after a failed poll, so it must be
+     * positive; {@code seek-backoff: PT0S} stays the documented opt-out of backoff.
+     */
+    private static void requireBoundedTiming(KafkaConfig config) {
+        if (config.pollTimeout().isNegative() || config.pollTimeout().isZero()) {
+            throw new IllegalArgumentException("tiko.kafka.poll-timeout must be positive");
+        }
+        if (config.seekBackoff().isNegative()) {
+            throw new IllegalArgumentException("tiko.kafka.seek-backoff must not be negative");
+        }
+        if (config.seekBackoffMax().compareTo(config.seekBackoff()) < 0) {
+            throw new IllegalArgumentException(
+                    "tiko.kafka.seek-backoff-max must not be less than tiko.kafka.seek-backoff");
+        }
     }
 
     @Override
