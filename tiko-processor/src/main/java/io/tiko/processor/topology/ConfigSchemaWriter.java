@@ -86,17 +86,20 @@ public final class ConfigSchemaWriter {
         var inner = fragment.substring(1, fragment.length() - 1);
         var raw = field.defaultValue().trim();
         String def;
+        // Numbers are written from the parsed value, not as typed: Java accepts forms JSON
+        // doesn't (+1, 1., 1d, 0x1p3), and NaN/Infinity have no JSON number at all (#496).
         if (fragment.contains("\"type\":\"integer\"")) {
             try {
-                Long.parseLong(raw);
-                def = "\"default\":" + raw;
+                def = "\"default\":" + Long.parseLong(raw);
             } catch (NumberFormatException e) {
                 def = "\"default\":\"" + escapeJson(field.defaultValue()) + "\"";
             }
         } else if (fragment.contains("\"type\":\"number\"")) {
             try {
-                Double.parseDouble(raw);
-                def = "\"default\":" + raw;
+                double d = Double.parseDouble(raw);
+                def = Double.isFinite(d)
+                        ? "\"default\":" + d
+                        : "\"default\":\"" + escapeJson(field.defaultValue()) + "\"";
             } catch (NumberFormatException e) {
                 def = "\"default\":\"" + escapeJson(field.defaultValue()) + "\"";
             }
@@ -109,6 +112,6 @@ public final class ConfigSchemaWriter {
     }
 
     private String escapeJson(String s) {
-        return s.replace("\\", "\\\\").replace("\"", "\\\"");
+        return JsonWriter.escape(s);
     }
 }

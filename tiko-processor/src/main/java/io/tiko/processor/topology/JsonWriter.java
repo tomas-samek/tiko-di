@@ -184,6 +184,11 @@ public final class JsonWriter implements AutoCloseable {
     }
 
     private void writeEscaped(String s) {
+        write(escape(s));
+    }
+
+    /** {@code s} escaped for use inside a JSON string literal (without the surrounding quotes). */
+    static String escape(String s) {
         var sb = new StringBuilder(s.length() + 8);
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
@@ -204,7 +209,7 @@ public final class JsonWriter implements AutoCloseable {
                 }
             }
         }
-        write(sb.toString());
+        return sb.toString();
     }
 
     private static final class Frame {

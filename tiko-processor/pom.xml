@@ -66,6 +66,12 @@
             <artifactId>compile-testing</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Parses generated config-schema.json in tests (#496); test scope only, never in the processor jar. -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
 </project>
