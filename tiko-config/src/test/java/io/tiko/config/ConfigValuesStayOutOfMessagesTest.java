@@ -4,10 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 import io.tiko.SourceLocation;
+import io.tiko.config.internal.YamlLoader;
 import io.tiko.config.internal.coercers.Coercers;
 import io.tiko.config.internal.coercers.CoercionException;
 import io.tiko.config.internal.coercers.CompositeCoercers;
 import io.tiko.config.internal.coercers.TypeCoercer;
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -71,6 +74,18 @@ class ConfigValuesStayOutOfMessagesTest {
                         .startsWith("app.yaml:4:9 db.port ")
                         .contains("expected integer")
                         .doesNotContain(SECRET));
+    }
+
+    /** An unquoted value starting with {@code *} parses as a YAML alias; the error must not echo it (#493). */
+    @Test
+    void malformedYamlIssueNamesLocationAndProblemButNotTheValue() {
+        var yaml = "app:\n  password: *" + SECRET + "\n";
+
+        var e = catchThrowableOfType(
+                ConfigValidationException.class,
+                () -> YamlLoader.load(new ByteArrayInputStream(yaml.getBytes(StandardCharsets.UTF_8)), "app.yaml"));
+
+        assertThat(e.getMessage()).contains("app.yaml:2:13", "undefined alias").doesNotContain(SECRET);
     }
 
     @Test

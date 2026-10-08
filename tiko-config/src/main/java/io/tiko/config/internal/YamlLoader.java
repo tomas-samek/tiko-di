@@ -9,6 +9,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -150,9 +152,21 @@ public final class YamlLoader {
         Mark mark = e.getProblemMark();
         String anchor =
                 mark != null ? sourceLabel + ":" + (mark.getLine() + 1) + ":" + (mark.getColumn() + 1) : sourceLabel;
-        String problem = e.getProblem() != null ? e.getProblem() : "malformed YAML";
+        String problem = e.getProblem() != null ? withoutEchoedName(e.getProblem()) : "malformed YAML";
         return new ConfigValidationException(
                 sourceLabel, List.of(new ConfigIssue(ConfigIssueCode.INVALID_VALUE, anchor + ": " + problem)));
+    }
+
+    /**
+     * SnakeYAML problems that repeat an alias or anchor name from the input. An unquoted value
+     * starting with {@code *} (a password, say) parses as an alias, so the name can be a secret
+     * (SEC-2, #493).
+     */
+    private static final Pattern ECHOED_NAME = Pattern.compile("^(found (?:undefined alias|duplicate anchor))\\b.*");
+
+    private static String withoutEchoedName(String problem) {
+        Matcher m = ECHOED_NAME.matcher(problem);
+        return m.matches() ? m.group(1) : problem;
     }
 
     private static SourceLocation locationOf(Node node, String sourceLabel) {
