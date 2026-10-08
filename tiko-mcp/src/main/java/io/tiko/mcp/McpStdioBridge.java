@@ -42,7 +42,8 @@ public final class McpStdioBridge {
      * Start the SDK-managed stdio JSON-RPC loop. Returns when stdin closes.
      */
     public void run() throws Exception {
-        var server = start(McpJsonDefaults.getMapper(), System.in, System.out, registrations);
+        // stdout is the MCP protocol channel (JSON-RPC responses), not a log destination.
+        var server = start(McpJsonDefaults.getMapper(), System.in, System.out, registrations); // NOSONAR java:S106
 
         LoggerHolder.LOG.log(Level.INFO, "tiko-mcp server started on stdio");
 
