@@ -108,13 +108,13 @@ byte[] JsonKafkaSerializer.serialize(Object value)
 | `consumer-group` | `tiko-app` |
 | `serializer` | `json` |
 | `auto-offset-reset` | `earliest` |
-| `poll-timeout` | `PT0.5S` |
+| `poll-timeout` | `PT0.5S` (must be positive) |
 | `shutdown-timeout` | `PT5S` |
 | `producer-properties` | `{}` |
 | `consumer-properties` | `{}` |
 | `poison-record-policy` | `SEEK` (`SKIP` opt-in) |
 | `seek-backoff` | `PT0.5S` (SEEK retry delay, doubles per failure; `PT0S` = immediate) |
-| `seek-backoff-max` | `PT30S` |
+| `seek-backoff-max` | `PT30S` (not less than `seek-backoff`) |
 
 Write these keys kebab-case exactly as above (they are `@Key`-declared;
 `serializer` is the one plain camelCase-free field name). A key that

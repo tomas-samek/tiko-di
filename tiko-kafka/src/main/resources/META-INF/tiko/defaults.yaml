@@ -8,6 +8,7 @@ tiko:
     consumer-group: "tiko-app"
     serializer: json
     auto-offset-reset: earliest
+    # Must be positive: it is also the pause after a failed poll() (#495).
     poll-timeout: PT0.5S
     shutdown-timeout: PT5S
     producer-properties: {}
@@ -19,6 +20,7 @@ tiko:
     # Under SEEK, a failed record's partition is paused before redelivery, for
     # seek-backoff doubling on each consecutive failure of the same record, capped
     # at seek-backoff-max; other partitions keep flowing. PT0S redelivers
-    # immediately. See #478.
+    # immediately. See #478. Negative values, or a seek-backoff-max below
+    # seek-backoff, fail at startup (#495).
     seek-backoff: PT0.5S
     seek-backoff-max: PT30S

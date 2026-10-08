@@ -183,8 +183,11 @@ tiko:
   tiko:
     kafka:
       seek-backoff: PT0.5S      # first retry delay (default); PT0S redelivers immediately
-      seek-backoff-max: PT30S   # cap (default)
+      seek-backoff-max: PT30S   # cap (default); must not be less than seek-backoff
   ```
+
+  A negative value, or a cap below `seek-backoff`, fails at startup with an error naming
+  the key, as does a `poll-timeout` that isn't positive.
 - **`SKIP`** — log via the `ErrorHandler` (above) and commit past the record so the
   partition advances. This is the first-class "log and skip a poison record" — no
   `null`-returning serializer workaround needed.
