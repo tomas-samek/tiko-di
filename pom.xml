@@ -70,7 +70,7 @@
         <kafka-clients.version>3.9.2</kafka-clients.version>
         <!-- kafka-clients 3.9.2 pulls lz4-java 1.10.1 (GHSA-4v53-57pg-c464, GHSA-6cx8-rjf8-pr8g,
              GHSA-xx22-p4ch-683r); 1.11.2 is the first fixed release, as shipped by Kafka 4.2.2 (#504). -->
-        <lz4-java.version>1.11.2</lz4-java.version>
+        <lz4-java.version>1.11.4</lz4-java.version>
         <jackson.version>2.22.3</jackson.version>
         <!-- jackson-annotations is versioned by major.minor only since 2.20; keep it on
              jackson.version's minor (ShadedDependenciesDeclaredTest checks this). -->
