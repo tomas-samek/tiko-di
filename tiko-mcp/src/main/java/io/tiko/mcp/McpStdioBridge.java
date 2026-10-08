@@ -66,7 +66,8 @@ public final class McpStdioBridge {
         }
     }
 
-    private static McpServerFeatures.SyncToolSpecification spec(McpJsonMapper mapper, ToolRegistration r) {
+    /** The SDK tool spec for one registration; package-private so it can be tested in-process. */
+    static McpServerFeatures.SyncToolSpecification spec(McpJsonMapper mapper, ToolRegistration r) {
         var tool = McpSchema.Tool.builder()
                 .name(r.name())
                 .description(r.description())
