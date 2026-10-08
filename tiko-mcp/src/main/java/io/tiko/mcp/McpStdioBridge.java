@@ -4,8 +4,11 @@ import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
+import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
 import java.util.List;
@@ -39,19 +42,7 @@ public final class McpStdioBridge {
      * Start the SDK-managed stdio JSON-RPC loop. Returns when stdin closes.
      */
     public void run() throws Exception {
-        var mapper = McpJsonDefaults.getMapper();
-        var transport = new StdioServerTransportProvider(mapper);
-
-        var specs = registrations.stream()
-                .map(r -> spec(mapper, r))
-                .toArray(McpServerFeatures.SyncToolSpecification[]::new);
-
-        var server = McpServer.sync(transport)
-                .serverInfo("tiko-mcp", "0.1.0")
-                .capabilities(
-                        McpSchema.ServerCapabilities.builder().tools(false).build())
-                .tools(specs)
-                .build();
+        var server = start(McpJsonDefaults.getMapper(), System.in, System.out, registrations);
 
         LoggerHolder.LOG.log(Level.INFO, "tiko-mcp server started on stdio");
 
@@ -64,6 +55,28 @@ public final class McpStdioBridge {
         } finally {
             server.closeGracefully();
         }
+    }
+
+    /**
+     * Starts an MCP server that reads JSON-RPC from {@code in} and writes responses to {@code out};
+     * package-private so tests can drive it through pipes instead of the process's stdio.
+     */
+    static McpSyncServer start(
+            McpJsonMapper mapper, InputStream in, OutputStream out, List<ToolRegistration> registrations) {
+        var transport = new StdioServerTransportProvider(mapper, in, out);
+        var specs = registrations.stream()
+                .map(r -> spec(mapper, r))
+                .toArray(McpServerFeatures.SyncToolSpecification[]::new);
+        // immediateExecution: run tool handlers on the transport's single inbound thread. Offloaded
+        // to concurrent threads, two handlers finishing together race on the stdio transport's
+        // unicast outbound sink, and one response is dropped ("Failed to enqueue message", #509).
+        return McpServer.sync(transport)
+                .immediateExecution(true)
+                .serverInfo("tiko-mcp", "0.1.0")
+                .capabilities(
+                        McpSchema.ServerCapabilities.builder().tools(false).build())
+                .tools(specs)
+                .build();
     }
 
     /** The SDK tool spec for one registration; package-private so it can be tested in-process. */
