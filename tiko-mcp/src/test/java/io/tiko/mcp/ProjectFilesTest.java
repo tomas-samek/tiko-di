@@ -40,6 +40,33 @@ class ProjectFilesTest {
     }
 
     @Test
+    void aDirectoryIsEnteredOnlyOnceByItsRealPath(@TempDir Path tmp) throws Exception {
+        var dir = Files.createDirectories(tmp.resolve("a"));
+        var entered = new java.util.HashSet<Path>();
+
+        assertThat(ProjectFiles.enterOnce(entered, dir)).isEqualTo(java.nio.file.FileVisitResult.CONTINUE);
+        assertThat(ProjectFiles.enterOnce(entered, tmp.resolve("a/../a")))
+                .as("the same real directory reached again (#499)")
+                .isEqualTo(java.nio.file.FileVisitResult.SKIP_SUBTREE);
+        assertThat(ProjectFiles.enterOnce(entered, tmp.resolve("missing")))
+                .isEqualTo(java.nio.file.FileVisitResult.SKIP_SUBTREE);
+    }
+
+    @Test
+    void findReturnsMatchesInsideTheRootAndCanStopAtTheFirst(@TempDir Path tmp) throws Exception {
+        var root = Files.createDirectories(tmp.resolve("project"));
+        Files.writeString(Files.createDirectories(root.resolve("a")).resolve("x.json"), "{}");
+        Files.writeString(Files.createDirectories(root.resolve("b")).resolve("x.json"), "{}");
+        Files.writeString(root.resolve("other.txt"), "");
+
+        java.util.function.Predicate<Path> json =
+                p -> p.getFileName().toString().equals("x.json");
+        assertThat(ProjectFiles.find(root, json, false)).hasSize(2);
+        assertThat(ProjectFiles.find(root, json, true)).hasSize(1);
+        assertThat(ProjectFiles.find(root.resolve("missing"), json, false)).isEmpty();
+    }
+
+    @Test
     void unresolvableRootFallsBackToItsNormalizedAbsolutePath(@TempDir Path tmp) {
         var missingRoot = tmp.resolve("not-there/../project");
 

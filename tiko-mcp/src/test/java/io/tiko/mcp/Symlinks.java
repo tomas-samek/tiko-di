@@ -25,4 +25,30 @@ public final class Symlinks {
             assumeTrue(false, "symbolic links not supported here: " + e.getMessage());
         }
     }
+
+    /**
+     * Creates a directory link {@code link} → {@code target}: a symbolic link where the OS allows
+     * one, otherwise (Windows without the privilege) a directory junction, which Java walks into
+     * like a plain directory (#499). Skips the test when neither can be made.
+     */
+    public static void directoryLinkOrSkip(Path link, Path target) throws IOException, InterruptedException {
+        Files.createDirectories(link.getParent());
+        try {
+            Files.createSymbolicLink(link, target);
+            return;
+        } catch (FileSystemException | UnsupportedOperationException e) {
+            assumeTrue(isWindows(), "symbolic links not supported here: " + e.getMessage());
+        }
+        var mklink = new ProcessBuilder("cmd", "/c", "mklink", "/J", link.toString(), target.toString())
+                .redirectErrorStream(true)
+                .start();
+        mklink.getInputStream().readAllBytes();
+        assumeTrue(mklink.waitFor() == 0 && Files.isDirectory(link), "could not create a directory junction");
+    }
+
+    private static boolean isWindows() {
+        return System.getProperty("os.name", "")
+                .toLowerCase(java.util.Locale.ROOT)
+                .startsWith("windows");
+    }
 }
