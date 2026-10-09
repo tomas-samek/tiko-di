@@ -24,8 +24,8 @@ mvn -pl tiko-examples/01_basic_di test
 |---|---|---|
 | 1 | `INITIALIZING CONTAINER` | SINGLETON eager init + `@PostConstruct` in dependency order; auto-generated proxies for cross-scope deps |
 | 2 | `RETRIEVING COMPONENTS` | `container.get(Class)` resolution |
-| 3 | `DEMONSTRATING REQUEST SCOPE` | `runInRequestScope` + nested `runInEventScope`; one REQUEST can wrap many EVENTs; each scope gets a fresh `RequestContext` / `EventContext` |
-| 4 | `DEMONSTRATING LIFECYCLE EVENTS` | `ApplicationStartedEvent` / `RequestStartedEvent` / `EventStartedEvent` (and the matching `Ending` counterparts) published automatically by the container |
+| 3 | `DEMONSTRATING EVENT SCOPE (UNIT OF WORK)` | three `runInEventScope` units; each unit gets a fresh `EventContext`, torn down when the unit ends |
+| 4 | `DEMONSTRATING LIFECYCLE EVENTS` | `ApplicationStartedEvent` / `EventStartedEvent` (and the matching `Ending` counterparts) published automatically by the container |
 | 5 | `DEMONSTRATING PROVIDER<T>` | Lazy lookup, breaking circular deps, on-demand PROTOTYPE instances |
 | 6 | `DEMONSTRATING EVENT CHAINING` | `@EventTrigger`: return-as-payload, guards, `spread = true`, full origin chain via `Event<?>` wrapper (the trigger code itself lives in the `trigger/` subpackage; this section narrates the flow) |
 | 7 | `AUDIT LOG` | `EventBus` + `@EventHandler` cross-scope wiring of the AuditService |
@@ -44,11 +44,9 @@ MessageService (SINGLETON, @PostConstruct + @PreDestroy)
   └ depends on MessageRepository
 
 AuditService (SINGLETON, @PostConstruct, @EventHandler)
-  ├ depends on RequestContext (REQUEST → auto-proxied, interface required)
-  └ depends on EventContext  (EVENT   → auto-proxied, interface required)
+  └ depends on EventContext (EVENT → auto-proxied, interface required)
 
-RequestContextImpl (REQUEST)   implements RequestContext
-EventContextImpl   (EVENT)     implements EventContext
+EventContextImpl (EVENT) implements EventContext
 
 MessageCreatedEvent (record) — payload published by MessageService and observed by AuditService
 ```
@@ -66,7 +64,7 @@ The three subpackages house JUnit 5 fixtures that pin contracts the runtime demo
 
 - **`teardown/`** — Lifecycle teardown contract. `LifoSingletonA`/`B`/`C`,
   `LifoRequestA`/`B`/`C`, `LifoEventA`/`B`/`C`, and `LifoFactoryChain*` pin LIFO
-  destruction across SINGLETON `@Component` beans, REQUEST/EVENT scopes, and
+  destruction across SINGLETON `@Component` beans, the EVENT scope, and
   `@Produces` factory-produced AutoCloseables (issues #151, #189). `AutoCloseable*Holder`,
   `FakePool*`, `ExplicitWinsBean`, and `ThrowingPreDestroy*` cover implicit
   `close()`, factory cleanup, explicit-over-implicit precedence, and error routing
@@ -89,7 +87,6 @@ Tiko DI - Basic Example
 1. INITIALIZING CONTAINER
 ----------------------------------------------------------------------
 [AuditService] Constructor called
-[AuditService] RequestContext type: io.tiko.generated.RequestContextImplProxy
 [AuditService] EventContext type: io.tiko.generated.EventContextImplProxy
 [AuditService] @PostConstruct - Audit service ready
 [MessageRepository] Constructor called
@@ -101,32 +98,31 @@ Tiko DI - Basic Example
 2. RETRIEVING COMPONENTS
 ----------------------------------------------------------------------
 
-3. DEMONSTRATING REQUEST SCOPE
+3. DEMONSTRATING EVENT SCOPE (UNIT OF WORK)
 ----------------------------------------------------------------------
 
->>> Request 1: Creating multiple messages
+>>> Unit 1: first message
 [MessageRepository] Saved message 3: [1] First message
-[RequestContext] Created for request: REQ-...
 [EventContext] Created for event: EVT-...
-[AUDIT] Request=REQ-..., Event=EVT-..., User=user-123 created message 3: First message
+[AUDIT] Event=EVT-..., User=user-123 created message 3: First message
+
+>>> Unit 2: second message
 [MessageRepository] Saved message 4: [2] Second message
 [EventContext] Created for event: EVT-...
-[AUDIT] Request=REQ-..., Event=EVT-..., User=user-123 created message 4: Second message
-Request 1 complete - processed 2 messages
+[AUDIT] Event=EVT-..., User=user-123 created message 4: Second message
+Processed so far: 2 messages
 
->>> Request 2: Creating another message
+>>> Unit 3: another caller's message
 [MessageRepository] Saved message 5: [3] Third message
-[RequestContext] Created for request: REQ-...
 [EventContext] Created for event: EVT-...
-[AUDIT] Request=REQ-..., Event=EVT-..., User=user-456 created message 5: Third message
-Request 2 complete - total messages: 3
+[AUDIT] Event=EVT-..., User=user-456 created message 5: Third message
+Total messages: 3
 
 4. DEMONSTRATING LIFECYCLE EVENTS
 ----------------------------------------------------------------------
 Lifecycle events are automatically published by the container:
   - ApplicationStartedEvent (on container start)
-  - RequestStartedEvent/RequestEndingEvent (on request scope)
-  - EventStartedEvent/EventEndingEvent (on event scope)
+  - EventStartedEvent/EventEndingEvent (one pair per unit of work)
   - ApplicationEndingEvent (on container shutdown)
 
 These enable metrics, logging, and tracing without cluttering business logic.
@@ -152,21 +148,19 @@ Provider<T> enables:
 
 7. AUDIT LOG
 ----------------------------------------------------------------------
-[AUDIT] Request=REQ-..., Event=EVT-..., User=user-123 created message 3: First message
-[AUDIT] Request=REQ-..., Event=EVT-..., User=user-123 created message 4: Second message
-[AUDIT] Request=REQ-..., Event=EVT-..., User=user-456 created message 5: Third message
+[AUDIT] Event=EVT-..., User=user-123 created message 3: First message
+[AUDIT] Event=EVT-..., User=user-123 created message 4: Second message
+[AUDIT] Event=EVT-..., User=user-456 created message 5: Third message
 
 8. SCOPE SUMMARY
 ----------------------------------------------------------------------
 Scope hierarchy (longest to shortest lifetime):
   SINGLETON - Application lifetime (e.g., services, repositories)
-  REQUEST   - Transaction/batch scope (e.g., DB transaction, HTTP request)
-  EVENT     - Single event processing (e.g., one message, one event handler)
+  EVENT     - One unit of work (e.g., one HTTP request, message, job)
   PROTOTYPE - Per injection (e.g., DTOs, temporary objects)
 
 Cross-scope injection:
-  SINGLETON -> REQUEST/EVENT = Automatic proxy (requires interface)
-  REQUEST -> EVENT = Automatic proxy (requires interface)
+  SINGLETON -> EVENT = Automatic proxy (requires interface)
   Any scope -> PROTOTYPE = New instance each time
 
 9. SHUTTING DOWN CONTAINER
@@ -180,7 +174,7 @@ Example completed successfully
 ======================================================================
 ```
 
-`REQ-...` / `EVT-...` IDs are random per run; everything else is stable. Construction
+`EVT-...` IDs are random per run; everything else is stable. Construction
 order under "INITIALIZING CONTAINER" follows hash-bucket iteration over the SINGLETON
 set, which is why `AuditService` appears before `MessageRepository` despite the latter
 being the deeper dep — `Main` only triggers eager construction, not a dep-graph walk.
@@ -188,13 +182,12 @@ Teardown under section 9 IS dep-graph-ordered (LIFO) per the contract in #151.
 
 ## Key behaviour the output shows
 
-- **Cross-scope auto-proxy**. `AuditService` (SINGLETON) sees its `RequestContext` /
-  `EventContext` dependencies through proxy types
-  (`io.tiko.generated.RequestContextImplProxy` etc.) instead of the concrete impls. Each
-  call to a proxy method resolves to the current scope's instance.
-- **One request, many events**. Request 1 wraps two `runInEventScope` blocks — two
-  distinct `EventContext` instances under a single `RequestContext`. Request 2 starts a
-  fresh `RequestContext`.
+- **Cross-scope auto-proxy**. `AuditService` (SINGLETON) sees its `EventContext`
+  dependency through a proxy type (`io.tiko.generated.EventContextImplProxy`) instead of
+  the concrete impl. Each call to a proxy method resolves to the current unit's instance.
+- **A fresh context per unit of work**. Each `runInEventScope` block creates its own
+  `EventContext`, so the same `AuditService` singleton logs a different `Event=` id for
+  every unit. Nothing carries over from one unit to the next.
 - **LIFO destroy order**. Section 9 destroys `MessageService` before
   `MessageRepository` because Service depends on Repository — the LIFO contract the
   framework documents.

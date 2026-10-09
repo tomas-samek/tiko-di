@@ -62,16 +62,17 @@ class CoreDiIntegrationTest {
         assertThat(repo.count()).isZero();
     }
 
+    /** #458: one per-unit context, named for the EVENT scope it lives in, fresh in every unit. */
     @Test
-    void requestScope_isolatesInstancesAcrossScopes() {
+    void eachUnitOfWorkGetsItsOwnEventContext() {
         try (Container container = Tiko.create()) {
             AuditService audit = container.get(AuditService.class);
 
             String first = captureLastAuditEntry(container, audit, 1L, "a", "u1");
             String second = captureLastAuditEntry(container, audit, 2L, "b", "u2");
 
-            assertThat(requestIdOf(first)).isNotEqualTo(requestIdOf(second));
-            assertThat(eventIdOf(first)).isNotEqualTo(eventIdOf(second));
+            assertThat(first).doesNotContain("Request=");
+            assertThat(eventIdOf(first)).startsWith("EVT-").isNotEqualTo(eventIdOf(second));
         }
     }
 
@@ -90,7 +91,7 @@ class CoreDiIntegrationTest {
 
     @Test
     void crossScopeProxy_resolvesPerScopeWithinSingleton() {
-        // AuditService is SINGLETON but injected with REQUEST/EVENT contexts via proxies.
+        // AuditService is SINGLETON but injected with an EVENT-scoped context via a proxy.
         // The proxy must resolve to the current scope's instance on each call.
         try (Container container = Tiko.create()) {
             AuditService audit = container.get(AuditService.class);
@@ -98,9 +99,9 @@ class CoreDiIntegrationTest {
             String entryA = captureLastAuditEntry(container, audit, 10L, "x", "u");
             String entryB = captureLastAuditEntry(container, audit, 11L, "y", "u");
 
-            // Same AuditService singleton observes different request/event ids
+            // Same AuditService singleton observes different event ids
             // only if the proxy delegates to the current scope.
-            assertThat(requestIdOf(entryA)).isNotEqualTo(requestIdOf(entryB));
+            assertThat(eventIdOf(entryA)).isNotEqualTo(eventIdOf(entryB));
         }
     }
 
@@ -110,10 +111,6 @@ class CoreDiIntegrationTest {
             container.getEventBus().publish(new MessageCreatedEvent(msgId, content, user));
             return audit.getAuditLog().get(audit.getAuditLog().size() - 1);
         });
-    }
-
-    private static String requestIdOf(String auditEntry) {
-        return between(auditEntry, "Request=", ",");
     }
 
     private static String eventIdOf(String auditEntry) {
