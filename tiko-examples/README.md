@@ -6,7 +6,7 @@ Each subdirectory is a self-contained example demonstrating one slice of Tiko. T
 
 ## 01 — Basic DI &nbsp;<sub>[`01_basic_di/`](./01_basic_di)</sub>
 
-The fundamentals: `@Component`, `@Inject`, `@PostConstruct` / `@PreDestroy`, the four scopes (`SINGLETON`, `REQUEST`, `EVENT`, `PROTOTYPE`), automatic cross-scope proxies, `@Produces` factory methods (instance + static), `@Named` qualifiers, `Provider<T>` lazy lookup, and the `container.pick(Class)` fluent API.
+The fundamentals: `@Component`, `@Inject`, `@PostConstruct` / `@PreDestroy`, the three scopes (`SINGLETON`, `EVENT`, `PROTOTYPE`), automatic cross-scope proxies, `@Produces` factory methods (instance + static), `@Named` qualifiers, `Provider<T>` lazy lookup, and the `container.pick(Class)` fluent API.
 
 ```
 mvn -pl tiko-examples/01_basic_di exec:java \

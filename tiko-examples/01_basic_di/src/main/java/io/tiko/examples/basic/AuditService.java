@@ -10,24 +10,20 @@ import java.util.List;
 
 /**
  * SINGLETON service demonstrating:
- * 1. Cross-scope injection (REQUEST-scoped context into SINGLETON)
+ * 1. Cross-scope injection (EVENT-scoped context into SINGLETON, via a generated proxy)
  * 2. Event handling with @EventHandler
  */
 @Component(scope = Scope.SINGLETON)
 public class AuditService {
 
-    private final RequestContext requestContext; // Proxy will be injected
     private final EventContext eventContext; // Proxy will be injected
     private final List<String> auditLog = new ArrayList<>();
 
     @Inject
-    public AuditService(RequestContext requestContext, EventContext eventContext) {
+    public AuditService(EventContext eventContext) {
         System.out.println("[AuditService] Constructor called");
-        System.out.println("[AuditService] RequestContext type: "
-                + requestContext.getClass().getName());
         System.out.println(
                 "[AuditService] EventContext type: " + eventContext.getClass().getName());
-        this.requestContext = requestContext;
         this.eventContext = eventContext;
     }
 
@@ -43,12 +39,8 @@ public class AuditService {
     @EventHandler
     public void onMessageCreated(MessageCreatedEvent event) {
         String logEntry = String.format(
-                "[AUDIT] Request=%s, Event=%s, User=%s created message %d: %s",
-                requestContext.getRequestId(),
-                eventContext.getEventId(),
-                event.userId(),
-                event.messageId(),
-                event.content());
+                "[AUDIT] Event=%s, User=%s created message %d: %s",
+                eventContext.getEventId(), event.userId(), event.messageId(), event.content());
 
         System.out.println(logEntry);
         auditLog.add(logEntry);

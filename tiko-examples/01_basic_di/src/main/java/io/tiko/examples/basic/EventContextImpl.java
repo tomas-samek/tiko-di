@@ -6,9 +6,9 @@ import java.util.UUID;
 
 /**
  * EVENT-scoped context implementation.
- * One instance per event processing.
+ * One instance per unit of work, torn down when the unit ends.
  *
- * When injected into SINGLETON/REQUEST scope, a proxy will be generated automatically.
+ * When injected into SINGLETON scope, a proxy will be generated automatically.
  */
 @Component(scope = Scope.EVENT)
 public class EventContextImpl implements EventContext {
