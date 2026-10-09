@@ -43,8 +43,8 @@ class YamlAliasBoundsTest {
     void reusingAnAnchorStillWorks() {
         var data = load("base: &b {x: 1, y: [a, b]}\nother: *b\n").data();
 
-        assertThat(data).containsEntry("other", Map.of("x", "1", "y", List.of("a", "b")));
-        assertThat(data).containsEntry("base", data.get("other"));
+        var expanded = Map.of("x", "1", "y", List.of("a", "b"));
+        assertThat(data).containsEntry("base", expanded).containsEntry("other", expanded);
     }
 
     /** {@code levels} anchors, each a list holding the previous one twice: 2^levels leaves. */
