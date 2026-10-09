@@ -197,9 +197,8 @@ the moment of failure — and deserialization is *not* exempt (a schema-registry
 deserializer does a network call; a rolling deployment can make the same bytes fail now
 and succeed minutes later). So `SKIP` also drops records that failed for a transient
 reason. Enable it only for streams where occasional loss on a blip is acceptable; keep
-the default `SEEK` when every record matters. A *safe* auto-skip that rides out transient
-failures before giving up needs bounded retry, tracked separately (#108), as does a
-dead-letter destination (#111).
+the default `SEEK` when every record matters. To retry a bounded number of times and then
+dead-letter, register a `KafkaIngestErrorDecider` (below).
 
 ## Programmatic ingest-error decisions (`KafkaIngestErrorDecider`)
 
@@ -259,7 +258,8 @@ never kills the consumer thread.
 ## Trade-offs (MVP)
 
 - Per-record commit only (`commitMode = PER_RECORD`).
-- Poison handling is skip-or-seek (§5); bounded-retry and dead-letter are future (#108 / #111).
+- Poison handling is the static skip-or-seek policy (§5), or per-error decisions (bounded
+  retry, dead-letter) via `KafkaIngestErrorDecider`.
 - The Kafka transport edges are not yet reflected in `topology.json`, so the MCP
   `trace_event_flow` tool can't confirm a Kafka end-to-end path (see #312) — verify
   the generated `KafkaTransportBootstrap` directly meanwhile.

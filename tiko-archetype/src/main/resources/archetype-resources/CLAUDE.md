@@ -190,6 +190,16 @@ transport-driven app (e.g. `@KafkaSource`) needs `Tiko.daemon(...).awaitShutdown
 instead — full idiom in
 [`reference/events.md`](./.ai-skills/tiko-build/reference/events.md).
 
+### Kafka consumers: a record that fails ingest blocks its partition by default
+
+`tiko.kafka.poison-record-policy` defaults to `SEEK`: the failed record is redelivered
+(with backoff) until it succeeds, so a permanently bad record blocks its partition. This
+is deliberate — the runner can't tell a poison record from a transient failure, and
+`SKIP` would also drop good records that failed on a blip. Don't override it to `SKIP` to
+get production behaviour; for "retry a few times, then dead-letter" register one
+`KafkaIngestErrorDecider` — see
+[`reference/kafka.md`](./.ai-skills/tiko-build/reference/kafka.md).
+
 ## Optional Tiko modules
 
 The starter `pom.xml` wires the core (`tiko-api`, `tiko-runtime`) + the processor; opt into more by uncommenting its block:
