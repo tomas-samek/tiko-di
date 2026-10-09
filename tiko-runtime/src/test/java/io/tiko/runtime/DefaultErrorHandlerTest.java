@@ -143,9 +143,34 @@ class DefaultErrorHandlerTest {
         });
     }
 
+    /** #516: a transport that names where the failure happened gets it in the log line. */
+    @Test
+    void transportErrorWithALocationNamesIt() {
+        RuntimeException cause = new RuntimeException("kafka-fail");
+
+        HANDLER.onError(new LocatedTransportError("kafka", "orders-3@1042", cause));
+
+        assertThat(CapturingLoggerFinder.RECORDS)
+                .singleElement()
+                .satisfies(r -> assertThat(r.message()).startsWith("Transport kafka error at orders-3@1042: "));
+    }
+
+    /** Without a location the line keeps its previous shape. */
+    @Test
+    void transportErrorWithoutALocationKeepsThePlainLine() {
+        HANDLER.onError(new FakeTransportError("kafka", new RuntimeException("kafka-fail")));
+
+        assertThat(CapturingLoggerFinder.RECORDS)
+                .singleElement()
+                .satisfies(r -> assertThat(r.message()).startsWith("Transport kafka error: "));
+    }
+
     static class FakeService {}
 
     record FakeEvent() {}
 
     private record FakeTransportError(String transport, Throwable cause) implements TransportError {}
+
+    private record LocatedTransportError(String transport, String location, Throwable cause)
+            implements TransportError {}
 }

@@ -22,4 +22,10 @@ public record KafkaIngestError(String topic, int partition, long offset, Headers
     public String transport() {
         return "kafka";
     }
+
+    /** {@code topic-partition@offset}, or the topic alone for a poll failure; never a header value. */
+    @Override
+    public String location() {
+        return KafkaLocation.of(topic, partition, offset);
+    }
 }

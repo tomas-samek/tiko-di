@@ -17,4 +17,13 @@ public non-sealed interface TransportError extends ErrorContext {
      * Used by generic error-handling code that does not pattern-match on concrete types.
      */
     String transport();
+
+    /**
+     * Where the failure happened, in transport terms, for logs and metrics, e.g.
+     * {@code "orders-3@1042"} (topic-partition@offset). Names the place, never a payload,
+     * header or event value. Empty when unknown.
+     */
+    default String location() {
+        return "";
+    }
 }
