@@ -27,6 +27,7 @@ public final class ConfigurationValidator {
         boolean ok = true;
         ok &= checkPrefixUniqueness();
         for (ConfigurationModel cfg : ctx.getConfigurations()) {
+            ok &= checkPrefixIsOneLine(cfg);
             ok &= checkFields(cfg);
             ok &= checkNoRecursion(cfg);
         }
@@ -50,6 +51,24 @@ public final class ConfigurationValidator {
             }
         }
         return ok;
+    }
+
+    /**
+     * {@code META-INF/tiko/configs.txt} stores one {@code <fqn>=<prefix>} entry per line, and the
+     * runtime loads each listed name with {@code Class.forName}. A line break, another control
+     * character or {@code =} in the prefix could add or alter entries (SEC-5, #496).
+     */
+    private boolean checkPrefixIsOneLine(ConfigurationModel cfg) {
+        boolean unsafe = cfg.prefix().chars().anyMatch(c -> c == '=' || Character.isISOControl(c));
+        if (unsafe) {
+            ctx.getErrorReporter()
+                    .error(
+                            cfg.element(),
+                            cfg.simpleName() + ".java — the @Configuration prefix contains a line break,"
+                                    + " another control character or '='.",
+                            "Use a dot-separated path such as 'tiko.my-app'");
+        }
+        return !unsafe;
     }
 
     private boolean checkFields(ConfigurationModel cfg) {

@@ -147,16 +147,20 @@ or, where a literal is assembled by hand, through `CodeLiterals.javaString` (the
   records). `KeyLiteralEscapingTest` pins quote, backslash, line-break, unicode-escape and
   code-injection keys at both call sites.
 
-- Resource files: `topology.json` / `topology-kafka.json` escape names. `ConfigManifestWriter`
-  (`configs.txt`) and `ConfigSchemaWriter` (`config-schema.json`) don't escape for their
-  format (see Status).
+- Resource files:
+  - `topology.json` / `topology-kafka.json` escape names.
+  - `ConfigurationValidator` rejects, with a compile error, a `@Configuration` prefix holding a
+    control character or `=`, so it can't add or alter a `configs.txt` entry. Pinned by
+    `ConfigPrefixLineSafetyTest`.
+  - `ConfigSchemaWriter` escapes `@Default` strings with `JsonWriter.escape`, and writes numeric
+    defaults from the parsed value, or as a string when not finite. Pinned by
+    `ConfigSchemaDefaultsJsonTest`, which parses the schema as JSON.
 
-**Status.** Generated Java holds (fixed in #479; before it, a crafted `@Key` compiled into
-extra statements in the generated binder). Gap in resources, tracked in #496:
-- A `prefix` containing a line break adds lines to `configs.txt`, which `AggregatingContainer`
-  reads back with `Class.forName`.
-- `@Default` control characters, and `NaN` / `Infinity` / hex `double` defaults, produce
-  invalid `config-schema.json`.
+**Status.** Holds. Generated Java was fixed in #479; before it, a crafted `@Key` compiled into
+extra statements in the generated binder. Resources were fixed in #496. Before it, a `prefix`
+containing a line break added lines to `configs.txt`, which `AggregatingContainer` reads back
+with `Class.forName`. `@Default` control characters, and `NaN`, `Infinity`, `+1`, `1d` or hex
+`double` defaults, produced invalid `config-schema.json`.
 
 **Violation looks like.** `$L` with an annotation string value, or hand-built quoting
 (`"\"" + value + "\""`) without `CodeLiterals.javaString`, in an `addStatement` / `addCode`

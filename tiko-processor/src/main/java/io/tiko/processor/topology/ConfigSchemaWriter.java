@@ -84,31 +84,32 @@ public final class ConfigSchemaWriter {
             return fragment;
         }
         var inner = fragment.substring(1, fragment.length() - 1);
-        var raw = field.defaultValue().trim();
-        String def;
-        if (fragment.contains("\"type\":\"integer\"")) {
-            try {
-                Long.parseLong(raw);
-                def = "\"default\":" + raw;
-            } catch (NumberFormatException e) {
-                def = "\"default\":\"" + escapeJson(field.defaultValue()) + "\"";
-            }
-        } else if (fragment.contains("\"type\":\"number\"")) {
-            try {
-                Double.parseDouble(raw);
-                def = "\"default\":" + raw;
-            } catch (NumberFormatException e) {
-                def = "\"default\":\"" + escapeJson(field.defaultValue()) + "\"";
-            }
-        } else if (fragment.contains("\"type\":\"boolean\"") && ("true".equals(raw) || "false".equals(raw))) {
-            def = "\"default\":" + raw;
-        } else {
-            def = "\"default\":\"" + escapeJson(field.defaultValue()) + "\"";
-        }
+        var def = "\"default\":" + defaultValueJson(fragment, field.defaultValue());
         return "{" + inner + (inner.isEmpty() ? "" : ",") + def + "}";
     }
 
-    private String escapeJson(String s) {
-        return s.replace("\\", "\\\\").replace("\"", "\\\"");
+    /**
+     * The {@code @Default} as a JSON value for a fragment of the given schema type. Numbers are
+     * written from the parsed value, not as typed: Java accepts forms JSON doesn't ({@code +1},
+     * {@code 1.}, {@code 1d}, {@code 0x1p3}), and NaN/Infinity have no JSON number at all, so
+     * those fall back to a string (#496).
+     */
+    private static String defaultValueJson(String fragment, String defaultValue) {
+        var raw = defaultValue.trim();
+        try {
+            if (fragment.contains("\"type\":\"integer\"")) {
+                return Long.toString(Long.parseLong(raw));
+            }
+            if (fragment.contains("\"type\":\"number\"")) {
+                double d = Double.parseDouble(raw);
+                if (Double.isFinite(d)) return Double.toString(d);
+            }
+        } catch (NumberFormatException notANumber) {
+            // falls through to the string form
+        }
+        if (fragment.contains("\"type\":\"boolean\"") && ("true".equals(raw) || "false".equals(raw))) {
+            return raw;
+        }
+        return "\"" + JsonWriter.escape(defaultValue) + "\"";
     }
 }
