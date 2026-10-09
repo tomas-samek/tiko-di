@@ -1,5 +1,6 @@
 package io.tiko.processor.validation;
 
+import io.tiko.annotations.Inject;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.EventHandlerModel;
@@ -11,6 +12,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 
@@ -50,6 +53,7 @@ public final class ComponentShapeValidator {
         Map<String, List<ComponentModel>> bySimpleName = new LinkedHashMap<>();
         for (ComponentModel component : context.getComponents().values()) {
             valid &= validateInstantiable(component);
+            valid &= validatePublicMembers(component);
             valid &= validateDependencies(component.getTypeElement(), component.getDependencies());
             bySimpleName
                     .computeIfAbsent(component.getClassName(), k -> new java.util.ArrayList<>())
@@ -77,10 +81,51 @@ public final class ComponentShapeValidator {
                                 handler.getMethodElement(),
                                 handler.getDeclaringClass().getSimpleName().toString());
                 valid = false;
+            } else {
+                valid &= requirePublic(handler.getMethodElement(), "@EventHandler");
             }
         }
 
         return valid;
+    }
+
+    /**
+     * The generated factory, container and registry call these members from the
+     * {@code io.tiko.generated} package, so a non-public one surfaced as a javac access error in
+     * generated code (#464). A component built by a static {@code @Produces} factory may keep a
+     * private constructor; only an {@code @Inject} constructor is invoked directly.
+     */
+    private boolean validatePublicMembers(ComponentModel component) {
+        boolean valid = true;
+        ExecutableElement constructor = component.getConstructor();
+        if (constructor != null
+                && component.getStaticFactoryMethod().isEmpty()
+                && constructor.getAnnotation(Inject.class) != null) {
+            valid &= requirePublic(constructor, "@Inject");
+        }
+        for (ExecutableElement hook : component.getPostConstructMethods()) {
+            valid &= requirePublic(hook, "@PostConstruct");
+        }
+        for (ExecutableElement hook : component.getPreDestroyMethods()) {
+            valid &= requirePublic(hook, "@PreDestroy");
+        }
+        return valid;
+    }
+
+    private boolean requirePublic(ExecutableElement member, String annotation) {
+        if (member.getModifiers().contains(Modifier.PUBLIC)) return true;
+        String owner =
+                ((TypeElement) member.getEnclosingElement()).getSimpleName().toString();
+        boolean constructor = member.getKind() == ElementKind.CONSTRUCTOR;
+        String name = constructor ? owner : member.getSimpleName().toString();
+        String kind = constructor ? "constructor" : "method";
+        context.getErrorReporter()
+                .error(
+                        member,
+                        annotation + " " + kind + " '" + owner + (constructor ? "" : "." + name) + "' must be public;"
+                                + " the generated code calls it from the io.tiko.generated package.",
+                        "Add the public modifier to " + (constructor ? "the constructor" : "'" + name + "'"));
+        return false;
     }
 
     private boolean validateInstantiable(ComponentModel component) {
