@@ -118,7 +118,7 @@ public final class YamlLoader {
                 // and leaf scalars typically share a line with their key, so "db.url" still resolves
                 // to the "url:" line. Using the value node would push section anchors down to the
                 // first nested key's line.
-                outLocations.put(fullPath, locationOf(keyNode, sourceLabel));
+                outLocations.put(fullPath, locationOf(keyNode));
                 outData.put(key, value(t.getValueNode(), fullPath, outLocations));
             }
             onPath.remove(mapping);
@@ -127,7 +127,8 @@ public final class YamlLoader {
         private List<Object> walkSequence(SequenceNode seq) {
             enter(seq);
             List<Object> out = new ArrayList<>(seq.getValue().size());
-            for (Node item : seq.getValue()) {
+            // value() updates the walk's path set and node budget; CLAUDE.md keeps loops with side effects as loops.
+            for (Node item : seq.getValue()) { // NOSONAR java:S9391
                 // list elements aren't location-indexed in v1
                 out.add(value(item, "", new LinkedHashMap<>()));
             }
@@ -162,36 +163,46 @@ public final class YamlLoader {
             }
         }
 
+        private SourceLocation locationOf(Node node) {
+            Mark m = node.getStartMark();
+            if (m == null) return new SourceLocation(sourceLabel, 0, 0);
+            return new SourceLocation(sourceLabel, m.getLine() + 1, m.getColumn() + 1);
+        }
+
+        /**
+         * Returns the scalar's literal text — binding is schema-aware (#343): the record
+         * component declares the target type and every coercer parses from text (the same
+         * path {@code @Default} string values already take), so YAML 1.1 implicit typing
+         * only ever loses information. The previous re-parse through {@code yaml.load}
+         * turned {@code NO} into {@code Boolean.FALSE}, {@code 0644} into octal 420 and
+         * {@code 1:30} into sexagesimal 90 — and, because {@link ScalarNode#getValue()}
+         * strips quote style, corrupted explicitly quoted strings too.
+         *
+         * <p>Only plain (unquoted) {@code null} / {@code Null} / {@code NULL} / {@code ~} /
+         * empty scalars keep YAML's null semantics; a quoted "null" is the literal string.
+         */
+        private static Object parseScalar(ScalarNode scalar) {
+            String text = scalar.getValue();
+            if (scalar.getScalarStyle() == DumperOptions.ScalarStyle.PLAIN && isYamlNull(text)) {
+                return null;
+            }
+            return text;
+        }
+
+        private static boolean isYamlNull(String text) {
+            return text.isEmpty()
+                    || text.equals("~")
+                    || text.equals("null")
+                    || text.equals("Null")
+                    || text.equals("NULL");
+        }
+
         private ConfigValidationException invalid(Node at, String problem) {
-            SourceLocation loc = locationOf(at, sourceLabel);
+            SourceLocation loc = locationOf(at);
             String anchor = loc.line() > 0 ? sourceLabel + ":" + loc.line() + ":" + loc.column() : sourceLabel;
             return new ConfigValidationException(
                     sourceLabel, List.of(new ConfigIssue(ConfigIssueCode.INVALID_VALUE, anchor + ": " + problem)));
         }
-    }
-
-    /**
-     * Returns the scalar's literal text — binding is schema-aware (#343): the record
-     * component declares the target type and every coercer parses from text (the same
-     * path {@code @Default} string values already take), so YAML 1.1 implicit typing
-     * only ever loses information. The previous re-parse through {@code yaml.load}
-     * turned {@code NO} into {@code Boolean.FALSE}, {@code 0644} into octal 420 and
-     * {@code 1:30} into sexagesimal 90 — and, because {@link ScalarNode#getValue()}
-     * strips quote style, corrupted explicitly quoted strings too.
-     *
-     * <p>Only plain (unquoted) {@code null} / {@code Null} / {@code NULL} / {@code ~} /
-     * empty scalars keep YAML's null semantics; a quoted "null" is the literal string.
-     */
-    private static Object parseScalar(ScalarNode scalar) {
-        String text = scalar.getValue();
-        if (scalar.getScalarStyle() == DumperOptions.ScalarStyle.PLAIN && isYamlNull(text)) {
-            return null;
-        }
-        return text;
-    }
-
-    private static boolean isYamlNull(String text) {
-        return text.isEmpty() || text.equals("~") || text.equals("null") || text.equals("Null") || text.equals("NULL");
     }
 
     private static ConfigValidationException malformedYaml(String sourceLabel, MarkedYAMLException e) {
@@ -213,11 +224,5 @@ public final class YamlLoader {
     private static String withoutEchoedName(String problem) {
         Matcher m = ECHOED_NAME.matcher(problem);
         return m.matches() ? m.group(1) : problem;
-    }
-
-    private static SourceLocation locationOf(Node node, String sourceLabel) {
-        Mark m = node.getStartMark();
-        if (m == null) return new SourceLocation(sourceLabel, 0, 0);
-        return new SourceLocation(sourceLabel, m.getLine() + 1, m.getColumn() + 1);
     }
 }
