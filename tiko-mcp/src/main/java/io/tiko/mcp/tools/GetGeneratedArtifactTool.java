@@ -111,59 +111,49 @@ public final class GetGeneratedArtifactTool {
         // match found; multi-module reactors with multiple containers surface only one
         // (acceptable limitation — the agent can ask again with componentFqn-keyed kinds
         // to drill into a specific module's components).
-        // No FOLLOW_LINKS, and every match must resolve under the root (#475).
-        var realRoot = ProjectFiles.realRoot(store.projectRoot());
-        try (Stream<Path> walk = Files.walk(store.projectRoot())) {
-            var match = walk.filter(p -> {
-                        var name = p.getFileName().toString();
-                        if (!name.startsWith(filenamePrefix) || !name.endsWith(".java")) {
-                            return false;
-                        }
-                        var pathStr = p.toString().replace('\\', '/');
-                        return pathStr.contains("/generated-sources/annotations/io/tiko/generated/");
-                    })
-                    // Resolve real paths only for name matches — cheap, and links leading out are dropped.
-                    .filter(p -> ProjectFiles.isInside(realRoot, p))
-                    .findFirst();
-            if (match.isEmpty()) {
-                return notFound(
-                        kind,
-                        null,
-                        "No " + filenamePrefix + "*.java found on disk under generated-sources — run mvn compile?");
-            }
-            return summarise(kind, null, match.orElseThrow());
-        } catch (IOException e) {
-            throw new IllegalStateException("Filesystem walk failed: " + e.getMessage(), e);
+        // Confined to the project (#475) and safe against directory link cycles (#499).
+        var match = ProjectFiles.find(
+                        store.projectRoot(),
+                        p -> {
+                            var name = p.getFileName().toString();
+                            if (!name.startsWith(filenamePrefix) || !name.endsWith(".java")) {
+                                return false;
+                            }
+                            var pathStr = p.toString().replace('\\', '/');
+                            return pathStr.contains("/generated-sources/annotations/io/tiko/generated/");
+                        },
+                        true)
+                .stream()
+                .findFirst();
+        if (match.isEmpty()) {
+            return notFound(
+                    kind,
+                    null,
+                    "No " + filenamePrefix + "*.java found on disk under generated-sources — run mvn compile?");
         }
+        return summarise(kind, null, match.orElseThrow());
     }
 
     // === Filesystem helpers =============================================================
 
     private Map<String, Object> locate(String kind, String fileName, String pkgDir, String componentFqn) {
         var expectedTail = "/generated-sources/annotations/" + pkgDir + "/" + fileName;
-        // No FOLLOW_LINKS, and every match must resolve under the root (#475).
-        var realRoot = ProjectFiles.realRoot(store.projectRoot());
-        try (Stream<Path> walk = Files.walk(store.projectRoot())) {
-            var match = walk.filter(p -> {
-                        if (!p.getFileName().toString().equals(fileName)) {
-                            return false;
-                        }
-                        return p.toString().replace('\\', '/').endsWith(expectedTail);
-                    })
-                    // Resolve real paths only for name matches — cheap, and links leading out are dropped.
-                    .filter(p -> ProjectFiles.isInside(realRoot, p))
-                    .findFirst();
-            if (match.isEmpty()) {
-                return notFound(
-                        kind,
-                        componentFqn,
-                        "Generated file " + fileName
-                                + " not found on disk — topology snapshot may predate sources; run mvn compile");
-            }
-            return summarise(kind, componentFqn, match.orElseThrow());
-        } catch (IOException e) {
-            throw new IllegalStateException("Filesystem walk failed: " + e.getMessage(), e);
+        // Confined to the project (#475) and safe against directory link cycles (#499).
+        var match = ProjectFiles.find(
+                        store.projectRoot(),
+                        p -> p.getFileName().toString().equals(fileName)
+                                && p.toString().replace('\\', '/').endsWith(expectedTail),
+                        true)
+                .stream()
+                .findFirst();
+        if (match.isEmpty()) {
+            return notFound(
+                    kind,
+                    componentFqn,
+                    "Generated file " + fileName
+                            + " not found on disk — topology snapshot may predate sources; run mvn compile");
         }
+        return summarise(kind, componentFqn, match.orElseThrow());
     }
 
     private static Map<String, Object> summarise(String kind, String componentFqn, Path file) {

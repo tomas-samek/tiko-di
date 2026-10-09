@@ -210,8 +210,9 @@ longer pass `FOLLOW_LINKS`. Pinned by `TopologyStoreSymlinkTest` (all four files
 one (Windows without Developer Mode), so CI on Linux is where they run.
 
 **Status.** Holds (fixed in #475; symlinks that stay inside the project still work).
-Re-checked 2026-10-07 with directory junctions and traversal arguments. A link cycle under
-the project root stops the server from starting, a robustness issue tracked in #499.
+Re-checked 2026-10-07 with directory junctions and traversal arguments. Both directory walks go
+through `ProjectFiles.find`, which enters each directory once by its real path, so a link cycle
+under the project root no longer stops the server from starting (#499; `LinkCycleTest`).
 
 **Violation looks like.** A socket/HTTP transport, `FileVisitOption.FOLLOW_LINKS`, or a tool
 argument resolved into a path outside the root.

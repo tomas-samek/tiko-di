@@ -6,8 +6,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.PathMatcher;
-import java.nio.file.SimpleFileVisitor;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -216,25 +214,9 @@ public final class TopologyStore {
     // ----- helpers -----
 
     private static List<Path> findFiles(Path root, String fileName) {
-        var result = new ArrayList<Path>();
-        if (!Files.isDirectory(root)) return result;
         PathMatcher matcher = root.getFileSystem().getPathMatcher("glob:**/target/classes/META-INF/tiko/" + fileName);
-        Path realRoot = ProjectFiles.realRoot(root);
-        try {
-            Files.walkFileTree(root, new SimpleFileVisitor<>() {
-                @Override
-                public java.nio.file.FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                    // A matching name that is a symlink leading outside the project is skipped (#475).
-                    if (matcher.matches(file) && ProjectFiles.isInside(realRoot, file)) {
-                        result.add(file);
-                    }
-                    return java.nio.file.FileVisitResult.CONTINUE;
-                }
-            });
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-        return result;
+        // Confined to the project (#475) and safe against directory link cycles (#499).
+        return ProjectFiles.find(root, matcher::matches, false);
     }
 
     @SuppressWarnings("unchecked")
