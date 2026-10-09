@@ -27,8 +27,9 @@ reaches. Global tags (`!!java.…`) are rejected at compose time by the default 
 tag inspector, as a `ConfigValidationException` ("Global tag is not allowed"). No regression
 test pins it.
 
-**Status.** Holds; reproduced in the 2026-10-07 audit. A recursive or exponentially expanding
-alias isn't bounded; tracked in #498.
+**Status.** Holds; reproduced in the 2026-10-07 audit. Since #498, a recursive alias, a document
+that expands past `YamlLoader.MAX_EXPANDED_NODES` through aliases, and a repeated key all fail
+as located `ConfigValidationException`s; `YamlAliasBoundsTest` covers them.
 
 **Violation looks like.** `compose` swapped for `load` / `loadAs` together with a non-safe
 constructor; `new Yaml()` without a constructor argument; a `Constructor` / custom
