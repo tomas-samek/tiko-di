@@ -39,11 +39,19 @@ public final class Symlinks {
         } catch (FileSystemException | UnsupportedOperationException e) {
             assumeTrue(isWindows(), "symbolic links not supported here: " + e.getMessage());
         }
-        var mklink = new ProcessBuilder("cmd", "/c", "mklink", "/J", link.toString(), target.toString())
+        // Absolute cmd.exe (%ComSpec%), never looked up on PATH.
+        var mklink = new ProcessBuilder(windowsShell(), "/c", "mklink", "/J", link.toString(), target.toString())
                 .redirectErrorStream(true)
                 .start();
         mklink.getInputStream().readAllBytes();
         assumeTrue(mklink.waitFor() == 0 && Files.isDirectory(link), "could not create a directory junction");
+    }
+
+    private static String windowsShell() {
+        var comSpec = System.getenv("ComSpec");
+        if (comSpec != null && Path.of(comSpec).isAbsolute()) return comSpec;
+        return Path.of(System.getenv().getOrDefault("SystemRoot", "C:\\Windows"), "System32", "cmd.exe")
+                .toString();
     }
 
     private static boolean isWindows() {
