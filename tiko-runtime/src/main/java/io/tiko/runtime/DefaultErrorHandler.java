@@ -97,6 +97,16 @@ public final class DefaultErrorHandler implements ErrorHandler {
                         declaringClass.getName(),
                         methodName,
                         cause);
+            case TransportError t
+            when !t.location().isEmpty() ->
+                TikoLog.log(
+                        LoggerHolder.LOG,
+                        System.Logger.Level.WARNING,
+                        t.cause(),
+                        "Transport {0} error at {1}: {2}",
+                        t.transport(),
+                        t.location(),
+                        t.cause());
             case TransportError t ->
                 TikoLog.log(
                         LoggerHolder.LOG,

@@ -103,8 +103,10 @@ record value.
 
 **Enforced by.** Type: `KafkaIngestError(String topic, int partition, long offset, Headers
 headers, Throwable cause)` and `KafkaRecordDeadLettered` have no payload component.
-`DefaultErrorHandler` logs a `TransportError` as `Transport {0} error: {1}` (transport name +
-cause). Egress is different: `KafkaEgressError(topic, Object event, cause)` carries the
+`DefaultErrorHandler` logs a `TransportError` as `Transport {0} error at {1}: {2}` (transport
+name, `location()`, cause), or without `at {1}` when the location is empty. Kafka's
+`location()` is `topic-partition@offset` (the topic alone for a poll failure or egress), built
+from coordinates only (`KafkaErrorLocationTest`). Egress is different: `KafkaEgressError(topic, Object event, cause)` carries the
 outbound event. `DefaultErrorHandler` doesn't render it, but the record's `toString()`
 includes it.
 
@@ -113,10 +115,11 @@ which quoted the offending field value in full (`from String "SSN-123-45-6789"`)
 `SEEK` redelivery. `JsonKafkaSerializer` now throws a message naming only the failure kind,
 field path and position, and doesn't chain Jackson's exception; `JsonKafkaSerializerPayloadLeakTest`
 checks the whole printed stack trace. A user-supplied `KafkaSerializer` controls its own
-messages. The log line doesn't yet name the record's topic, partition and offset (#516).
+messages. Since #516 the log line names the record (`orders-3@1042`) so an operator can find it.
 
 **Violation looks like.** A payload/`byte[]` component added to `KafkaIngestError`, a log
-call that renders `record.value()` or a `KafkaEgressError` (its `toString()`), or a
+call that renders `record.value()` or a `KafkaEgressError` (its `toString()`), a `location()`
+built from a header or event value, or a
 deserializer exception message passed to a log line unfiltered.
 
 ---

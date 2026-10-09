@@ -17,4 +17,10 @@ public record KafkaEgressError(String topic, Object event, Throwable cause) impl
     public String transport() {
         return "kafka";
     }
+
+    /** The destination topic; never the event. */
+    @Override
+    public String location() {
+        return topic;
+    }
 }
