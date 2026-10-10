@@ -7,6 +7,7 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -55,8 +56,7 @@ class StrayTestWiringTest {
     void optedInTestWiringAppliesTheShadow() {
         try (Container c = Tiko.create(TikoOptions.builder().testWiring(true).build())) {
             assertThat(c.get(StubService.class)).isSameAs(FakeStubService.INSTANCE);
-            assertThat(CapturingLoggerFinder.RECORDS)
-                    .noneMatch(r -> r.message() != null && r.message().contains("Ignoring test wiring"));
+            assertThat(warnings()).noneMatch(m -> m.contains("Ignoring test wiring"));
         }
     }
 
@@ -64,10 +64,16 @@ class StrayTestWiringTest {
     void strayTestWiringIsReportedAtStartup() throws Exception {
         String jarLocation = fixturesJar.toUri().toURL().toString(); // the form the class loader reports
         try (Container c = Tiko.create(TikoOptions.builder().build())) {
-            assertThat(CapturingLoggerFinder.RECORDS)
-                    .filteredOn(r -> r.level() == System.Logger.Level.WARNING)
-                    .anySatisfy(r -> assertThat(r.message())
+            assertThat(warnings())
+                    .anySatisfy(m -> assertThat(m)
                             .contains(jarLocation + "META-INF/tiko/test-container.properties", "testWiring(true)"));
         }
+    }
+
+    private static List<String> warnings() {
+        return CapturingLoggerFinder.RECORDS.stream()
+                .filter(r -> r.level() == System.Logger.Level.WARNING && r.message() != null)
+                .map(CapturingLoggerFinder.LogEntry::message)
+                .toList();
     }
 }

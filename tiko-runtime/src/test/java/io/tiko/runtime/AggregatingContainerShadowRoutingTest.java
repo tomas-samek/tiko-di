@@ -104,12 +104,10 @@ class AggregatingContainerShadowRoutingTest {
             shadows.store(out, "test");
         }
 
-        URLClassLoader cl = new URLClassLoader(
-                new URL[] {tmp.toUri().toURL()}, AggregatingContainerShadowRoutingTest.class.getClassLoader());
         ClassLoader previous = Thread.currentThread().getContextClassLoader();
-        Thread.currentThread().setContextClassLoader(cl);
-
-        try {
+        try (URLClassLoader cl = new URLClassLoader(
+                new URL[] {tmp.toUri().toURL()}, AggregatingContainerShadowRoutingTest.class.getClassLoader())) {
+            Thread.currentThread().setContextClassLoader(cl);
             TikoOptions opts = TikoOptions.builder().build();
             new AggregatingContainer(
                     new LocalEventBus(),

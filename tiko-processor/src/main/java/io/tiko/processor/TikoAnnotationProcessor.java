@@ -265,37 +265,46 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
             }
         }
 
-        // Test-classpath shadow annotation. Resolved by FQN so the processor stays
-        // dependency-free of the optional support module and tolerates its absence in
-        // production builds (lookup returns null → loop is skipped silently).
+        collectTestComponents(roundEnv);
+    }
+
+    /**
+     * Collects {@code @TestComponent} classes. Resolved by FQN so the processor stays
+     * dependency-free of the optional support module and tolerates its absence in
+     * production builds (lookup returns null → nothing to collect).
+     */
+    private void collectTestComponents(RoundEnvironment roundEnv) {
         TypeElement testComponentType = processingEnv.getElementUtils().getTypeElement(TEST_COMPONENT_FQN);
-        if (testComponentType != null) {
-            for (Element element : roundEnv.getElementsAnnotatedWith(testComponentType)) {
-                if (!(element instanceof TypeElement typeElement)) {
-                    context.getErrorReporter()
-                            .error(
-                                    element,
-                                    "@TestComponent can only be applied to classes",
-                                    "Move @TestComponent to a class declaration");
-                    continue;
-                }
-                if (isInProductionSources(typeElement)) {
-                    String name = typeElement.getSimpleName().toString();
-                    context.getErrorReporter()
-                            .error(
-                                    typeElement,
-                                    "@TestComponent " + name + " is in production sources (src/main). Test components"
-                                            + " only apply in a container that opts into test wiring; compiled here"
-                                            + " they ship in the jar as test wiring (#497).",
-                                    "Move " + name + " under src/test/java",
-                                    "Use @Component if " + name + " is a real production implementation");
-                    continue;
-                }
-                ComponentModel component = buildTestComponentModel(typeElement);
-                if (component != null) {
-                    context.registerComponent(component);
-                }
-            }
+        if (testComponentType == null) return;
+        for (Element element : roundEnv.getElementsAnnotatedWith(testComponentType)) {
+            registerTestComponent(element);
+        }
+    }
+
+    private void registerTestComponent(Element element) {
+        if (!(element instanceof TypeElement typeElement)) {
+            context.getErrorReporter()
+                    .error(
+                            element,
+                            "@TestComponent can only be applied to classes",
+                            "Move @TestComponent to a class declaration");
+            return;
+        }
+        if (isInProductionSources(typeElement)) {
+            String name = typeElement.getSimpleName().toString();
+            context.getErrorReporter()
+                    .error(
+                            typeElement,
+                            "@TestComponent " + name + " is in production sources (src/main). Test components"
+                                    + " only apply in a container that opts into test wiring; compiled here"
+                                    + " they ship in the jar as test wiring (#497).",
+                            "Move " + name + " under src/test/java",
+                            "Use @Component if " + name + " is a real production implementation");
+            return;
+        }
+        ComponentModel component = buildTestComponentModel(typeElement);
+        if (component != null) {
+            context.registerComponent(component);
         }
     }
 
