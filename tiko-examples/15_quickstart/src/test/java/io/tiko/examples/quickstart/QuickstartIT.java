@@ -14,6 +14,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Duration;
@@ -72,8 +73,8 @@ class QuickstartIT {
         assertThat(body.get("text").asText()).isEqualTo("hello orchestrator");
 
         try (Connection c = DriverManager.getConnection(JDBC_URL, "sa", "");
-                Statement st = c.createStatement();
-                var rs = st.executeQuery("SELECT text FROM notes WHERE id = '" + id + "'")) {
+                var st = selectById(c, "SELECT text FROM notes WHERE id = ?", id);
+                var rs = st.executeQuery()) {
             assertThat(rs.next()).isTrue();
             assertThat(rs.getString(1)).isEqualTo("hello orchestrator");
         }
@@ -128,5 +129,17 @@ class QuickstartIT {
                 HttpResponse.BodyHandlers.ofString());
 
         assertThat(resp.statusCode()).isEqualTo(400);
+    }
+
+    /** Looks a row up by id with a bound parameter — test code gets copied, so it never concatenates SQL (#523). */
+    private static PreparedStatement selectById(Connection c, String sql, Object id) throws SQLException {
+        var st = c.prepareStatement(sql);
+        try {
+            st.setObject(1, id);
+            return st;
+        } catch (SQLException e) {
+            st.close();
+            throw e;
+        }
     }
 }
