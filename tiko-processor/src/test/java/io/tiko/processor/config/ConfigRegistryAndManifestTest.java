@@ -16,8 +16,12 @@ import org.junit.jupiter.api.Test;
 
 class ConfigRegistryAndManifestTest {
 
+    /**
+     * #531: binders are discovered with ServiceLoader, so a shaded fat jar's
+     * ServicesResourceTransformer merges every module's entries instead of keeping one manifest.
+     */
     @Test
-    void registry_class_lists_all_binders() {
+    void bindersAreListedAsConfigBinderServices() throws IOException {
         JavaFileObject a = JavaFileObjects.forSourceLines(
                 "io.example.A",
                 "package io.example;",
@@ -31,20 +35,13 @@ class ConfigRegistryAndManifestTest {
 
         Compilation c =
                 Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(a, b);
+
         assertThat(c).succeeded();
-        // Registry class name carries the same hash as TikoContainerImpl_<hash>;
-        // search by simple-name pattern across generated files.
-        var generated = c.generatedSourceFiles();
-        var registry = generated.stream()
-                .filter(f -> f.getName().contains("ConfigBinderRegistry_"))
-                .findFirst()
-                .orElseThrow();
-        try {
-            String src = new String(registry.openInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-            assertThat(src).contains("new ABinder()").contains("new BBinder()");
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        var services = c.generatedFile(StandardLocation.CLASS_OUTPUT, "META-INF/services/io.tiko.config.ConfigBinder");
+        assertThat(services).isPresent();
+        assertThat(read(services.get()).lines())
+                .contains("io.tiko.generated.config.ABinder", "io.tiko.generated.config.BBinder");
+        assertThat(c.generatedSourceFiles()).noneMatch(f -> f.getName().contains("ConfigBinderRegistry_"));
     }
 
     @Test
@@ -63,6 +60,12 @@ class ConfigRegistryAndManifestTest {
         try (var r = new InputStreamReader(manifestOpt.get().openInputStream(), StandardCharsets.UTF_8)) {
             content = new java.io.BufferedReader(r).lines().reduce("", (acc, line) -> acc + line + "\n");
         }
-        assertThat(content).contains("io.example.A=a");
+        assertThat(content).contains("io.example.A=a").doesNotContain("# registry=");
+    }
+
+    private static String read(JavaFileObject file) throws IOException {
+        try (var in = file.openInputStream()) {
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
     }
 }

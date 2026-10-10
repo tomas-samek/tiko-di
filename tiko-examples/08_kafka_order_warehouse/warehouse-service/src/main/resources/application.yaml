@@ -3,3 +3,5 @@ tiko:
     bootstrap-servers: "${KAFKA_BOOTSTRAP:localhost:9092}"
     consumer-group: warehouse-service
     auto-offset-reset: earliest
+warehouse:
+  site: "${WAREHOUSE_SITE:main}"

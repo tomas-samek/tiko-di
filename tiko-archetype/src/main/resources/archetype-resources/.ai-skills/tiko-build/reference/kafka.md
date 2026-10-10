@@ -137,9 +137,12 @@ Inbound consumption is asynchronous (background poll thread): assert with Awaiti
 (`await().atMost(...)`), never `Thread.sleep`. Reference ITs:
 `tiko-examples/08_kafka_order_warehouse/*/src/test/java/.../FakeBroker*IT.java`.
 
-**If your module builds a shaded jar:** failsafe defaults to running ITs against the
-packaged fat jar, which duplicates bundled dependency classes on the classpath and fails
-container boot with `duplicate @Configuration prefix 'tiko.kafka'`. Add
+**If your module builds a shaded jar:** keep `ServicesResourceTransformer` in the
+`maven-shade-plugin` transformers. Tiko finds the Kafka transport and every module's
+`@Configuration` binders through `META-INF/services/` files, which that transformer merges;
+without it the fat jar keeps one module's copy and startup fails on the other module's keys.
+Also, failsafe defaults to running ITs against the packaged fat jar, which puts bundled
+dependency classes on the classpath twice; add
 `<classesDirectory>${project.build.outputDirectory}</classesDirectory>` to the
-`maven-failsafe-plugin` configuration — see the poms under
-`tiko-examples/08_kafka_order_warehouse/*/pom.xml` for the exact block.
+`maven-failsafe-plugin` configuration. The poms under
+`tiko-examples/08_kafka_order_warehouse/*/pom.xml` show both blocks.

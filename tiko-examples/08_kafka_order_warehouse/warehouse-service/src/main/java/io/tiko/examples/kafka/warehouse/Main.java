@@ -14,7 +14,8 @@ public final class Main {
         try (Container container = Tiko.create(opts)) {
             CountDownLatch stop = new CountDownLatch(1);
             Runtime.getRuntime().addShutdownHook(new Thread(stop::countDown, "warehouse-shutdown"));
-            System.out.println("warehouse-service ready, awaiting orders…");
+            String site = container.get(WarehouseSettings.class).site();
+            System.out.println("warehouse-service ready (site " + site + "), awaiting orders…");
             stop.await();
         }
     }

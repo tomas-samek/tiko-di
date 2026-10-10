@@ -147,6 +147,16 @@ public final class BindContext {
     }
 
     /**
+     * Like {@link #requireSection}, but an absent section is not an error: it returns an empty
+     * map, so every field falls back to its default. For records whose fields all have defaults
+     * (#531) — they must bind even when a fat jar kept another module's {@code defaults.yaml}.
+     */
+    public Map<String, Object> optionalSection(Map<String, Object> root, String key) {
+        boolean present = resolveByDottedPath(root, key) != null || root.get(key) != null;
+        return present ? requireSection(root, key) : new LinkedHashMap<>();
+    }
+
+    /**
      * Walks a dotted path through nested maps. Returns {@code null} when any segment
      * is absent or a non-map. Single-segment keys delegate to a normal {@code get}.
      */

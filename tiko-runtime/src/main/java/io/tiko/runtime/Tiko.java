@@ -6,15 +6,10 @@ import io.tiko.ContainerInitializationException;
 import io.tiko.ErrorHandler;
 import io.tiko.EventBus;
 import io.tiko.TransportBootstrap;
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
@@ -221,60 +216,18 @@ public final class Tiko {
     }
 
     /**
-     * Loads and binds all declared @Configuration records from configs.txt manifests.
+     * Binds the framework's {@code tiko.*} keys and every {@code @Configuration} record whose
+     * binder is listed in {@code META-INF/services/io.tiko.config.ConfigBinder} (#531).
      *
      * <p>Layers module-baked {@code META-INF/tiko/defaults.yaml} under the (optional)
      * user source so each module can ship its own private slice of defaults inside
-     * its jar — overrideable per-key by the user file (#18). The framework's own
-     * {@code tiko.*} keys bind the same way, through tiko-config's
-     * {@code TikoFrameworkConfig} (#114).</p>
+     * its jar — overrideable per-key by the user file (#18).</p>
      *
      * <p>Returns {@link BoundConfigs#NONE} when tiko-config is not on the classpath; then
      * {@link ConfigBinding}, which needs it, is never loaded.</p>
      */
-    static BoundConfigs bindConfigs(ConfigSource userSource, ClassLoader cl, ErrorHandler errorHandler)
-            throws Exception {
-        // A registry named by several manifests (a fat jar next to the jars it bundles) is the
-        // same binders: load each one once, or its prefixes would be reported as duplicates.
-        var registries = new LinkedHashSet<String>();
-        var manifests = cl.getResources("META-INF/tiko/configs.txt");
-        while (manifests.hasMoreElements()) {
-            String registry = registryName(manifests.nextElement());
-            if (registry != null) registries.add(registry);
-        }
-        if (!TIKO_CONFIG_PRESENT) return BoundConfigs.NONE;
-        List<io.tiko.config.ConfigBinder<?>> binders = new ArrayList<>();
-        for (String registry : registries) {
-            binders.addAll(registryBinders(registry, cl));
-        }
-        return ConfigBinding.bind(userSource, binders, errorHandler);
-    }
-
-    /** The registry class a {@code configs.txt} names on its {@code # registry=} line, or {@code null}. */
-    private static String registryName(URL manifest) throws IOException {
-        try (BufferedReader br =
-                new BufferedReader(new InputStreamReader(manifest.openStream(), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = br.readLine()) != null) {
-                line = line.trim();
-                if (line.startsWith("# registry="))
-                    return line.substring("# registry=".length()).trim();
-            }
-        }
-        return null;
-    }
-
-    /**
-     * The binders a registry advertises. The registry is generated (or hand-maintained) per
-     * module; its static {@code all()} is its only entry point, located by the name its manifest
-     * records.
-     */
-    @SuppressWarnings("unchecked")
-    private static List<io.tiko.config.ConfigBinder<?>> registryBinders(String registry, ClassLoader cl)
-            throws Exception {
-        Class<?> registryClass = Class.forName(registry, true, cl);
-        return (List<io.tiko.config.ConfigBinder<?>>)
-                registryClass.getMethod("all").invoke(null);
+    static BoundConfigs bindConfigs(ConfigSource userSource, ClassLoader cl, ErrorHandler errorHandler) {
+        return TIKO_CONFIG_PRESENT ? ConfigBinding.bind(userSource, cl, errorHandler) : BoundConfigs.NONE;
     }
 
     /**
