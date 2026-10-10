@@ -132,7 +132,7 @@ tiko-api (no dependencies)
   ↑
 tiko-processor (depends on tiko-api, javapoet, auto-service)
   ↑ (annotation processor path)
-tiko-runtime (depends on tiko-api)
+tiko-runtime (depends on tiko-api; tiko-config optional)
   ↑
 tiko-config (depends on tiko-api, snakeyaml)
 ```

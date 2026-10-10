@@ -25,11 +25,6 @@
         </dependency>
 
         <dependency>
-            <groupId>io.github.tomas-samek</groupId>
-            <artifactId>tiko-runtime</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>

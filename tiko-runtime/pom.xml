@@ -20,6 +20,13 @@
             <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-api</artifactId>
         </dependency>
+        <!-- Optional (#114): when an app has tiko-config, Tiko.create binds the framework's own
+             tiko.* keys (TikoFrameworkConfig) through it. Apps without it get no SnakeYAML. -->
+        <dependency>
+            <groupId>io.github.tomas-samek</groupId>
+            <artifactId>tiko-config</artifactId>
+            <optional>true</optional>
+        </dependency>
 
         <!-- Testing -->
         <dependency>
