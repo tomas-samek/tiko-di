@@ -1207,14 +1207,34 @@ public final class ContainerGenerator {
      * {@code finally} blocks: the destroy-hook walk, the scope-map clear, and the
      * frame-flag reset. Emitted once so the ~70-line teardown chain is not duplicated
      * verbatim in each scope method (#308).
+     *
+     * <p>The clear and the reset run in a {@code finally}: whatever escapes the hook walk, the
+     * finished unit's beans never stay on the thread and the next unit can open.
      */
     private MethodSpec createCloseEventScopeMethod() {
         MethodSpec.Builder method =
                 MethodSpec.methodBuilder("__closeEventScope").addModifiers(Modifier.PRIVATE);
+        method.beginControlFlow("try");
         emitScopedTeardown(method, Scope.EVENT, "eventScoped.get()");
+        method.nextControlFlow("finally");
         method.addStatement("eventScoped.get().clear()");
         method.addStatement("__unitFrameOpen.set($T.FALSE)", Boolean.class);
+        method.endControlFlow();
         return method.build();
+    }
+
+    /**
+     * Emits {@code errorHandler.onError(<context>)} guarded the way the event registry guards it:
+     * an exception thrown by the user's ErrorHandler is logged and does not escape the teardown
+     * (the {@code ErrorHandler} contract).
+     */
+    private static void emitGuardedOnError(MethodSpec.Builder method, CodeBlock errorContext) {
+        method.beginControlFlow("try");
+        method.addStatement("errorHandler.onError($L)", errorContext);
+        method.nextControlFlow("catch ($T __inner)", Exception.class);
+        method.addStatement(
+                "$T.logErrorHandlerFailure(__inner)", ClassName.get("io.tiko.runtime", "EventChainContext"));
+        method.endControlFlow();
     }
 
     /**
@@ -1283,7 +1303,7 @@ public final class ContainerGenerator {
             ClassName failureType = isAutoCloseOnly
                     ? ClassName.get("io.tiko", "AutoCloseFailure")
                     : ClassName.get("io.tiko", "PreDestroyFailure");
-            method.addStatement("errorHandler.onError(new $T($T.class, __t))", failureType, componentType);
+            emitGuardedOnError(method, CodeBlock.of("new $T($T.class, __t)", failureType, componentType));
             method.endControlFlow(); // try/catch
         }
 
@@ -1299,8 +1319,8 @@ public final class ContainerGenerator {
             method.beginControlFlow("try");
             method.addStatement("__ac.close()");
             method.nextControlFlow("catch ($T __t)", Throwable.class);
-            method.addStatement(
-                    "errorHandler.onError(new $T(__ac.getClass(), __t))", ClassName.get("io.tiko", "AutoCloseFailure"));
+            emitGuardedOnError(
+                    method, CodeBlock.of("new $T(__ac.getClass(), __t)", ClassName.get("io.tiko", "AutoCloseFailure")));
             method.endControlFlow(); // try/catch
         }
 

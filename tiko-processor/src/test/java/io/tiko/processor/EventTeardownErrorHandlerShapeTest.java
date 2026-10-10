@@ -1,0 +1,73 @@
+package io.tiko.processor;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.google.testing.compile.Compilation;
+import com.google.testing.compile.CompilationSubject;
+import com.google.testing.compile.Compiler;
+import com.google.testing.compile.JavaFileObjects;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import javax.tools.JavaFileObject;
+import org.junit.jupiter.api.Test;
+
+/**
+ * The generated EVENT teardown keeps the unit bracket intact when the user's ErrorHandler throws:
+ * each {@code onError} report of a failed destroy hook is guarded like the event registry's, and
+ * the scope-map clear and frame reset run in a {@code finally}. The behaviour is pinned end to end
+ * by {@code TeardownErrorHandlerFailureTest} in {@code tiko-examples/01_basic_di}.
+ */
+class EventTeardownErrorHandlerShapeTest {
+
+    @Test
+    void teardownGuardsTheErrorHandlerAndResetsTheUnitInFinally() throws IOException {
+        String source = generateContainerSource(
+                JavaFileObjects.forSourceLines(
+                        "demo.ClosingEventBean",
+                        "package demo;",
+                        "import io.tiko.Scope;",
+                        "import io.tiko.annotations.Component;",
+                        "import io.tiko.annotations.PreDestroy;",
+                        "@Component(scope = Scope.EVENT)",
+                        "public class ClosingEventBean {",
+                        "  @PreDestroy public void cleanup() {}",
+                        "}"),
+                JavaFileObjects.forSourceLines(
+                        "demo.ClosingResource",
+                        "package demo;",
+                        "import io.tiko.Scope;",
+                        "import io.tiko.annotations.Component;",
+                        "@Component(scope = Scope.EVENT)",
+                        "public class ClosingResource implements AutoCloseable {",
+                        "  public void close() {}",
+                        "}"));
+
+        String teardown = closeEventScopeBody(source);
+        assertThat(teardown)
+                .as("every onError report is guarded, as in the event registry")
+                .contains("catch (Exception __inner)", "EventChainContext.logErrorHandlerFailure(__inner)");
+        assertThat(teardown.split("errorHandler\\.onError\\(", -1).length - 1)
+                .isEqualTo(teardown.split("logErrorHandlerFailure\\(__inner\\)", -1).length - 1);
+        assertThat(teardown.substring(teardown.indexOf("finally")))
+                .as("the scope clear and frame reset run whatever escapes the hook walk")
+                .contains("eventScoped.get().clear()", "__unitFrameOpen.set(Boolean.FALSE)");
+    }
+
+    private static String closeEventScopeBody(String source) {
+        int start = source.indexOf("private void __closeEventScope()");
+        assertThat(start).as("__closeEventScope() emitted").isNotNegative();
+        int end = source.indexOf("\n  }\n", start);
+        return source.substring(start, end);
+    }
+
+    private static String generateContainerSource(JavaFileObject... sources) throws IOException {
+        Compilation c =
+                Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(sources);
+        CompilationSubject.assertThat(c).succeeded();
+        JavaFileObject container = c.generatedSourceFiles().stream()
+                .filter(f -> f.getName().contains("TikoContainerImpl"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("TikoContainerImpl not generated"));
+        return new String(container.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
+    }
+}
