@@ -88,6 +88,30 @@ class ConfigValuesStayOutOfMessagesTest {
         assertThat(e.getMessage()).contains("app.yaml:2:13", "undefined alias").doesNotContain(SECRET);
     }
 
+    /** The value text a malformed escape is followed by, which SnakeYAML's scanner quotes back (#541). */
+    static Stream<Arguments> malformedEscapes() {
+        return Stream.of(
+                Arguments.of("\\U (8 hex digits)", "Hunter\\UTOPSECRT", "TOPSECRT"),
+                Arguments.of("\\u (4 hex digits)", "Hunter\\uSECR", "SECR"),
+                Arguments.of("\\x (2 hex digits)", "Hunter\\xSE", "found: SE"),
+                Arguments.of("unknown escape", "Hunter\\Qsecret", "Q("));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("malformedEscapes")
+    void malformedEscapeIssueNamesLocationAndProblemButNotTheValue(String kind, String value, String echoed) {
+        var yaml = "app:\n  password: \"" + value + "\"\n";
+
+        var e = catchThrowableOfType(
+                ConfigValidationException.class,
+                () -> YamlLoader.load(new ByteArrayInputStream(yaml.getBytes(StandardCharsets.UTF_8)), "app.yaml"));
+
+        assertThat(e.getMessage())
+                .contains("app.yaml:2:")
+                .containsIgnoringCase("escape")
+                .doesNotContain(echoed);
+    }
+
     @Test
     void duplicateSetElementWarningLocatesTheElementButNotTheValue() {
         TypeCoercer<java.util.Set<String>> c = CompositeCoercers.set(Coercers.stringCoercer());
