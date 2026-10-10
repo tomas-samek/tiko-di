@@ -13,8 +13,8 @@ import org.junit.jupiter.api.Test;
  *
  * <ol>
  *   <li>{@code ApplicationStartedEvent} fires after all component {@code @PostConstruct} complete.
- *   <li>{@code RequestStarted}/{@code EventStarted} fire before any user handler in that scope.
- *   <li>{@code RequestEnding}/{@code EventEnding} fire after synchronous user handlers complete.
+ *   <li>{@code EventStartedEvent} fires before any user handler in that unit of work.
+ *   <li>{@code EventEndingEvent} fires after the unit's synchronous user handlers complete.
  * </ol>
  *
  * <p>It also pins the semantics surfaced while writing these: an {@code @EventHandler(async=true)}

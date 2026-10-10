@@ -157,16 +157,15 @@ When a new example is added under `tiko-examples/N_<name>/`:
 
 **Method:** audit `tiko-processor/src/test/` for coverage of each cell + negative path. For gaps, write a small `compile-testing` fixture asserting the expected outcome.
 
-### Scope cell matrix (4 × 4 = 16 cells)
+### Scope cell matrix (3 × 3 = 9 cells)
 
 For each cell, verify: compiles when allowed, generates a proxy when required, errors cleanly when forbidden, runtime delegates correctly.
 
-| From \ To | SINGLETON | REQUEST | EVENT | PROTOTYPE |
-|---|---|---|---|---|
-| SINGLETON | direct | proxy (interface req.) | proxy (interface req.) | direct, fresh each call |
-| REQUEST | direct | direct | proxy (interface req.) | direct, fresh each call |
-| EVENT | direct | direct | direct | direct, fresh each call |
-| PROTOTYPE | direct | direct | direct | direct, fresh each call |
+| Consumer \ Dependency | SINGLETON | EVENT | PROTOTYPE |
+|---|---|---|---|
+| SINGLETON | direct | proxy (interface req.) | direct, fresh each call |
+| EVENT | direct | direct | direct, fresh each call |
+| PROTOTYPE | direct | direct | direct, fresh each call |
 
 ### Negative paths (coverage requirement)
 
@@ -282,13 +281,11 @@ When a new validation check is added to the processor:
 |---|---|---|
 | `ApplicationStartedEvent` | `Instant timestamp` | Fires AFTER all `@PostConstruct` complete |
 | `ApplicationEndingEvent` | `Instant timestamp`, `Duration uptime` | Fires BEFORE any `@PreDestroy` |
-| `EventStartedEvent` | `String requestId`, `Instant timestamp` | Fires BEFORE any user `@EventHandler` in scope |
-| `EventEndingEvent` | `String requestId`, `Instant timestamp`, `Duration duration` | Fires AFTER all user handlers complete (including async drain) |
-| `EventStartedEvent` | `String eventId`, `Instant timestamp` | Same pair semantics as Request |
-| `EventEndingEvent` | `String eventId`, `Instant timestamp`, `Duration duration` | Same pair semantics as Request |
+| `EventStartedEvent` | `String eventId`, `Instant timestamp` | Fires when a unit of work opens, BEFORE any user `@EventHandler` in it |
+| `EventEndingEvent` | `String eventId`, `Instant timestamp`, `Duration duration` | Fires AFTER the unit's synchronous handlers complete and BEFORE its `@PreDestroy`; async handlers run in their own units (one pair each) and are not awaited |
 
 Plus:
-- Nested scopes (one REQUEST containing N EVENTs) — each pair properly nested.
+- Single-frame units: `runInEventScope` inside an open unit throws `IllegalStateException`; consecutive units each publish one pair.
 - Idempotency across multiple `container.shutdown()` calls.
 - Timestamp monotonicity within a single container instance.
 

@@ -24,7 +24,10 @@ class NoRequestScopeWordingTest {
 
     /** The retired scope's names and API, as they appeared before #250/#251. */
     private static final Pattern REQUEST_SCOPE = Pattern.compile(
-            "request[- ]?scope|Scope\\.REQUEST|Request(Started|Ending)Event|REQUEST/EVENT|(?-i:REQUEST →)|REQUEST-vs-EVENT",
+            "request[- ]?scope|Scope\\.REQUEST|REQUEST/EVENT|(?-i:REQUEST →)|REQUEST-vs-EVENT"
+                    // #535: the retired lifecycle pair (not handler names like onRequestStarted),
+                    // a scope-matrix table cell, and the old nesting phrase.
+                    + "|(?<!on)Request(Started|Ending)|(?-i:\\|\\s*REQUEST\\s*\\|)|(?-i:one REQUEST)",
             Pattern.CASE_INSENSITIVE);
 
     /** Dated or historical records, and this gate itself. */

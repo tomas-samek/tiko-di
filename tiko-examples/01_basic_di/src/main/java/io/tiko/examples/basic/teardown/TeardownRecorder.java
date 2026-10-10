@@ -17,14 +17,10 @@ public final class TeardownRecorder {
     public static final List<String> order = Collections.synchronizedList(new ArrayList<>());
 
     /** Captures the {@code EventEndingEvent} timestamp index relative to {@link #order}. */
-    public static final AtomicReference<Integer> requestEndingIndex = new AtomicReference<>();
-
-    /** Captures the {@code EventEndingEvent} timestamp index relative to {@link #order}. */
     public static final AtomicReference<Integer> eventEndingIndex = new AtomicReference<>();
 
     public static void reset() {
         order.clear();
-        requestEndingIndex.set(null);
         eventEndingIndex.set(null);
     }
 
