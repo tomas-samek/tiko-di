@@ -33,6 +33,8 @@ emits a standalone `TestContainerImpl_<hash>` plus a `META-INF/tiko/test-shadows
 declaration instead of regenerating the main container. At runtime `AggregatingContainer`
 federates the two: each shadow declaration registers as a runtime override on the shared
 `TikoOptions`, so a `@TestComponent` like `FixedClock` (extending `Clock`) becomes the
-`Clock` injected into every consumer.
+`Clock` injected into every consumer. That federation happens only in a container that opts
+into test wiring — every `@TikoTest` container does, and a test calling `Tiko.create(...)`
+itself passes `TikoOptions.builder().testWiring(true)`.
 
 See [docs/testing.md](../../docs/testing.md) for the full guide.

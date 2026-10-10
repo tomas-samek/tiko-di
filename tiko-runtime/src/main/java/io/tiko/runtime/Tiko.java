@@ -7,7 +7,9 @@ import io.tiko.ErrorHandler;
 import io.tiko.EventBus;
 import io.tiko.TransportBootstrap;
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -47,6 +49,14 @@ public final class Tiko {
         java.time.Duration.class,
         TikoOptions.class,
     };
+
+    private static final String MAIN_DESCRIPTOR = AggregatingContainer.DEFAULT_DESCRIPTOR;
+    private static final String TEST_DESCRIPTOR = "META-INF/tiko/test-container.properties";
+
+    // Lazy holder: defers System.LoggerFinder resolution until a warning is actually logged.
+    private static final class LoggerHolder {
+        static final System.Logger LOG = System.getLogger("io.tiko.events");
+    }
 
     private Tiko() {}
 
@@ -130,32 +140,25 @@ public final class Tiko {
                 eventBus = options.eventBusDecorator().apply(eventBus);
             }
 
-            // 3. Detect single vs multi-module scenario. Prefer the test descriptor
-            //    when present on the classpath: a {@code @TestComponent}-bearing build
+            // 3. Detect single vs multi-module scenario. A {@code @TestComponent}-bearing build
             //    emits {@code META-INF/tiko/test-container.properties} (pointing at the
             //    standalone {@code TestContainerImpl_<hash>}) plus a
-            //    {@code META-INF/tiko/test-shadows.properties} declaration. Test runs pick
-            //    up the test-side wiring while production binaries — which never see
-            //    {@code @TestComponent}s — fall back to the main descriptor.
+            //    {@code META-INF/tiko/test-shadows.properties} declaration. Those apply only
+            //    when the container opted in (TikoOptions.testWiring, set by @TikoTest);
+            //    otherwise they are ignored with a warning (#497).
             ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
             if (classLoader == null) classLoader = Tiko.class.getClassLoader();
 
-            String descriptorName = "META-INF/tiko/test-container.properties";
-            var resources = classLoader.getResources(descriptorName);
-            int moduleCount = countResources(resources);
-            if (moduleCount == 0) {
-                descriptorName = "META-INF/tiko/container.properties";
-                resources = classLoader.getResources(descriptorName);
-                moduleCount = countResources(resources);
-            }
+            String descriptorName = selectDescriptor(options, classLoader);
+            int moduleCount = countResources(classLoader.getResources(descriptorName));
 
             java.time.Duration effectiveShutdownTimeout = resolveShutdownTimeout(options, classLoader);
 
-            // When the test descriptor is on the classpath, always route through the aggregator —
-            // even with a single module — so AggregatingContainer's shadow-registration phase
-            // (test-shadows.properties → TikoOptions overrides) runs. The single-module fast path
-            // bypasses shadow registration entirely.
-            boolean testMode = "META-INF/tiko/test-container.properties".equals(descriptorName);
+            // In test mode, always route through the aggregator — even with a single module — so
+            // AggregatingContainer's shadow-registration phase (test-shadows.properties →
+            // TikoOptions overrides) runs. The single-module fast path bypasses shadow registration
+            // entirely.
+            boolean testMode = TEST_DESCRIPTOR.equals(descriptorName);
 
             Container container;
             if (moduleCount > 1 || testMode) {
@@ -378,6 +381,29 @@ public final class Tiko {
             // avoid silently masking a wiring bug.
             throw new ContainerInitializationException("Failed to read tiko.shutdownTimeout from YAML", e);
         }
+    }
+
+    /**
+     * The container descriptor to boot from: the test descriptor when the container opted into
+     * test wiring and one is on the classpath, otherwise the main one. Test wiring found without
+     * the opt-in is reported, never applied (#497).
+     */
+    private static String selectDescriptor(TikoOptions options, ClassLoader classLoader) throws IOException {
+        var testWiring = new ArrayList<URL>();
+        testWiring.addAll(Collections.list(classLoader.getResources(TEST_DESCRIPTOR)));
+        if (options.testWiring()) {
+            return testWiring.isEmpty() ? MAIN_DESCRIPTOR : TEST_DESCRIPTOR;
+        }
+        testWiring.addAll(Collections.list(classLoader.getResources(AggregatingContainer.TEST_SHADOWS)));
+        if (!testWiring.isEmpty()) {
+            TikoLog.log(
+                    LoggerHolder.LOG,
+                    System.Logger.Level.WARNING,
+                    "Ignoring test wiring on the classpath: {0}. Test components apply only when the container"
+                            + " opts in: @TikoTest, or TikoOptions.builder().testWiring(true).",
+                    testWiring);
+        }
+        return MAIN_DESCRIPTOR;
     }
 
     /** Counts how many {@link java.net.URL}s an enumeration yields, draining it. */

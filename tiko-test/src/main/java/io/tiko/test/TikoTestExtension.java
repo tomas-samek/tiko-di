@@ -153,9 +153,11 @@ public final class TikoTestExtension
         // deterministically (#443). Because it is supplied, the container does not own it
         // (ownsEventExecutor = false) — closeContainer shuts it down.
         CountingThreadPoolExecutor executor = CountingThreadPoolExecutor.withFrameworkDefaults();
+        // A @TikoTest container is a test container: apply @TestComponent wiring (#497).
         TikoOptions opts = TikoOptions.builder()
                 .eventBusDecorator(RecordingEventBus::new)
                 .eventExecutor(executor)
+                .testWiring(true)
                 .build();
         Container container = Tiko.create(opts);
         RecordingEventBus bus = (RecordingEventBus) container.getEventBus();

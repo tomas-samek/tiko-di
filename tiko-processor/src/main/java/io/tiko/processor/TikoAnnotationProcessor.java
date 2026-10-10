@@ -17,6 +17,7 @@ import javax.lang.model.type.MirroredTypeException;
 import javax.lang.model.type.MirroredTypesException;
 import javax.lang.model.type.TypeMirror;
 import javax.tools.Diagnostic;
+import javax.tools.JavaFileObject;
 
 /**
  * Main annotation processor for Tiko DI.
@@ -278,11 +279,39 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
                                     "Move @TestComponent to a class declaration");
                     continue;
                 }
+                if (isInProductionSources(typeElement)) {
+                    String name = typeElement.getSimpleName().toString();
+                    context.getErrorReporter()
+                            .error(
+                                    typeElement,
+                                    "@TestComponent " + name + " is in production sources (src/main). Test components"
+                                            + " only apply in a container that opts into test wiring; compiled here"
+                                            + " they ship in the jar as test wiring (#497).",
+                                    "Move " + name + " under src/test/java",
+                                    "Use @Component if " + name + " is a real production implementation");
+                    continue;
+                }
                 ComponentModel component = buildTestComponentModel(typeElement);
                 if (component != null) {
                     context.registerComponent(component);
                 }
             }
+        }
+    }
+
+    /**
+     * {@code true} when {@code type}'s source file sits under a {@code src/main/} directory — the
+     * Maven/Gradle production source root. Unknown locations (in-memory sources, a compiler that
+     * doesn't report the file) count as not production, so the check never fires without evidence.
+     */
+    private boolean isInProductionSources(TypeElement type) {
+        try {
+            JavaFileObject source = processingEnv.getElementUtils().getFileObjectOf(type);
+            return source != null
+                    && source.toUri().getPath() != null
+                    && source.toUri().getPath().contains("/src/main/");
+        } catch (UnsupportedOperationException e) {
+            return false;
         }
     }
 

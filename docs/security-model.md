@@ -341,13 +341,18 @@ checks, in-memory stores) because a test-component jar landed on the classpath.
 **Rule.** Test wiring only activates when the application opted into it explicitly, and a
 `@TestComponent` outside a test context is reported, not applied silently.
 
-**Enforced by.** Not yet enforced.
+**Enforced by.** Code: `TikoOptions.testWiring` is off by default; only then does
+`Tiko.create` select `test-container.properties`, and `AggregatingContainer` reads
+`test-shadows.properties` only for that descriptor. Without the opt-in, test wiring on the
+classpath is ignored with a WARNING naming its URLs. `@TikoTest` opts its container in.
+Processor: a `@TestComponent` whose source is under `src/main/` is a compile error. Tests:
+`StrayTestWiringTest`, `AggregatingContainerShadowRoutingTest`,
+`TestComponentInProductionSourcesTest`.
 
-**Status.** Gap: any `test-container.properties` on the classpath switches the container to
-test mode, and the processor writes these files for main sources too. Reproduced: a fixtures
-jar with a `@TestComponent` replaced a real component in a production container, with nothing
-logged. Tracked in #497. `replaceTransport` / `FakeKafkaTransport` are explicit code-level
-opt-ins and are not part of this gap.
+**Status.** Holds. Fixed in #497: before it, any `test-container.properties` on the classpath
+switched the container to test mode, and a fixtures jar with a `@TestComponent` replaced a real
+component in a production container with nothing logged. `replaceTransport` /
+`FakeKafkaTransport` are explicit code-level opt-ins and are not part of this rule.
 
 **Violation looks like.** Test-only behaviour selected by classpath presence alone, or a test
 seam reachable through configuration.

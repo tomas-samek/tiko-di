@@ -35,6 +35,8 @@ public final class AggregatingContainer implements Container {
     /** Default descriptor name used when callers don't override (production / multi-module). */
     static final String DEFAULT_DESCRIPTOR = "META-INF/tiko/container.properties";
 
+    static final String TEST_SHADOWS = "META-INF/tiko/test-shadows.properties";
+
     /**
      * Lazy holder: defers System.LoggerFinder resolution until first use. Most aggregator
      * paths log only on bus-impl defects or shadow-config issues, so the class's {@code <clinit>}
@@ -197,8 +199,11 @@ public final class AggregatingContainer implements Container {
         // close over it and resolve their target container lazily on first invocation.
         Map<String, Container> containersByImplName = new HashMap<>();
 
-        // Phase 1: scan classpath for test-shadows.properties and register shadow overrides.
-        Enumeration<URL> shadowResources = classLoader.getResources("META-INF/tiko/test-shadows.properties");
+        // Phase 1: in test mode only (#497), scan classpath for test-shadows.properties and
+        // register shadow overrides. A production container never applies shadows.
+        Enumeration<URL> shadowResources = DEFAULT_DESCRIPTOR.equals(descriptorName)
+                ? Collections.emptyEnumeration()
+                : classLoader.getResources(TEST_SHADOWS);
         Map<String, String> seenShadowDeclarations = new HashMap<>();
         while (shadowResources.hasMoreElements()) {
             URL url = shadowResources.nextElement();

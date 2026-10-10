@@ -148,6 +148,7 @@ class OrderServiceTest {
         var mock = mock(PaymentGateway.class);
         when(mock.charge(any(), anyLong())).thenReturn("MOCK-TXN");
         try (Container c = Tiko.create(TikoOptions.builder()
+                .testWiring(true) // a test container, like @TikoTest's
                 .override(PaymentGateway.class, () -> mock)
                 .build())) {
             // ...
@@ -155,12 +156,16 @@ class OrderServiceTest {
     }
 }
 
-// Shadow a production @Component with a test fixture:
+// Shadow a production @Component with a test fixture (src/test/java only):
 @TestComponent
 public class FixedClock extends Clock {
     public Instant now() { return Instant.parse("2026-01-01T00:00:00Z"); }
 }
 ```
+
+`@TestComponent`s apply only in containers that opt into test wiring: every `@TikoTest`
+container does; a test calling `Tiko.create(...)` itself adds
+`TikoOptions.builder().testWiring(true)`. Without it they are ignored (with a WARNING).
 
 ## Common pitfalls
 

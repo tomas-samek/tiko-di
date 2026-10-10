@@ -119,6 +119,7 @@ one option + one helper:
 ```java
 FakeKafkaBroker broker = new FakeKafkaBroker();
 try (Container c = Tiko.create(TikoOptions.builder()
+        .testWiring(true) // a test container: apply @TestComponents too
         .configSource(ConfigSources.classpath("application.yaml"))
         .replaceTransport(KafkaTransport.class, t -> FakeKafkaTransport.over(t, broker))
         .build())) {

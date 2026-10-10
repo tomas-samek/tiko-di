@@ -12,6 +12,13 @@ import org.junit.jupiter.api.Test;
 
 class TikoOptionsTest {
 
+    /** #497: test wiring is opt-in. */
+    @Test
+    void testWiringIsOffUnlessRequested() {
+        assertThat(TikoOptions.builder().build().testWiring()).isFalse();
+        assertThat(TikoOptions.builder().testWiring(true).build().testWiring()).isTrue();
+    }
+
     @Test
     void builder_default_has_no_config_source_and_no_error_handler() {
         TikoOptions options = TikoOptions.builder().build();

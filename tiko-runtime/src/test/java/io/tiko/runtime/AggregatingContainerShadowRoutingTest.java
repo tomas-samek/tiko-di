@@ -93,4 +93,35 @@ class AggregatingContainerShadowRoutingTest {
             Thread.currentThread().setContextClassLoader(previous);
         }
     }
+
+    /** #497: shadow declarations are test wiring; a production (main-descriptor) aggregator never applies them. */
+    @Test
+    void productionAggregatorIgnoresShadowDeclarations(@TempDir Path tmp) throws Exception {
+        Path meta = Files.createDirectories(tmp.resolve("META-INF").resolve("tiko"));
+        Properties shadows = new Properties();
+        shadows.setProperty("java.lang.String", "io.tiko.runtime.StubContainer");
+        try (var out = Files.newOutputStream(meta.resolve("test-shadows.properties"))) {
+            shadows.store(out, "test");
+        }
+
+        URLClassLoader cl = new URLClassLoader(
+                new URL[] {tmp.toUri().toURL()}, AggregatingContainerShadowRoutingTest.class.getClassLoader());
+        ClassLoader previous = Thread.currentThread().getContextClassLoader();
+        Thread.currentThread().setContextClassLoader(cl);
+
+        try {
+            TikoOptions opts = TikoOptions.builder().build();
+            new AggregatingContainer(
+                    new LocalEventBus(),
+                    ctx -> {},
+                    null,
+                    java.time.Duration.ZERO,
+                    opts,
+                    "META-INF/tiko/container.properties");
+
+            assertThat(opts.hasOverride(String.class)).isFalse();
+        } finally {
+            Thread.currentThread().setContextClassLoader(previous);
+        }
+    }
 }
