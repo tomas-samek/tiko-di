@@ -29,7 +29,8 @@ public final class KafkaConfigBinder implements ConfigBinder<KafkaConfig> {
 
     @Override
     public KafkaConfig bind(Map<String, Object> root, BindContext ctx) {
-        Map<String, Object> node = ctx.requireSection(root, "tiko.kafka");
+        // Optional (#531): every field has a default, and a fat jar may not keep this jar's defaults.yaml.
+        Map<String, Object> node = ctx.optionalSection(root, "tiko.kafka");
         String bootstrapServers = ctx.scalarOrDefault(
                 node,
                 "bootstrap-servers",
@@ -66,18 +67,18 @@ public final class KafkaConfigBinder implements ConfigBinder<KafkaConfig> {
                 "tiko.kafka.shutdown-timeout",
                 Coercers.durationCoercer(),
                 Coercers.durationCoercer().coerce("PT5S"));
-        Map<String, String> producerProperties = ctx.requireScalar(
+        Map<String, String> producerProperties = ctx.scalarOrDefault(
                 node,
                 "producer-properties",
                 "tiko.kafka.producer-properties",
                 CompositeCoercers.map(Coercers.stringCoercer()),
-                null);
-        Map<String, String> consumerProperties = ctx.requireScalar(
+                Map.of());
+        Map<String, String> consumerProperties = ctx.scalarOrDefault(
                 node,
                 "consumer-properties",
                 "tiko.kafka.consumer-properties",
                 CompositeCoercers.map(Coercers.stringCoercer()),
-                null);
+                Map.of());
         String poisonRecordPolicy = ctx.scalarOrDefault(
                 node,
                 "poison-record-policy",

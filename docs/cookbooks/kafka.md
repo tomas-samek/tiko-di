@@ -45,6 +45,12 @@ Add both the runtime and the annotation processor (the processor generates the
 </path>
 ```
 
+**Packaging as a shaded fat jar:** keep `ServicesResourceTransformer` among the
+`maven-shade-plugin` transformers. The transport and every module's `@Configuration`
+binders (yours and `tiko-kafka`'s `tiko.kafka`) are discovered through
+`META-INF/services/` files, which that transformer merges (#531). See
+`tiko-examples/08_kafka_order_warehouse/*/pom.xml`.
+
 > **Note:** as of writing, `tiko-kafka` / `tiko-kafka-processor` are not in
 > `tiko-bom` `dependencyManagement` (see #298), so pin `${tiko.version}` explicitly
 > on both until that lands.

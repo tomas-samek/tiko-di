@@ -6,7 +6,6 @@ import io.tiko.config.ConfigBinder;
 import io.tiko.config.TikoFrameworkConfig;
 import io.tiko.config.internal.coercers.Coercers;
 import java.time.Duration;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -34,7 +33,7 @@ public final class TikoFrameworkConfigBinder implements ConfigBinder<TikoFramewo
     @Override
     public TikoFrameworkConfig bind(Map<String, Object> root, BindContext ctx) {
         // Optional section: absent (or present only for module sub-prefixes) means all defaults.
-        Map<String, Object> node = root.containsKey("tiko") ? ctx.requireSection(root, "tiko") : new LinkedHashMap<>();
+        Map<String, Object> node = ctx.optionalSection(root, "tiko");
         Duration shutdownTimeout = ctx.scalarOrDefault(
                 node, "shutdownTimeout", "tiko.shutdownTimeout", Coercers.durationCoercer(), DEFAULT_SHUTDOWN_TIMEOUT);
         if (shutdownTimeout.isNegative()) {
