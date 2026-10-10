@@ -33,6 +33,8 @@ public final class ContainerGenerator {
 
     private static final String GENERATED_PACKAGE = "io.tiko.generated";
     private static final String TIKO_PACKAGE = "io.tiko";
+    private static final ClassName ERROR_HANDLER = ClassName.get(TIKO_PACKAGE, "ErrorHandler");
+    private static final ClassName AUTO_CLOSE_FAILURE = ClassName.get(TIKO_PACKAGE, "AutoCloseFailure");
     private static final String MAIN_DESCRIPTOR = "META-INF/tiko/container.properties";
     private static final String TEST_DESCRIPTOR = "META-INF/tiko/test-container.properties";
 
@@ -381,8 +383,7 @@ public final class ContainerGenerator {
      * Creates the ErrorHandler field.
      */
     private FieldSpec createErrorHandlerField() {
-        return FieldSpec.builder(
-                        ClassName.get(TIKO_PACKAGE, "ErrorHandler"), "errorHandler", Modifier.PRIVATE, Modifier.FINAL)
+        return FieldSpec.builder(ERROR_HANDLER, "errorHandler", Modifier.PRIVATE, Modifier.FINAL)
                 .build();
     }
 
@@ -604,7 +605,7 @@ public final class ContainerGenerator {
         MethodSpec.Builder constructor = MethodSpec.constructorBuilder()
                 .addModifiers(Modifier.PUBLIC)
                 .addParameter(EventBus.class, "eventBus")
-                .addParameter(ClassName.get(TIKO_PACKAGE, "ErrorHandler"), "errorHandler")
+                .addParameter(ERROR_HANDLER, "errorHandler")
                 .addParameter(ClassName.get("java.util.concurrent", "ExecutorService"), "userEventExecutor")
                 .addParameter(TypeName.BOOLEAN, PUBLISH_LIFECYCLE_FIELD)
                 .addParameter(Duration.class, "shutdownTimeout")
@@ -1345,9 +1346,8 @@ public final class ContainerGenerator {
             method.nextControlFlow("catch ($T __t)", Throwable.class);
             // Failures route solely through ErrorHandler (#116) — no catch-site log. AutoCloseable
             // and @PreDestroy emit distinct permits so observability code can discriminate.
-            ClassName failureType = isAutoCloseOnly
-                    ? ClassName.get(TIKO_PACKAGE, "AutoCloseFailure")
-                    : ClassName.get(TIKO_PACKAGE, "PreDestroyFailure");
+            ClassName failureType =
+                    isAutoCloseOnly ? AUTO_CLOSE_FAILURE : ClassName.get(TIKO_PACKAGE, "PreDestroyFailure");
             emitGuardedOnError(method, CodeBlock.of("new $T($T.class, __t)", failureType, componentType));
             method.endControlFlow(); // try/catch
         }
@@ -1364,9 +1364,7 @@ public final class ContainerGenerator {
             method.beginControlFlow("try");
             method.addStatement("__ac.close()");
             method.nextControlFlow("catch ($T __t)", Throwable.class);
-            emitGuardedOnError(
-                    method,
-                    CodeBlock.of("new $T(__ac.getClass(), __t)", ClassName.get(TIKO_PACKAGE, "AutoCloseFailure")));
+            emitGuardedOnError(method, CodeBlock.of("new $T(__ac.getClass(), __t)", AUTO_CLOSE_FAILURE));
             method.endControlFlow(); // try/catch
         }
 
@@ -1885,7 +1883,7 @@ public final class ContainerGenerator {
         return MethodSpec.methodBuilder("getErrorHandler")
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
-                .returns(ClassName.get(TIKO_PACKAGE, "ErrorHandler"))
+                .returns(ERROR_HANDLER)
                 .addStatement("return this.errorHandler")
                 .build();
     }
@@ -2138,9 +2136,7 @@ public final class ContainerGenerator {
 
         boolean isAutoCloseOnly =
                 component.isAutoCloseable() && component.getPreDestroyMethods().isEmpty();
-        ClassName failureType = isAutoCloseOnly
-                ? ClassName.get(TIKO_PACKAGE, "AutoCloseFailure")
-                : ClassName.get(TIKO_PACKAGE, "PreDestroyFailure");
+        ClassName failureType = isAutoCloseOnly ? AUTO_CLOSE_FAILURE : ClassName.get(TIKO_PACKAGE, "PreDestroyFailure");
 
         method.beginControlFlow("if ($L != null)", variableName);
         // Teardown runs under options.teardownTimeout() (#106): unset → inline on the shutdown
@@ -2199,7 +2195,7 @@ public final class ContainerGenerator {
                         + " __t -> new $T($L.getClass(), __t))",
                 BOUNDED_EXECUTION,
                 variableName,
-                ClassName.get(TIKO_PACKAGE, "AutoCloseFailure"),
+                AUTO_CLOSE_FAILURE,
                 variableName);
         method.endControlFlow(); // if non-null
     }
