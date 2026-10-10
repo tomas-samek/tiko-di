@@ -128,7 +128,7 @@ class TikoFrameworkConfigTest {
         var bound = bind(user, new TikoFrameworkConfigBinder(), new AppConfigBinder());
 
         assertThat(framework(bound).shutdownTimeout()).isEqualTo(Duration.ofSeconds(5));
-        assertThat(bound.get(AppConfig.class)).isEqualTo(new AppConfig("notes"));
+        assertThat(bound).containsEntry(AppConfig.class, new AppConfig("notes"));
     }
 
     @Test
@@ -139,7 +139,7 @@ class TikoFrameworkConfigTest {
         var bound = bind(user, new TikoFrameworkConfigBinder(), new ModuleConfigBinder());
 
         assertThat(framework(bound).shutdownTimeout()).isEqualTo(Duration.ofSeconds(5));
-        assertThat(bound.get(ModuleConfig.class)).isEqualTo(new ModuleConfig("broker:9092"));
+        assertThat(bound).containsEntry(ModuleConfig.class, new ModuleConfig("broker:9092"));
     }
 
     @Test
