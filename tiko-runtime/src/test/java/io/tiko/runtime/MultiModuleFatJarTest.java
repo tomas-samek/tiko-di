@@ -58,7 +58,8 @@ class MultiModuleFatJarTest {
         try (var cl =
                 new URLClassLoader(new URL[] {jar.toUri().toURL()}, getClass().getClassLoader())) {
             Thread.currentThread().setContextClassLoader(cl);
-            assertThatThrownBy(() -> Tiko.create(TikoOptions.builder().build()))
+            TikoOptions options = TikoOptions.builder().build();
+            assertThatThrownBy(() -> Tiko.create(options))
                     .isInstanceOf(ContainerInitializationException.class)
                     .hasMessageContaining("META-INF/services/" + TikoModule.class.getName());
         } finally {
