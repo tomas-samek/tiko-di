@@ -24,18 +24,6 @@ class AutoCloseableScopedTest {
     }
 
     @Test
-    void request_autocloseable_is_closed_at_scope_exit() {
-        Container container = Tiko.create();
-        try {
-            container.runInEventScope(() -> container.get(AutoCloseableRequestHolder.class));
-        } finally {
-            container.shutdown();
-        }
-
-        assertThat(TeardownRecorder.order).contains("AutoCloseableRequest");
-    }
-
-    @Test
     void event_autocloseable_is_closed_at_scope_exit() {
         Container container = Tiko.create();
         try {

@@ -230,7 +230,7 @@ public final class ComponentFactoryGenerator {
      * @param dependency the dependency to resolve
      * @param consumer the consuming component — needed for cross-scope proxy decisions
      *     when the provider is a {@code @Produces} factory output (a longer-lived consumer
-     *     of a REQUEST/EVENT-scoped factory output gets a generated proxy instead of a
+     *     of an EVENT-scoped factory output gets a generated proxy instead of a
      *     direct {@code container.produce_*()} call so the value resolves per-call to the
      *     current scope).
      */

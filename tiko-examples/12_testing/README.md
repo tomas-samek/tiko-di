@@ -9,7 +9,7 @@ Runnable demo of the `tiko-test` JUnit 5 extension. Each test file targets one f
 | `lifecycle/PerClassLifecycleTest.java` | `@TikoTest(lifecycle = PER_CLASS)` |
 | `order/OrderServiceTest.java` | Parameter resolution + `RecordingEventBus` assertions + `@EventTrigger` chain |
 | `payment/MockedPaymentTest.java` | Runtime `override(PaymentGateway.class, …)` swaps a Mockito mock in by interface |
-| `repo/RequestScopedRepoTest.java` | `@RequestScopeTest` scope helper |
+| `repo/EventScopedRepoTest.java` | `@EventScopeTest` scope helper |
 
 Run with:
 

@@ -5,8 +5,8 @@ import io.tiko.Container;
 
 /**
  * Tiny middleware bridge: wraps a Javalin {@link Handler} so each invocation
- * runs inside a Tiko request scope. Drop this in front of every route
- * registration to get request-scope semantics for the whole request lifecycle
+ * runs inside one Tiko unit of work (an EVENT scope). Drop this in front of every
+ * route registration to get one unit per request across the whole request lifecycle
  * — body parsing, business logic, event publishing, response serialization.
  *
  * <p>Why a helper instead of opening the scope inside each handler: ergonomics.
@@ -24,7 +24,7 @@ public final class TikoJavalin {
     private TikoJavalin() {}
 
     /**
-     * Returns a new {@link Handler} that opens a Tiko request scope around
+     * Returns a new {@link Handler} that opens one unit of work around
      * the delegate's {@link Handler#handle(io.javalin.http.Context)}.
      * Javalin's checked-exception declaration is wrapped in a
      * {@link RuntimeException}; Javalin's own exception mapper unwraps it on

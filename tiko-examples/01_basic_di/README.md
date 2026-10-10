@@ -63,7 +63,7 @@ The three subpackages house JUnit 5 fixtures that pin contracts the runtime demo
   instance regardless of which interface the caller asks for.
 
 - **`teardown/`** — Lifecycle teardown contract. `LifoSingletonA`/`B`/`C`,
-  `LifoRequestA`/`B`/`C`, `LifoEventA`/`B`/`C`, and `LifoFactoryChain*` pin LIFO
+  `LifoEventA`/`B`/`C`, and `LifoFactoryChain*` pin LIFO
   destruction across SINGLETON `@Component` beans, the EVENT scope, and
   `@Produces` factory-produced AutoCloseables (issues #151, #189). `AutoCloseable*Holder`,
   `FakePool*`, `ExplicitWinsBean`, and `ThrowingPreDestroy*` cover implicit

@@ -62,7 +62,7 @@ class ProxyForProducesOutputCrossScopeTest {
 
         // Without the fix, javac compiles the generated GreetingConsumerFactory.java
         // and it works (per PR #93), but the singleton captures a closed/leaked
-        // connection on the second REQUEST scope. There is no compile-time symptom —
+        // connection in the second unit of work (EVENT scope). There is no compile-time symptom —
         // the symptom only surfaces at runtime. So this test asserts the
         // *structural* fix: a proxy class must exist, and the consumer factory
         // must instantiate it instead of calling produce_*() directly.

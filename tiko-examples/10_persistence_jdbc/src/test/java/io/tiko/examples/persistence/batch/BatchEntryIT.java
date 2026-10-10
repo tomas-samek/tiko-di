@@ -55,8 +55,8 @@ class BatchEntryIT {
             assertThat(rs.getInt(1)).isEqualTo(5);
         }
 
-        // Auto-proxy demonstration: audit logger saw EVENT-scoped CurrentOrder
-        // resolve to a different order id on each of the 5 iterations.
+        // The batch loop records each order with the audit logger directly — one unit
+        // of work, so there is no per-item scope to observe.
         List<UUID> seen = container.get(BatchAuditLogger.class).captured();
         assertThat(seen).hasSize(5);
         assertThat(seen)

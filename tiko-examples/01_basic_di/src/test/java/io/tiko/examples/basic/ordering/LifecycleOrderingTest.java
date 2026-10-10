@@ -20,8 +20,9 @@ import org.junit.jupiter.api.Test;
  * <p>It also pins the semantics surfaced while writing these: an {@code @EventHandler(async=true)}
  * handler is <em>detached</em> from the triggering scope, so scope exit does not await it. Draining
  * async work at scope exit would contradict "async" — the scope is a synchronous frame, and async
- * dispatch is the in-process equivalent of a distributed consumer running in its own scope. The
- * deeper guard (rejecting REQUEST-scoped dependencies in async handlers) is tracked for Phase 7.
+ * dispatch is the in-process equivalent of a distributed consumer running in its own scope. Since
+ * #220 each async invocation runs in its own fresh EVENT unit, so its EVENT-scoped dependencies bind
+ * to that unit, never the publisher's.
  */
 class LifecycleOrderingTest {
 

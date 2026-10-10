@@ -7,8 +7,8 @@ import java.sql.SQLException;
 
 /**
  * Factory whose {@code @Produces} method declares and throws a checked
- * {@link SQLException}. The output is REQUEST-scoped so resolution only fires
- * when the test explicitly opens a REQUEST scope and asks for the produced
+ * {@link SQLException}. The output is EVENT-scoped so resolution only fires
+ * when the test explicitly opens a unit of work and asks for the produced
  * type — keeps the fixture out of every other test's container start path.
  *
  * <p>Used by {@code CheckedExceptionPropagationTest} to verify the processor's

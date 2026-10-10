@@ -41,14 +41,14 @@ class LifecycleErrorRoutingTest {
         var opts = TikoOptions.builder().errorHandler(recorded::add).build();
 
         try (Container container = Tiko.create(opts)) {
-            assertThatThrownBy(() ->
-                            container.runInEventScope(() -> container.get(ThrowingPostConstructRequestBean.class)))
+            assertThatThrownBy(
+                            () -> container.runInEventScope(() -> container.get(ThrowingPostConstructEventBean.class)))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessage("intentional-postconstruct");
         }
 
         assertThat(recorded).singleElement().isInstanceOfSatisfying(PostConstructFailure.class, f -> {
-            assertThat(f.component()).isEqualTo(ThrowingPostConstructRequestBean.class);
+            assertThat(f.component()).isEqualTo(ThrowingPostConstructEventBean.class);
             assertThat(f.cause()).isInstanceOf(IllegalStateException.class).hasMessage("intentional-postconstruct");
         });
     }
@@ -61,8 +61,8 @@ class LifecycleErrorRoutingTest {
         Container container = Tiko.create(opts);
         try {
             container.runInEventScope(() -> {
-                container.get(LifoRequestA.class);
-                container.get(ThrowingPreDestroyRequestBean.class);
+                container.get(LifoEventA.class);
+                container.get(ThrowingPreDestroyEventBean.class);
             });
         } finally {
             container.shutdown();
@@ -71,11 +71,11 @@ class LifecycleErrorRoutingTest {
         // Teardown continued past the throw — sibling beans still fired.
         assertThat(TeardownRecorder.order)
                 .as("Throwing @PreDestroy must not skip sibling beans")
-                .contains("RequestA", "RequestB", "RequestC", "Throwing.boom");
+                .contains("EventA", "EventB", "EventC", "Throwing.boom");
 
         // The throw routed through ErrorHandler.
         assertThat(recorded).hasSize(1).first().isInstanceOfSatisfying(PreDestroyFailure.class, f -> {
-            assertThat(f.component()).isEqualTo(ThrowingPreDestroyRequestBean.class);
+            assertThat(f.component()).isEqualTo(ThrowingPreDestroyEventBean.class);
             assertThat(f.cause()).isInstanceOf(IllegalStateException.class).hasMessage("intentional");
         });
     }
@@ -88,8 +88,8 @@ class LifecycleErrorRoutingTest {
         Container container = Tiko.create(opts);
         try {
             container.runInEventScope(() -> {
-                container.get(LifoRequestA.class);
-                container.get(ThrowingCloseRequestBean.class);
+                container.get(LifoEventA.class);
+                container.get(ThrowingCloseEventBean.class);
             });
         } finally {
             container.shutdown();
@@ -98,11 +98,11 @@ class LifecycleErrorRoutingTest {
         // Teardown continued past the throw.
         assertThat(TeardownRecorder.order)
                 .as("Throwing AutoCloseable.close() must not skip sibling beans")
-                .contains("RequestA", "RequestB", "RequestC", "ThrowingClose.close");
+                .contains("EventA", "EventB", "EventC", "ThrowingClose.close");
 
         // Routed as AutoCloseFailure (NOT PreDestroyFailure).
         assertThat(recorded).hasSize(1).first().isInstanceOfSatisfying(AutoCloseFailure.class, f -> {
-            assertThat(f.component()).isEqualTo(ThrowingCloseRequestBean.class);
+            assertThat(f.component()).isEqualTo(ThrowingCloseEventBean.class);
             assertThat(f.cause()).isInstanceOf(IllegalStateException.class).hasMessage("intentional-close");
         });
     }

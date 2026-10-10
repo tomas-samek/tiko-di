@@ -16,23 +16,22 @@ intentionally out of scope:
   Spring Boot competitor instead of an orthogonal alternative.
 
 What Tiko *does* offer is the wiring patterns: `@Produces` factories,
-REQUEST scope = transaction lifetime, auto-proxy of REQUEST-scoped
-resources into SINGLETON consumers. This cookbook shows that wiring with
+EVENT scope (one unit of work) = transaction lifetime, auto-proxy of
+EVENT-scoped resources into SINGLETON consumers. This cookbook shows that wiring with
 raw JDBC + HikariCP — the lowest layer, easiest to follow. Higher-level
 libraries layer on top of the same scaffolding.
 
 ## What you'll learn
 
-1. **REQUEST = one DB transaction.** Open a REQUEST scope; everything
-   inside it runs in one transaction; commit on clean exit, roll back
-   on exception.
-2. **EVENT = single message being processed.** Inside one batch (one
-   REQUEST), multiple messages each get their own EVENT scope and their
-   own per-message state — but share the one outer transaction.
+1. **One unit of work = one DB transaction.** Open an EVENT scope (an
+   HTTP request, a batch run, a consumed message); everything inside it
+   runs in one transaction; commit on clean exit, roll back on exception.
+2. **A batch is one unit with a loop.** EVENT scopes don't nest, so a
+   batch processes its items inside the one unit — all-or-none.
 3. **Auto-proxy on `java.sql.Connection`.** A SINGLETON repository can
-   inject the REQUEST-scoped Connection directly; Tiko's annotation
-   processor generates a proxy that resolves to the current scope on
-   every method call.
+   inject the EVENT-scoped Connection directly; Tiko's annotation
+   processor generates a proxy that resolves to the current unit's
+   connection on every method call.
 4. **Transaction decorator pattern.** A single helper
    (`TransactionalScope.run(...)`) opens the scope, commits on success,
    rolls back on exception. Both HTTP and batch entries use it.
@@ -99,7 +98,7 @@ at container shutdown automatically.
 > }
 > ```
 
-## REQUEST-scoped Connection + auto-proxy
+## EVENT-scoped Connection + auto-proxy
 
 ```java
 @Component(scope = Scope.EVENT)
@@ -133,19 +132,19 @@ public class OrderRepository {
 ```
 
 `java.sql.Connection` is an interface. The Tiko annotation processor
-notices that a SINGLETON consumer wants a REQUEST-scoped bean, and
+notices that a SINGLETON consumer wants an EVENT-scoped bean, and
 generates a per-method delegating proxy. Every call on the proxy
-resolves to the current REQUEST scope's `Connection`. The repository
+resolves to the current unit's `Connection`. The repository
 looks like it captured a connection at construction time; it didn't,
 and that's the point.
 
-If you call repository methods outside an active REQUEST scope, the
-proxy fails with a scope-resolution error — the right behaviour: you
-asked for a request-scoped resource without an open request.
+If you call repository methods outside an open unit of work, the
+proxy fails with `NoActiveEventScopeException` — the right behaviour:
+you asked for a per-unit resource with no unit open.
 
 ## TransactionContext + decorator
 
-Commit/rollback responsibility lives in a tiny REQUEST-scoped bean:
+Commit/rollback responsibility lives in a tiny EVENT-scoped bean:
 
 ```java
 @Component(scope = Scope.EVENT)
@@ -203,69 +202,49 @@ Javalin app = Javalin.create(cfg -> cfg.routes.post("/orders", ctx -> Transactio
 })));
 ```
 
-One HTTP request = one REQUEST scope = one transaction. REQUEST and
-EVENT collapse to the same lifetime here — there's no batching, just
-one operation per request. The route handler does its work via
+One HTTP request = one EVENT scope = one transaction — one operation
+per request. The route handler does its work via
 auto-proxied repositories; commit happens on success, rollback on any
 thrown exception.
 
-## Batch flow — where REQUEST and EVENT do different jobs
+## Batch flow — one unit of work, one transaction, a loop
 
 ```java
 TransactionalScope.run(container, () -> {
     var repo = container.get(OrderRepository.class);
+    var audit = container.get(BatchAuditLogger.class);
     for (Order o : orders) {
-        container.runInEventScope(() -> {
-            // CurrentOrder is auto-proxied — container.get returns a proxy
-            // wired to the current EVENT scope's CurrentOrderContext.
-            var current = container.get(CurrentOrder.class);
-            current.setOrderId(o.id());
-            repo.insert(o);
-        });
+        repo.insert(o);          // same proxied Connection, same transaction
+        audit.record(o.id());    // per-item observation, called directly
     }
     return orders.size();
 });
 ```
 
-**One REQUEST → one transaction → N EVENT scopes inside.** The
-distinction earns its keep here:
+**One EVENT scope → one transaction → N inserts.** The `Connection` is
+EVENT-scoped, so every insert runs on the same connection in the one
+transaction: either every order commits, or none of them do.
 
-- The `Connection` is REQUEST-scoped, so all N inserts run on the same
-  connection in one transaction. Either every order commits, or none of
-  them do.
-- `CurrentOrderContext` is EVENT-scoped, so each iteration gets its own
-  instance with its own `orderId`. `BatchAuditLogger` is a SINGLETON
-  `@EventHandler` on `EventEndingEvent` that injects `CurrentOrder` as
-  a proxy and reads the current iteration's id at scope-end — no
-  parameter threading.
+EVENT scopes don't nest (opening one inside another throws
+`IllegalStateException`), so there is no per-item scope to hook into.
+Per-item work — here `BatchAuditLogger.record(...)` — is called from the
+loop body. When items are genuinely independent and each should commit
+on its own, give each its own unit of work (one `TransactionalScope.run`
+per item) and coordinate across them above the DI layer (outbox, saga).
 
-This is also the first place in the examples tree where auto-proxy is
-shown on an **EVENT-scoped** bean (REQUEST-scoped auto-proxy was already
-shown in this cookbook's repository pattern). The same processor
-mechanism handles both. Subscribing at `EventEndingEvent` rather than
-`EventStartedEvent` is deliberate: the body of `runInEventScope` runs
-between those two events, so reads of `CurrentOrder.orderId()` must
-happen *after* the body has populated it.
+## Async handlers already have their own unit of work
 
-## Async handlers + explicit REQUEST scope
+`@EventHandler(async = true)` runs on Tiko's framework executor, and each
+invocation runs inside its **own fresh EVENT unit** (see
+[events.md](../events.md#async-handlers-own-their-unit-of-work)). Its
+EVENT-scoped `Connection` and `TransactionContext` are therefore that
+invocation's own — a separate connection and transaction from the
+publisher's.
 
-`@EventHandler(async = true)` runs on Tiko's framework executor — a
-different thread, no enclosing REQUEST scope. If the async handler
-needs to touch the DB, it opens its own:
-
-```java
-@EventHandler(async = true)
-public void onSomeEvent(SomeEvent e) {
-    TransactionalScope.run(container, () -> {
-        // persistence work — gets its own connection + transaction
-        return null;
-    });
-}
-```
-
-No auto-elevation. This matches Tiko's "no runtime magic" positioning:
-the transaction boundary is visible at the call site, not implied by
-ambient state.
+Don't wrap the handler body in `TransactionalScope.run(...)`: that opens
+a second unit inside the handler's, and EVENT scopes don't nest. Commit
+through the unit's `TransactionContext` before the handler returns; if it
+doesn't, `TransactionContext.close()` rolls back when the unit tears down.
 
 ## Simplifications this cookbook makes
 
@@ -300,6 +279,6 @@ teaches, the recommended pointers are:
   recommendation.
 
 Whatever you pick, the wiring stays the same shape: a SINGLETON
-`@Produces` factory for the connection/session source, a REQUEST-scoped
-`@Produces` for the per-request handle, an auto-proxied interface
+`@Produces` factory for the connection/session source, an EVENT-scoped
+`@Produces` for the per-unit handle, an auto-proxied interface
 injected into SINGLETON repositories.

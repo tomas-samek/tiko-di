@@ -26,7 +26,7 @@ import io.tiko.runtime.Tiko;
  * - Application logic
  *   - Each unit of work gets its own EVENT-scoped context, torn down on exit
  *   - Events published and handled
- *   - Lifecycle events track request/event timing
+ *   - Lifecycle events track each unit of work's timing
  * - Container shutdown
  *   - ApplicationEndingEvent published
  *   - @PreDestroy methods called in reverse order

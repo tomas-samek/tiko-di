@@ -10,7 +10,7 @@ import javax.tools.Diagnostic;
 
 /**
  * Validates that every Kafka bridge component is {@code @Component(scope = Scope.SINGLETON)}.
- * Kafka consumer threads run outside any request/event scope; resolving a non-singleton
+ * Kafka consumer threads run outside any unit of work (EVENT scope); resolving a non-singleton
  * bridge component would fail at runtime.
  */
 public final class SingletonBridgeValidator {
@@ -25,7 +25,7 @@ public final class SingletonBridgeValidator {
                 messager.printMessage(
                         Diagnostic.Kind.ERROR,
                         "@KafkaSource bridge component must be declared @Component(scope = Scope.SINGLETON). "
-                                + "Kafka consumer threads run outside any request/event scope.",
+                                + "Kafka consumer threads run outside any unit of work (EVENT scope).",
                         s.method());
                 ok = false;
             }

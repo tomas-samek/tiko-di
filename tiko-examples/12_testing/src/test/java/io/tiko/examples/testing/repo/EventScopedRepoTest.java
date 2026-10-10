@@ -8,14 +8,14 @@ import io.tiko.test.TikoTest;
 import org.junit.jupiter.api.Test;
 
 @TikoTest
-class RequestScopedRepoTest {
+class EventScopedRepoTest {
 
     // EVENT-scoped beans resolve inside the scope wrapper, not as method parameters:
     // JUnit resolves parameters before the @EventScopeTest frame opens, and resolving an
     // EVENT bean outside a unit of work throws NoActiveEventScopeException (#302).
     @Test
     @EventScopeTest
-    void requestScopedRepoResolvableInsideScopeWrapper(Container container) {
+    void eventScopedRepoResolvableInsideScopeWrapper(Container container) {
         var repo = container.get(AccountRepository.class);
         assertThat(repo.findCustomerName("alice")).isEqualTo("Customer-alice");
     }

@@ -31,7 +31,7 @@ mvn -pl tiko-examples/02_config exec:java \
 
 ## 03 — Events &nbsp;<sub>[`03_events/`](./03_events)</sub>
 
-Lifecycle observability via `ApplicationStarted/Ending` + `Request/EventStarted/Ending` events, plus declarative event chains with `@EventTrigger` (return-as-payload, guards, `spread = true`) and full origin tracking through the `Event<?>` wrapper. `async = true` triggers are shown in example 07.
+Lifecycle observability via `ApplicationStarted/Ending` + `EventStarted/Ending` events, plus declarative event chains with `@EventTrigger` (return-as-payload, guards, `spread = true`) and full origin tracking through the `Event<?>` wrapper. `async = true` triggers are shown in example 07.
 
 ```
 mvn -pl tiko-examples/03_events exec:java \
@@ -84,11 +84,11 @@ See the example's own README for the multi-process run sequence.
 
 ## 09 — HTTP / Javalin integration &nbsp;<sub>[`09_http_javalin/`](./09_http_javalin)</sub>
 
-How Tiko lives behind an existing HTTP server. `TikoJavalin.scoped` middleware opens a REQUEST scope around each route so REQUEST-scoped beans (`HttpRequestContext`) are valid for the handler's lifetime. The sync request→response path is independent of the event bus; three subscribers demonstrate sync vs. async side effects.
+How Tiko lives behind an existing HTTP server. `TikoJavalin.scoped` middleware opens one unit of work (EVENT scope) around each route, so EVENT-scoped beans (`RequestId`) are valid for the handler's lifetime. The sync request→response path is independent of the event bus; three subscribers demonstrate sync vs. async side effects.
 
 ## 10 — Persistence (raw JDBC + HikariCP) &nbsp;<sub>[`10_persistence_jdbc/`](./10_persistence_jdbc)</sub>
 
-Persistence cookbook as a **test-only example** — no `Main` to `exec:java`; the pattern is exercised by `BatchEntryIT` and `HttpEntryIT` under `src/test/java`. REQUEST-scoped JDBC transactions wrap both an HTTP entry point and a batch flow; the same `OrderRepository` is reused across both. Demonstrates the auto-proxy mechanism on a JDK interface (`java.sql.Connection`) and the practical REQUEST-vs-EVENT scope distinction. Run via `mvn -pl tiko-examples/10_persistence_jdbc verify`. See [docs/cookbooks/persistence.md](../docs/cookbooks/persistence.md).
+Persistence cookbook as a **test-only example** — no `Main` to `exec:java`; the pattern is exercised by `BatchEntryIT` and `HttpEntryIT` under `src/test/java`. One JDBC transaction per unit of work (EVENT scope) wraps both an HTTP entry point and a batch flow; the same `OrderRepository` is reused across both. Demonstrates the auto-proxy mechanism on a JDK interface (`java.sql.Connection`). Run via `mvn -pl tiko-examples/10_persistence_jdbc verify`. See [docs/cookbooks/persistence.md](../docs/cookbooks/persistence.md).
 
 ## 11 — Custom logger &nbsp;<sub>[`11_custom_logger/`](./11_custom_logger)</sub>
 
@@ -102,7 +102,7 @@ Note this example uses `exec:exec` (forks a JVM), not `exec:java`. `System.Logge
 
 ## 12 — Testing &nbsp;<sub>[`12_testing/`](./12_testing)</sub>
 
-Runnable demo of the `tiko-test` JUnit 5 extension: `@TikoTest` boots a container around each test (`PER_METHOD` default, `PER_CLASS` opt-in), parameters are resolved via JUnit's `ParameterResolver` (no field injection), `RecordingEventBus` provides fluent publish-assertions including `awaitAsyncDispatch(Duration)` for `@EventHandler(async = true)`, and `@RequestScopeTest` / `@EventScopeTest` wrap the test body in container scopes. See the example's own README for the per-file feature map and the full guide at [docs/testing.md](../docs/testing.md).
+Runnable demo of the `tiko-test` JUnit 5 extension: `@TikoTest` boots a container around each test (`PER_METHOD` default, `PER_CLASS` opt-in), parameters are resolved via JUnit's `ParameterResolver` (no field injection), `RecordingEventBus` provides fluent publish-assertions including `awaitAsyncDispatch(Duration)` for `@EventHandler(async = true)`, and `@EventScopeTest` wraps the test body in a unit of work. See the example's own README for the per-file feature map and the full guide at [docs/testing.md](../docs/testing.md).
 
 ```
 mvn -pl tiko-examples/12_testing -am test
