@@ -5,7 +5,7 @@ Each invariant is a load-bearing rule for tiko-di's architecture — a constrain
 violated, erodes the compile-time-safety pitch, breaks the public contract, or introduces a
 class of runtime surprise the framework exists to prevent. The registry is independently
 citable: contributors, CLAUDE.md, and agent skills reference invariants by ID (ARCH-1 …
-ARCH-15). It is a living document — `tiko-architect` proposes additions in its step-5
+ARCH-16). It is a living document — `tiko-architect` proposes additions in its step-5
 self-audit whenever a release introduces a new rule that should be codified.
 
 ---
@@ -160,9 +160,13 @@ slf4j/log4j2 via a `LoggerFinder`. A direct logging-framework dep in `tiko-runti
 
 **Anchor.** CLAUDE.md "Logging in Framework Code".
 
+**Exception.** `tiko-mcp` writes MCP JSON-RPC messages to `System.out` (`McpStdioBridge`): stdout
+is the MCP stdio protocol channel, not log output. Its logging still goes through
+`System.Logger`. Recorded at the 0.6.0 gate.
+
 **Violation looks like.** An `import org.slf4j.*` or `import org.apache.logging.*` in any
 `tiko-api` or `tiko-runtime` source file; or a `System.err.println` / `printStackTrace` in
-framework or generated code.
+framework or generated code; or `System.out` used for anything other than a protocol channel.
 
 ---
 
@@ -195,8 +199,14 @@ exclude them. Consistency via the shared helper prevents per-generator drift.
 
 **Anchor.** CLAUDE.md "Generated Code Markings".
 
+**Exception.** `tiko-kafka-processor`'s `KafkaTransportBootstrapGenerator` builds the same
+`@Generated(value = <generator FQN>)` annotation inline: the module deliberately has no compile
+dependency on `tiko-processor`, where the helper lives (the two processors run side by side on
+the user's annotation-processor path). Any other processor module in the same position follows
+the same shape. Recorded at the 0.6.0 gate.
+
 **Violation looks like.** A new processor-emitted top-level class that lacks the `@Generated`
-annotation; or a generator that writes its own ad-hoc `@Generated` string instead of
+annotation; or a `tiko-processor` generator that writes its own ad-hoc `@Generated` instead of
 delegating to `GeneratorAnnotations.generatedBy(...)`.
 
 ---
@@ -213,9 +223,16 @@ new "guard" feature.
 
 **Anchor.** Memory `feedback_benevolent_defaults`.
 
+**Not in scope.** Security fixes recorded as SEC-* entries in
+[`security-model.md`](./security-model.md), validation of the user's own input (a malformed
+value, a misspelled key, a repeated YAML key) and correctness diagnostics (a missing dependency,
+a non-public hook) may fail by default — they are not restriction features. Their behaviour
+changes belong in the release notes with a migration line. Clarified at the 0.6.0 gate, where
+#497, #464, #495, #498 and #114 tightened defaults under this reading.
+
 **Violation looks like.** A new restriction feature that is on-by-default and breaks existing
-tiko users who have not opted in; or a compile error that fires without any user-visible
-configuration to disable it.
+tiko users who have not opted in; or a compile error from a restriction feature that fires
+without any user-visible configuration to disable it.
 
 ---
 
@@ -292,3 +309,30 @@ its unit without violating either.
 **Violation looks like.** Async dispatch reusing the publisher's open frame; a detached path that
 fails to restore the caller's frame in a `finally`; or `runInEventScope` made re-entrant or
 silently nesting.
+
+---
+
+### ARCH-16 — cross-module discovery goes through `META-INF/services`, not single-copy resources
+
+**Statement.** When the runtime must find something every module contributes (`@Configuration`
+binders, transports), each module lists it in a `META-INF/services/<interface>` file and the
+runtime discovers it with `ServiceLoader`. A fixed-name `META-INF/tiko/` resource that several
+jars ship is not a discovery mechanism the runtime relies on to find every module.
+
+**Rationale.** A shaded fat jar keeps one copy of each same-named resource, while the standard
+`ServicesResourceTransformer` merges `META-INF/services` files — and a Kafka service already
+needs it for `TransportBootstrap`. #531: an app's own `configs.txt` replaced `tiko-kafka`'s in a
+fat jar and startup failed on "unknown key 'tiko.kafka'"; binders moved to
+`META-INF/services/io.tiko.config.ConfigBinder`. `ServiceLoader` also replaces a reflective
+registry lookup (ARCH-7).
+
+**Anchor.** `ConfigBinding#bind` javadoc (`tiko-runtime`); `ConfigBinderServicesWriter`
+(`tiko-processor`); the `TransportBootstrap` SPI.
+
+**Known gap.** Multi-module containers are still found through per-module
+`META-INF/tiko/container.properties` / `components.txt`; a multi-module fat jar keeps one
+module (#537).
+
+**Violation looks like.** A new module-shipped `META-INF/tiko/` resource that the runtime reads
+from every jar to find each module's contribution; or a library module shipping a
+`META-INF/tiko/` file that collides with the application's own in a fat jar.
