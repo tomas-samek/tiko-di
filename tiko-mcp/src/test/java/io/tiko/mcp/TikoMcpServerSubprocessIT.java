@@ -59,7 +59,7 @@ class TikoMcpServerSubprocessIT {
                 """, StandardCharsets.UTF_8);
 
         var pb = new ProcessBuilder(
-                System.getProperty("java.home") + "/bin/java",
+                Path.of(System.getProperty("java.home"), "bin", "java").toString(),
                 "-jar",
                 jar.toAbsolutePath().toString(),
                 projectDir.toAbsolutePath().toString());

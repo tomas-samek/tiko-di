@@ -10,6 +10,7 @@ import io.tiko.examples.persistence.infra.TransactionalScope;
 import io.tiko.runtime.Tiko;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Instant;
@@ -105,10 +106,22 @@ class OrderRepositoryTest {
 
         try (Connection c =
                         DriverManager.getConnection("jdbc:h2:mem:tiko;DB_CLOSE_DELAY=-1;MODE=PostgreSQL", "sa", "");
-                Statement st = c.createStatement();
-                var rs = st.executeQuery("SELECT customer FROM orders WHERE id = '" + id + "'")) {
+                var st = selectById(c, "SELECT customer FROM orders WHERE id = ?", id);
+                var rs = st.executeQuery()) {
             assertThat(rs.next()).isTrue();
             assertThat(rs.getString(1)).isEqualTo("bob");
+        }
+    }
+
+    /** Looks a row up by id with a bound parameter — test code gets copied, so it never concatenates SQL (#523). */
+    private static PreparedStatement selectById(Connection c, String sql, Object id) throws SQLException {
+        var st = c.prepareStatement(sql);
+        try {
+            st.setObject(1, id);
+            return st;
+        } catch (SQLException e) {
+            st.close();
+            throw e;
         }
     }
 }

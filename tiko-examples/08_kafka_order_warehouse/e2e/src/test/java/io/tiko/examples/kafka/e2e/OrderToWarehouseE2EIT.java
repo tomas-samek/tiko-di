@@ -44,6 +44,10 @@ import org.testcontainers.utility.DockerImageName;
 @Testcontainers(disabledWithoutDocker = true)
 class OrderToWarehouseE2EIT {
 
+    /** The running JVM's own launcher, by absolute path — never looked up on PATH (#523). */
+    private static final String JAVA =
+            Path.of(System.getProperty("java.home"), "bin", "java").toString();
+
     private static final Duration READY_TIMEOUT = Duration.ofSeconds(60);
     private static final Duration PROBE_TIMEOUT = Duration.ofSeconds(60);
 
@@ -119,7 +123,7 @@ class OrderToWarehouseE2EIT {
         var bootstrapServers = KAFKA.getBootstrapServers();
 
         // --- warehouse-service ---
-        var warehousePb = new ProcessBuilder("java", "-Dprobe.file=" + probeFile.toAbsolutePath(), "-jar", warehouseJar)
+        var warehousePb = new ProcessBuilder(JAVA, "-Dprobe.file=" + probeFile.toAbsolutePath(), "-jar", warehouseJar)
                 .redirectErrorStream(true);
         warehousePb.environment().put("KAFKA_BOOTSTRAP", bootstrapServers);
         warehouseProc = warehousePb.start();
@@ -134,7 +138,7 @@ class OrderToWarehouseE2EIT {
                 .untilTrue(warehouseReady);
 
         // --- order-service ---
-        var orderPb = new ProcessBuilder("java", "-jar", orderJar).redirectErrorStream(true);
+        var orderPb = new ProcessBuilder(JAVA, "-jar", orderJar).redirectErrorStream(true);
         orderPb.environment().put("KAFKA_BOOTSTRAP", bootstrapServers);
         orderProc = orderPb.start();
 

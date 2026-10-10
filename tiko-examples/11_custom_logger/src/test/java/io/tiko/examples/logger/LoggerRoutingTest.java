@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -27,7 +28,7 @@ class LoggerRoutingTest {
     @Test
     void frameworkWarningsFlowThroughLogback() throws Exception {
         var classpath = System.getProperty("java.class.path");
-        var javaBin = System.getProperty("java.home") + "/bin/java";
+        var javaBin = Path.of(System.getProperty("java.home"), "bin", "java").toString();
 
         var pb = new ProcessBuilder(javaBin, "-cp", classpath, Main.class.getName());
         pb.redirectErrorStream(true);
@@ -60,7 +61,7 @@ class LoggerRoutingTest {
         // #116: a teardown failure routes solely through DefaultErrorHandler — exactly one WARN
         // line, not the previous catch-site + ErrorHandler duplicate.
         var classpath = System.getProperty("java.class.path");
-        var javaBin = System.getProperty("java.home") + "/bin/java";
+        var javaBin = Path.of(System.getProperty("java.home"), "bin", "java").toString();
 
         var pb = new ProcessBuilder(javaBin, "-cp", classpath, Main.class.getName());
         pb.redirectErrorStream(true);
