@@ -1254,7 +1254,11 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         // List the binders as ConfigBinder services (#531) and write the configs.txt manifest
         List<io.tiko.processor.config.ConfigurationModel> configs = context.getConfigurations();
         new io.tiko.processor.config.ConfigBinderServicesWriter(processingEnv.getFiler()).write(configs);
-        new io.tiko.processor.config.ConfigManifestWriter(processingEnv.getFiler()).write(configs);
+        // Test-compile output (TestContainerImpl_) keeps only the fixed-name manifest (#537).
+        String moduleRoot = containerClassName.startsWith("TikoContainerImpl_")
+                ? io.tiko.processor.generator.ContainerGenerator.moduleRoot(containerClassName)
+                : null;
+        new io.tiko.processor.config.ConfigManifestWriter(processingEnv.getFiler(), moduleRoot).write(configs);
 
         // Emit machine-readable topology.json for AI agents / IDE tooling / doc generators
         // when the build has anything worth describing. Gated to avoid empty-file noise.

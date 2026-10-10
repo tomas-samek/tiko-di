@@ -246,10 +246,7 @@ public final class AggregatingContainer implements Container {
         }
 
         // Phase 2: instantiate per-module containers from descriptor resources.
-        Enumeration<URL> resources = classLoader.getResources(descriptorName);
-
-        while (resources.hasMoreElements()) {
-            URL resourceUrl = resources.nextElement();
+        for (URL resourceUrl : ModuleDescriptors.find(descriptorName, classLoader)) {
             processContainerResource(resourceUrl, classLoader, containersByImplName);
         }
 
@@ -259,9 +256,7 @@ public final class AggregatingContainer implements Container {
         // routing covers both sides — shadow overrides registered in Phase 1 ensure the test
         // container's components win for shadowed keys.
         if (!DEFAULT_DESCRIPTOR.equals(descriptorName)) {
-            Enumeration<URL> mainResources = classLoader.getResources(DEFAULT_DESCRIPTOR);
-            while (mainResources.hasMoreElements()) {
-                URL resourceUrl = mainResources.nextElement();
+            for (URL resourceUrl : ModuleDescriptors.find(DEFAULT_DESCRIPTOR, classLoader)) {
                 processContainerResource(resourceUrl, classLoader, containersByImplName);
             }
         }

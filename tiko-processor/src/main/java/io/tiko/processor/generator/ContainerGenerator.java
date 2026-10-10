@@ -86,7 +86,7 @@ public final class ContainerGenerator {
             // container itself, its descriptor, components list, and the shadows file.
             var testSideComponents = context.getAllActiveComponents();
             generateOne(containerClassName, testSideComponents, TEST_DESCRIPTOR, "");
-            generateComponentsListFile(testSideComponents);
+            generateComponentsListFile(testSideComponents, "META-INF/tiko/components.txt");
             writeTestShadowsFile(containerClassName);
             return;
         }
@@ -99,7 +99,8 @@ public final class ContainerGenerator {
         // prod and test together to a single processing round.
         var mainComponents = context.getActiveMainComponents();
         generateOne(containerClassName, mainComponents, MAIN_DESCRIPTOR, "");
-        generateComponentsListFile(mainComponents);
+        generateComponentsListFile(mainComponents, "META-INF/tiko/components.txt");
+        generateModule(containerClassName, mainComponents);
 
         if (context.hasTestComponents()) {
             var testSideComponents = context.getAllActiveComponents();
@@ -110,6 +111,49 @@ public final class ContainerGenerator {
             }
             generateOne(testContainerClassName, testSideComponents, TEST_DESCRIPTOR, "Test_");
             writeTestShadowsFile(testContainerClassName);
+        }
+    }
+
+    /**
+     * The classpath directory of a main container's per-module descriptors (#537), e.g.
+     * {@code META-INF/tiko/modules/TikoContainerImpl_33c9eab1/}. The container name carries the
+     * module's hash, so the path is unique per module and survives a shaded fat jar's merge.
+     */
+    public static String moduleRoot(String containerClassName) {
+        return "META-INF/tiko/modules/" + containerClassName + "/";
+    }
+
+    /**
+     * Writes the main container's descriptors under {@link #moduleRoot} too, and announces the
+     * module as a {@code io.tiko.TikoModule} service: a generated
+     * {@code TikoModule_<hash>} returning that root, listed in
+     * {@code META-INF/services/io.tiko.TikoModule}. A shaded fat jar merges services files
+     * but keeps one copy of the fixed-name descriptors, so the runtime finds every module through
+     * the services (#537, ARCH-16). The fixed-name copies stay for modules read by older runtimes.
+     */
+    private void generateModule(String containerClassName, List<ComponentModel> components) throws IOException {
+        String root = moduleRoot(containerClassName);
+        writeContainerDescriptor(root + "container.properties", containerClassName);
+        generateComponentsListFile(components, root + "components.txt");
+
+        String moduleClassName = "TikoModule_" + containerClassName.substring(containerClassName.lastIndexOf('_') + 1);
+        TypeSpec module = TypeSpec.classBuilder(moduleClassName)
+                .addAnnotation(GeneratorAnnotations.generatedBy(ContainerGenerator.class))
+                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                .addSuperinterface(ClassName.get("io.tiko", "TikoModule"))
+                .addMethod(MethodSpec.methodBuilder("descriptorRoot")
+                        .addAnnotation(Override.class)
+                        .addModifiers(Modifier.PUBLIC)
+                        .returns(String.class)
+                        .addStatement("return $S", root)
+                        .build())
+                .build();
+        JavaFile.builder(GENERATED_PACKAGE, module).build().writeTo(context.getFiler());
+
+        try (var writer = context.getFiler()
+                .createResource(javax.tools.StandardLocation.CLASS_OUTPUT, "", "META-INF/services/io.tiko.TikoModule")
+                .openWriter()) {
+            writer.write(GENERATED_PACKAGE + "." + moduleClassName + "\n");
         }
     }
 
@@ -2156,9 +2200,9 @@ public final class ContainerGenerator {
         method.endControlFlow(); // if non-null
     }
 
-    private void generateComponentsListFile(List<ComponentModel> components) throws IOException {
+    private void generateComponentsListFile(List<ComponentModel> components, String resourcePath) throws IOException {
         try (var writer = context.getFiler()
-                .createResource(javax.tools.StandardLocation.CLASS_OUTPUT, "", "META-INF/tiko/components.txt")
+                .createResource(javax.tools.StandardLocation.CLASS_OUTPUT, "", resourcePath)
                 .openWriter()) {
 
             for (ComponentModel component : components) {
