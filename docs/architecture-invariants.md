@@ -327,11 +327,13 @@ fat jar and startup failed on "unknown key 'tiko.kafka'"; binders moved to
 registry lookup (ARCH-7).
 
 **Anchor.** `ConfigBinding#bind` javadoc (`tiko-runtime`); `ConfigBinderServicesWriter`
-(`tiko-processor`); the `TransportBootstrap` SPI.
+(`tiko-processor`); the `TransportBootstrap` and `TikoModule` SPIs (`tiko-api`);
+`ModuleDescriptors` (`tiko-runtime`).
 
-**Known gap.** Multi-module containers are still found through per-module
-`META-INF/tiko/container.properties` / `components.txt`; a multi-module fat jar keeps one
-module (#537).
+Module containers follow it too (#537): each module's `container.properties`,
+`components.txt` and `configs.txt` also live under `META-INF/tiko/modules/<container>/`, and a
+generated `io.tiko.TikoModule` listed in `META-INF/services` points at them. The fixed-name
+copies remain only so modules built by an older processor keep booting.
 
 **Violation looks like.** A new module-shipped `META-INF/tiko/` resource that the runtime reads
 from every jar to find each module's contribution; or a library module shipping a
