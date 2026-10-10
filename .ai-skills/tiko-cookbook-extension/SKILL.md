@@ -150,8 +150,8 @@ public class JavalinFactory {
     private Javalin app;
 
     @Produces(scope = Scope.SINGLETON)
-    public Javalin javalin() {
-        this.app = Javalin.create();
+    public Javalin javalin(NoteRoutes notes) {
+        this.app = Javalin.create(cfg -> notes.register(cfg.routes));
         return app;
     }
 
@@ -161,7 +161,9 @@ public class JavalinFactory {
 ```
 
 Javalin isn't AutoCloseable in current versions → explicit `@PreDestroy`.
-Routes register in `Main`. Reference:
+Javalin 7 accepts routes only inside `Javalin.create(...)`, so each route group
+is a `@Component` with a `register(RoutesConfig)` method, passed in as a producer
+parameter. Reference:
 [`JavalinFactory.java`](../../tiko-examples/15_quickstart/src/main/java/io/tiko/examples/quickstart/JavalinFactory.java).
 
 ### Worked example 3 — Caffeine cache (canonical, see `docs/orchestrator-model.md` §3.4)

@@ -50,9 +50,10 @@ public final class Main {
             TicketHttpRoutes routes =
                     new TicketHttpRoutes(container.get(TicketService.class), container.getEventBus(), container);
 
-            Javalin app = Javalin.create();
-            app.post("/tickets", TikoJavalin.scoped(container, routes::handleCreate));
-            app.get("/tickets/{id}", TikoJavalin.scoped(container, routes::handleGet));
+            Javalin app = Javalin.create(cfg -> {
+                cfg.routes.post("/tickets", TikoJavalin.scoped(container, routes::handleCreate));
+                cfg.routes.get("/tickets/{id}", TikoJavalin.scoped(container, routes::handleGet));
+            });
 
             int port = portFromEnv();
             app.start(port);

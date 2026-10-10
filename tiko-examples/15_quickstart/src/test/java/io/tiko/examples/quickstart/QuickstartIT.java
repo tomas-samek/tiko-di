@@ -41,10 +41,7 @@ class QuickstartIT {
     @BeforeEach
     void setUp() {
         container = Tiko.create(ConfigSources.classpath("application.yml"));
-        var routes = new NoteRoutes(container.get(NoteRepository.class), container.getEventBus());
         app = container.get(Javalin.class);
-        app.post("/notes", routes::handleCreate);
-        app.get("/notes/{id}", routes::handleGet);
         app.start(0);
         port = app.port();
         client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();

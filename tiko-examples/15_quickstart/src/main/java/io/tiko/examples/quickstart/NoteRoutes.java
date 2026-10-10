@@ -1,25 +1,37 @@
 package io.tiko.examples.quickstart;
 
+import io.javalin.config.RoutesConfig;
 import io.javalin.http.Context;
 import io.tiko.EventBus;
+import io.tiko.Scope;
+import io.tiko.annotations.Component;
+import io.tiko.annotations.Inject;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Bridge between Javalin and the persistence + event-bus layers. Not a
- * {@code @Component}: it depends on {@link EventBus}, which Tiko exposes
- * off the {@link io.tiko.Container} rather than via DI. {@link Main}
- * constructs it once after container bootstrap.
+ * Bridge between Javalin and the persistence + event-bus layers. A plain
+ * component: its paths live next to their handlers in {@link #register}, which
+ * {@link JavalinFactory} calls inside {@code Javalin.create(...)} — Javalin 7
+ * accepts routes only there.
  */
-public final class NoteRoutes {
+@Component(scope = Scope.SINGLETON)
+public class NoteRoutes {
 
     private final NoteRepository repo;
     private final EventBus eventBus;
 
+    @Inject
     public NoteRoutes(NoteRepository repo, EventBus eventBus) {
         this.repo = repo;
         this.eventBus = eventBus;
+    }
+
+    /** Registers this group's paths. */
+    public void register(RoutesConfig routes) {
+        routes.post("/notes", this::handleCreate);
+        routes.get("/notes/{id}", this::handleGet);
     }
 
     public void handleCreate(Context ctx) {
