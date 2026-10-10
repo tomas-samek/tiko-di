@@ -44,6 +44,7 @@ Builder configSource(ConfigSource source)
 Builder errorHandler(ErrorHandler handler)
 <T> Builder override(Class<T> type, Supplier<? extends T> supplier)
 <T extends TransportBootstrap> Builder replaceTransport(Class<T> transport, Function<T, TransportBootstrap> replacement)
+Builder testWiring(boolean enabled)   // apply @TestComponent wiring; @TikoTest sets it
 TikoOptions build()
 
 // Config sources (io.tiko.config.ConfigSources)

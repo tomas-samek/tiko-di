@@ -128,13 +128,11 @@ in **tiko-api**; the in-memory implementation is in `tiko-runtime`. There is no 
 ### Module Dependencies (core chain)
 
 ```
-tiko-api (no dependencies)
-  ↑
-tiko-processor (depends on tiko-api, javapoet, auto-service)
-  ↑ (annotation processor path)
-tiko-runtime (depends on tiko-api; tiko-config optional)
-  ↑
-tiko-config (depends on tiko-api, snakeyaml)
+tiko-api            (no dependencies)
+├── tiko-processor  (tiko-api, javapoet, auto-service) — on the annotation-processor path
+├── tiko-config     (tiko-api, snakeyaml)
+└── tiko-runtime    (tiko-api; tiko-config as an OPTIONAL dependency — present only when the
+                     app uses @Configuration or tiko.* YAML keys)
 ```
 
 The Kafka pair mirrors the core split: `tiko-kafka` is the runtime (depends on
