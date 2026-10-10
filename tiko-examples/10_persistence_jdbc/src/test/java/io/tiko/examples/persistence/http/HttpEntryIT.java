@@ -43,19 +43,20 @@ class HttpEntryIT {
     void setUp() {
         container = Tiko.create(ConfigSources.classpath("application.yml"));
         var routes = new OrderHttpRoutes(container);
-        app = Javalin.create();
-        app.post(
-                "/orders",
-                ctx -> TransactionalScope.run(container, () -> {
-                    routes.handleCreate(ctx);
-                    return null;
-                }));
-        app.get(
-                "/orders/{id}",
-                ctx -> TransactionalScope.run(container, () -> {
-                    routes.handleGet(ctx);
-                    return null;
-                }));
+        app = Javalin.create(cfg -> {
+            cfg.routes.post(
+                    "/orders",
+                    ctx -> TransactionalScope.run(container, () -> {
+                        routes.handleCreate(ctx);
+                        return null;
+                    }));
+            cfg.routes.get(
+                    "/orders/{id}",
+                    ctx -> TransactionalScope.run(container, () -> {
+                        routes.handleGet(ctx);
+                        return null;
+                    }));
+        });
         app.start(0);
         port = app.port();
         client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();

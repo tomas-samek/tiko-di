@@ -86,7 +86,7 @@
         <!-- Testcontainers 1.x pulls commons-compress 1.24.0 (GHSA-4265-ccf5-phj5,
              GHSA-4g9r-vxhx-9pgx); 1.26.0+ fixes both (#505). -->
         <commons-compress.version>1.28.0</commons-compress.version>
-        <javalin.version>6.7.0</javalin.version>
+        <javalin.version>7.2.3</javalin.version>
         <hikari.version>6.2.1</hikari.version>
         <h2.version>2.3.232</h2.version>
         <mcp-sdk.version>2.0.1</mcp-sdk.version>

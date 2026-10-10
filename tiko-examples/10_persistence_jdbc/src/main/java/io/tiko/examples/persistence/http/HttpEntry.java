@@ -20,19 +20,20 @@ public final class HttpEntry {
         Container container = Tiko.create(ConfigSources.classpath("application.yml"));
         var routes = new OrderHttpRoutes(container);
 
-        Javalin app = Javalin.create();
-        app.post(
-                "/orders",
-                ctx -> TransactionalScope.run(container, () -> {
-                    routes.handleCreate(ctx);
-                    return null;
-                }));
-        app.get(
-                "/orders/{id}",
-                ctx -> TransactionalScope.run(container, () -> {
-                    routes.handleGet(ctx);
-                    return null;
-                }));
+        Javalin app = Javalin.create(cfg -> {
+            cfg.routes.post(
+                    "/orders",
+                    ctx -> TransactionalScope.run(container, () -> {
+                        routes.handleCreate(ctx);
+                        return null;
+                    }));
+            cfg.routes.get(
+                    "/orders/{id}",
+                    ctx -> TransactionalScope.run(container, () -> {
+                        routes.handleGet(ctx);
+                        return null;
+                    }));
+        });
         app.start(portFromEnv());
 
         Runtime.getRuntime()

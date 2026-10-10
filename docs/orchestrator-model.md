@@ -58,9 +58,9 @@ my-service/
 │   ├── ThingRepository.java           (raw library API behind an interface)
 │   ├── ThingCreated.java              (domain event record)
 │   ├── ThingAuditor.java              (@EventHandler(ThingCreated))
-│   ├── JavalinFactory.java            (@Produces Javalin)
-│   ├── ThingRoutes.java               (plain route methods)
-│   └── Main.java                      (Tiko.create + register routes + start)
+│   ├── JavalinFactory.java            (@Produces Javalin; route groups register in create)
+│   ├── ThingRoutes.java               (@Component: register(RoutesConfig) + handler methods)
+│   └── Main.java                      (Tiko.create + start)
 └── src/main/resources/
     ├── application.yml                (typed-config binding)
     └── schema.sql                     (or Flyway migrations)
@@ -73,7 +73,7 @@ Conventions:
 - `@Produces` factories live next to the code that consumes them. There is
   no `infra` ceremony unless the module is big enough that scrolling hurts.
 - `Main.java` calls `Tiko.create(ConfigSources.classpath("application.yml"))`,
-  resolves the produced server, registers routes, calls `.start(port)`.
+  resolves the produced server (its routes are already registered) and calls `.start(port)`.
   Shutdown hook calls `container.shutdown()`.
 
 ---
@@ -155,7 +155,7 @@ public class FlywayMigrator {
 
 `ApplicationStartedEvent` fires synchronously during `Tiko.create(...)` after
 all `SINGLETON`s are wired and before the call returns. Migrations therefore
-complete before `Main` registers any HTTP route.
+complete before `Main` starts the HTTP server.
 
 The same shape works for ad-hoc DDL — see
 [`SchemaInitializer.java`](../tiko-examples/15_quickstart/src/main/java/io/tiko/examples/quickstart/SchemaInitializer.java),
@@ -209,14 +209,18 @@ endpoint (see §6).
 
 **When:** you need an HTTP layer.
 
+Javalin (7+) accepts routes only inside `Javalin.create(config -> ...)`, so
+each route group is a `@Component` that registers its own paths, and the
+producer takes it as a parameter:
+
 ```java
 @Component(scope = Scope.SINGLETON)
 public class JavalinFactory {
     private Javalin app;
 
     @Produces(scope = Scope.SINGLETON)
-    public Javalin javalin() {
-        this.app = Javalin.create();
+    public Javalin javalin(NoteRoutes notes) {
+        this.app = Javalin.create(cfg -> notes.register(cfg.routes));
         return app;
     }
 
@@ -225,27 +229,51 @@ public class JavalinFactory {
         if (app != null) app.stop();
     }
 }
+
+@Component(scope = Scope.SINGLETON)
+public class NoteRoutes {
+    private final NoteRepository repo;
+    private final EventBus eventBus;
+
+    @Inject
+    public NoteRoutes(NoteRepository repo, EventBus eventBus) {
+        this.repo = repo;
+        this.eventBus = eventBus;
+    }
+
+    public void register(RoutesConfig routes) {
+        routes.post("/notes", this::handleCreate);
+        routes.get("/notes/{id}", this::handleGet);
+    }
+
+    public void handleCreate(Context ctx) { /* ... */ }
+
+    public void handleGet(Context ctx) { /* ... */ }
+}
 ```
 
-Routes are registered in `Main` after `Tiko.create(...)` returns — see
-[`Main.java`](../tiko-examples/15_quickstart/src/main/java/io/tiko/examples/quickstart/Main.java).
-Route handlers go in a plain class
-([`NoteRoutes.java`](../tiko-examples/15_quickstart/src/main/java/io/tiko/examples/quickstart/NoteRoutes.java))
-that is **not** a `@Component` — it depends on `EventBus`, which tiko
-exposes off the `Container` rather than via DI.
+A second route group is one more producer parameter and one more
+`register(cfg.routes)` call. `Main` only starts the server:
+`container.get(Javalin.class).start(port)` — see
+[`Main.java`](../tiko-examples/15_quickstart/src/main/java/io/tiko/examples/quickstart/Main.java),
+[`JavalinFactory.java`](../tiko-examples/15_quickstart/src/main/java/io/tiko/examples/quickstart/JavalinFactory.java)
+and [`NoteRoutes.java`](../tiko-examples/15_quickstart/src/main/java/io/tiko/examples/quickstart/NoteRoutes.java).
 
 #### Redirect: `@RestController` → register the HTTP layer via `@Produces`
 
-There is no annotation-driven dispatch. Routes are plain methods you wire to
-URL patterns in `Main`. No reflection, no scanning, no surprise endpoints.
+There is no annotation-driven dispatch. Routes are plain methods a route
+group wires to URL patterns in its `register(RoutesConfig)`. No reflection,
+no scanning, no surprise endpoints.
 
 #### Redirect: Spring Actuator endpoints → routes on your HTTP layer
 
-Tiko ships no `/actuator/*`. Write the route you want and have it call a
-plain `HealthChecker` `@Component`:
+Tiko ships no `/actuator/*`. Write the route you want in a route group and
+have it call a plain `HealthChecker` `@Component` injected into that group:
 
 ```java
-app.get("/health", ctx -> ctx.json(container.get(HealthChecker.class).snapshot()));
+public void register(RoutesConfig routes) {
+    routes.get("/health", ctx -> ctx.json(healthChecker.snapshot()));
+}
 ```
 
 Visible, debuggable, and the response shape is yours.
@@ -496,8 +524,8 @@ until the scope-handoff story stabilizes.
 ### Pragmatic starting point
 
 ```java
-// In Main, before app.start(port):
-app.before(ctx -> {
+// In a route group's register(RoutesConfig routes), with the other paths:
+routes.before(ctx -> {
     var token = ctx.header("Authorization");
     if (token == null || !validate(token)) {
         ctx.status(401).result("unauthorized");

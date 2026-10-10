@@ -197,10 +197,10 @@ across transports. The batch entry uses the same `run(...)`.
 ## HTTP single-request flow
 
 ```java
-app.post("/orders", ctx -> TransactionalScope.run(container, () -> {
+Javalin app = Javalin.create(cfg -> cfg.routes.post("/orders", ctx -> TransactionalScope.run(container, () -> {
     routes.handleCreate(ctx);
     return null;
-}));
+})));
 ```
 
 One HTTP request = one REQUEST scope = one transaction. REQUEST and

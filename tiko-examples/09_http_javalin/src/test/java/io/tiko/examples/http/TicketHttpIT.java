@@ -35,9 +35,10 @@ class TicketHttpIT {
     void setUp() {
         container = Tiko.create();
         var routes = new TicketHttpRoutes(container.get(TicketService.class), container.getEventBus(), container);
-        app = Javalin.create();
-        app.post("/tickets", TikoJavalin.scoped(container, routes::handleCreate));
-        app.get("/tickets/{id}", TikoJavalin.scoped(container, routes::handleGet));
+        app = Javalin.create(cfg -> {
+            cfg.routes.post("/tickets", TikoJavalin.scoped(container, routes::handleCreate));
+            cfg.routes.get("/tickets/{id}", TikoJavalin.scoped(container, routes::handleGet));
+        });
         app.start(0); // 0 = OS picks a free port
         port = app.port();
         client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();

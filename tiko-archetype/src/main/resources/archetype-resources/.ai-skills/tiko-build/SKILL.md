@@ -68,22 +68,51 @@ service/
 │   ├── <Thing>Repository.java         # raw library API
 │   ├── <Thing>Created.java            # domain event record
 │   ├── <Thing>Auditor.java            # @EventHandler(<Thing>Created)
-│   ├── <Thing>Routes.java             # plain route methods (not a @Component)
-│   └── Main.java                      # Tiko.create + register routes + start
+│   ├── <Thing>Routes.java             # @Component: register(RoutesConfig) + handler methods
+│   └── Main.java                      # Tiko.create + start
 ├── src/main/resources/
 │   ├── application.yml                # typed-config binding
 │   └── schema.sql                     # if applicable
 └── src/test/java/...
 ```
 
-Bootstrap pattern (`Main.java`):
+Bootstrap pattern (`Main.java`) — routes are already registered by the
+`@Produces Javalin` factory, so `Main` only starts the server:
 ```java
 Container container = Tiko.create(ConfigSources.classpath("application.yml"));
 Runtime.getRuntime().addShutdownHook(new Thread(container::shutdown));
-var routes = new ThingRoutes(container.get(ThingRepository.class), container.getEventBus());
-Javalin app = container.get(Javalin.class);
-app.post("/things", routes::handleCreate);
-app.start(container.get(AppConfig.class).server().port());
+container.get(Javalin.class).start(container.get(AppConfig.class).server().port());
+```
+
+HTTP routes (Javalin 7 accepts them only inside `Javalin.create(config -> ...)`):
+each route group is a `@Component` with a `register(RoutesConfig)` method, and
+the factory takes it as a parameter.
+```java
+@Component(scope = Scope.SINGLETON)
+public class ThingRoutes {
+    @Inject
+    public ThingRoutes(ThingRepository repo, EventBus eventBus) { /* store */ }
+
+    public void register(RoutesConfig routes) {
+        routes.post("/things", this::handleCreate);
+    }
+
+    public void handleCreate(Context ctx) { /* ... */ }
+}
+
+@Component(scope = Scope.SINGLETON)
+public class JavalinFactory {
+    private Javalin app;
+
+    @Produces(scope = Scope.SINGLETON)
+    public Javalin javalin(ThingRoutes things) {
+        this.app = Javalin.create(cfg -> things.register(cfg.routes));
+        return app;
+    }
+
+    @PreDestroy
+    public void shutdown() { if (app != null) app.stop(); }
+}
 ```
 
 Reference shape:
@@ -111,7 +140,7 @@ Every recipe = one factory class. Construction shape + lifecycle is enough.
 | Schema migrations | Flyway | `@EventHandler(ApplicationStartedEvent)` calling `Flyway.configure().dataSource(ds).load().migrate()`. |
 | Typed query DSL | jOOQ | `@Produces DSLContext` via `DSL.using(ds, dialect)`. No lifecycle. |
 | In-process cache | Caffeine | `@Produces Cache<K,V>` via `Caffeine.newBuilder()...build()`. Named for qualifier. |
-| HTTP layer | Javalin | `@Produces Javalin` + `@PreDestroy app.stop()`. Routes registered in `Main`. |
+| HTTP layer | Javalin | `@Produces Javalin` taking each route-group `@Component` as a parameter: `Javalin.create(cfg -> things.register(cfg.routes))` + `@PreDestroy app.stop()`. |
 | Templates | FreeMarker | `@Produces freemarker.template.Configuration`. No lifecycle. |
 | SDK client | any | `@Produces ClientType`. Add `@PreDestroy` if not `AutoCloseable`. |
 | Messaging (Kafka) | tiko-kafka | `@KafkaSource`/`@KafkaSink` bridges — **not** a `@Produces` recipe. Write the shape in [`reference/kafka.md`](reference/kafka.md), not a "void consumer". |

@@ -46,8 +46,8 @@ the skill changes, the corresponding file here changes too, and vice versa.
 | [`DataSourceFactory.java`](src/main/java/io/tiko/examples/quickstart/DataSourceFactory.java) | HikariCP `DataSource` via `@Produces` |
 | [`SchemaInitializer.java`](src/main/java/io/tiko/examples/quickstart/SchemaInitializer.java) | Flyway-style migration via `@EventHandler(ApplicationStartedEvent)` |
 | [`NoteRepository.java`](src/main/java/io/tiko/examples/quickstart/NoteRepository.java) | Raw JDBC against an injected `DataSource` — no wrapper |
-| [`JavalinFactory.java`](src/main/java/io/tiko/examples/quickstart/JavalinFactory.java) | HTTP layer via `@Produces` (replaces `@RestController`); `@PreDestroy` lifecycle |
-| [`NoteRoutes.java`](src/main/java/io/tiko/examples/quickstart/NoteRoutes.java) | Plain route methods, no annotation-driven dispatch |
+| [`JavalinFactory.java`](src/main/java/io/tiko/examples/quickstart/JavalinFactory.java) | HTTP layer via `@Produces` (replaces `@RestController`); route groups register inside `Javalin.create`; `@PreDestroy` lifecycle |
+| [`NoteRoutes.java`](src/main/java/io/tiko/examples/quickstart/NoteRoutes.java) | Route group as a `@Component`: paths in `register(RoutesConfig)`, plain handler methods, no annotation-driven dispatch |
 | [`NoteAuditor.java`](src/main/java/io/tiko/examples/quickstart/NoteAuditor.java) | Event-driven workflow via `@EventHandler` (replaces `@TransactionalEventListener` / `@Async`) |
 | [`Main.java`](src/main/java/io/tiko/examples/quickstart/Main.java) | Bootstrap shape: `Tiko.create(ConfigSources.classpath(...))` |
 

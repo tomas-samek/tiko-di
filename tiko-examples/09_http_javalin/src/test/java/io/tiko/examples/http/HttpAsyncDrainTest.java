@@ -40,8 +40,8 @@ class HttpAsyncDrainTest {
         TicketHttpRoutes routes =
                 new TicketHttpRoutes(container.get(TicketService.class), container.getEventBus(), container);
 
-        Javalin app = Javalin.create();
-        app.post("/tickets", TikoJavalin.scoped(container, routes::handleCreate));
+        Javalin app =
+                Javalin.create(cfg -> cfg.routes.post("/tickets", TikoJavalin.scoped(container, routes::handleCreate)));
         app.start(0);
         int port = app.port();
 
@@ -80,8 +80,8 @@ class HttpAsyncDrainTest {
         TicketHttpRoutes routes =
                 new TicketHttpRoutes(container.get(TicketService.class), container.getEventBus(), container);
 
-        Javalin app = Javalin.create();
-        app.post("/tickets", TikoJavalin.scoped(container, routes::handleCreate));
+        Javalin app =
+                Javalin.create(cfg -> cfg.routes.post("/tickets", TikoJavalin.scoped(container, routes::handleCreate)));
         app.start(0);
         int port = app.port();
 
