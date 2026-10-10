@@ -61,8 +61,15 @@ messages, both now pinned by tests:
 - The malformed-YAML message passed an alias name through: an unquoted `password: *secret`
   was reported as `found undefined alias secret`. `YamlLoader` now reports only `found
   undefined alias` or `found duplicate anchor`; `ConfigValuesStayOutOfMessagesTest` covers it.
-- `tiko.shutdownTimeout` validation quoted the rejected duration;
-  `TikoResolveShutdownTimeoutTest` covers it.
+- `tiko.shutdownTimeout` validation quoted the rejected duration. Since #114 the key binds
+  through `TikoFrameworkConfigBinder`, which reports only the key; `TikoShutdownTimeoutTest`
+  covers it.
+
+The 0.6.0 release gate found one more, fixed in #541: SnakeYAML's scanner quoted the
+characters after a malformed escape in a double-quoted value (`"Hunter\UTOPSECRT"` was
+reported as `… but found: TOPSECRT`, up to eight characters; `\Q` as `found unknown escape
+character Q(81)`). `YamlLoader` now cuts that text and keeps the kind of problem;
+`ConfigValuesStayOutOfMessagesTest` covers `\U`, `\u`, `\x` and an unknown escape.
 
 **Violation looks like.** A log call or exception message that concatenates a resolved
 configuration value.

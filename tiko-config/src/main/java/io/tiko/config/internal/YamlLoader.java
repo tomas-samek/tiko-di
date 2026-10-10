@@ -209,7 +209,7 @@ public final class YamlLoader {
         Mark mark = e.getProblemMark();
         String anchor =
                 mark != null ? sourceLabel + ":" + (mark.getLine() + 1) + ":" + (mark.getColumn() + 1) : sourceLabel;
-        String problem = e.getProblem() != null ? withoutEchoedName(e.getProblem()) : "malformed YAML";
+        String problem = e.getProblem() != null ? withoutEchoedInput(e.getProblem()) : "malformed YAML";
         return new ConfigValidationException(
                 sourceLabel, List.of(new ConfigIssue(ConfigIssueCode.INVALID_VALUE, anchor + ": " + problem)));
     }
@@ -221,8 +221,20 @@ public final class YamlLoader {
      */
     private static final Pattern ECHOED_NAME = Pattern.compile("^(found (?:undefined alias|duplicate anchor))\\b.*");
 
-    private static String withoutEchoedName(String problem) {
-        Matcher m = ECHOED_NAME.matcher(problem);
-        return m.matches() ? m.group(1) : problem;
+    /**
+     * Scanner problems that quote the characters met inside a value: "expected escape sequence of 8
+     * hexadecimal numbers, but found: …" and "found unknown escape character …(…)". A malformed
+     * escape in a quoted secret would otherwise put up to eight of its characters in the message
+     * (SEC-2, #541).
+     */
+    private static final Pattern ECHOED_TEXT =
+            Pattern.compile("^(.*?, but found|found unknown escape character)\\b.*", Pattern.DOTALL);
+
+    /** The problem with any input text SnakeYAML repeated cut off; the kind of problem stays. */
+    private static String withoutEchoedInput(String problem) {
+        Matcher name = ECHOED_NAME.matcher(problem);
+        if (name.matches()) return name.group(1);
+        Matcher text = ECHOED_TEXT.matcher(problem);
+        return text.matches() ? text.group(1).replaceFirst(", but found$", "") : problem;
     }
 }
