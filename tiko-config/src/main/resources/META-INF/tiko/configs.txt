@@ -1,3 +1,0 @@
-# Hand-maintained — see io.tiko.config.internal.TikoFrameworkConfigRegistry
-# registry=io.tiko.config.internal.TikoFrameworkConfigRegistry
-io.tiko.config.TikoFrameworkConfig=tiko

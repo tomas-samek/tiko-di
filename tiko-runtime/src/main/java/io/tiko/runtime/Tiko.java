@@ -59,6 +59,13 @@ public final class Tiko {
         static final System.Logger LOG = System.getLogger("io.tiko.events");
     }
 
+    /**
+     * Whether tiko-config is on the classpath, looked up as a resource of the loader that links
+     * {@link ConfigBinding} — no class is loaded to find out.
+     */
+    private static final boolean TIKO_CONFIG_PRESENT =
+            Tiko.class.getClassLoader().getResource("io/tiko/config/runtime/ConfigBootstrap.class") != null;
+
     private Tiko() {}
 
     /**
@@ -222,9 +229,8 @@ public final class Tiko {
      * {@code tiko.*} keys bind the same way, through tiko-config's
      * {@code TikoFrameworkConfig} (#114).</p>
      *
-     * <p>Returns {@link BoundConfigs#NONE} when no registry is on the classpath — tiko-config
-     * ships one, so that means tiko-config is absent and {@link ConfigBinding}, which needs it,
-     * is never loaded.</p>
+     * <p>Returns {@link BoundConfigs#NONE} when tiko-config is not on the classpath; then
+     * {@link ConfigBinding}, which needs it, is never loaded.</p>
      */
     static BoundConfigs bindConfigs(ConfigSource userSource, ClassLoader cl, ErrorHandler errorHandler)
             throws Exception {
@@ -236,7 +242,7 @@ public final class Tiko {
             String registry = registryName(manifests.nextElement());
             if (registry != null) registries.add(registry);
         }
-        if (registries.isEmpty()) return BoundConfigs.NONE;
+        if (!TIKO_CONFIG_PRESENT) return BoundConfigs.NONE;
         List<io.tiko.config.ConfigBinder<?>> binders = new ArrayList<>();
         for (String registry : registries) {
             binders.addAll(registryBinders(registry, cl));

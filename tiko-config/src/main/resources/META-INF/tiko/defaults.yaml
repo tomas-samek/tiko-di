@@ -1,6 +1,0 @@
-# Defaults baked into tiko-config.jar for the framework's own tiko.* keys (#114). User
-# config overrides these per key. Nested form, so the layered deep-merge unifies it with
-# module sections such as tiko.kafka.
-tiko:
-  # Graceful drain window for the event executor at container shutdown (ISO-8601).
-  shutdownTimeout: PT10S
