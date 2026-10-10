@@ -9,7 +9,7 @@ Cursor, …) can introspect the app's wiring at compile time. After the
 | Class | Scope | Notes |
 |---|---|---|
 | `OrderService` | SINGLETON | handles `OrderPlaced` with `@EventHandler` + `@EventTrigger("OrderValidated")` |
-| `OrderRepository` | REQUEST | proxy-injected into `OrderService` via the `Orders` interface |
+| `OrderRepository` | EVENT | proxy-injected into `OrderService` via the `Orders` interface |
 | `Orders` | — | injection-point interface implemented by `OrderRepository` |
 | `DbConfig` | — | `@Configuration(prefix = "database")` record |
 | `DbConfig.HikariShim` | — | nested record returned by the `@Produces` factory below |
