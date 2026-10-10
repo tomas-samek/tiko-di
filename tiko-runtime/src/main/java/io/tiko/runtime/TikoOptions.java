@@ -40,6 +40,7 @@ public final class TikoOptions {
     private final Duration eventExecutorKeepAlive;
     private final java.util.Map<OverrideKey, java.util.function.Supplier<?>> overrides;
     private final java.util.Map<Class<?>, java.util.function.UnaryOperator<TransportBootstrap>> transportReplacements;
+    private final boolean testWiring;
 
     /** Sentinel for an unset pool-size knob: the framework derives the default from {@code availableProcessors()}. */
     static final int UNSET_POOL_SIZE = -1;
@@ -62,6 +63,7 @@ public final class TikoOptions {
         this.transportReplacements = b.transportReplacements == null
                 ? java.util.Map.of()
                 : java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(b.transportReplacements));
+        this.testWiring = b.testWiring;
     }
 
     /**
@@ -164,6 +166,15 @@ public final class TikoOptions {
         return eventExecutorKeepAlive;
     }
 
+    /**
+     * @return {@code true} when this container applies test wiring ({@code @TestComponent}s and
+     *         their shadow overrides) found on the classpath; {@code false} by default, in which
+     *         case {@link Tiko#create(TikoOptions)} ignores it and logs a warning (#497).
+     */
+    public boolean testWiring() {
+        return testWiring;
+    }
+
     public boolean hasOverride(Class<?> type) {
         return overrides.containsKey(new OverrideKey(type, ""));
     }
@@ -261,6 +272,7 @@ public final class TikoOptions {
         private Duration eventExecutorKeepAlive;
         private java.util.Map<OverrideKey, java.util.function.Supplier<?>> overrides;
         private java.util.Map<Class<?>, java.util.function.UnaryOperator<TransportBootstrap>> transportReplacements;
+        private boolean testWiring;
 
         private Builder() {}
 
@@ -499,6 +511,19 @@ public final class TikoOptions {
                 throw new IllegalArgumentException("replaceTransport already registered for " + transport.getName());
             }
             transportReplacements.put(transport, tb -> replacement.apply(transport.cast(tb)));
+            return this;
+        }
+
+        /**
+         * Opts this container into test wiring: the {@code @TestComponent}s compiled into
+         * {@code META-INF/tiko/test-container.properties} and the shadow overrides in
+         * {@code META-INF/tiko/test-shadows.properties} (#497). Off by default, so a test-fixtures
+         * jar that reaches a production classpath can't change which implementation
+         * {@code get(...)} returns. {@code @TikoTest} turns it on; a test that calls
+         * {@code Tiko.create(...)} itself and relies on {@code @TestComponent}s sets it here.
+         */
+        public Builder testWiring(boolean enabled) {
+            this.testWiring = enabled;
             return this;
         }
 

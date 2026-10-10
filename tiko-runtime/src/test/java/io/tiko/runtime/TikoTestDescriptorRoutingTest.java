@@ -15,9 +15,9 @@ class TikoTestDescriptorRoutingTest {
 
     @Test
     void singleModuleTestDescriptorRoutesThroughAggregatingContainer(@TempDir Path tmp) throws Exception {
-        // Even with exactly 1 test-container.properties on the classpath, Tiko.createInternal
-        // must use AggregatingContainer (not the single-module fast path) so that
-        // shadow registration runs.
+        // Even with exactly 1 test-container.properties on the classpath, an opted-in
+        // container (#497) must use AggregatingContainer (not the single-module fast path)
+        // so that shadow registration runs.
 
         Path meta = tmp.resolve("META-INF").resolve("tiko");
         Files.createDirectories(meta);
@@ -34,7 +34,7 @@ class TikoTestDescriptorRoutingTest {
         ClassLoader previous = Thread.currentThread().getContextClassLoader();
         Thread.currentThread().setContextClassLoader(cl);
 
-        try (Container c = Tiko.create(TikoOptions.builder().build())) {
+        try (Container c = Tiko.create(TikoOptions.builder().testWiring(true).build())) {
             // The container should be (or wrap) an AggregatingContainer instance.
             // TransportAwareContainer may wrap the inner container; unwrap if needed.
             Container inner = c;
@@ -51,6 +51,14 @@ class TikoTestDescriptorRoutingTest {
             assertThat(inner.getClass().getName()).isEqualTo("io.tiko.runtime.AggregatingContainer");
         } finally {
             Thread.currentThread().setContextClassLoader(previous);
+        }
+    }
+
+    /** #497: opting in when no test descriptor is on the classpath boots the production wiring. */
+    @Test
+    void optedInWithoutTestWiringBootsTheMainContainer() {
+        try (Container c = Tiko.create(TikoOptions.builder().testWiring(true).build())) {
+            assertThat(c.get(StubService.class)).isSameAs(StubContainer.STUB_SERVICE);
         }
     }
 }

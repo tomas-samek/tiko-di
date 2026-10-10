@@ -12,7 +12,10 @@ import java.lang.annotation.Target;
  * <p>The {@code tiko-processor} processes {@code @TestComponent}-annotated classes during
  * {@code test-compile} and emits a separate {@code TestTikoContainerImpl_<hash>} into
  * {@code target/test-classes/}. At runtime, {@link io.tiko.runtime.Tiko#create(io.tiko.runtime.TikoOptions)}
- * prefers the test container when {@code META-INF/tiko/test-container.properties} is on the classpath.
+ * uses the test container when {@code META-INF/tiko/test-container.properties} is on the classpath
+ * <em>and</em> the container opted in via {@link io.tiko.runtime.TikoOptions.Builder#testWiring(boolean)}
+ * — {@link TikoTest} does that for you. Without the opt-in, test wiring is ignored with a warning.
+ * A {@code @TestComponent} in {@code src/main/} sources is a compile error.
  *
  * <p>Shadow resolution:
  * <ul>

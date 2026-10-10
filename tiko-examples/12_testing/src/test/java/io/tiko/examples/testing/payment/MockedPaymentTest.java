@@ -28,8 +28,11 @@ class MockedPaymentTest {
         PaymentGateway mock = mock(PaymentGateway.class);
         when(mock.charge(anyString(), anyLong())).thenReturn("MOCK-TXN");
 
-        try (Container c = Tiko.create(
-                TikoOptions.builder().override(PaymentGateway.class, () -> mock).build())) {
+        // A test container of its own: opt into this module's test wiring (#497), as @TikoTest does.
+        try (Container c = Tiko.create(TikoOptions.builder()
+                .testWiring(true)
+                .override(PaymentGateway.class, () -> mock)
+                .build())) {
             String txn = c.get(OrderService.class).create("alice", 100L);
             assertThat(txn).isEqualTo("MOCK-TXN");
             verify(mock).charge("alice", 100L);

@@ -24,7 +24,7 @@ Tiko's processor runs in two Maven phases:
 - **`compile`** — sees `src/main/java/` sources; generates the main `TikoContainerImpl` + `META-INF/tiko/container.properties` in `target/classes/`.
 - **`test-compile`** — sees `src/test/java/` sources only (Maven's behaviour); generates a standalone `TestContainerImpl` + `META-INF/tiko/test-container.properties` + (if any `@TestComponent` shadows exist) `META-INF/tiko/test-shadows.properties` in `target/test-classes/`.
 
-At runtime, `Tiko.create(...)` detects the test descriptors and uses `AggregatingContainer` to federate both containers. Shadow declarations register as runtime overrides on the shared `TikoOptions` — `@TestComponent FakeClock extends Clock` causes every `Clock` injection across both containers to resolve to `FakeClock`.
+At runtime, a container that opted into test wiring — every `@TikoTest` container, or `Tiko.create(TikoOptions.builder().testWiring(true).build())` — detects the test descriptors and uses `AggregatingContainer` to federate both containers. Without the opt-in, `Tiko.create(...)` ignores them, boots the production wiring and logs a WARNING naming where they came from, so a test-fixtures jar on a production classpath can't swap implementations (#497). Shadow declarations register as runtime overrides on the shared `TikoOptions` — `@TestComponent FakeClock extends Clock` causes every `Clock` injection across both containers to resolve to `FakeClock`.
 
 Production components live in `src/main/java/`, test fixtures (mocks, `@TestComponent`s, helpers) live in `src/test/java/` — the natural Maven layout.
 
@@ -160,6 +160,16 @@ public class FixedClock implements Clock {
 
 The test container resolves `Clock` to `FixedClock` instead of the production `SystemClock`.
 
+**Test containers only.** `@TikoTest` opts its container in. A test that boots its own
+container with `Tiko.create(...)` and relies on `@TestComponent`s (or other test-source
+components) opts in itself:
+
+```java
+try (Container c = Tiko.create(TikoOptions.builder().testWiring(true).build())) { ... }
+```
+
+A `@TestComponent` in `src/main/` is a compile error — it would ship test wiring in the jar.
+
 ## Shadow detection
 
 `@TestComponent` discovers its shadow target two ways:
@@ -204,6 +214,7 @@ For per-test substitutions without writing a new `@TestComponent`, hand a suppli
 ```java
 PaymentGateway mock = mock(PaymentGateway.class);
 try (Container container = Tiko.create(TikoOptions.builder()
+        .testWiring(true) // a test container: apply @TestComponents too (as @TikoTest does)
         .override(PaymentGateway.class, () -> mock)
         .build())) {
     // Any @Component that injects PaymentGateway gets `mock`,
@@ -231,6 +242,7 @@ generated Kafka transport with one backed by the in-memory `FakeKafkaBroker`:
 ```java
 FakeKafkaBroker broker = new FakeKafkaBroker();
 try (Container c = Tiko.create(TikoOptions.builder()
+        .testWiring(true)
         .configSource(ConfigSources.classpath("application.yaml"))
         .replaceTransport(KafkaTransport.class, t -> FakeKafkaTransport.over(t, broker))
         .build())) {
