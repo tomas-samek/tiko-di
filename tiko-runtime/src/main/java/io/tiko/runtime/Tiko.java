@@ -144,8 +144,8 @@ public final class Tiko {
             //    emits {@code META-INF/tiko/test-container.properties} (pointing at the
             //    standalone {@code TestContainerImpl_<hash>}) plus a
             //    {@code META-INF/tiko/test-shadows.properties} declaration. Those apply only
-            //    when the container opted into test wiring, as every @TikoTest container does;
-            //    otherwise they are ignored with a warning (#497).
+            //    when the container opted into test wiring, as every @TikoTest container does.
+            //    Otherwise they are ignored with a warning (#497).
             ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
             if (classLoader == null) classLoader = Tiko.class.getClassLoader();
 
