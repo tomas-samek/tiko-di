@@ -65,16 +65,21 @@ Two modules cannot independently claim the same `@Configuration(prefix="...")` �
 ## The `tiko:` reserved namespace
 
 Top-level `tiko:` in your YAML is reserved for framework-level configuration knobs
-that Tiko itself consumes (not your `@Configuration` records). v1 defines one key:
+that Tiko itself consumes (not your `@Configuration` records). They bind through the
+same pipeline as your records — tiko-config ships the framework's own
+`@Configuration(prefix = "tiko")` record, `TikoFrameworkConfig` (#114) — so they get
+`${VAR}` interpolation, source-anchored errors and the unknown-key check:
 
 ```yaml
 tiko:
-  shutdownTimeout: PT5S    # event-executor graceful drain window; see events.md
+  shutdownTimeout: ${SHUTDOWN_BUDGET:PT5S}   # event-executor graceful drain window; see events.md
+  kafka:                                     # module sections nest under tiko: as well
+    bootstrap-servers: localhost:9092
 ```
 
-Duration values use ISO-8601 syntax (`PT5S`, `PT30S`, `PT5M`). Phase 7 (resiliency)
-will add sibling keys (executor sizing, queue capacity, etc.). Do not declare your
-own `@Configuration(prefix = "tiko")` — that prefix is the framework's.
+Module sub-prefixes such as `tiko.kafka` belong to their own records and sit alongside
+the framework's keys. Do not declare your own `@Configuration(prefix = "tiko")` — that
+prefix is the framework's, and a second claim fails startup as a duplicate prefix.
 
 ## Nested records
 

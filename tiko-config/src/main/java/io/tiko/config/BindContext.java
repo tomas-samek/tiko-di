@@ -10,6 +10,7 @@ import io.tiko.config.internal.coercers.CoercionException;
 import io.tiko.config.internal.coercers.TypeCoercer;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -25,6 +26,7 @@ public final class BindContext {
 
     private final String source;
     private final Map<String, SourceLocation> locations;
+    private final Set<String> claimedPrefixes;
     private final List<ConfigError> errors = new ArrayList<>();
 
     public BindContext(String source) {
@@ -32,8 +34,18 @@ public final class BindContext {
     }
 
     public BindContext(String source, Map<String, SourceLocation> locations) {
+        this(source, locations, Set.of());
+    }
+
+    /**
+     * @param claimedPrefixes every {@code @Configuration} prefix bound in this run. A section's
+     *     unknown-key check leaves alone a child that is (or leads to) another record's prefix —
+     *     {@code kafka} under {@code tiko}, which {@code tiko.kafka} owns (#114).
+     */
+    public BindContext(String source, Map<String, SourceLocation> locations, Set<String> claimedPrefixes) {
         this.source = source;
         this.locations = Map.copyOf(locations);
+        this.claimedPrefixes = Set.copyOf(claimedPrefixes);
     }
 
     // -- Error accumulation ------------------------------------------------
@@ -214,17 +226,36 @@ public final class BindContext {
 
     /**
      * Emits one error per remaining key in {@code node} after binding consumed
-     * all the known fields. Generated binders pass the set of consumed keys.
+     * all the known fields. Generated binders pass the set of consumed keys. A key that
+     * is, or leads to, another claimed prefix belongs to that record's binder and is skipped;
+     * those prefixes are also offered as "did you mean" candidates for a typo.
      */
     public void checkUnknownKeys(Map<String, Object> node, String sectionPath, Set<String> known) {
+        Set<String> candidates = new LinkedHashSet<>(known);
+        candidates.addAll(claimedChildren(sectionPath));
         for (String k : node.keySet()) {
-            if (!known.contains(k)) {
-                String hint = NearestKey.hint(k, known, suggestion -> sectionPath + "." + suggestion);
-                reportAtPath(
-                        ConfigIssueCode.UNKNOWN_KEY,
-                        sectionPath + "." + k,
-                        "unknown key '" + sectionPath + "." + k + "'." + hint);
+            String path = sectionPath + "." + k;
+            if (!known.contains(k) && !leadsToClaimedPrefix(path)) {
+                String hint = NearestKey.hint(k, candidates, suggestion -> sectionPath + "." + suggestion);
+                reportAtPath(ConfigIssueCode.UNKNOWN_KEY, path, "unknown key '" + path + "'." + hint);
             }
         }
+    }
+
+    private boolean leadsToClaimedPrefix(String path) {
+        return claimedPrefixes.stream().anyMatch(p -> p.equals(path) || p.startsWith(path + "."));
+    }
+
+    /** The next segment of each claimed prefix strictly below {@code sectionPath}. */
+    private Set<String> claimedChildren(String sectionPath) {
+        Set<String> children = new LinkedHashSet<>();
+        for (String p : claimedPrefixes) {
+            if (p.startsWith(sectionPath + ".")) {
+                String rest = p.substring(sectionPath.length() + 1);
+                int dot = rest.indexOf('.');
+                children.add(dot < 0 ? rest : rest.substring(0, dot));
+            }
+        }
+        return children;
     }
 }

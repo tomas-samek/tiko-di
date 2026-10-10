@@ -322,12 +322,11 @@ this graceful drain — the JVM may tear down threads abruptly when in an
 unrecoverable state. For everything short of a JVM-level fatal, `shutdownTimeout`
 is the bound.
 
-**v1 limitations:**
-
-- Duration values use ISO-8601 syntax (`PT5S`, `PT30S`, `PT5M`). Friendly-syntax
-  durations (`5s`, `30s`) are a planned enhancement.
-- `${VAR}` interpolation on `tiko.shutdownTimeout` is not supported. Use the
-  programmatic API if you need env-var resolution.
+**Binding:** `tiko.shutdownTimeout` binds like any `@Configuration` field (via
+tiko-config's `TikoFrameworkConfig`, #114): `${VAR}` interpolation works
+(`shutdownTimeout: ${SHUTDOWN_BUDGET:PT30S}`), and a malformed or negative value fails
+startup with a `ConfigurationFailure` anchored at its `file:line:column`. The YAML key
+needs tiko-config on the classpath; without it only the programmatic setting applies.
 
 ## Lifecycle events
 

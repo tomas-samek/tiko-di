@@ -48,7 +48,9 @@ public final class ConfigBootstrap {
         // 1. Load
         Map<String, Object> raw = source.load();
         Map<String, SourceLocation> locations = source.locations();
-        BindContext ctx = new BindContext(sourceLabel, locations);
+        Set<String> claimedPrefixes =
+                binders.stream().map(ConfigBinder::prefix).collect(Collectors.toCollection(LinkedHashSet::new));
+        BindContext ctx = new BindContext(sourceLabel, locations, claimedPrefixes);
 
         // 2. Interpolate
         @SuppressWarnings("unchecked")

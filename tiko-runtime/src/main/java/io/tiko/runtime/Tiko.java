@@ -13,6 +13,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -152,7 +153,10 @@ public final class Tiko {
             String descriptorName = selectDescriptor(options, classLoader);
             int moduleCount = countResources(classLoader.getResources(descriptorName));
 
-            java.time.Duration effectiveShutdownTimeout = resolveShutdownTimeout(options, classLoader);
+            // Bind configuration first: the container needs the bound tiko.shutdownTimeout.
+            // A no-op (BoundConfigs.NONE) without tiko-config on the classpath.
+            BoundConfigs configs = bindConfigs(options.configSource(), classLoader, errorHandler);
+            java.time.Duration effectiveShutdownTimeout = effectiveShutdownTimeout(options, configs);
 
             // In test mode, always route through the aggregator — even with a single module — so
             // AggregatingContainer's shadow-registration phase (test-shadows.properties →
@@ -183,10 +187,9 @@ public final class Tiko {
             // 4. Inject config singletons before start(), so @PostConstruct can use them.
             // Defaults from META-INF/tiko/defaults.yaml are always layered under the user
             // source — modules can ship a self-sufficient bean even when the user provides
-            // no ConfigSource. bindConfigs is a no-op when no @Configuration records exist.
-            Map<Class<?>, Object> bound = bindConfigs(options.configSource(), classLoader, errorHandler);
-            if (!bound.isEmpty()) {
-                container.getClass().getMethod("injectConfigs", Map.class).invoke(container, bound);
+            // no ConfigSource. The framework's own record is consumed above, not injected.
+            if (!configs.userConfigs().isEmpty()) {
+                container.getClass().getMethod("injectConfigs", Map.class).invoke(container, configs.userConfigs());
             }
 
             // 5. Start the container — single-module's TikoContainerImpl.start() initialises
@@ -215,172 +218,68 @@ public final class Tiko {
      *
      * <p>Layers module-baked {@code META-INF/tiko/defaults.yaml} under the (optional)
      * user source so each module can ship its own private slice of defaults inside
-     * its jar — overrideable per-key by the user file (#18).</p>
+     * its jar — overrideable per-key by the user file (#18). The framework's own
+     * {@code tiko.*} keys bind the same way, through tiko-config's
+     * {@code TikoFrameworkConfig} (#114).</p>
      *
-     * <p>Returns an empty map if no {@code @Configuration} records are declared on
-     * the classpath. Uses reflection to avoid a circular compile dependency on
-     * tiko-config.</p>
+     * <p>Returns {@link BoundConfigs#NONE} when no registry is on the classpath — tiko-config
+     * ships one, so that means tiko-config is absent and {@link ConfigBinding}, which needs it,
+     * is never loaded.</p>
      */
-    private static Map<Class<?>, Object> bindConfigs(ConfigSource userSource, ClassLoader cl, ErrorHandler errorHandler)
+    static BoundConfigs bindConfigs(ConfigSource userSource, ClassLoader cl, ErrorHandler errorHandler)
             throws Exception {
-        List<Object> binders = new ArrayList<>();
-        var resources = cl.getResources("META-INF/tiko/configs.txt");
-        while (resources.hasMoreElements()) {
-            var url = resources.nextElement();
-            try (BufferedReader br =
-                    new BufferedReader(new InputStreamReader(url.openStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = br.readLine()) != null) {
-                    line = line.trim();
-                    if (line.startsWith("# registry=")) {
-                        String registryFqn =
-                                line.substring("# registry=".length()).trim();
-                        Class<?> registryClass = Class.forName(registryFqn, true, cl);
-                        @SuppressWarnings("unchecked")
-                        List<Object> moduleBinders =
-                                (List<Object>) registryClass.getMethod("all").invoke(null);
-                        binders.addAll(moduleBinders);
-                        break;
-                    }
-                }
+        // A registry named by several manifests (a fat jar next to the jars it bundles) is the
+        // same binders: load each one once, or its prefixes would be reported as duplicates.
+        var registries = new LinkedHashSet<String>();
+        var manifests = cl.getResources("META-INF/tiko/configs.txt");
+        while (manifests.hasMoreElements()) {
+            String registry = registryName(manifests.nextElement());
+            if (registry != null) registries.add(registry);
+        }
+        if (registries.isEmpty()) return BoundConfigs.NONE;
+        List<io.tiko.config.ConfigBinder<?>> binders = new ArrayList<>();
+        for (String registry : registries) {
+            binders.addAll(registryBinders(registry, cl));
+        }
+        return ConfigBinding.bind(userSource, binders, errorHandler);
+    }
+
+    /** The registry class a {@code configs.txt} names on its {@code # registry=} line, or {@code null}. */
+    private static String registryName(URL manifest) throws IOException {
+        try (BufferedReader br =
+                new BufferedReader(new InputStreamReader(manifest.openStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                line = line.trim();
+                if (line.startsWith("# registry="))
+                    return line.substring("# registry=".length()).trim();
             }
         }
-
-        // Nothing declared — skip the reflective ConfigBootstrap call entirely.
-        if (binders.isEmpty()) return Collections.emptyMap();
-
-        // Build the effective ConfigSource: defaults first, user override on top.
-        Class<?> sourcesClass = Class.forName("io.tiko.config.ConfigSources", true, cl);
-        ConfigSource defaults = (ConfigSource)
-                sourcesClass.getMethod("classpathAll", String.class).invoke(null, "META-INF/tiko/defaults.yaml");
-        ConfigSource effective;
-        if (userSource == null) {
-            effective = defaults;
-        } else {
-            effective = (ConfigSource)
-                    sourcesClass.getMethod("layered", ConfigSource[].class).invoke(null, (Object)
-                            new ConfigSource[] {defaults, userSource});
-        }
-
-        // Delegate to ConfigBootstrap via reflection (avoids a tiko-runtime → tiko-config
-        // compile dependency). ConfigBootstrap.bind itself routes a single
-        // ConfigurationFailure through the supplied ErrorHandler before throwing, so this
-        // call site doesn't need to unwrap reflective exceptions or detect specific cause
-        // types — it just surfaces whatever the underlying call threw.
-        Class<?> bootstrapClass = Class.forName("io.tiko.config.runtime.ConfigBootstrap", true, cl);
-        try {
-            @SuppressWarnings("unchecked")
-            Map<Class<?>, Object> result = (Map<Class<?>, Object>) bootstrapClass
-                    .getMethod("bind", String.class, ConfigSource.class, List.class, ErrorHandler.class)
-                    .invoke(null, "config", effective, binders, errorHandler);
-            return result;
-        } catch (java.lang.reflect.InvocationTargetException ite) {
-            // Method.invoke always wraps the called method's exception inside an
-            // InvocationTargetException. We have to peel that wrap so callers of
-            // Tiko.create() see ConfigValidationException directly (the type they expect
-            // to catch), not the reflective wrap. Three branches are required because
-            // `throw` needs a statically-typed throwable — Throwable is too broad and
-            // would force a `throws` clause on this method:
-            //
-            //   - RuntimeException: the common case (ConfigValidationException lands here).
-            //   - Error: should propagate unwrapped too; an OOM from bind shouldn't morph.
-            //   - fallback: the language requires it but is unreachable in practice —
-            //     ConfigBootstrap.bind declares no checked exceptions.
-            //
-            // The shape is intrinsic to using reflection here. The honest fix is to drop
-            // the reflective call entirely by depending on tiko-config at compile time
-            // with `<scope>provided</scope>` (lets users without @Configuration skip the
-            // dep, while making the runtime call a plain static method invocation).
-            Throwable cause = ite.getCause();
-            if (cause instanceof RuntimeException re) throw re;
-            if (cause instanceof Error err) throw err;
-            throw ite;
-        }
+        return null;
     }
 
     /**
-     * Computes the effective event-executor shutdown timeout with precedence:
-     * programmatic ({@link TikoOptions#shutdownTimeout()}) > YAML ({@code tiko.shutdownTimeout}
-     * in the layered config sources) > {@code Duration.ofSeconds(10)}.
-     *
-     * <p>Package-private for testability — {@code TikoResolveShutdownTimeoutTest} drives this
-     * helper directly without booting a container.
-     *
-     * <p>The YAML lookup is reflective (mirrors the existing {@code bindConfigs} path) so
-     * tiko-runtime does not gain a compile dep on tiko-config. If tiko-config is not on the
-     * classpath, the YAML path silently falls through to the default. No {@code ${VAR}}
-     * interpolation is applied on {@code tiko.shutdownTimeout} in v1.
+     * The binders a registry advertises. The registry is generated (or hand-maintained) per
+     * module; its static {@code all()} is its only entry point, located by the name its manifest
+     * records.
      */
-    static java.time.Duration resolveShutdownTimeout(TikoOptions options, ClassLoader classLoader) {
-        java.time.Duration explicit = options.shutdownTimeout();
-        if (explicit != null) {
-            return explicit;
-        }
+    @SuppressWarnings("unchecked")
+    private static List<io.tiko.config.ConfigBinder<?>> registryBinders(String registry, ClassLoader cl)
+            throws Exception {
+        Class<?> registryClass = Class.forName(registry, true, cl);
+        return (List<io.tiko.config.ConfigBinder<?>>)
+                registryClass.getMethod("all").invoke(null);
+    }
 
-        java.time.Duration fromYaml = readYamlShutdownTimeout(options.configSource(), classLoader);
-        if (fromYaml != null) {
-            if (fromYaml.isNegative()) {
-                throw new ContainerInitializationException("tiko.shutdownTimeout must not be negative");
-            }
-            return fromYaml;
-        }
-
+    /**
+     * The event-executor shutdown timeout, with precedence: programmatic
+     * ({@link TikoOptions#shutdownTimeout()}) > {@code tiko.shutdownTimeout} bound from config
+     * (defaults to {@code PT10S} there) > {@code Duration.ofSeconds(10)} without tiko-config.
+     */
+    static java.time.Duration effectiveShutdownTimeout(TikoOptions options, BoundConfigs configs) {
+        if (options.shutdownTimeout() != null) return options.shutdownTimeout();
+        if (configs.shutdownTimeout() != null) return configs.shutdownTimeout();
         return java.time.Duration.ofSeconds(10);
-    }
-
-    /**
-     * Returns the value of {@code tiko.shutdownTimeout} from the layered config (defaults +
-     * user source) coerced via {@code Coercers.durationCoercer()}, or {@code null} if the key
-     * is absent or tiko-config is not on the classpath.
-     */
-    private static java.time.Duration readYamlShutdownTimeout(ConfigSource userSource, ClassLoader classLoader) {
-        try {
-            // Build the layered source the same way bindConfigs does — defaults first,
-            // user override on top.
-            Class<?> sourcesClass = Class.forName("io.tiko.config.ConfigSources", true, classLoader);
-            ConfigSource defaults = (ConfigSource)
-                    sourcesClass.getMethod("classpathAll", String.class).invoke(null, "META-INF/tiko/defaults.yaml");
-            ConfigSource effective;
-            if (userSource == null) {
-                effective = defaults;
-            } else {
-                effective = (ConfigSource)
-                        sourcesClass.getMethod("layered", ConfigSource[].class).invoke(null, (Object)
-                                new ConfigSource[] {defaults, userSource});
-            }
-
-            // Read raw map, walk to tiko.shutdownTimeout.
-            Map<String, Object> raw = effective.load();
-            Object tikoSection = raw.get("tiko");
-            if (!(tikoSection instanceof Map<?, ?> tikoMap)) {
-                return null;
-            }
-            Object value = tikoMap.get("shutdownTimeout");
-            if (value == null) {
-                return null;
-            }
-
-            // Coerce via the canonical durationCoercer (handles ISO-8601 like "PT5S").
-            Class<?> coercersClass = Class.forName("io.tiko.config.internal.coercers.Coercers", true, classLoader);
-            Object durationCoercer = coercersClass.getMethod("durationCoercer").invoke(null);
-            Class<?> coercerInterface =
-                    Class.forName("io.tiko.config.internal.coercers.TypeCoercer", true, classLoader);
-            Object coerced = coercerInterface.getMethod("coerce", Object.class).invoke(durationCoercer, value);
-            return (java.time.Duration) coerced;
-        } catch (ClassNotFoundException notOnClasspath) {
-            // tiko-config absent — YAML config not available; programmatic + default still work.
-            return null;
-        } catch (java.lang.reflect.InvocationTargetException ite) {
-            // CoercionException or similar from the coercer — surface its message.
-            Throwable cause = ite.getCause();
-            throw new ContainerInitializationException(
-                    "Invalid tiko.shutdownTimeout in YAML: " + (cause == null ? ite.getMessage() : cause.getMessage()),
-                    cause);
-        } catch (Exception e) {
-            // Reflective infrastructure error (e.g. method missing). Surface as runtime to
-            // avoid silently masking a wiring bug.
-            throw new ContainerInitializationException("Failed to read tiko.shutdownTimeout from YAML", e);
-        }
     }
 
     /**
