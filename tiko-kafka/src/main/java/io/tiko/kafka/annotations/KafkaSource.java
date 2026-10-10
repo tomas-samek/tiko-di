@@ -20,7 +20,7 @@ import java.lang.annotation.Target;
  * "Trigger semantics on bridge methods — MVP scope cut".
  *
  * <p>The enclosing class must be {@code @Component(scope = Scope.SINGLETON)} (Kafka consumer
- * threads run outside any request/event scope). Validated at compile time by
+ * threads run outside any unit of work). Validated at compile time by
  * {@code tiko-kafka-processor}.
  */
 @Target(ElementType.METHOD)

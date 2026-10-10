@@ -1223,7 +1223,7 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
             proxyGenerator.generate(component);
         }
         // Factory outputs that are interfaces in shorter-lived scopes also need proxies so
-        // longer-lived consumers (e.g., SINGLETON repo injecting a REQUEST-scoped Connection)
+        // longer-lived consumers (e.g., SINGLETON repo injecting an EVENT-scoped Connection)
         // resolve per-call to the current scope's value instead of capturing the first one.
         for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
             if (factory.requiresProxy()) {

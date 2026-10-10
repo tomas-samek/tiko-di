@@ -53,7 +53,7 @@ These are explicit, not accidents of implementation. A handler that depends on d
 - **Delivery semantics — at-least-once to the bus, at-most-once per handler execution.** Delivery is at-least-once: a transport failure before the event reaches the bus (deserialize, bridge dispatch, publish) is redelivered, so handlers must be idempotent — a handler that breaks under redelivery is buggy regardless of transport. Handler *outcome* is not part of the acknowledgment: once an event is on the bus, the transport's job is done (Kafka commits the offset), and a failing handler routes to the `ErrorHandler` without triggering redelivery — see [Error handling](#error-handling).
 - **Ordering — per-source FIFO only, no cross-source merge.** Local events preserve publisher order. Future distributed transports preserve their own intra-partition order. A handler subscribed to both sees them in arrival order at the handler — there is no synthesized global ordering.
 - **Backpressure — publishers never block on handler work.** Async handlers run on a bounded executor; `bus.publish(...)` returns once the event is enqueued. Synchronous in-process delivery is the default for handlers without `async = true`, and remains an option per handler — it is not the publisher's responsibility to throttle.
-- **Transactional semantics — request-scope buffering built in, outbox recommended for crash safety.** Events published inside `runInEventScope` are buffered and only released when the scope exits successfully; on failure they are dropped. Persistence-backed outbox (for crash safety across the JVM boundary) is the consumer's responsibility — Tiko does not own a database.
+- **Transactional semantics — unit-of-work buffering built in, outbox recommended for crash safety.** Events published inside `runInEventScope` are buffered and only released when the scope exits successfully; on failure they are dropped. Persistence-backed outbox (for crash safety across the JVM boundary) is the consumer's responsibility — Tiko does not own a database.
 - **Error handling — log + isolate by default, per-handler policy configurable.** A throwing handler does not propagate to the publisher and does not break sibling handlers. See [Error handling](#error-handling) below.
 - **Routing is by event type, not by name.** A handler subscribes to a payload *type*; an event reaches every `@EventHandler` of that type. Tiko deliberately has no name-keyed dispatch — model distinct intents as distinct types (`CustomerAdded` / `SupplierAdded`), not as one type fanned out by string name. `@EventTrigger(eventName = "...")` is therefore an optional trace label for the topology view, never a routing key. This keeps wiring compile-time-checked: a typo or rename can't silently misroute an event, because there is no name to mistype.
 
@@ -540,7 +540,7 @@ publishing one event per business action that subscribers can react to
 without the HTTP client waiting on them.
 
 See `tiko-examples/09_http_javalin/` for a runnable example with Javalin: a
-tiny `Handler` decorator opens a Tiko request scope around each route,
+tiny `Handler` decorator opens one unit of work (EVENT scope) around each route,
 the bridge bean stays plain straight-line code, and three subscribers
 (audit, metrics, async notification) demonstrate the sync-vs-async-side-effect
 axis. The pattern ports to Helidon, Jetty, the JDK's `HttpServer`, etc. — swap

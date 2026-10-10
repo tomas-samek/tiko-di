@@ -207,7 +207,7 @@ Each documented compile-time check should have a focused test (Pass 2's concern)
 | 7 | "Trigger only on successful return" | Handler exception → triggered event NOT published; sync + async forms; mid-chain | required | optional |
 | 8 | Optional `Event<?>` second param | Handler signature `(EventType, Event<?>)` works; param is optional | required | required |
 | 9 | `EventCallback<T>` | Functional-interface subscription via `EventBus.subscribe` | required | optional |
-| 10 | Lifecycle events | All 6 (Application/Request/Event Started/Ending) fire with correct payload — overlaps Pass 5 | required | required |
+| 10 | Lifecycle events | All 4 (Application/Event Started/Ending) fire with correct payload — overlaps Pass 5 | required | required |
 
 The "Test coverage" column is Pass 3's concern (was a test written?). The "Demo (Pass 6)" column tracks whether an example actually exercises the feature in `main` code — Pass 6 fills this in. A row can be tested but undemoed; both matter for different reasons.
 
@@ -234,7 +234,7 @@ For each, expect: source location (`file:line`), one clean Tiko message (not a c
 |---|---|---|
 | 1 | Missing dependency | `@Component A` injects non-`@Component B` |
 | 2 | Circular dependency `A→B→A` | Two `@Component`s injecting each other |
-| 3 | Missing interface for proxy | SINGLETON injects REQUEST-scoped concrete class |
+| 3 | Missing interface for proxy | SINGLETON injects EVENT-scoped concrete class |
 | 4 | Ambiguous interface | Two `@Component`s implement same interface, no `@Named`; a third injects the interface |
 | 5 | Bad `@Produces` signature | Void return, primitive return (if disallowed), wildcard generic |
 | 6 | `@Inject` on field | `@Inject Repository repo;` |

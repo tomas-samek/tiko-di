@@ -41,7 +41,7 @@ class FactoryAutoCloseableTest {
         }
 
         assertThat(TeardownRecorder.order)
-                .as("@Produces returning AutoCloseable in REQUEST scope must auto-close at scope exit")
+                .as("@Produces returning AutoCloseable in EVENT scope must auto-close at scope exit")
                 .contains("FakePool.request");
     }
 
@@ -50,7 +50,7 @@ class FactoryAutoCloseableTest {
         Container container = Tiko.create();
         try {
             container.runInEventScope(() -> {
-                // Don't touch the request-scoped FakePool — nothing to close.
+                // Don't touch the EVENT-scoped FakePool — nothing to close.
             });
         } finally {
             container.shutdown();

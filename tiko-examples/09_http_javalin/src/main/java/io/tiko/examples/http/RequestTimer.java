@@ -9,8 +9,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Subscribes to Tiko's framework lifecycle events to demonstrate that every
- * HTTP request — including reads, including 404s — opens and closes a Tiko
- * request scope, and therefore gets per-request observability for free.
+ * HTTP request — including reads, including 404s — opens and closes one Tiko
+ * unit of work, and therefore gets per-request observability for free.
  *
  * <p>The framework's {@code EventStartedEvent.requestId()} is a separate
  * identifier from the application's {@link RequestId#value()}. Both are

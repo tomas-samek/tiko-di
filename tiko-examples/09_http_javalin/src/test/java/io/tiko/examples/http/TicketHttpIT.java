@@ -104,7 +104,7 @@ class TicketHttpIT {
 
         var lastTwo = emitted.subList(emitted.size() - 2, emitted.size());
         assertThat(lastTwo.get(0).requestId())
-                .as("each request gets its own REQUEST-scoped requestId")
+                .as("each request gets its own EVENT-scoped requestId")
                 .isNotEqualTo(lastTwo.get(1).requestId());
 
         // GET back the first one.

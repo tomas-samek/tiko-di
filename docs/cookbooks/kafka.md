@@ -63,7 +63,7 @@ local `EventBus` (dispatched **by return type**, not by name).
 
 **Rules (enforced at compile time):**
 - The enclosing class is `@Component(scope = Scope.SINGLETON)` (consumer threads run
-  outside request/event scopes).
+  outside any unit of work).
 - The method must be **non-void** and carry a sibling **`@EventTrigger`**.
 - Signature: `(Payload payload)` or `(Payload payload, KafkaContext ctx)`.
 

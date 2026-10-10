@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
  * on, so a service that flushes via its repository in {@code @PreDestroy} sees a live
  * repo instance.
  *
- * <p>Mirrors {@code RequestScopePreDestroyTest#destroy_order_is_reverse_creation_lifo}
+ * <p>Mirrors {@code EventScopePreDestroyTest#predestroy_fires_in_lifo_order_for_each_event_scoped_bean}
  * for the SINGLETON scope.
  */
 class SingletonScopePreDestroyTest {

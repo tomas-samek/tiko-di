@@ -5,7 +5,7 @@ import io.tiko.annotations.Component;
 import java.util.UUID;
 
 /**
- * REQUEST-scoped {@link RequestId}: each scope entry constructs a fresh
+ * EVENT-scoped {@link RequestId}: each unit of work constructs a fresh
  * instance with its own UUID. Re-reading {@code value()} during the request
  * returns the same string.
  */

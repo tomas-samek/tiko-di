@@ -107,7 +107,7 @@ public final class TikoOptions {
      *         {@code Container.shutdown()} runs each such hook under this bound and routes a
      *         {@code TimeoutException}-caused {@code PreDestroyFailure} / {@code AutoCloseFailure}
      *         through the {@link ErrorHandler} if the hook overruns, then continues to the next
-     *         component. REQUEST/EVENT scope-exit teardown is unaffected.
+     *         component. EVENT scope-exit teardown is unaffected.
      */
     public Duration teardownTimeout() {
         return teardownTimeout;
@@ -346,7 +346,7 @@ public final class TikoOptions {
          * then continues. A hook that ignores interrupts cannot be forcibly killed — the same JVM
          * contract as {@link #shutdownTimeout(Duration)}.
          *
-         * <p>Scope: SINGLETON container shutdown only. REQUEST/EVENT scope-exit teardown is
+         * <p>Scope: SINGLETON container shutdown only. EVENT scope-exit teardown is
          * unaffected.
          *
          * @param timeout non-negative duration; {@link Duration#ZERO} gives the hook no time and

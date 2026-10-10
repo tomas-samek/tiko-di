@@ -63,4 +63,36 @@ class EventScopePreDestroyTest {
                 TeardownRecorder.order.stream().filter(s -> s.equals("EventC")).count();
         assertThat(eventCDestroys).isEqualTo(3);
     }
+
+    @Test
+    void exceptionInPreDestroyDoesNotSkipOtherBeans() {
+        Container container = Tiko.create();
+        try {
+            container.runInEventScope(() -> {
+                container.get(LifoEventA.class);
+                container.get(ThrowingPreDestroyEventBean.class);
+            });
+        } finally {
+            container.shutdown();
+        }
+
+        assertThat(TeardownRecorder.order)
+                .as("a throwing @PreDestroy must not skip the other beans")
+                .contains("EventA", "EventB", "EventC", "Throwing.boom");
+    }
+
+    @Test
+    void eachUnitOfWorkGetsFreshInstances() {
+        Container container = Tiko.create();
+        LifoEventA inFirst;
+        LifoEventA inSecond;
+        try {
+            inFirst = container.supplyInEventScope(() -> container.get(LifoEventA.class));
+            inSecond = container.supplyInEventScope(() -> container.get(LifoEventA.class));
+        } finally {
+            container.shutdown();
+        }
+
+        assertThat(inFirst).isNotSameAs(inSecond);
+    }
 }
