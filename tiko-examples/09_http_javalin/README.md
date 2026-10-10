@@ -46,7 +46,7 @@ This gives the example three things for free:
 
 ```bash
 mvn -pl tiko-examples/09_http_javalin -am package
-java -jar tiko-examples/09_http_javalin/target/09_http_javalin-0.1.0.jar &
+java -jar tiko-examples/09_http_javalin/target/09_http_javalin-*.jar &
 
 # In another shell:
 curl -X POST http://localhost:8080/tickets \

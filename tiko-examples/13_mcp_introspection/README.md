@@ -30,7 +30,9 @@ Plus two events: `OrderPlaced` (input to `OrderService.validate`) and
    This emits `META-INF/tiko/topology.json`, `config-schema.json`, and
    `wiring-errors.json` into
    `tiko-examples/13_mcp_introspection/target/classes/META-INF/tiko/`
-   and produces the runnable `tiko-mcp/target/tiko-mcp-0.1.0.jar`.
+   and produces the runnable `tiko-mcp/target/tiko-mcp-<version>.jar`. `.mcp.json` in
+   this directory names that jar for the repository's current version
+   (`tiko-mcp-0.6.0-SNAPSHOT.jar`); update it if you build a different version.
 
 2. Open this directory in your MCP-aware agent. The agent picks up
    `.mcp.json` automatically (Claude Code, Cursor) — or import it manually.

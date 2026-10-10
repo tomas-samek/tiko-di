@@ -51,9 +51,8 @@ binders (yours and `tiko-kafka`'s `tiko.kafka`) are discovered through
 `META-INF/services/` files, which that transformer merges (#531). See
 `tiko-examples/08_kafka_order_warehouse/*/pom.xml`.
 
-> **Note:** as of writing, `tiko-kafka` / `tiko-kafka-processor` are not in
-> `tiko-bom` `dependencyManagement` (see #298), so pin `${tiko.version}` explicitly
-> on both until that lands.
+Both artifacts are managed by `tiko-bom`; with the BOM imported, the explicit
+`<version>` lines above can go.
 
 ## 2. Inbound — `@KafkaSource`
 
@@ -125,25 +124,25 @@ callbacks, so a sink/broker failure doesn't block local processing.
 
 ## 4. Configuration
 
-Broker settings bind to the `KafkaConfig` record under the `tiko.kafka` prefix.
-Fields: `bootstrapServers` (default `localhost:9092`), `consumerGroup`
-(`tiko-app`), `serializer` (`json`), `autoOffsetReset` (`earliest`),
-`pollTimeout`, `shutdownTimeout`, and pass-through `producerProperties` /
-`consumerProperties` maps.
+Broker settings bind to the `KafkaConfig` record under the `tiko.kafka` prefix, with
+**kebab-case** keys: `bootstrap-servers` (default `localhost:9092`), `consumer-group`
+(`tiko-app`), `serializer` (`json`), `auto-offset-reset` (`earliest`), `poll-timeout`,
+`shutdown-timeout`, and pass-through `producer-properties` / `consumer-properties` maps.
+The full key table, with defaults, is in the `tiko-build` skill's
+[`reference/api-signatures.md`](../../.ai-skills/tiko-build/reference/api-signatures.md).
 
 ```yaml
 tiko:
   kafka:
-    bootstrapServers: localhost:9092
-    consumerGroup: notify-service
-    autoOffsetReset: earliest
+    bootstrap-servers: localhost:9092
+    consumer-group: notify-service
+    auto-offset-reset: earliest
 ```
 
-> **Key casing (resolved in #310):** config binding is **exact-key** — the YAML key
-> must match the record field name verbatim. Use camelCase (`bootstrapServers`), not
-> kebab-case (`bootstrap-servers`) or snake_case. A near-miss fails the build with a
-> "did you mean 'bootstrapServers'?" suggestion rather than binding silently. Keep your
-> own `@Configuration` records' keys aligned to their field names the same way.
+> **Key casing:** `KafkaConfig` declares its public keys with `@Key("bootstrap-servers")`,
+> so they are kebab-case. Your own `@Configuration` records bind to their component names
+> exactly (camelCase as declared) unless a component carries `@Key`. A key that matches
+> neither fails startup with a "did you mean …?" suggestion rather than binding silently.
 
 ### Swapping the serializer (the `EventSerializer` SPI)
 
@@ -266,9 +265,6 @@ never kills the consumer thread.
 - Per-record commit only (`commitMode = PER_RECORD`).
 - Poison handling is the static skip-or-seek policy (§5), or per-error decisions (bounded
   retry, dead-letter) via `KafkaIngestErrorDecider`.
-- The Kafka transport edges are not yet reflected in `topology.json`, so the MCP
-  `trace_event_flow` tool can't confirm a Kafka end-to-end path (see #312) — verify
-  the generated `KafkaTransportBootstrap` directly meanwhile.
 
 ## Beyond
 

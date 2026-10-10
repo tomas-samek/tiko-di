@@ -20,10 +20,10 @@ docker compose -f tiko-examples/08_kafka_order_warehouse/docker-compose.yml up -
 mvn -pl tiko-examples/08_kafka_order_warehouse -am package
 
 # 3. Run warehouse-service (waits for orders)
-java -jar tiko-examples/08_kafka_order_warehouse/warehouse-service/target/kafka-warehouse-service-0.1.0.jar &
+java -jar tiko-examples/08_kafka_order_warehouse/warehouse-service/target/kafka-warehouse-service-*.jar &
 
 # 4. Run order-service (CLI prompts for amounts)
-java -jar tiko-examples/08_kafka_order_warehouse/order-service/target/kafka-order-service-0.1.0.jar
+java -jar tiko-examples/08_kafka_order_warehouse/order-service/target/kafka-order-service-*.jar
 # Type "19.99" + ENTER → watch warehouse-service log "warehouse received: …"
 ```
 
