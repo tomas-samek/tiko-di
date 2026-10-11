@@ -7,7 +7,7 @@ description: Use when a change touches how tiko-di handles untrusted input, depe
 
 Security for **Tiko's own code and supply chain** — not for applications built on Tiko.
 Everything here is driven by the registry [`docs/security-model.md`](../../docs/security-model.md)
-(SEC-1 … SEC-13). Disclosure policy: [`SECURITY.md`](../../SECURITY.md).
+(SEC-1 … SEC-14). Disclosure policy: [`SECURITY.md`](../../SECURITY.md).
 
 ## Surface map
 
@@ -18,6 +18,7 @@ Everything here is driven by the registry [`docs/security-model.md`](../../docs/
 | `tiko-kafka/**/runtime/**`, `KafkaIngestError`, `KafkaEgressError` | SEC-3, SEC-4, SEC-11 |
 | `KafkaConfig`, `KafkaBootstrapSupport`, Kafka client properties | SEC-8, SEC-11 |
 | `tiko-processor/**`, `tiko-kafka-processor/**` (generators, `CodeLiterals`, generated resource writers) | SEC-5 |
+| generated EVENT teardown (`ContainerGenerator` scope methods), `ErrorHandler` call sites | SEC-14 |
 | test mode, `@TestComponent`, `test-*.properties`, `AggregatingContainer` overrides | SEC-12 |
 | any log call, `TikoLog` | SEC-6 |
 | `tiko-mcp/**` | SEC-7 |
