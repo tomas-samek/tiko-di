@@ -7,7 +7,7 @@
 
     <groupId>io.github.tomas-samek</groupId>
     <artifactId>tiko-bom</artifactId>
-    <version>0.6.0</version>
+    <version>0.6.1-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Tiko DI - BOM</name>
@@ -55,7 +55,7 @@
 
     <properties>
         <!-- Tiko DI version -->
-        <tiko.version>0.6.0</tiko.version>
+        <tiko.version>0.6.1-SNAPSHOT</tiko.version>
 
         <!-- Third-party dependency versions -->
         <auto-service.version>1.1.1</auto-service.version>
