@@ -79,6 +79,25 @@ jobs:
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
           gpg-passphrase-env-var: MAVEN_GPG_PASSPHRASE
 
+      - name: Install pinned Maven
+        # The release uses a pinned Maven, not the runner image's (#545). With Maven 3.10.0
+        # the staging directory also holds maven-metadata-local.xml, _remote.repositories
+        # and .locks files, which central-publishing-maven-plugin (0.10.0 and 0.11.0) bundles
+        # and the Central Portal rejects ("content that does NOT have a .pom file").
+        # Bump MAVEN_VERSION and MAVEN_SHA512 together (the .sha512 file next to the
+        # archive on archive.apache.org).
+        env:
+          MAVEN_VERSION: "3.9.16"
+          MAVEN_SHA512: "831a8591fe20c8243b1dbe7d71e3244f31d1665b0804b2e825e38cbbe5ce0cafb8338851f90780735568773e0a6cd07bbec107cda0b896b008b861075358b6f6"
+        run: |
+          archive="apache-maven-${MAVEN_VERSION}-bin.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/$archive" \
+              "https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/$archive"
+          echo "${MAVEN_SHA512}  $RUNNER_TEMP/$archive" | sha512sum -c -
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/apache-maven-${MAVEN_VERSION}/bin/mvn" -v
+          echo "$RUNNER_TEMP/apache-maven-${MAVEN_VERSION}/bin" >> "$GITHUB_PATH"
+
       - name: Set release version in all poms
         # versions:set walks every module (reactor + sub-modules) but leaves inline
         # <tiko.version> properties untouched. Two such properties exist in places

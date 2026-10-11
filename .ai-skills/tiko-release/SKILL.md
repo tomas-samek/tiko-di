@@ -380,6 +380,15 @@ are the operational gotchas:
 - **A tag that points at the wrong commit must be deleted before
   re-running.** `git push origin :refs/tags/vX.Y.Z`. The workflow will
   fail at the tag-push step if the tag exists.
+- **The release runs on a pinned Maven, not the runner's.** The
+  `0.6.0` deploy failed Portal validation ("content that does NOT have
+  a .pom file") after the runner image moved to Maven 3.10.0, whose
+  staging leftovers the publishing plugin bundles (`#545`). The
+  workflow installs the Maven named by `MAVEN_VERSION`; bump it and
+  `MAVEN_SHA512` together, and only after a dead-URL bundle check
+  (`-DcentralBaseUrl=http://127.0.0.1:9`, then list
+  `tiko-bom/target/central-publishing/central-bundle.zip`) shows
+  nothing but artifacts, signatures and checksums.
 - **Don't publish a release with a known shaded-jar defect.** Drop
   staging, fix on a PR, retry. The `0.2.0` → `0.2.1` cycle did this
   for the `tiko-mcp` NOTICE merge.
