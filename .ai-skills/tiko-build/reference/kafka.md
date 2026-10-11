@@ -138,8 +138,9 @@ Inbound consumption is asynchronous (background poll thread): assert with Awaiti
 `tiko-examples/08_kafka_order_warehouse/*/src/test/java/.../FakeBroker*IT.java`.
 
 **If your module builds a shaded jar:** keep `ServicesResourceTransformer` in the
-`maven-shade-plugin` transformers. Tiko finds the Kafka transport and every module's
-`@Configuration` binders through `META-INF/services/` files, which that transformer merges;
+`maven-shade-plugin` transformers. Tiko finds the Kafka transport, every module's
+`@Configuration` binders and every module's container through `META-INF/services/` files,
+which that transformer merges;
 without it the fat jar keeps one module's copy and startup fails on the other module's keys.
 Also, failsafe defaults to running ITs against the packaged fat jar, which puts bundled
 dependency classes on the classpath twice; add

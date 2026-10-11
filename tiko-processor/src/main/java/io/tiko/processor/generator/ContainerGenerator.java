@@ -32,6 +32,9 @@ import javax.lang.model.element.Modifier;
 public final class ContainerGenerator {
 
     private static final String GENERATED_PACKAGE = "io.tiko.generated";
+    private static final String TIKO_PACKAGE = "io.tiko";
+    private static final ClassName ERROR_HANDLER = ClassName.get(TIKO_PACKAGE, "ErrorHandler");
+    private static final ClassName AUTO_CLOSE_FAILURE = ClassName.get(TIKO_PACKAGE, "AutoCloseFailure");
     private static final String MAIN_DESCRIPTOR = "META-INF/tiko/container.properties";
     private static final String TEST_DESCRIPTOR = "META-INF/tiko/test-container.properties";
 
@@ -86,7 +89,7 @@ public final class ContainerGenerator {
             // container itself, its descriptor, components list, and the shadows file.
             var testSideComponents = context.getAllActiveComponents();
             generateOne(containerClassName, testSideComponents, TEST_DESCRIPTOR, "");
-            generateComponentsListFile(testSideComponents);
+            generateComponentsListFile(testSideComponents, "META-INF/tiko/components.txt");
             writeTestShadowsFile(containerClassName);
             return;
         }
@@ -99,7 +102,8 @@ public final class ContainerGenerator {
         // prod and test together to a single processing round.
         var mainComponents = context.getActiveMainComponents();
         generateOne(containerClassName, mainComponents, MAIN_DESCRIPTOR, "");
-        generateComponentsListFile(mainComponents);
+        generateComponentsListFile(mainComponents, "META-INF/tiko/components.txt");
+        generateModule(containerClassName, mainComponents);
 
         if (context.hasTestComponents()) {
             var testSideComponents = context.getAllActiveComponents();
@@ -110,6 +114,49 @@ public final class ContainerGenerator {
             }
             generateOne(testContainerClassName, testSideComponents, TEST_DESCRIPTOR, "Test_");
             writeTestShadowsFile(testContainerClassName);
+        }
+    }
+
+    /**
+     * The classpath directory of a main container's per-module descriptors (#537), e.g.
+     * {@code META-INF/tiko/modules/TikoContainerImpl_33c9eab1/}. The container name carries the
+     * module's hash, so the path is unique per module and survives a shaded fat jar's merge.
+     */
+    public static String moduleRoot(String containerClassName) {
+        return "META-INF/tiko/modules/" + containerClassName + "/";
+    }
+
+    /**
+     * Writes the main container's descriptors under {@link #moduleRoot} too, and announces the
+     * module as a {@code io.tiko.TikoModule} service: a generated
+     * {@code TikoModule_<hash>} returning that root, listed in
+     * {@code META-INF/services/io.tiko.TikoModule}. A shaded fat jar merges services files
+     * but keeps one copy of the fixed-name descriptors, so the runtime finds every module through
+     * the services (#537, ARCH-16). The fixed-name copies stay for modules read by older runtimes.
+     */
+    private void generateModule(String containerClassName, List<ComponentModel> components) throws IOException {
+        String root = moduleRoot(containerClassName);
+        writeContainerDescriptor(root + "container.properties", containerClassName);
+        generateComponentsListFile(components, root + "components.txt");
+
+        String moduleClassName = "TikoModule_" + containerClassName.substring(containerClassName.lastIndexOf('_') + 1);
+        TypeSpec module = TypeSpec.classBuilder(moduleClassName)
+                .addAnnotation(GeneratorAnnotations.generatedBy(ContainerGenerator.class))
+                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                .addSuperinterface(ClassName.get(TIKO_PACKAGE, "TikoModule"))
+                .addMethod(MethodSpec.methodBuilder("descriptorRoot")
+                        .addAnnotation(Override.class)
+                        .addModifiers(Modifier.PUBLIC)
+                        .returns(String.class)
+                        .addStatement("return $S", root)
+                        .build())
+                .build();
+        JavaFile.builder(GENERATED_PACKAGE, module).build().writeTo(context.getFiler());
+
+        try (var writer = context.getFiler()
+                .createResource(javax.tools.StandardLocation.CLASS_OUTPUT, "", "META-INF/services/io.tiko.TikoModule")
+                .openWriter()) {
+            writer.write(GENERATED_PACKAGE + "." + moduleClassName + "\n");
         }
     }
 
@@ -336,8 +383,7 @@ public final class ContainerGenerator {
      * Creates the ErrorHandler field.
      */
     private FieldSpec createErrorHandlerField() {
-        return FieldSpec.builder(
-                        ClassName.get("io.tiko", "ErrorHandler"), "errorHandler", Modifier.PRIVATE, Modifier.FINAL)
+        return FieldSpec.builder(ERROR_HANDLER, "errorHandler", Modifier.PRIVATE, Modifier.FINAL)
                 .build();
     }
 
@@ -559,7 +605,7 @@ public final class ContainerGenerator {
         MethodSpec.Builder constructor = MethodSpec.constructorBuilder()
                 .addModifiers(Modifier.PUBLIC)
                 .addParameter(EventBus.class, "eventBus")
-                .addParameter(ClassName.get("io.tiko", "ErrorHandler"), "errorHandler")
+                .addParameter(ERROR_HANDLER, "errorHandler")
                 .addParameter(ClassName.get("java.util.concurrent", "ExecutorService"), "userEventExecutor")
                 .addParameter(TypeName.BOOLEAN, PUBLISH_LIFECYCLE_FIELD)
                 .addParameter(Duration.class, "shutdownTimeout")
@@ -705,7 +751,7 @@ public final class ContainerGenerator {
                 .nextControlFlow("catch ($T __t)", Exception.class)
                 .addStatement(
                         "getErrorHandler().onError(new $T($T.class, $S, __t))",
-                        ClassName.get("io.tiko", "ProduceFailure"),
+                        ClassName.get(TIKO_PACKAGE, "ProduceFailure"),
                         ClassName.get(factory.getDeclaringClass()),
                         factory.getMethodName())
                 .addStatement(
@@ -966,7 +1012,7 @@ public final class ContainerGenerator {
     private static final ClassName APP_STARTED = ClassName.get(EVENTS_PACKAGE, "ApplicationStartedEvent");
     private static final ClassName APP_ENDING = ClassName.get(EVENTS_PACKAGE, "ApplicationEndingEvent");
     private static final ClassName BOUNDED_EXECUTION = ClassName.get("io.tiko.runtime", "BoundedExecution");
-    private static final ClassName CONTAINER_SHUT_DOWN = ClassName.get("io.tiko", "ContainerShutDownException");
+    private static final ClassName CONTAINER_SHUT_DOWN = ClassName.get(TIKO_PACKAGE, "ContainerShutDownException");
     /** Shared get-or-create statement fragments (S1192) — used by scoped and singleton emission. */
     private static final String IF_EXISTING_NULL = "if (__existing == null)";
 
@@ -981,8 +1027,8 @@ public final class ContainerGenerator {
 
     private static final String RETURN_EXISTING = "return __existing";
 
-    private static final ClassName NO_SUCH_COMPONENT = ClassName.get("io.tiko", "NoSuchComponentException");
-    private static final ClassName NO_ACTIVE_EVENT_SCOPE = ClassName.get("io.tiko", "NoActiveEventScopeException");
+    private static final ClassName NO_SUCH_COMPONENT = ClassName.get(TIKO_PACKAGE, "NoSuchComponentException");
+    private static final ClassName NO_ACTIVE_EVENT_SCOPE = ClassName.get(TIKO_PACKAGE, "NoActiveEventScopeException");
 
     /** {@code Supplier<?>} — the type of a single-lookup override read (#309). */
     private static final TypeName SUPPLIER_WILDCARD = ParameterizedTypeName.get(
@@ -1300,9 +1346,8 @@ public final class ContainerGenerator {
             method.nextControlFlow("catch ($T __t)", Throwable.class);
             // Failures route solely through ErrorHandler (#116) — no catch-site log. AutoCloseable
             // and @PreDestroy emit distinct permits so observability code can discriminate.
-            ClassName failureType = isAutoCloseOnly
-                    ? ClassName.get("io.tiko", "AutoCloseFailure")
-                    : ClassName.get("io.tiko", "PreDestroyFailure");
+            ClassName failureType =
+                    isAutoCloseOnly ? AUTO_CLOSE_FAILURE : ClassName.get(TIKO_PACKAGE, "PreDestroyFailure");
             emitGuardedOnError(method, CodeBlock.of("new $T($T.class, __t)", failureType, componentType));
             method.endControlFlow(); // try/catch
         }
@@ -1319,8 +1364,7 @@ public final class ContainerGenerator {
             method.beginControlFlow("try");
             method.addStatement("__ac.close()");
             method.nextControlFlow("catch ($T __t)", Throwable.class);
-            emitGuardedOnError(
-                    method, CodeBlock.of("new $T(__ac.getClass(), __t)", ClassName.get("io.tiko", "AutoCloseFailure")));
+            emitGuardedOnError(method, CodeBlock.of("new $T(__ac.getClass(), __t)", AUTO_CLOSE_FAILURE));
             method.endControlFlow(); // try/catch
         }
 
@@ -1771,7 +1815,8 @@ public final class ContainerGenerator {
     private MethodSpec createGetProviderMethod() {
         TypeVariableName typeVar = TypeVariableName.get("T");
         ParameterizedTypeName classType = ParameterizedTypeName.get(ClassName.get(Class.class), typeVar);
-        ParameterizedTypeName providerType = ParameterizedTypeName.get(ClassName.get("io.tiko", "Provider"), typeVar);
+        ParameterizedTypeName providerType =
+                ParameterizedTypeName.get(ClassName.get(TIKO_PACKAGE, "Provider"), typeVar);
 
         return MethodSpec.methodBuilder("getProvider")
                 .addModifiers(Modifier.PUBLIC)
@@ -1789,7 +1834,8 @@ public final class ContainerGenerator {
     private MethodSpec createGetProviderWithNameMethod() {
         TypeVariableName typeVar = TypeVariableName.get("T");
         ParameterizedTypeName classType = ParameterizedTypeName.get(ClassName.get(Class.class), typeVar);
-        ParameterizedTypeName providerType = ParameterizedTypeName.get(ClassName.get("io.tiko", "Provider"), typeVar);
+        ParameterizedTypeName providerType =
+                ParameterizedTypeName.get(ClassName.get(TIKO_PACKAGE, "Provider"), typeVar);
 
         return MethodSpec.methodBuilder("getProvider")
                 .addModifiers(Modifier.PUBLIC)
@@ -1837,7 +1883,7 @@ public final class ContainerGenerator {
         return MethodSpec.methodBuilder("getErrorHandler")
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
-                .returns(ClassName.get("io.tiko", "ErrorHandler"))
+                .returns(ERROR_HANDLER)
                 .addStatement("return this.errorHandler")
                 .build();
     }
@@ -1864,7 +1910,7 @@ public final class ContainerGenerator {
      */
     private MethodSpec createEventExecutorMetricsMethod() {
         ClassName optional = ClassName.get("java.util", "Optional");
-        ClassName executorMetrics = ClassName.get("io.tiko", "ExecutorMetrics");
+        ClassName executorMetrics = ClassName.get(TIKO_PACKAGE, "ExecutorMetrics");
         ClassName threadPoolExecutor = ClassName.get("java.util.concurrent", "ThreadPoolExecutor");
         return MethodSpec.methodBuilder("eventExecutorMetrics")
                 .addModifiers(Modifier.PUBLIC)
@@ -2090,9 +2136,7 @@ public final class ContainerGenerator {
 
         boolean isAutoCloseOnly =
                 component.isAutoCloseable() && component.getPreDestroyMethods().isEmpty();
-        ClassName failureType = isAutoCloseOnly
-                ? ClassName.get("io.tiko", "AutoCloseFailure")
-                : ClassName.get("io.tiko", "PreDestroyFailure");
+        ClassName failureType = isAutoCloseOnly ? AUTO_CLOSE_FAILURE : ClassName.get(TIKO_PACKAGE, "PreDestroyFailure");
 
         method.beginControlFlow("if ($L != null)", variableName);
         // Teardown runs under options.teardownTimeout() (#106): unset → inline on the shutdown
@@ -2151,14 +2195,14 @@ public final class ContainerGenerator {
                         + " __t -> new $T($L.getClass(), __t))",
                 BOUNDED_EXECUTION,
                 variableName,
-                ClassName.get("io.tiko", "AutoCloseFailure"),
+                AUTO_CLOSE_FAILURE,
                 variableName);
         method.endControlFlow(); // if non-null
     }
 
-    private void generateComponentsListFile(List<ComponentModel> components) throws IOException {
+    private void generateComponentsListFile(List<ComponentModel> components, String resourcePath) throws IOException {
         try (var writer = context.getFiler()
-                .createResource(javax.tools.StandardLocation.CLASS_OUTPUT, "", "META-INF/tiko/components.txt")
+                .createResource(javax.tools.StandardLocation.CLASS_OUTPUT, "", resourcePath)
                 .openWriter()) {
 
             for (ComponentModel component : components) {

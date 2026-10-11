@@ -153,7 +153,8 @@ public final class Tiko {
             if (classLoader == null) classLoader = Tiko.class.getClassLoader();
 
             String descriptorName = selectDescriptor(options, classLoader);
-            int moduleCount = countResources(classLoader.getResources(descriptorName));
+            int moduleCount =
+                    ModuleDescriptors.find(descriptorName, classLoader).size();
 
             // Bind configuration first: the container needs the bound tiko.shutdownTimeout.
             // A no-op (BoundConfigs.NONE) without tiko-config on the classpath.
@@ -264,16 +265,6 @@ public final class Tiko {
         return MAIN_DESCRIPTOR;
     }
 
-    /** Counts how many {@link java.net.URL}s an enumeration yields, draining it. */
-    private static int countResources(java.util.Enumeration<java.net.URL> resources) {
-        int count = 0;
-        while (resources.hasMoreElements()) {
-            resources.nextElement();
-            count++;
-        }
-        return count;
-    }
-
     /**
      * Creates a single-module container. Does NOT call start() — that is done in createInternal
      * after injectConfigs() runs.
@@ -289,11 +280,11 @@ public final class Tiko {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
         if (classLoader == null) classLoader = Tiko.class.getClassLoader();
 
-        var resources = classLoader.getResources(descriptorName);
+        var resources = ModuleDescriptors.find(descriptorName, classLoader);
         Class<?> implClass;
-        if (resources.hasMoreElements()) {
+        if (!resources.isEmpty()) {
             Properties props = new Properties();
-            try (var input = resources.nextElement().openStream()) {
+            try (var input = resources.get(0).openStream()) {
                 props.load(input);
             }
             String implClassName = props.getProperty("impl");
