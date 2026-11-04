@@ -76,11 +76,16 @@ path.
        provider of `T` is the usual missing-dependency error.
      - Null is legitimate only when the **provider itself may return null**: a `@Produces`
        method whose return type is `T?`.
-     - Nullability is checked end to end at compile time. A nullable provider may only be
-       injected into `T?` points. Injecting it into a non-null `T` is an error that names the
-       producer.
-     - *Designer's call:* a non-null provider may be injected into either `T` or `T?`.
-     - *Designer's call:* Java-declared providers (platform types) count as non-null.
+     - Nullability is checked end to end at compile time, and it must **match exactly** (owner's
+       decision). A nullable provider may only be injected into `T?` points, and a non-null
+       provider only into `T` points. Each mismatch is a compile-time error that names the
+       producer and says which way to fix it. The reasoning: a `?` on an injection point has
+       to mean "this provider can return null". Allowing `T?` for a provider that never
+       returns null misleads readers into thinking the dependency is optional, and makes
+       developers handle a null that can't happen.
+     - *Designer's call:* Java-declared providers and Java injection points (platform types)
+       count as non-null. In a mixed module, a Java class therefore can't inject a Kotlin
+       `T?` provider. The error points to making the provider non-null.
      - The generated container must store and return a `null` instance correctly for SINGLETON
        and EVENT caching. That rules out map operations that treat `null` as "absent".
 
