@@ -6,7 +6,7 @@ import io.tiko.runtime.Tiko;
 /**
  * Tiny entry point produced by the tiko-archetype scaffold. Replace with your own.
  *
- * <p>Run: {@code mvn exec:java}.</p>
+ * <p>Run: {@code mvn compile exec:java}.</p>
  */
 public final class Main {
 

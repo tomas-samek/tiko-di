@@ -25,4 +25,4 @@ the recipe upstream, follow
 
 - `mvn compile` — annotation processing runs here
 - `mvn test` — full test run
-- `mvn exec:java -Dexec.mainClass=${package}.Main` — run example
+- `mvn compile exec:java` — run example (`exec:java` alone doesn't compile)
