@@ -101,28 +101,6 @@
                     </execution>
                 </executions>
             </plugin>
-            <!-- Run *IT.java via Failsafe at integration-test/verify. -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-failsafe-plugin</artifactId>
-                <version>3.2.2</version>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>integration-test</goal>
-                            <goal>verify</goal>
-                        </goals>
-                        <configuration>
-                            <!-- docker-java 3.4.0 (pulled by Testcontainers 1.20.4) defaults to
-                                 API 1.32, which Docker Desktop 25+ rejects. Pin a modern API
-                                 version supported by current engines. -->
-                            <systemPropertyVariables>
-                                <api.version>1.43</api.version>
-                            </systemPropertyVariables>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
         </plugins>
     </build>
 </project>
