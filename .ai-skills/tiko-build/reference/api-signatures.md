@@ -12,10 +12,10 @@ Transcribed from source. Import from this table — never from memory.
 |---|---|
 | `@Component` `@Inject` `@Named` `@Pick` `@Produces` `@PostConstruct` `@PreDestroy` `@EventHandler` `@EventTrigger` `@EventTriggers` `@Configuration` `@Default` `@Key` `BackoffStrategy` | `io.tiko.annotations` |
 | `@KafkaSource` `@KafkaSink` | `io.tiko.kafka.annotations` — **NOT** `io.tiko.annotations` |
-| `Container` `EventBus` `EventCallback` `Subscription` `Scope` `Provider` `TransportBootstrap` `ErrorHandler` `ConfigSource` | `io.tiko` |
+| `Container` `EventBus` `EventCallback` `Subscription` `Scope` `Provider` `TransportBootstrap` `ErrorHandler` `ConfigSource` `EventSerializer` `UndecodablePayloadException` | `io.tiko` |
 | `Tiko` `TikoOptions` `TikoDaemon` | `io.tiko.runtime` |
 | `ConfigSources` | `io.tiko.config` |
-| `KafkaTransport` `KafkaSerializer` `KafkaConfig` | `io.tiko.kafka` |
+| `KafkaTransport` `KafkaSerializer` `KafkaConfig` `KafkaIngestError` `KafkaIngestErrorDecider` `IngestDecision` `KafkaRecordDeadLettered` | `io.tiko.kafka` |
 | `JsonKafkaSerializer` | `io.tiko.kafka.serializer` |
 | `FakeKafkaBroker` `FakeKafkaTransport` | `io.tiko.kafka.test` |
 
@@ -65,8 +65,24 @@ Optional<ProducerRecord<String, byte[]>> FakeKafkaBroker.findProduced(String top
 static FakeKafkaTransport FakeKafkaTransport.over(KafkaTransport original, FakeKafkaBroker broker)
 
 // JSON serializer (io.tiko.kafka.serializer)
-byte[] JsonKafkaSerializer.serialize(Object value)
+byte[] JsonKafkaSerializer.serialize(Object value)          // throws IllegalStateException
 <T> T JsonKafkaSerializer.deserialize(byte[] bytes, Class<T> type)
+    // throws UndecodablePayloadException (extends IllegalStateException) on ANY decode
+    // failure: local and deterministic, so the same bytes fail on every redelivery.
+    // No cause, no payload in the message.
+
+// Decode-failure signal (io.tiko)
+Class<?> UndecodablePayloadException.targetType()
+
+// Ingest errors and decisions (io.tiko.kafka)
+record KafkaIngestError(String topic, int partition, long offset, Headers headers, Throwable cause)
+    // failure from deserialize, the bridge method, or publish; a decode failure's cause()
+    // IS the UndecodablePayloadException (not wrapped), so test it with instanceof
+record KafkaRecordDeadLettered(String topic, int partition, long offset, Headers headers,
+                               Throwable cause, int attempts)
+interface KafkaIngestErrorDecider { IngestDecision decide(KafkaIngestError error, int attempt); }
+    // attempt = consecutive failures of this offset, starting at 1
+enum IngestDecision { SEEK, SKIP, DEAD_LETTER, FAIL }
 ```
 
 ### Annotation attributes (with defaults)

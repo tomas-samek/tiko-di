@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import io.tiko.UndecodablePayloadException;
 import io.tiko.kafka.KafkaSerializer;
 import java.io.IOException;
 import java.util.stream.Collectors;
@@ -41,9 +42,11 @@ public final class JsonKafkaSerializer implements KafkaSerializer {
             return MAPPER.readValue(bytes, type);
         } catch (IOException e) {
             // Jackson's own message quotes the offending value, and the default error handler logs
-            // the whole cause chain, so the payload must not reach either (SEC-4, #494).
-            throw new IllegalStateException(
-                    "failed to deserialize " + type.getSimpleName() + " from JSON: " + describeWithoutValue(e));
+            // the whole cause chain, so the payload must not reach either (SEC-4, #494). Decoding is
+            // local and deterministic, so the failure is typed as undecodable (#549): the same
+            // bytes fail on every redelivery.
+            throw new UndecodablePayloadException(
+                    type, "failed to deserialize " + type.getSimpleName() + " from JSON: " + describeWithoutValue(e));
         }
     }
 

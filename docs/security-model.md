@@ -121,8 +121,11 @@ includes it.
 which quoted the offending field value in full (`from String "SSN-123-45-6789"`) on every
 `SEEK` redelivery. `JsonKafkaSerializer` now throws a message naming only the failure kind,
 field path and position, and doesn't chain Jackson's exception; `JsonKafkaSerializerPayloadLeakTest`
-checks the whole printed stack trace. A user-supplied `KafkaSerializer` controls its own
-messages. Since #516 the log line names the record (`orders-3@1042`) so an operator can find it.
+checks the whole printed stack trace. Since #549 that exception is an
+`UndecodablePayloadException` (target type plus the same value-free message, no cause), and
+the same test asserts the type and the missing cause. A user-supplied `KafkaSerializer`
+controls its own messages; the `EventSerializer.deserialize` contract asks it to keep payload
+values out of them. Since #516 the log line names the record (`orders-3@1042`) so an operator can find it.
 
 **Violation looks like.** A payload/`byte[]` component added to `KafkaIngestError`, a log
 call that renders `record.value()` or a `KafkaEgressError` (its `toString()`), a `location()`

@@ -5,10 +5,13 @@ import static org.awaitility.Awaitility.await;
 
 import io.tiko.Container;
 import io.tiko.ErrorContext;
+import io.tiko.UndecodablePayloadException;
 import io.tiko.kafka.IngestDecision;
 import io.tiko.kafka.KafkaIngestError;
 import io.tiko.kafka.KafkaIngestErrorDecider;
 import io.tiko.kafka.KafkaRecordDeadLettered;
+import io.tiko.kafka.KafkaSerializer;
+import io.tiko.kafka.serializer.JsonKafkaSerializer;
 import io.tiko.runtime.Tiko;
 import java.time.Duration;
 import java.util.List;
@@ -68,6 +71,86 @@ class KafkaIngestErrorDeciderTest {
                 .orElseThrow(() -> new AssertionError("no KafkaRecordDeadLettered routed: " + routed));
         assertThat(dl.attempts()).isEqualTo(3);
         assertThat(dl.offset()).isZero();
+    }
+
+    record Order(String id) {}
+
+    /** The skip-undecodable recipe from {@code reference/kafka.md} (#549). */
+    private static final KafkaIngestErrorDecider SKIP_UNDECODABLE = (error, attempt) -> {
+        if (error.cause() instanceof UndecodablePayloadException) {
+            return IngestDecision.DEAD_LETTER;
+        }
+        return attempt < 5 ? IngestDecision.SEEK : IngestDecision.DEAD_LETTER;
+    };
+
+    @Test
+    void undecodableRecordIsDeadLetteredAtOnceAndTheNextRecordFlows() {
+        var batch = new ConsumerRecords<>(Map.of(
+                P0,
+                List.of(
+                        RunnerTestSupport.consumerRecord("t", 0, 0, "not json"),
+                        RunnerTestSupport.consumerRecord("t", 0, 1, "{\"id\":\"o-1\"}"))));
+        var client = new ScriptedConsumerClient(List.of(batch));
+        List<ErrorContext> routed = new CopyOnWriteArrayList<>();
+        List<Order> received = new CopyOnWriteArrayList<>();
+        var source = new GeneratedSourceDescriptor(
+                "t", "", "Order", Order.class, KafkaSerializer.Default.class, false, (c, payload, ctx) -> payload);
+
+        try (Container container = Tiko.create()) {
+            container.getEventBus().subscribe(Order.class, received::add);
+            var runner = new ThreadPerTopicRunner(
+                    source,
+                    client,
+                    container,
+                    container.getEventBus(),
+                    routed::add,
+                    new JsonKafkaSerializer(),
+                    RunnerTestSupport.config(),
+                    SKIP_UNDECODABLE);
+            runner.start();
+            try {
+                await().atMost(Duration.ofSeconds(5)).until(() -> client.commits.contains(Map.entry(P0, 2L)));
+            } finally {
+                runner.stop();
+            }
+        }
+
+        assertThat(client.seeks).as("an undecodable record is never retried").isEmpty();
+        assertThat(received).as("the good record behind it is not held up").containsExactly(new Order("o-1"));
+        assertThat(routed)
+                .filteredOn(KafkaRecordDeadLettered.class::isInstance)
+                .singleElement()
+                .satisfies(e -> {
+                    var dl = (KafkaRecordDeadLettered) e;
+                    assertThat(dl.offset()).isZero();
+                    assertThat(dl.attempts()).isEqualTo(1);
+                    assertThat(dl.cause()).isInstanceOf(UndecodablePayloadException.class);
+                });
+    }
+
+    @Test
+    void aBridgeFailureIsNotReportedAsUndecodable() {
+        var client = new ScriptedConsumerClient(List.of(poisonBatch(0)));
+        List<ErrorContext> routed = new CopyOnWriteArrayList<>();
+        List<Throwable> causes = new CopyOnWriteArrayList<>();
+
+        try (Container container = Tiko.create()) {
+            var runner = runner(client, container, routed, (error, attempt) -> {
+                causes.add(error.cause());
+                return IngestDecision.SKIP;
+            });
+            runner.start();
+            try {
+                await().atMost(Duration.ofSeconds(5)).until(() -> client.commits.contains(Map.entry(P0, 1L)));
+            } finally {
+                runner.stop();
+            }
+        }
+
+        assertThat(causes)
+                .as("the bridge method threw after a successful decode")
+                .singleElement()
+                .isNotInstanceOf(UndecodablePayloadException.class);
     }
 
     @Test

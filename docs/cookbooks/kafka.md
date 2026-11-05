@@ -161,6 +161,11 @@ To plug in a different format (Avro, Protobuf, a schema-registry client, ...):
 3. Select it with `tiko.kafka.serializer: <name>` (whole transport) or per-bridge with
    `@KafkaSource(serializer = MyAvroSerializer.class)` / `@KafkaSink(serializer = ...)`.
 
+In `deserialize`, throw `io.tiko.UndecodablePayloadException` for input that can never be
+decoded (malformed bytes, a type mismatch), and any other exception for a failure that may
+pass on retry (the schema registry is unreachable). Error policies rely on that split. Keep
+payload values out of both: error handlers log the message and the whole cause chain.
+
 An unknown serializer name fails fast at container start, naming the missing serializer and the
 YAML key.
 
@@ -201,7 +206,10 @@ tiko:
 the moment of failure — and deserialization is *not* exempt (a schema-registry
 deserializer does a network call; a rolling deployment can make the same bytes fail now
 and succeed minutes later). So `SKIP` also drops records that failed for a transient
-reason. Enable it only for streams where occasional loss on a blip is acceptable; keep
+reason. The one failure that is known to be permanent is a serializer-reported
+`UndecodablePayloadException`: the bundled `JsonKafkaSerializer` decodes locally and
+deterministically, so its decode failures repeat on every redelivery — a decider can
+skip those without retrying (below). Enable it only for streams where occasional loss on a blip is acceptable; keep
 the default `SEEK` when every record matters. To retry a bounded number of times and then
 dead-letter, register a `KafkaIngestErrorDecider` (below).
 
@@ -222,16 +230,20 @@ ingest failure; when absent, the static `poison-record-policy` runs unchanged
 public class OrderIngestPolicy implements KafkaIngestErrorDecider {
     @Override
     public IngestDecision decide(KafkaIngestError error, int attempt) {
-        if (attempt < 3 && error.cause() instanceof java.io.IOException) {
-            return IngestDecision.SEEK;        // transient — retry (redelivered next poll)
+        if (error.cause() instanceof io.tiko.UndecodablePayloadException) {
+            return IngestDecision.DEAD_LETTER; // can never decode — hand off now, no retry
         }
-        if (error.cause() instanceof com.example.SchemaMismatch) {
-            return IngestDecision.DEAD_LETTER; // known-bad shape — hand off, then advance
-        }
-        return IngestDecision.SKIP;            // log and move on
+        return attempt < 5 ? IngestDecision.SEEK   // possibly transient — retry
+                           : IngestDecision.DEAD_LETTER;
     }
 }
 ```
+
+`UndecodablePayloadException` (in `tiko-api`) is the serializer's statement that the bytes
+can never be decoded into the target type. The bundled JSON serializer raises it for every
+decode failure; it carries the target type (`targetType()`) and no cause or payload value.
+For a decode failure, `error.cause()` is that exception itself, so test it with
+`instanceof` — never by matching the message text.
 
 `attempt` is the consecutive failure count for the record's offset, starting at
 `1`; bounding the retry is your code's job. The outcomes:
