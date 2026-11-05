@@ -34,7 +34,7 @@ invokes them via generated code at runtime.
 **Rationale.** Compile-time concerns must not leak into runtime bytecode; SOURCE retention is
 a code-level invariant, not a version-pinning bet.
 
-**Anchor.** CLAUDE.md "Annotation Retention".
+**Anchor.** `.claude/rules/api-surface.md` "Annotation Retention".
 
 **Violation looks like.** A new framework annotation with `@Retention(RUNTIME)` whose
 bytecode is never read by the container or generated code at runtime.
@@ -158,7 +158,7 @@ the lazy-holder pattern. No logging-framework dependency, no `System.err.println
 slf4j/log4j2 via a `LoggerFinder`. A direct logging-framework dep in `tiko-runtime` or
 `tiko-api` would force it on all consumers.
 
-**Anchor.** CLAUDE.md "Logging in Framework Code".
+**Anchor.** `.claude/rules/framework-code.md` "Logging in Framework Code".
 
 **Exception.** `tiko-mcp` writes MCP JSON-RPC messages to `System.out` (`McpStdioBridge`): stdout
 is the MCP stdio protocol channel, not log output. Its logging still goes through
@@ -197,7 +197,7 @@ generated proxy that bypasses the interface contract.
 **Rationale.** The `@Generated` marker lets IDEs grey out generated sources and coverage tools
 exclude them. Consistency via the shared helper prevents per-generator drift.
 
-**Anchor.** CLAUDE.md "Generated Code Markings".
+**Anchor.** `.claude/rules/annotation-processors.md` "Generated Code Markings".
 
 **Exception.** `tiko-kafka-processor`'s `KafkaTransportBootstrapGenerator` builds the same
 `@Generated(value = <generator FQN>)` annotation inline: the module deliberately has no compile

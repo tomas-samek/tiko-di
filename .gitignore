@@ -41,6 +41,7 @@ build/
 !/.claude/commands/
 /.claude/commands/*
 !/.claude/commands/*.md
+!/.claude/rules/
 /.idea/
 /.mvn/
 
