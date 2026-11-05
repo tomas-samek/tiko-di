@@ -37,4 +37,4 @@ root. It covers:
 
 - `mvn compile` — runs annotation processing
 - `mvn test` — runs tests
-- `mvn exec:java -Dexec.mainClass=${package}.Main` — runs the example
+- `mvn compile exec:java` — runs the example (`exec:java` alone doesn't compile)

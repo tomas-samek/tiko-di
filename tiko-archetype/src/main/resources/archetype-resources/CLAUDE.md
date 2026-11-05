@@ -179,10 +179,10 @@ container does; a test calling `Tiko.create(...)` itself adds
 ## Build and run
 
 ```bash
-mvn compile          # runs annotation processing → generated container
-mvn test             # runs tests
-mvn exec:java        # runs Main (pom.xml sets the mainClass)
-mvn clean install    # full clean build
+mvn compile            # runs annotation processing → generated container
+mvn test               # runs tests
+mvn compile exec:java  # runs Main (pom.xml sets the mainClass)
+mvn clean install      # full clean build
 ```
 
 Generated code lives under `target/generated-sources/annotations/io/tiko/generated/`
