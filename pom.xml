@@ -87,7 +87,7 @@
         <maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
         <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
         <central-publishing-maven-plugin.version>0.12.0</central-publishing-maven-plugin.version>
-        <jacoco.version>0.8.13</jacoco.version>
+        <jacoco.version>0.8.16</jacoco.version>
         <testcontainers.version>1.20.4</testcontainers.version>
         <!-- Testcontainers 1.x pulls commons-compress 1.24.0 (GHSA-4265-ccf5-phj5,
              GHSA-4g9r-vxhx-9pgx); 1.26.0+ fixes both (#505). -->
