@@ -60,7 +60,8 @@ class NoRequestScopeWordingTest {
                 REPO.resolve("tiko-examples"),
                 REPO.resolve(".ai-skills"),
                 REPO.resolve("README.md"),
-                REPO.resolve("CLAUDE.md")));
+                REPO.resolve("CLAUDE.md"),
+                REPO.resolve(".claude/rules")));
         try (Stream<Path> modules = Files.list(REPO)) {
             modules.filter(m -> m.getFileName().toString().startsWith("tiko-"))
                     .map(m -> m.resolve("src"))

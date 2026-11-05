@@ -2,62 +2,40 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **Building a service on Tiko?** Read
-> [`.ai-skills/tiko-build/SKILL.md`](./.ai-skills/tiko-build/SKILL.md)
-> first. It's the operational distillation of
-> [`docs/orchestrator-model.md`](./docs/orchestrator-model.md) — the
-> decision tree, `@Produces` cookbook, and anti-pattern redirects that
-> stop agents from searching for "tiko's equivalent of Spring's X". This
-> CLAUDE.md is the repo-development reference; the skill is for **building
-> with** the framework.
->
-> **Adding a new cookbook recipe?** Read
-> [`.ai-skills/tiko-cookbook-extension/SKILL.md`](./.ai-skills/tiko-cookbook-extension/SKILL.md) —
-> the procedural skill for extending the `tiko-build` cookbook when an
-> integration the canonical recipes don't cover comes up. **Load-bearing
-> rule: ask, don't fabricate.** Long-form companion:
-> [`docs/cookbook-extension.md`](./docs/cookbook-extension.md).
->
-> **About to cut a release? Run the architecture gate first.** Read
-> [`.ai-skills/tiko-architect/SKILL.md`](./.ai-skills/tiko-architect/SKILL.md) —
-> the architecture go/no-go (GO / CONDITIONAL / NO-GO) that runs *before*
-> `tiko-release`'s pre-flight, checking the release delta against the
-> [architecture invariants registry](./docs/architecture-invariants.md).
-> **Load-bearing rule: a NO-GO stops the release until the named blockers
-> are resolved.**
->
-> **Cutting a release of tiko-di?** Read
-> [`.ai-skills/tiko-release/SKILL.md`](./.ai-skills/tiko-release/SKILL.md) —
-> pre-flight checks, the two version inputs to ask the user about,
-> the Sonatype Portal manual gate, common traps. **Load-bearing rule:
-> never pick `release_version` or `next_snapshot` silently.** Long-form
-> companion: [`docs/release-skill.md`](./docs/release-skill.md).
-> Comprehensive reference: [`docs/releasing.md`](./docs/releasing.md).
->
-> **Touching the landing page (`site/`), adding a JDK, or a site deploy
-> looks stale?** Read
-> [`.ai-skills/tiko-site-maintainer/SKILL.md`](./.ai-skills/tiko-site-maintainer/SKILL.md) —
-> the framing rule for page copy, every place the JDK list lives, the
-> verification script, and deploy troubleshooting. **Load-bearing rule:
-> no "coming from Spring" mappings on the page — surface the conflict
-> instead of writing one.**
->
-> **Security-relevant change, a release, an audit, or a vulnerability report?** Read
-> [`.ai-skills/tiko-security/SKILL.md`](./.ai-skills/tiko-security/SKILL.md) — PR review
-> against the [security model](./docs/security-model.md), the release gate (after
-> `tiko-architect`), periodic audit, and advisory handling. **Load-bearing rule: nothing about
-> an undisclosed vulnerability goes public before its advisory is published.**
+Read the skill for the job first. Each one carries a **load-bearing rule** you must not skip.
+
+- **Building a service on Tiko?** [`.ai-skills/tiko-build/SKILL.md`](./.ai-skills/tiko-build/SKILL.md),
+  the operational distillation of [`docs/orchestrator-model.md`](./docs/orchestrator-model.md): decision
+  tree, `@Produces` cookbook, and the anti-pattern redirects that stop agents from searching for
+  "tiko's equivalent of Spring's X". This CLAUDE.md is for developing the repo; the skill is for
+  **building with** the framework.
+- **Adding a cookbook recipe?** [`.ai-skills/tiko-cookbook-extension/SKILL.md`](./.ai-skills/tiko-cookbook-extension/SKILL.md)
+  (long form: [`docs/cookbook-extension.md`](./docs/cookbook-extension.md)). **Load-bearing rule: ask,
+  don't fabricate.**
+- **About to cut a release? Run the architecture gate first.** [`.ai-skills/tiko-architect/SKILL.md`](./.ai-skills/tiko-architect/SKILL.md),
+  the GO / CONDITIONAL / NO-GO check of the release delta against the
+  [architecture invariants registry](./docs/architecture-invariants.md), before `tiko-release`'s
+  pre-flight. **Load-bearing rule: a NO-GO stops the release until the named blockers are resolved.**
+- **Cutting a release of tiko-di?** [`.ai-skills/tiko-release/SKILL.md`](./.ai-skills/tiko-release/SKILL.md)
+  (long form: [`docs/release-skill.md`](./docs/release-skill.md); reference:
+  [`docs/releasing.md`](./docs/releasing.md)): pre-flight, the two version inputs, the Sonatype Portal
+  manual gate, common traps. **Load-bearing rule: never pick `release_version` or `next_snapshot`
+  silently.**
+- **Touching the landing page (`site/`), adding a JDK, or a site deploy looks stale?**
+  [`.ai-skills/tiko-site-maintainer/SKILL.md`](./.ai-skills/tiko-site-maintainer/SKILL.md): page-copy
+  framing, every place the JDK list lives, verification, deploy troubleshooting. **Load-bearing rule:
+  no "coming from Spring" mappings on the page — surface the conflict instead of writing one.**
+- **Security-relevant change, a release, an audit, or a vulnerability report?**
+  [`.ai-skills/tiko-security/SKILL.md`](./.ai-skills/tiko-security/SKILL.md): PR review against the
+  [security model](./docs/security-model.md), the release gate (after `tiko-architect`), periodic
+  audit, advisory handling. **Load-bearing rule: nothing about an undisclosed vulnerability goes
+  public before its advisory is published.**
 
 ## Project Overview
 
-**Tiko DI** is a modern, compile-time dependency injection framework for Java 21+ with event-driven architecture.
-
-**Key Features:**
-- **Compile-time validation** - Zero runtime DI exceptions
-- **Minimal API surface** - Learn in 15 minutes
-- **Event-driven** - Seamless local/distributed event handling
-- **Java 21+ only** - Leverages records, sealed classes, pattern matching
-- **No reflection at runtime** - All wiring via generated code
+**Tiko DI** is a compile-time dependency injection framework for Java 21+ with an event-driven
+architecture. The annotation processor validates the wiring and generates it, so nothing at
+runtime uses reflection or classpath scanning.
 
 **Project Coordinates:**
 - **Maven Group ID**: `io.github.tomas-samek` (Maven Central namespace; verified via GitHub).
@@ -72,32 +50,12 @@ This project uses **Maven 3** as its build system.
 ### Common Commands
 
 ```bash
-# Compile the project (triggers annotation processing)
-mvn compile
-
-# Run tests
-mvn test
-
-# Run a single test class
-mvn test -Dtest=ClassName
-
-# Run a single test method
-mvn test -Dtest=ClassName#methodName
-
-# Package all modules
-mvn package
-
-# Clean build artifacts
-mvn clean
-
-# Full clean build
-mvn clean install
-
-# Skip tests during build
-mvn install -DskipTests
-
-# Build specific module
-mvn compile -pl tiko-api
+mvn compile                          # compile; runs annotation processing
+mvn test                             # unit tests (*Test, surefire)
+mvn test -Dtest=ClassName#methodName # one class or method
+mvn clean install                    # full build incl. integration tests (*IT, failsafe)
+mvn install -DskipTests              # install without tests
+mvn compile -pl tiko-api             # one module
 ```
 
 ## Multi-Module Structure
@@ -118,7 +76,7 @@ tiko/
 ├── tiko-archetype/        # Maven archetype for new Tiko services
 ├── tiko-bom/              # Bill of materials (no parent — excluded from spotless aggregate)
 ├── tiko-coverage/         # JaCoCo aggregate module for Sonar
-└── tiko-examples/         # Numbered example apps 01–15 (also serve as behavioral tests)
+└── tiko-examples/         # Numbered example apps 01–16 (also serve as behavioral tests)
 ```
 
 Event abstractions (`EventBus`, `@EventHandler`, `@EventTrigger`, `Event<T>`, etc.) live
@@ -158,15 +116,6 @@ Three scopes (via `Scope` enum) - from longest to shortest lifetime:
 - `Scope.EVENT` - One unit of work (HTTP request, consumed message, scheduled job, async dispatch)
 - `Scope.PROTOTYPE` - Per injection (shortest, default)
 
-**Scope hierarchy:**
-```
-SINGLETON (application)
-    ↓
-EVENT (one unit of work — sync reach of an inbound stimulus)
-    ↓
-PROTOTYPE (per injection)
-```
-
 **Unit of work:** The synchronous reach of an inbound stimulus, bounded at every async / transport hop. EVENT is single-frame in `0.x.0` — calling `runInEventScope` while a unit is already open throws `IllegalStateException`. Nestability is a deferred-but-additive future change.
 
 **Cross-scope injection rules (3×3):**
@@ -181,30 +130,12 @@ PROTOTYPE (per injection)
 
 ### Annotation Processing
 
-The `tiko-processor` module scans `@Component` classes at compile-time and:
-
-1. **Validates** dependency graph (missing deps, circular deps, scope violations)
-2. **Generates** factory classes for each component
-3. **Generates** `TikoContainerImpl` with all wiring
-4. **Generates** event handler registration code
-5. **Reports** clear compile-time errors with suggested fixes
-
-**No runtime reflection or classpath scanning!**
+`tiko-processor` scans `@Component` classes at compile time, validates the dependency graph
+(missing deps, cycles, scope violations), generates the per-component factories,
+`TikoContainerImpl` and the event-handler registration, and reports compile errors with
+suggested fixes. Generated sources land in `target/generated-sources/annotations`.
 
 ### Event System
-
-Event bus abstraction allows transparent switching between local and distributed implementations:
-
-```java
-// Same code works with both local and Kafka
-@Component
-public class OrderService {
-    @EventHandler
-    public void onOrderCreated(OrderCreatedEvent event) {
-        // Handle event
-    }
-}
-```
 
 The local in-memory bus is the default. The Kafka transport is opt-in via the
 `tiko-kafka` + `tiko-kafka-processor` modules: `@KafkaSource` / `@KafkaSink` annotations
@@ -213,147 +144,21 @@ generate a `KafkaTransportBootstrap` that `Tiko.create()` discovers through the
 transport selection is dependency + annotation driven, not a config switch. Broker
 settings live under `tiko.kafka.*` (see `tiko-kafka`'s `defaults.yaml`).
 
-## Core Annotations (tiko-api)
-
-**Package:** All annotations are in `io.tiko.annotations.*`
-
-### Dependency Injection
-- `@Component(scope, name, profiles)` - Mark classes for DI (SOURCE retention)
-  - `scope` - Lifecycle scope (SINGLETON, EVENT, PROTOTYPE)
-  - `name` - Optional qualifier
-  - `profiles` - Optional active profiles
-- `@Inject` - Mark injection points (SOURCE retention)
-- `@Named("qualifier")` - Disambiguate implementations at injection point
-
-### Scopes (Scope enum - longest to shortest)
-- `Scope.SINGLETON` - Application lifetime
-- `Scope.EVENT` - One unit of work (HTTP request, message, job, async dispatch)
-- `Scope.PROTOTYPE` - New instance per injection (default, shortest)
-
-### Lifecycle
-- `@PostConstruct` - Called after construction
-- `@PreDestroy` - Called before destruction
-
-### Advanced
-- `@Produces(scope, name, profiles)` - Factory method within component classes
-
-### Event System
-- `@EventHandler(async, eventType)` - Mark method as event handler (SOURCE retention)
-- `@EventTrigger(eventName, async, spread, guard)` - Declaratively trigger events after handler completes (SOURCE retention)
-- `@EventTriggers(value)` - Container for multiple @EventTrigger annotations
-- `EventTriggerGuard` - Interface for conditional event triggering
-- `Event<T>` - Event wrapper for origin tracking and event chain traversal
-- `EventCallback<T>` - Functional interface for programmatic subscription
-
-### Core Interfaces
-- `Container` - Main DI container interface
-- `Provider<T>` - Lazy dependency resolution
-- `EventBus` - Event publishing/subscribing
-
 The `Tiko` bootstrap (`Tiko.create()` / `Tiko.daemon()`) is a concrete class in
 **tiko-runtime** (`io.tiko.runtime.Tiko`), not a tiko-api interface — apps need the
 runtime artifact on the classpath to boot.
 
-### Lifecycle Events (io.tiko.events)
+## Framework reference
 
-The container automatically publishes lifecycle events for async hooks without cluttering main processing code:
+How the framework behaves for its users lives in the docs, not here. Read the one you need:
 
-**Application Lifecycle:**
-- `ApplicationStartedEvent(Instant timestamp)` - Published when container starts
-- `ApplicationEndingEvent(Instant timestamp, Duration uptime)` - Published before shutdown
-
-**Two lifecycle models:** `Tiko.create(...)` returns an AutoCloseable `Container` — *you* own the
-lifecycle (try-with-resources / explicit `shutdown()`), no JVM hook. `Tiko.daemon(...)` returns a
-non-AutoCloseable `TikoDaemon` that registers a JVM shutdown hook for long-lived processes, so
-`@PreDestroy` / `ApplicationEndingEvent` fire on `Ctrl+C` / `SIGTERM`. `ApplicationEndingEvent` fires
-*before* `@PreDestroy`, so external cleanup (stop an HTTP server, flush a buffer) belongs in an
-`@EventHandler(ApplicationEndingEvent)` subscriber.
-
-**Unit-of-work (EVENT) Lifecycle:**
-- `EventStartedEvent(String eventId, Instant timestamp)` - Published on scope entry
-- `EventEndingEvent(String eventId, Instant timestamp, Duration duration)` - Published on scope exit
-
-**Usage Pattern:**
-```java
-@Component(scope = Scope.SINGLETON)
-public class MetricsCollector {
-    @EventHandler
-    public void onEventStarted(EventStartedEvent event) {
-        metrics.incrementActiveUnits();
-        logger.debug("Unit {} started", event.eventId());
-    }
-
-    @EventHandler
-    public void onEventEnding(EventEndingEvent event) {
-        metrics.decrementActiveUnits();
-        metrics.recordDuration(event.duration());
-        logger.debug("Unit {} completed in {}",
-            event.eventId(), event.duration());
-    }
-
-    @EventHandler
-    public void onApplicationEnding(ApplicationEndingEvent event) {
-        logger.info("Application ran for {}", event.uptime());
-        metrics.flush();
-    }
-}
-```
-
-**Design rationale:** Lifecycle events enable separation of concerns - keep metrics, logging, and tracing separate from business logic. All events are Java records with timestamps and durations for easy integration with observability tools.
-
-### Event Chaining with @EventTrigger
-
-Declarative event workflows where handlers automatically trigger subsequent events:
-
-**Basic pattern:**
-```java
-@EventHandler
-@EventTrigger(eventName = "OrderValidated")
-public ValidationResult onOrderCreated(OrderCreatedEvent event) {
-    // Return value becomes payload of OrderValidated event
-    return validateOrder(event);
-}
-```
-
-**Key features:**
-- **Return value as payload** - Handler's return becomes next event's data
-- **Multiple triggers** - Use multiple `@EventTrigger` on one method
-- **Async control** - `async = true` for parallel processing
-- **Spread collections** - `spread = true` emits each item separately
-- **Conditional triggering** - Guards (`EventTriggerGuard`) enable branching logic
-- **Origin tracking** - `Event<T>` wrapper tracks full event lineage
-
-**Event origin chain:**
-```java
-@EventHandler
-public void handler(PaymentProcessedEvent event, Event<?> wrapper) {
-    // Access full chain
-    List<Object> chain = wrapper.getOriginChain();
-    // [OrderCreatedEvent, ValidationResult, PaymentProcessedEvent]
-
-    // Find specific event in chain
-    Optional<OrderCreatedEvent> original =
-        wrapper.findInChain(OrderCreatedEvent.class);
-}
-```
-
-**Guards for conditional triggering:**
-```java
-public class HighValueGuard implements EventTriggerGuard {
-    public boolean shouldTrigger(Object result, Object originalEvent) {
-        return ((OrderDetails) result).amount() > 10000;
-    }
-}
-
-@EventTrigger(eventName = "HighValueAlert", guard = HighValueGuard.class)
-```
-
-**Implementation notes:**
-- Events only trigger if handler completes successfully (no exceptions)
-- Guards evaluated in order (AND logic for multiple guards)
-- Spread works with Collections, arrays, and Iterables
-- Event wrapper parameter is optional (second param after event)
-- Framework wraps all events internally in `Event<T>` for tracking
+| Topic | Where |
+|---|---|
+| Every annotation, attribute and signature | [`.ai-skills/tiko-build/reference/api-signatures.md`](./.ai-skills/tiko-build/reference/api-signatures.md), sources in `tiko-api/src/main/java/io/tiko/annotations` |
+| Constructor injection, scopes, unit of work, `@Produces`, `@Named` | [`docs/di-and-scopes.md`](./docs/di-and-scopes.md) |
+| `@EventHandler`, lifecycle events, `@EventTrigger` chains and guards, `Event<?>`, async resilience | [`docs/events.md`](./docs/events.md) |
+| `@Configuration` and YAML | [`docs/configuration.md`](./docs/configuration.md) |
+| `@TikoTest`, `@TestComponent`, test containers | [`docs/testing.md`](./docs/testing.md) |
 
 ## Development Guidelines
 
@@ -377,165 +182,20 @@ fails fast on style violations.
   expression) rather than disabling Spotless. The whole point is a single mechanical
   source of truth — local exceptions defeat that.
 
-### Code Generation Strategy
+### Path-scoped rules
 
-All code is generated in the `io.tiko.generated` package:
-- `TikoContainerImpl` - Main container implementation
-- `<ComponentName>Factory` - Factory for each component
-- `EventRegistry` - Event handler wiring
+The rest of the house rules apply to part of the tree. They live in `.claude/rules/` and load
+when you read or edit a matching file. Read the file first when you start new code there.
 
-### Error Message Format
-
-Compile-time errors should:
-1. Show the problematic code location
-2. Explain what's wrong
-3. Suggest at least one fix
-
-Example:
-```
-ERROR: UserService.java:15
-EVENT-scoped bean 'RequestContext' must implement an interface for proxy generation
-
-  @Inject
-  public UserService(RequestContext context) {
-                     ^^^^^^^^^^^^^^
-
-When injecting EVENT-scoped beans into SINGLETON, proxying is required.
-
-Suggested fixes:
-1. Extract interface: interface IRequestContext { }
-2. Make RequestContext implement the interface
-```
-
-### Java 21+ Feature Usage
-
-- **Records** — for immutable DTOs, descriptors, lifecycle events, error contexts.
-- **Sealed classes / interfaces** — for closed type hierarchies (e.g. `ErrorContext`
-  + non-sealed `TransportError` escape hatch).
-- **Pattern matching for `instanceof`** — wherever a downcast follows a type check.
-  No `if (x instanceof Foo) { Foo f = (Foo) x; ... }` patterns.
-- **Switch expressions** — arrow syntax for non-trivial dispatch.
-- **Text blocks** — for multi-line strings, especially in code-generation templates
-  and diagnostic messages.
-- **`var` for local variables** — prefer `var` when the right-hand side makes the
-  type obvious (constructors, static factories, named getters returning typed
-  results). Don't use `var` when the type isn't visible at the call site. Fields,
-  parameters, and return types stay explicit (the language requires it).
-- **Enum constants over string `.name()`** — compare
-  `getKind() == ElementKind.RECORD_COMPONENT`, never
-  `getKind().name().equals("RECORD_COMPONENT")`. Applies to any enum.
-- **For-loops vs. Streams.** For-loops are correct when: the body throws checked
-  exceptions (Stream APIs can't propagate them cleanly), the loop has side effects
-  on a shared builder, recursion with early-return is needed, or reverse iteration
-  / explicit indexing matters. Streams are correct for pure
-  filter/map/reduce/collect pipelines.
-
-### Annotation Retention
-
-- Annotations the processor reads are `RetentionPolicy.SOURCE`. There is no good
-  reason for a compile-time concern to leak into runtime bytecode.
-- `@PostConstruct` and `@PreDestroy` are `RUNTIME` because the container invokes
-  them via generated code at runtime — that is the bar for keeping `RUNTIME`.
-- When adding a new annotation, audit it: if the bytecode doesn't read it, it must
-  be `SOURCE`.
-
-### Logging in Framework Code
-
-- All framework output goes through `System.Logger` (`System.getLogger(...)`) — the
-  JDK platform logging facade, so `Tiko.create()` works with zero logging-binding
-  dependencies (default routing is JUL; users bridge to slf4j/log4j2 via a
-  `LoggerFinder` on their classpath). Never `System.err.println` or
-  `e.printStackTrace()` in framework or generated code, and never depend on a
-  logging framework directly.
-- Default namespace: `io.tiko.events`, or a per-subsystem name like
-  `io.tiko.config` / `io.tiko.kafka`.
-- Use the lazy-holder pattern to defer `LoggerFinder` resolution off the cold-start
-  path; route every log call in the class through the holder (no inline
-  `System.getLogger(...)` next to a declared holder):
-  ```java
-  private static final class LoggerHolder {
-      static final System.Logger LOG = System.getLogger("io.tiko.events");
-  }
-  ```
-- Annotation processor failures format their stack via
-  `TikoAnnotationProcessor.formatStackTrace(Throwable)` (multi-line `\n  at …`
-  with cause chain). Do not embed `Arrays.toString(e.getStackTrace())` in
-  messager messages.
-
-### Generated Code Markings
-
-Every top-level type emitted by an annotation processor carries
-`@javax.annotation.processing.Generated(...)`. Use the shared helper
-`GeneratorAnnotations.generatedBy(GeneratorClass.class)` (in
-`tiko-processor/util`). This lets IDEs grey out generated sources and coverage
-tools exclude them.
-
-### Interface Default Methods
-
-Default methods on `tiko-api` interfaces are one-liners — typically a delegation
-to another method on the same interface, or a return of a singleton instance.
-Executable fallback logic (e.g. a JUL-backed error handler) goes in a
-package-private named class (see `FallbackErrorHandler`), not inline in the
-interface body. Keeps the API surface free of implementation.
-
-### YAML Loading
-
-`Yaml` instances must be constructed with an explicit `SafeConstructor`, even
-though SnakeYAML 2.x's default constructor is already safe today. Spelling out
-the safe-load intent makes it a code-level invariant rather than a
-version-pinning one.
-
-### Method Length
-
-Methods longer than ~50 LOC that mix multiple distinct concerns (e.g. reading
-three resources, decoding plus validating, parsing plus dispatching) should be
-split into private helpers along concern boundaries. Helpers should be named for
-what they do, not where they're called from.
-
-### Testing Strategy
-
-- **Framework: JUnit 5 only.** No JUnit 4, no mixing. AssertJ for assertions
-  (no Hamcrest, no JUnit's `Assertions`).
-- **Class naming:** `xxxTest` for unit tests, `xxxIT` for integration tests.
-  Surefire runs `*Test` at the `test` phase (fast lane: `mvn test`). Failsafe runs
-  `*IT` at the `integration-test` / `verify` phases (`mvn verify`). Both runners are
-  wired in the root `pom.xml` and inherited by every module — no per-module plumbing.
-  A misnamed `*IT.java` won't be discovered by surefire, so it will only run under
-  `mvn verify`; check the output to confirm your IT actually ran.
-- **Method naming: camelCase, no underscores.** New tests use
-  `applicationStartedPublishedOnceAfterContainerBoot`, not
-  `application_started_published_once`. Existing snake_case tests stay until
-  they're touched for other reasons; don't churn the tree just to rename.
-- **No `@Disabled` tests.** Fix or delete.
-- **No bare `Thread.sleep`.** Either remove if the assertion is trivially
-  satisfied (e.g. `>= Duration.ZERO`), or use Awaitility:
-  `await().atMost(...).until(...)` for condition polls,
-  `await().pollDelay(...).until(() -> true)` for intentional pauses where no
-  observable signal exists.
-- **Parameterize multi-assertion methods.** Multiple `assertThat` calls in one
-  test body covering distinct cases → `@ParameterizedTest` + `@MethodSource`
-  returning `Arguments.of(name, ...)` so failures report which row failed.
-- **Annotation-processor coverage:** use Google's `compile-testing` to compile
-  sample sources and assert on generated output. Negative paths (invalid scopes,
-  missing deps, circular deps, bad config) need explicit tests.
-- **No test side effects bleed across tests.** Reset system properties; use
-  `@TempDir` for filesystem fixtures; no ThreadLocal contamination.
-- **Verify error messages are helpful** — see "Error Message Format" above.
-
-### Adding Dependencies
-
-When introducing a new third-party dependency, look up the latest stable version
-on Maven Central (or `mvnrepository.com`) before writing the `<version>` into
-the pom. Don't copy a version from the first Stack Overflow result or a sibling
-project — those go stale.
-
-- Pin the version in `tiko-bom/pom.xml` and the root `pom.xml`
-  `<dependencyManagement>` (the project is BOM-managed).
-- Confirm the artifact's license is compatible (Apache 2.0, MIT, BSD, EPL all
-  fine; LGPL/GPL/SSPL need a separate discussion).
-- For existing dependencies, use `mvn versions:display-dependency-updates` to
-  spot bumps, and `mvn versions:set -DprocessAllModules=true` for the bump
-  itself. Don't string-replace versions in `pom.xml` by hand.
+| Rule file | Loads for | Covers |
+|---|---|---|
+| [`java-idioms.md`](./.claude/rules/java-idioms.md) | any `.java` | Java 21+ features, `var`, enum comparison, loops vs streams, method length |
+| [`framework-code.md`](./.claude/rules/framework-code.md) | `**/src/main/java/**` | `System.Logger` only, the lazy logger holder, processor stack traces |
+| [`api-surface.md`](./.claude/rules/api-surface.md) | `tiko-api`, `**/annotations/**`, `tiko-test` sources | `SOURCE` vs `RUNTIME` retention, one-line interface default methods |
+| [`annotation-processors.md`](./.claude/rules/annotation-processors.md) | `tiko-processor`, `tiko-kafka-processor`, `tiko-processor-core` | the generated package, `@Generated` markings, the compile-error format |
+| [`yaml.md`](./.claude/rules/yaml.md) | `tiko-config` | explicit `SafeConstructor` |
+| [`testing.md`](./.claude/rules/testing.md) | `**/src/test/**` | JUnit 5 + AssertJ, `*Test` / `*IT`, naming, Awaitility, parameterized tests, compile-testing |
+| [`dependencies.md`](./.claude/rules/dependencies.md) | `**/pom.xml` | latest stable version, BOM + root pins, licenses, versions plugin |
 
 ### Issue Writing
 
@@ -556,165 +216,3 @@ How to keep it from happening:
 - After publish, verify with `gh api .../releases/tags/<tag> --jq .body | xxd | grep <annotation>` — the byte immediately before `@` should be `0x60` (backtick) or `0x20` (space inside a code span), never `0x5c` (backslash).
 
 Postmortem of the v0.1.0 release notes that triggered this rule lives in the memory entry `feedback_github_markdown_no_mention_harvest`.
-
-## Common Patterns
-
-### Constructor Injection (Preferred)
-```java
-@Component(scope = Scope.SINGLETON)
-public class UserService {
-    @Inject
-    public UserService(UserRepository repository) {
-        this.repository = repository;
-    }
-}
-```
-
-### Unit of work — EVENT scope in practice
-```java
-// EVENT scope - per-unit context (txn, connection, request-id, ...)
-public interface TransactionContext {
-    String getTransactionId();
-    void begin();
-    void commit();
-    void rollback();
-}
-
-@Component(scope = Scope.EVENT)
-public class TransactionContextImpl implements TransactionContext {
-    private final String txId = UUID.randomUUID().toString();
-    public String getTransactionId() { return txId; }
-    public void begin() { /* open the unit's transaction */ }
-    public void commit() { /* commit it */ }
-    public void rollback() { /* roll it back */ }
-}
-
-// Automatic proxy for cross-scope injection: SINGLETON ← EVENT
-@Component(scope = Scope.SINGLETON)
-public class OrderService {
-    @Inject
-    public OrderService(TransactionContext txCtx) {
-        // Resolved to the current unit's instance on every call.
-    }
-
-    public void process(Order order, TransactionContext tx) { /* domain work */ }
-}
-
-// Batch processing — one unit / one transaction with an internal loop.
-// Genuinely independent events each own their own unit and txn (saga/outbox
-// above the DI layer for cross-event consistency).
-container.runInEventScope(() -> {
-    var tx = container.get(TransactionContext.class);
-    tx.begin();
-    try {
-        for (Order order : orders) {
-            orderService.process(order, tx);
-        }
-        tx.commit();
-    } catch (Exception e) {
-        tx.rollback();
-        throw e;
-    }
-});
-```
-
-### Event Handling
-```java
-@Component(scope = Scope.SINGLETON)
-public class NotificationService {
-    @EventHandler
-    public void onUserRegistered(UserRegisteredEvent event) {
-        sendWelcomeEmail(event.getUser());
-    }
-}
-```
-
-### Factory Methods with @Produces
-```java
-// Factory component with dependencies
-@Component(scope = Scope.SINGLETON)
-public class DatabaseConfiguration {
-
-    private final ConfigProvider config;
-
-    @Inject
-    public DatabaseConfiguration(ConfigProvider config) {
-        this.config = config;
-    }
-
-    @Produces(scope = Scope.SINGLETON, name = "mysql")
-    public DataSource mysqlDataSource() {
-        HikariConfig hikariConfig = new HikariConfig();
-        hikariConfig.setJdbcUrl(config.getMysqlUrl());
-        hikariConfig.setUsername(config.getMysqlUsername());
-        hikariConfig.setPassword(config.getMysqlPassword());
-        return new HikariDataSource(hikariConfig);
-    }
-
-    @Produces(scope = Scope.SINGLETON, name = "postgres")
-    public DataSource postgresDataSource() {
-        HikariConfig hikariConfig = new HikariConfig();
-        hikariConfig.setJdbcUrl(config.getPostgresUrl());
-        return new HikariDataSource(hikariConfig);
-    }
-}
-
-// Injecting factory-produced components
-@Component(scope = Scope.SINGLETON)
-public class UserRepository {
-    @Inject
-    public UserRepository(@Named("mysql") DataSource dataSource) {
-        // Uses mysqlDataSource from factory
-    }
-}
-
-// Factory methods can have dependencies injected
-@Component
-public class ServiceFactories {
-    @Produces(scope = Scope.SINGLETON)
-    public CacheService cacheService(RedisClient redis, MetricsCollector metrics) {
-        CacheService service = new CacheServiceImpl(redis);
-        service.enableMetrics(metrics);
-        return service;
-    }
-}
-
-// Static factory method with validation (same class)
-@Component
-public class Database {
-    private final Connection connection;
-
-    // Private constructor - force factory usage
-    private Database(Connection connection) {
-        this.connection = connection;
-    }
-
-    @Produces(scope = Scope.SINGLETON)
-    public static Database create(ConfigProvider config) {
-        // Validation before construction
-        if (config.getUrl() == null || config.getUrl().isEmpty()) {
-            throw new IllegalArgumentException("Database URL is required");
-        }
-
-        // Complex initialization
-        Connection conn = DriverManager.getConnection(
-            config.getUrl(),
-            config.getUsername(),
-            config.getPassword()
-        );
-        conn.setAutoCommit(false);
-
-        return new Database(conn);
-    }
-}
-```
-
-## Development Environment
-
-The project is configured for IntelliJ IDEA but supports any Java IDE.
-
-**IntelliJ IDEA Setup:**
-1. Import as Maven project
-2. Enable annotation processing: Settings → Build → Compiler → Annotation Processors
-3. Build project to trigger code generation
-4. Generated code appears in `target/generated-sources/annotations`
