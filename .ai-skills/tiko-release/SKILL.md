@@ -383,12 +383,17 @@ are the operational gotchas:
 - **The release runs on a pinned Maven, not the runner's.** The
   `0.6.0` deploy failed Portal validation ("content that does NOT have
   a .pom file") after the runner image moved to Maven 3.10.0, whose
-  staging leftovers the publishing plugin bundles (`#545`). The
-  workflow installs the Maven named by `MAVEN_VERSION`; bump it and
-  `MAVEN_SHA512` together, and only after a dead-URL bundle check
-  (`-DcentralBaseUrl=http://127.0.0.1:9`, then list
-  `tiko-bom/target/central-publishing/central-bundle.zip`) shows
-  nothing but artifacts, signatures and checksums.
+  staging leftovers (`.locks/`, `_remote.repositories`,
+  `maven-metadata-local.xml`) `central-publishing-maven-plugin` 0.10.0
+  bundled (`#545`). The workflow installs Maven 3.10.0, which is safe
+  since the plugin moved to 0.12.0 (`#551`). Change `MAVEN_VERSION` and
+  `MAVEN_SHA512`, or the plugin version, only after a bundle dry run:
+  on a non-SNAPSHOT version, with a `central` server in `settings.xml`
+  (dummy credentials do), run
+  `mvn -Prelease -DskipTests -Dgpg.skip=true -DskipUpload=true clean deploy`,
+  then list `tiko-bom/target/central-publishing/central-bundle.zip`. It
+  must hold nothing but artifacts and checksums (plus `.asc`
+  signatures when gpg runs).
 - **Don't publish a release with a known shaded-jar defect.** Drop
   staging, fix on a PR, retry. The `0.2.0` → `0.2.1` cycle did this
   for the `tiko-mcp` NOTICE merge.
