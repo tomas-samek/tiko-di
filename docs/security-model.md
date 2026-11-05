@@ -371,8 +371,7 @@ seam reachable through configuration.
 
 ### SEC-13 — generated projects start safe
 
-**Surface.** `tiko-archetype` output: the project template, the `mcp.json` that
-`archetype-post-generate.groovy` turns into `.mcp.json` (which runs
+**Surface.** `tiko-archetype` output: the project template, the `.mcp.json` (which runs
 `jbang run io.github.tomas-samek:tiko-mcp:<version>` when an agent opens the project), and the
 agent-instruction files it copies (`.ai-skills`, `CLAUDE.md`, `AGENTS.md`, `.cursor`,
 `.junie`, `.github`).
@@ -385,7 +384,7 @@ canonical repository sources.
 contains no secrets or permissive defaults. The agent-instruction files are copies of the
 repository's canonical sources.
 
-**Enforced by.** `release.yml` bumps the `tiko-mcp` coordinate in `mcp.json` to the released
+**Enforced by.** `release.yml` bumps the `tiko-mcp` coordinate in `.mcp.json` to the released
 version. `ArchetypeBundledSkillsInSyncTest` keeps the bundled skills identical to the
 repository's. The template declares no repositories besides Central.
 

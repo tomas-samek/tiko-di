@@ -16,14 +16,6 @@
     <name>Tiko DI - Archetype</name>
     <description>Maven archetype that scaffolds a runnable single-module Tiko DI project</description>
 
-    <properties>
-        <!-- maven-archetype-plugin 3.4.1 runs archetype-post-generate.groovy on Groovy 4.0.28, whose
-             ASM stops at Java 25: on JDK 26+ the archetype IT fails with "Unsupported class file
-             major version 70". 4.0.33 reads up to Java 27. Drop the override once the plugin
-             ships a Groovy that covers the CI matrix. -->
-        <archetype-groovy.version>4.0.33</archetype-groovy.version>
-    </properties>
-
     <!-- Test-only deps: the doc-sync gate (#408) verifies the archetype-bundled agent-skill
          docs stay in sync with their canonical repo-root sources. Versions are BOM-managed. -->
     <dependencies>
@@ -53,34 +45,14 @@
                 <plugin>
                     <artifactId>maven-archetype-plugin</artifactId>
                     <version>3.4.1</version>
-                    <!-- The whole Groovy family moves together; mixed versions don't load. -->
-                    <dependencies>
-                        <dependency>
-                            <groupId>org.apache.groovy</groupId>
-                            <artifactId>groovy</artifactId>
-                            <version>${archetype-groovy.version}</version>
-                        </dependency>
-                        <dependency>
-                            <groupId>org.apache.groovy</groupId>
-                            <artifactId>groovy-json</artifactId>
-                            <version>${archetype-groovy.version}</version>
-                        </dependency>
-                        <dependency>
-                            <groupId>org.apache.groovy</groupId>
-                            <artifactId>groovy-templates</artifactId>
-                            <version>${archetype-groovy.version}</version>
-                        </dependency>
-                        <dependency>
-                            <groupId>org.apache.groovy</groupId>
-                            <artifactId>groovy-xml</artifactId>
-                            <version>${archetype-groovy.version}</version>
-                        </dependency>
-                        <dependency>
-                            <groupId>org.apache.groovy</groupId>
-                            <artifactId>groovy-yaml</artifactId>
-                            <version>${archetype-groovy.version}</version>
-                        </dependency>
-                    </dependencies>
+                    <!-- The archetype ships its dotfiles as-is, with no post-generation script: an
+                         archetype script runs on the Groovy of whichever maven-archetype-plugin the
+                         user's `mvn archetype:generate` resolves, and plugin 3.4.1's Groovy can't
+                         read JDK 26 class files (#557). The jar's default excludes would drop
+                         .gitignore. -->
+                    <configuration>
+                        <useDefaultExcludes>false</useDefaultExcludes>
+                    </configuration>
                 </plugin>
             </plugins>
         </pluginManagement>
@@ -121,11 +93,6 @@
           integration-test phase by default. The IT regenerates the archetype against
           src/test/resources/projects/basic/archetype.properties and runs `mvn compile`
           (per goal.txt) on the generated project. Catches regressions on every CI run.
-
-          .gitignore: shipped in archetype-resources as `gitignore` (no leading dot)
-          and renamed by META-INF/archetype-post-generate.groovy after generation.
-          Maven archetype-plugin's default-excludes filter `**/.gitignore` out of the
-          packaged archetype jar otherwise.
         -->
     </build>
 </project>
