@@ -184,7 +184,7 @@ mvn archetype:generate \
     -DinteractiveMode=false
 
 cd my-app
-mvn exec:java   # prints: Hello, world!
+mvn compile exec:java   # prints: Hello, world!
 ```
 
 The generated project ships with AI-context files for the major coding agents — `CLAUDE.md` (canonical), `AGENTS.md`, `.cursor/rules/tiko.md`, `.github/copilot-instructions.md`, `.junie/guidelines.md`, `.ai-skills/SKILL.md`, and `.ai-skills/tiko-build/SKILL.md` (the orchestrator-model skill — decision tree + `@Produces` cookbook + anti-pattern redirects). Each tool-specific file points at the canonical sources, so edit one file when conventions change.

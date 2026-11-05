@@ -25,7 +25,7 @@ Everything here is driven by the registry [`docs/security-model.md`](../../docs/
 | `tiko-runtime/**` (`Class.forName`, `ServiceLoader`, `TikoOptions`) | SEC-8, SEC-11 |
 | `pom.xml`, `tiko-bom/pom.xml`, any `<dependency>` / shade config (incl. `tiko-mcp`) | SEC-9 |
 | `.github/workflows/**` | SEC-10 |
-| `tiko-archetype/**` (template, `mcp.json`, bundled agent files) | SEC-13 |
+| `tiko-archetype/**` (template, `.mcp.json`, bundled agent files) | SEC-13 |
 
 ## Mode 1 — PR review
 
