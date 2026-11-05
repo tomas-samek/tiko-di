@@ -44,7 +44,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        java: [ '21', '26' ]
+        # Not governed by the JDK support policy. The newest JDK is in so the archetype IT runs
+        # archetype:generate end to end on it (#557).
+        java: [ '21', '26', '27' ]
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
