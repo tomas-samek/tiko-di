@@ -3,6 +3,7 @@ package io.tiko.kafka.serializer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.tiko.UndecodablePayloadException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
@@ -55,5 +56,19 @@ class JsonKafkaSerializerTest {
         assertThatThrownBy(() -> json.deserialize(bytes, OrderPlaced.class))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("OrderPlaced");
+    }
+
+    @Test
+    void malformedInputThrowsUndecodablePayloadNamingTheTargetType() {
+        var json = new JsonKafkaSerializer();
+        byte[] bytes = "not json at all".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+        assertThatThrownBy(() -> json.deserialize(bytes, OrderPlaced.class))
+                .as("a deterministic decode failure is typed, and existing IllegalStateException catches still match")
+                .isInstanceOf(UndecodablePayloadException.class)
+                .isInstanceOf(IllegalStateException.class)
+                .hasNoCause()
+                .satisfies(e -> assertThat(((UndecodablePayloadException) e).targetType())
+                        .isEqualTo(OrderPlaced.class));
     }
 }

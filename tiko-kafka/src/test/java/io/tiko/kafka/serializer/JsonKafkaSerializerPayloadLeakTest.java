@@ -3,6 +3,7 @@ package io.tiko.kafka.serializer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
+import io.tiko.UndecodablePayloadException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
@@ -44,5 +45,9 @@ class JsonKafkaSerializerPayloadLeakTest {
                 .doesNotContain(SECRET)
                 .doesNotContain(SECRET.replace("-", ""));
         if (field != null) assertThat(failure.getMessage()).contains(field);
+        assertThat(failure)
+                .as("the typed decode signal (#549) carries no payload either: no cause, value-free message")
+                .isInstanceOf(UndecodablePayloadException.class)
+                .hasNoCause();
     }
 }

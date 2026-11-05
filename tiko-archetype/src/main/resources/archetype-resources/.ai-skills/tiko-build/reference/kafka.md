@@ -66,10 +66,13 @@ partition with a doubling backoff (`seek-backoff`, default `PT0.5S`, capped at
 partition** until it is removed or the consumer is reconfigured; other partitions keep
 flowing.
 
-That is deliberate, not an oversight. At the moment of failure the runner cannot tell a
-permanent poison record from a transient one, and deserialization is not exempt: a
-schema-registry deserializer makes a network call, so during a rolling deploy the same
-good bytes fail now and succeed seconds later. `SEEK` rides that out with no data loss.
+That is deliberate, not an oversight. In general a failure can be transient, and
+deserialization is not exempt: a schema-registry deserializer makes a network call, so
+during a rolling deploy the same good bytes fail now and succeed seconds later. `SEEK`
+rides that out with no data loss. The exception is a record the serializer reports as
+**undecodable**: the bundled `JsonKafkaSerializer` is local and deterministic, and every
+decode failure it raises is an `io.tiko.UndecodablePayloadException` — the same bytes
+fail on every redelivery, so retrying them only stalls the partition.
 **`SKIP`** commits past every failed record — including ones that failed for a transient
 reason — so set it only on a stream where losing a record on a blip is acceptable. It is
 not the way to get "retry, then give up".
@@ -93,6 +96,29 @@ public class OrdersIngestPolicy implements KafkaIngestErrorDecider {
     }
 }
 ```
+
+**Skip undecodable records, retry everything else, then dead-letter** — branch on the
+typed signal, never on message text or stack frames:
+
+```java
+import io.tiko.UndecodablePayloadException;
+
+@Component(scope = Scope.SINGLETON)
+public class SkipUndecodablePolicy implements KafkaIngestErrorDecider {
+    @Override
+    public IngestDecision decide(KafkaIngestError error, int attempt) {
+        if (error.cause() instanceof UndecodablePayloadException) {
+            return IngestDecision.DEAD_LETTER; // can never decode: hand off now, no retry
+        }
+        return attempt < 5 ? IngestDecision.SEEK : IngestDecision.DEAD_LETTER;
+    }
+}
+```
+
+Return `SKIP` instead of `DEAD_LETTER` on the first branch to drop such records with
+only the logged `KafkaIngestError`. A custom serializer gets the same treatment by
+throwing `UndecodablePayloadException` for input it can never decode (and any other
+exception for a failure that may pass on retry).
 
 `DEAD_LETTER` routes a `KafkaRecordDeadLettered` (topic, partition, offset, headers,
 cause, `attempts`) to the `ErrorHandler` and commits past the record. There is no

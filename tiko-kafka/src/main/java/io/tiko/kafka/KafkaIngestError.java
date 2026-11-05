@@ -9,6 +9,11 @@ import org.apache.kafka.common.header.Headers;
  * seeks back to {@link #offset()} on the next loop iteration; the same record is
  * redelivered. Routed via the configured {@code ErrorHandler}.
  *
+ * <p>{@link #cause()} is an {@link io.tiko.UndecodablePayloadException} when the serializer
+ * reports that the record can never be decoded (the bundled {@code JsonKafkaSerializer} always
+ * does on a decode failure). A {@link KafkaIngestErrorDecider} can skip or dead-letter those
+ * without retrying; any other cause may be transient.
+ *
  * @param topic     source topic
  * @param partition partition number
  * @param offset    record offset within the partition

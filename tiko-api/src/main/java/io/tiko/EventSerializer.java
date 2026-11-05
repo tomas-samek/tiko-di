@@ -20,6 +20,12 @@ public interface EventSerializer {
     /** Serialize {@code value} to bytes. Thread-safe. */
     byte[] serialize(Object value);
 
-    /** Deserialize {@code bytes} into an instance of {@code type}. Thread-safe. */
+    /**
+     * Deserialize {@code bytes} into an instance of {@code type}. Thread-safe.
+     *
+     * @throws UndecodablePayloadException if these bytes can never be decoded into {@code type},
+     *     so retrying them is pointless. Throw any other exception for a failure that may succeed
+     *     on retry (e.g. an unreachable schema registry). Neither may carry payload-derived values.
+     */
     <T> T deserialize(byte[] bytes, Class<T> type);
 }
