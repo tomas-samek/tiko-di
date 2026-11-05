@@ -48,6 +48,12 @@
             <artifactId>lz4-java</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!-- Same reason for snappy-java (#554). -->
+        <dependency>
+            <groupId>org.xerial.snappy</groupId>
+            <artifactId>snappy-java</artifactId>
+            <scope>runtime</scope>
+        </dependency>
 
         <!-- JSON serializer (shadow-bundled below; declared here for compile scope). Every Jackson
              artifact the shade plugin bundles is declared directly, transitive ones included, so
