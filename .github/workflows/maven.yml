@@ -65,6 +65,17 @@ jobs:
       # fails to find tiko-bom in central.
       - name: Run integration tests
         run: mvn -B install --file pom.xml
+      # Docker is reachable on these runners, so a skipped integration test means a broken setup,
+      # not a missing Docker. A Testcontainers IT that couldn't reach Docker went green here for
+      # weeks (#561).
+      - name: Fail on skipped integration tests
+        run: |
+          skipped=$(find . -path '*/target/failsafe-reports/TEST-*.xml' -exec grep -lE '<testsuite [^>]*skipped="[1-9]' {} + || true)
+          if [ -n "$skipped" ]; then
+            echo "::error::Integration tests were skipped on a runner with Docker:"
+            echo "$skipped"
+            exit 1
+          fi
       # SonarCloud CI-based analysis, on the JDK 21 leg only (one analysis per build). Runs after
       # `install`, reusing the compiled classes + the JaCoCo aggregate from this same job — no
       # rebuild. Requires the SONAR_TOKEN secret and Automatic Analysis DISABLED in the SonarCloud
