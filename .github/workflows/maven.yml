@@ -125,4 +125,16 @@ jobs:
         run: mvn -B install -DskipTests --file pom.xml
       - name: Build, test and run the Gradle example
         working-directory: tiko-examples-gradle/kotlin-quickstart
-        run: ./gradlew build run
+        # The wrapper retries its own distribution download (gradle-wrapper.properties); plugins are
+        # resolved from the portal on this first invocation, so bound-retry it against transient
+        # download failures before failing the job.
+        run: |
+          for attempt in 1 2 3; do
+            ./gradlew build run && exit 0
+            echo "gradle attempt $attempt failed" >&2
+            sleep 15
+          done
+          exit 1
+      - name: Incremental KSP rebuild adds and changes components
+        working-directory: tiko-examples-gradle/kotlin-quickstart
+        run: ci/incremental-check.sh
