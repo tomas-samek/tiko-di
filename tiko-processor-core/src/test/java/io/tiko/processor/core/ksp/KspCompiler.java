@@ -17,6 +17,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import kotlin.Unit;
 
 /**
@@ -48,8 +49,32 @@ public final class KspCompiler {
     /** Runs every provider in the same KSP run, in list order, with the given processor options. */
     public static KspResult compile(
             List<SymbolProcessorProvider> providers, Map<String, String> options, SourceFile... sources) {
+        return compile(providers, options, List.of(), sources);
+    }
+
+    /** Compiles the sources, without processors, to a class directory a later run can take as a library. */
+    public static File library(SourceFile... sources) {
         var compilation = new KotlinCompilation();
         compilation.setSources(List.of(sources));
+        compilation.setInheritClassPath(true);
+        compilation.setJvmTarget("21");
+        compilation.setMessageOutputStream(OutputStream.nullOutputStream());
+        var result = compilation.compile();
+        if (result.getExitCode() != KotlinCompilation.ExitCode.OK) {
+            throw new IllegalStateException(result.getMessages());
+        }
+        return result.getOutputDirectory();
+    }
+
+    /** As above, with separately compiled library class directories on the compile classpath. */
+    public static KspResult compile(
+            List<SymbolProcessorProvider> providers,
+            Map<String, String> options,
+            List<File> libraries,
+            SourceFile... sources) {
+        var compilation = new KotlinCompilation();
+        compilation.setSources(List.of(sources));
+        compilation.setClasspaths(libraries);
         compilation.setInheritClassPath(true);
         compilation.setJvmTarget("21");
         compilation.setMessageOutputStream(OutputStream.nullOutputStream());
@@ -65,7 +90,10 @@ public final class KspCompiler {
                 result.getMessages(),
                 readTree(generated.resolve("java"), ".java"),
                 readTree(generated.resolve("resources"), ""),
-                List.of(result.getOutputDirectory().toPath(), generated.resolve("resources")));
+                Stream.concat(
+                                Stream.of(result.getOutputDirectory().toPath(), generated.resolve("resources")),
+                                libraries.stream().map(File::toPath))
+                        .toList());
     }
 
     /** Every file under {@code root} with the suffix, keyed by its path relative to the root. */
