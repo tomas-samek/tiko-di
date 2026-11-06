@@ -89,11 +89,9 @@ public final class DependencyGraphValidator {
 
         // For instance methods, validate that the declaring class is available as a component
         if (!factory.isStatic()) {
-            String declaringClassKey = factory.getDeclaringClass().qualifiedName();
-
             if (context.isRejected(factory.getDeclaringClass())) {
                 valid = false; // the declaring component's rejection was reported
-            } else if (!context.getComponents().containsKey(declaringClassKey)) {
+            } else if (!context.isRegisteredComponent(factory.getDeclaringClass())) {
                 context.getErrorReporter()
                         .error(
                                 factory.getMethod().location(),

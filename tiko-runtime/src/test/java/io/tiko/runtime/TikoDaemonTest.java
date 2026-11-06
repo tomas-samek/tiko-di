@@ -1,11 +1,14 @@
 package io.tiko.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 
 import io.tiko.Container;
 import io.tiko.ErrorHandler;
 import io.tiko.EventBus;
 import io.tiko.Provider;
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Supplier;
@@ -74,6 +77,28 @@ class TikoDaemonTest {
     }
 
     @Test
+    void stopReleasesWaiterWhenContainerShutdownThrows() throws InterruptedException {
+        var delegate = new RecordingContainer();
+        var failure = new IllegalStateException("shutdown failed");
+        delegate.shutdownFailure = failure;
+        var daemon = new TikoDaemon(delegate);
+        var waiter = Thread.ofPlatform().daemon().start(daemon::awaitShutdown);
+        try {
+            await().atMost(Duration.ofSeconds(2)).until(() -> waiter.getState() == Thread.State.WAITING);
+
+            assertThatThrownBy(daemon::stop).isSameAs(failure);
+
+            assertThat(waiter.join(Duration.ofSeconds(2)))
+                    .as("awaitShutdown must return when explicit shutdown throws")
+                    .isTrue();
+        } finally {
+            waiter.interrupt();
+            waiter.join(Duration.ofSeconds(2));
+            Runtime.getRuntime().removeShutdownHook(daemon.shutdownHook());
+        }
+    }
+
+    @Test
     void awaitShutdownUnblocksWhenHookFires() throws InterruptedException {
         TikoDaemon daemon = new TikoDaemon(new RecordingContainer());
         java.util.concurrent.CountDownLatch returned = new java.util.concurrent.CountDownLatch(1);
@@ -104,13 +129,17 @@ class TikoDaemonTest {
         Runtime.getRuntime().removeShutdownHook(hook); // cleanup
     }
 
-    /** Minimal {@link Container} that only records {@code shutdown()} calls. */
+    /** Minimal {@link Container} that records {@code shutdown()} calls and can fail on shutdown. */
     private static final class RecordingContainer implements Container {
         int shutdownCount;
+        RuntimeException shutdownFailure;
 
         @Override
         public void shutdown() {
             shutdownCount++;
+            if (shutdownFailure != null) {
+                throw shutdownFailure;
+            }
         }
 
         @Override
