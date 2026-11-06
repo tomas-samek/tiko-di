@@ -9,7 +9,9 @@ import com.google.devtools.ksp.symbol.KSPropertyDeclaration;
 import com.google.devtools.ksp.symbol.KSType;
 import com.google.devtools.ksp.symbol.KSTypeReference;
 import com.google.devtools.ksp.symbol.Modifier;
+import com.google.devtools.ksp.symbol.Origin;
 import com.palantir.javapoet.ClassName;
+import com.palantir.javapoet.TypeName;
 import io.tiko.processor.core.model.AnnotationRef;
 import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.DeclKind;
@@ -20,8 +22,10 @@ import io.tiko.processor.core.model.SourceLanguage;
 import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.core.model.Visibility;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -256,33 +260,86 @@ final class KspClassDecl implements ClassDecl {
     }
 
     /**
-     * A Java record's components, in declaration order. KSP shows a Java record as its accessor
+     * A Java record's components, in header order. KSP shows a Java record as its accessor
      * functions and constructors, without fields, so the components are read off the canonical
-     * constructor: the one whose every parameter has a same-named accessor.
+     * constructor (see {@link #canonicalConstructor}).
+     *
+     * @throws IllegalStateException when the canonical constructor cannot be told apart (see
+     *     {@link #canonicalConstructor}): guessing would silently bind the wrong components
      */
     @Override
     public List<FieldDecl> recordComponents() {
         if (kind() != DeclKind.RECORD) {
             return List.of();
         }
-        var functions = KspModel.functionsOf(declaration());
-        var accessors = functions.stream()
-                .filter(function -> !UtilsKt.isConstructor(function)
-                        && function.getParameters().isEmpty())
-                .map(function -> function.getSimpleName().asString())
-                .collect(Collectors.toSet());
-        return functions.stream()
-                .filter(UtilsKt::isConstructor)
-                .filter(constructor -> !constructor.getParameters().isEmpty()
-                        && constructor.getParameters().stream()
-                                .allMatch(parameter -> parameter.getName() != null
-                                        && accessors.contains(
-                                                parameter.getName().asString())))
-                .findFirst()
-                .map(constructor -> model.methodDecl(constructor).parameters().stream()
-                        .<FieldDecl>map(parameter -> new KspRecordComponent(parameter, key() + "." + parameter.name()))
-                        .toList())
-                .orElse(List.of());
+        return model.methodDecl(canonicalConstructor(declaration())).parameters().stream()
+                .<FieldDecl>map(parameter -> new KspRecordComponent(parameter, key() + "." + parameter.name()))
+                .toList();
+    }
+
+    /**
+     * The record's canonical constructor, whose parameters are the components in header order.
+     *
+     * <ul>
+     *   <li>When the record does not declare it, KSP synthesizes it, and it is the one
+     *       constructor of {@code SYNTHETIC} origin.
+     *   <li>When the record declares it (compact or full), it has origin {@code JAVA} like every
+     *       other constructor. It is then the widest constructor whose every parameter matches an
+     *       accessor by name and type; a shorter one (a subset of the components) never is.
+     * </ul>
+     *
+     * KSP does not expose the header order itself, so a declared canonical constructor next to
+     * another constructor taking the same components in a different order (legal when their types
+     * differ) cannot be told apart. That case, and a record with no matching constructor, fail with
+     * {@link IllegalStateException} rather than guess.
+     */
+    private KSFunctionDeclaration canonicalConstructor(KSClassDeclaration record) {
+        var functions = KspModel.functionsOf(record);
+        var constructors = functions.stream().filter(UtilsKt::isConstructor).toList();
+        var synthesized = constructors.stream()
+                .filter(constructor -> constructor.getOrigin() == Origin.SYNTHETIC)
+                .toList();
+        if (synthesized.size() == 1) {
+            return synthesized.get(0);
+        }
+        var accessors = new HashMap<String, TypeName>();
+        for (var function : functions) {
+            if (!UtilsKt.isConstructor(function) && function.getParameters().isEmpty()) {
+                accessors.put(function.getSimpleName().asString(), typeName(function.getReturnType()));
+            }
+        }
+        var matching = constructors.stream()
+                .filter(constructor -> takesOnlyComponents(constructor, accessors))
+                .toList();
+        var widest = matching.stream()
+                .mapToInt(constructor -> constructor.getParameters().size())
+                .max()
+                .orElse(-1);
+        var candidates = matching.stream()
+                .filter(constructor -> constructor.getParameters().size() == widest)
+                .toList();
+        if (candidates.size() == 1) {
+            return candidates.get(0);
+        }
+        throw new IllegalStateException("Cannot tell the canonical constructor of record " + qualifiedName()
+                + " on KSP: "
+                + (candidates.isEmpty()
+                        ? "no constructor takes only its components"
+                        : candidates.size() + " constructors take its components, in different orders")
+                + ". Let the compiler supply the canonical constructor, or give the other constructors"
+                + " parameters that are not all components.");
+    }
+
+    /** Whether every parameter matches an accessor (a zero-argument function) by name and type. */
+    private boolean takesOnlyComponents(KSFunctionDeclaration constructor, Map<String, TypeName> accessors) {
+        return constructor.getParameters().stream()
+                .allMatch(parameter -> parameter.getName() != null
+                        && typeName(parameter.getType())
+                                .equals(accessors.get(parameter.getName().asString())));
+    }
+
+    private TypeName typeName(KSTypeReference reference) {
+        return KspTypeNames.of(reference.resolve(), false, false, model);
     }
 
     @Override

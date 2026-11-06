@@ -140,6 +140,35 @@ class KspDeclarationFactsTest {
 
             record Point(int x, int y) {}
 
+            record Shorter(int a, String b) {
+                Shorter(int a) { this(a, ""); }
+            }
+
+            record Reordered(int a, String b) {
+                Reordered(String b, int a) { this(a, b); }
+            }
+
+            record Compact(int a, String b) {
+                Compact {}
+                Compact(String b, int a) { this(a, b); }
+            }
+
+            record Full(int a, String b) {
+                Full(String b, int a) { this(a, b); }
+                Full(int a, String b) { this.a = a; this.b = b; }
+            }
+
+            record Declared(int a, String b) {
+                Declared(int a) { this(a, ""); }
+                Declared(int a, String b) { this.a = a; this.b = b; }
+            }
+
+            record Explicit(int a, String b) {
+                int sum() { return a; }
+                public String b() { return b; }
+                Explicit(int a, String b, int extra) { this(a + extra, b); }
+            }
+
             @Repeatable(Roles.class)
             @interface Role { String value(); }
 
@@ -280,6 +309,30 @@ class KspDeclarationFactsTest {
                 fact("enumConstants", env -> cls(env, "f.Color").enumConstants(), List.of("RED", "GREEN")),
                 fact("annotationKind", env -> cls(env, "f.Rich").kind(), DeclKind.ANNOTATION),
                 fact("interfaceKind", env -> cls(env, "f.Shape").kind(), DeclKind.INTERFACE),
+                fact(
+                        "recordWithShorterConstructorFirst",
+                        env -> components(env, "f.Shorter"),
+                        List.of("a:int", "b:java.lang.String")),
+                fact(
+                        "recordWithPermutedConstructor",
+                        env -> components(env, "f.Reordered"),
+                        List.of("a:int", "b:java.lang.String")),
+                fact(
+                        "recordWithExplicitAccessorsAndWiderConstructor",
+                        env -> components(env, "f.Explicit"),
+                        List.of("a:int", "b:java.lang.String")),
+                fact(
+                        "recordWithDeclaredCanonicalAndShorterConstructor",
+                        env -> components(env, "f.Declared"),
+                        List.of("a:int", "b:java.lang.String")),
+                fact(
+                        "recordWithDeclaredCanonicalBesidePermutationFailsClearly",
+                        env -> components(env, "f.Full"),
+                        new Threw(IllegalStateException.class)),
+                fact(
+                        "recordWithCompactCanonicalBesidePermutationFailsClearly",
+                        env -> components(env, "f.Compact"),
+                        new Threw(IllegalStateException.class)),
                 fact("javaRecordKind", env -> cls(env, "f.Point").kind(), DeclKind.RECORD),
                 fact(
                         "javaRecordComponents",
@@ -758,6 +811,13 @@ class KspDeclarationFactsTest {
 
     private static AnnotationRef component(ProcessingEnv env) {
         return cls(env, "f.Circle").annotation("io.tiko.annotations.Component").orElseThrow();
+    }
+
+    /** A record's components as {@code name:type}, in order. */
+    private static List<String> components(ProcessingEnv env, String record) {
+        return cls(env, record).recordComponents().stream()
+                .map(component -> component.name() + ":" + component.type().displayName())
+                .toList();
     }
 
     private static List<String> names(List<TypeRef> types) {
