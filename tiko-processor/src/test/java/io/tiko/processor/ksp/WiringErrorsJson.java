@@ -17,13 +17,18 @@ final class WiringErrorsJson {
 
     private WiringErrorsJson() {}
 
-    /** The run failed, and some error of {@code kind} has a message containing every fragment. */
+    /**
+     * The run failed, the compiler output contains every fragment, and one error in
+     * {@code wiring-errors.json} has {@code kind} and a problem text containing the first fragment
+     * (the problem fragment; later ones may sit in the suggested fixes).
+     */
     static void assertRejected(KspResult result, String kind, List<String> fragments) {
         assertThat(result.exitCode()).as(result.messages()).isEqualTo(KotlinCompilation.ExitCode.COMPILATION_ERROR);
         assertThat(result.messages()).contains(fragments);
-        assertThat(errors(result))
-                .as("wiring-errors.json")
-                .anySatisfy(error -> assertThat(error.get("kind")).isEqualTo(kind));
+        assertThat(errors(result)).as("wiring-errors.json").anySatisfy(error -> {
+            assertThat(error.get("kind")).isEqualTo(kind);
+            assertThat(String.valueOf(error.get("message"))).contains(fragments.get(0));
+        });
     }
 
     @SuppressWarnings("unchecked")

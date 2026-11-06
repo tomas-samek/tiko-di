@@ -114,6 +114,39 @@ class KotlinConstructRulesTest {
                         "object declarations can't be components",
                         "use a class with scope = SINGLETON"),
                 rejected(
+                        "companionObjectComponentRejected",
+                        """
+                        class Host {
+                            @Component(scope = Scope.SINGLETON) companion object
+                        }
+                        """,
+                        ErrorReporter.KOTLIN_UNSUPPORTED,
+                        "Host.Companion is a companion object: object declarations can't be components",
+                        "use a class with scope = SINGLETON"),
+                rejected(
+                        "companionEventHandlerRejected",
+                        """
+                        @Component(scope = Scope.SINGLETON) class Listener {
+                            companion object {
+                                @EventHandler fun onPing(event: Ping) {}
+                            }
+                        }
+                        """,
+                        ErrorReporter.KOTLIN_UNSUPPORTED,
+                        "@EventHandler inside a companion object",
+                        "move it to the enclosing @Component class"),
+                rejected(
+                        "extensionProducesRejected",
+                        """
+                        class Config
+                        @Component(scope = Scope.SINGLETON) class Factories {
+                            @Produces fun Config.clock(): Clock = Clock()
+                        }
+                        """,
+                        ErrorReporter.KOTLIN_UNSUPPORTED,
+                        "@Produces on the extension function 'Factories.clock'",
+                        "declare a regular fun that takes the receiver as a parameter"),
+                rejected(
                         "companionProducesRejected",
                         """
                         @Component(scope = Scope.SINGLETON) class Host {
@@ -193,6 +226,34 @@ class KotlinConstructRulesTest {
                         """,
                         ErrorReporter.KIND_MISSING_DEPENDENCY,
                         "Cannot resolve dependency: app.B[]"));
+    }
+
+    /**
+     * A Java varargs constructor compiled through KSP is keyed by its array type, as javac keys it
+     * ({@code demo.B[]} on javac), so it is the same missing dependency on both frontends.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("javaVarargs")
+    void javaVarargsOnKspAreKeyedByTheirArrayType(String name, String parameter, String expectedMessage) {
+        var result = KspCompiler.compile(
+                new TikoSymbolProcessorProvider(),
+                KspCompiler.kotlin("Anchor.kt", "package app", "@io.tiko.annotations.Component class Anchor"),
+                KspCompiler.kotlin("B.kt", "package app", "@io.tiko.annotations.Component class B"),
+                KspCompiler.java(
+                        "app/A.java",
+                        "package app;",
+                        "@io.tiko.annotations.Component",
+                        "public class A {",
+                        "  public A(" + parameter + ") {}",
+                        "}"));
+
+        WiringErrorsJson.assertRejected(result, ErrorReporter.KIND_MISSING_DEPENDENCY, List.of(expectedMessage));
+    }
+
+    static Stream<Arguments> javaVarargs() {
+        return Stream.of(
+                Arguments.of("classVarargs", "B... bs", "Cannot resolve dependency: app.B[]"),
+                Arguments.of("boxedVarargs", "Integer... n", "Cannot resolve dependency: java.lang.Integer[]"));
     }
 
     private static Arguments supported(String name, String body, String... generatedFragments) {

@@ -292,7 +292,7 @@ public final class ComponentFactoryGenerator {
             // resolves to the current scope's value. Without the proxy, a SINGLETON consumer
             // would capture the first scope's instance and reuse a stale (often closed)
             // reference on subsequent scope frames.
-            if (factory.requiresProxy() && scopeLevel(consumer.getScope()) < scopeLevel(factory.getScope())) {
+            if (factory.isProxiedFor(consumer.getScope())) {
                 return String.format("new %sProxy(container)", factory.getFactoryIdentifier());
             }
             return String.format("container.produce_%s()", factory.getFactoryIdentifier());
@@ -318,17 +318,5 @@ public final class ComponentFactoryGenerator {
     private String getSimpleClassName(String qualifiedName) {
         int lastDot = qualifiedName.lastIndexOf('.');
         return lastDot >= 0 ? qualifiedName.substring(lastDot + 1) : qualifiedName;
-    }
-
-    /**
-     * Scope ordinal where lower = longer-lived. Used to decide whether a factory output
-     * needs a per-call-resolving proxy when injected into a longer-lived consumer.
-     */
-    private static int scopeLevel(io.tiko.Scope scope) {
-        return switch (scope) {
-            case SINGLETON -> 0;
-            case EVENT -> 1;
-            case PROTOTYPE -> 2;
-        };
     }
 }

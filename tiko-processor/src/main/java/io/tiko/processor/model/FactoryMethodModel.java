@@ -131,6 +131,24 @@ public final class FactoryMethodModel {
         return requiresProxy;
     }
 
+    /**
+     * Whether a component in {@code consumerScope} receives this factory's output through its
+     * generated proxy instead of the value itself: the factory needs a proxy and the consumer
+     * outlives the factory's scope. The one rule the factory generator and the validators share.
+     */
+    public boolean isProxiedFor(Scope consumerScope) {
+        return requiresProxy && scopeLevel(consumerScope) < scopeLevel(scope);
+    }
+
+    /** Lower is longer-lived. */
+    private static int scopeLevel(Scope scope) {
+        return switch (scope) {
+            case SINGLETON -> 0;
+            case EVENT -> 1;
+            case PROTOTYPE -> 2;
+        };
+    }
+
     public static final class Builder {
         private MethodDecl method;
         private ClassDecl declaringClass;

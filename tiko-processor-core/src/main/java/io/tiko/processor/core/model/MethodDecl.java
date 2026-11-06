@@ -31,6 +31,9 @@ public interface MethodDecl {
     /** A Kotlin top-level function; always false for Java. */
     boolean isTopLevel();
 
+    /** A Kotlin extension function: it declares a receiver type ({@code fun Config.clock()}); always false for Java. */
+    boolean isExtension();
+
     Visibility visibility();
 
     TypeRef returnType();

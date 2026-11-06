@@ -136,13 +136,15 @@ final class KspTypeNames {
     /**
      * The type a vararg parameter has in its JVM signature, which is what javac reports for it: a
      * primitive array for a non-null primitive element ({@code vararg n: Int} is {@code int[]}),
-     * {@code Array<out T>} otherwise ({@code T[]}). KSP gives the parameter its element type.
+     * {@code Array<out T>} otherwise ({@code T[]}), so a nullable or Java-boxed element ({@code Int?},
+     * a Java {@code Integer...}, a platform type) gives a boxed array, as {@link #of} boxes them. KSP gives
+     * a vararg parameter its element type, for Kotlin and Java declarations alike.
      */
     static KSType varargArray(KSValueParameter parameter, Resolver resolver) {
         var element = parameter.getType();
         var resolved = element.resolve();
         if (!resolved.isError()
-                && !resolved.isMarkedNullable()
+                && resolved.getNullability() == Nullability.NOT_NULL
                 && resolved.getDeclaration() instanceof KSClassDeclaration declaration
                 && PRIMITIVES.containsKey(declaration.getQualifiedName().asString())) {
             var arrayName = declaration.getQualifiedName().asString() + "Array";

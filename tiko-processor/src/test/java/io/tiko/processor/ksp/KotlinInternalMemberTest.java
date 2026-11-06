@@ -4,13 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.tschuchort.compiletesting.KotlinCompilation;
 import io.tiko.processor.core.ksp.KspCompiler;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
  * {@code internal} Kotlin members are called from generated Java by their JVM (mangled) name
  * (Review Focus 2): with the source name the generated Java would compile on KSP and then fail
- * in javac. The program is compiled, booted with {@code Tiko.create()}, and both members record
- * that they ran.
+ * in javac. Each program is compiled, booted with {@code Tiko.create()} (and shut down), and its
+ * internal members record that they ran.
  */
 class KotlinInternalMemberTest {
 
@@ -49,5 +50,50 @@ class KotlinInternalMemberTest {
         try (var program = KspProgram.boot(result)) {
             assertThat(program.staticList("app.Recorder", "calls")).containsExactly("postConstruct", "handler");
         }
+    }
+
+    @Test
+    void internalProducesAndPreDestroyCalledByJvmName() throws Exception {
+        var source = KspCompiler.kotlin(
+                "Clocks.kt",
+                "package app",
+                "",
+                "import io.tiko.Scope",
+                "import io.tiko.annotations.Component",
+                "import io.tiko.annotations.PreDestroy",
+                "import io.tiko.annotations.Produces",
+                "import java.util.concurrent.CopyOnWriteArrayList",
+                "",
+                "class Clock(val label: String)",
+                "",
+                "object Recorder {",
+                "    @JvmField val calls = CopyOnWriteArrayList<String>()",
+                "}",
+                "",
+                "@Component(scope = Scope.SINGLETON)",
+                "class Clocks {",
+                "    @Produces(scope = Scope.SINGLETON)",
+                "    internal fun clock(): Clock {",
+                "        Recorder.calls.add(\"produces\")",
+                "        return Clock(\"utc\")",
+                "    }",
+                "}",
+                "",
+                "@Component(scope = Scope.SINGLETON)",
+                "class Ticker(val clock: Clock) {",
+                "    @PreDestroy internal fun stop() { Recorder.calls.add(\"preDestroy:\" + clock.label) }",
+                "}");
+
+        var result = KspCompiler.compile(new TikoSymbolProcessorProvider(), source);
+
+        assertThat(result.exitCode()).as(result.messages()).isEqualTo(KotlinCompilation.ExitCode.OK);
+        assertThat(String.join("\n", result.javaSources().values()))
+                .as("mangled JVM names of the internal members")
+                .contains(".clock$", ".stop$");
+        List<Object> calls;
+        try (var program = KspProgram.boot(result)) {
+            calls = program.staticList("app.Recorder", "calls");
+        }
+        assertThat(calls).as("recorded through shutdown").containsExactly("produces", "preDestroy:utc");
     }
 }

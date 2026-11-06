@@ -11,6 +11,7 @@ import io.tiko.processor.model.FactoryMethodModel;
 import io.tiko.processor.util.ErrorReporter;
 import io.tiko.processor.util.ProcessorContext;
 import io.tiko.processor.util.TypeRefs;
+import io.tiko.processor.util.TypeUtil;
 import java.util.ArrayList;
 import java.util.Optional;
 
@@ -26,23 +27,32 @@ import java.util.Optional;
  * <p>It reads {@link TypeRef#nullability()} only. Java declarations are always
  * {@link Nullability#NON_NULL}, and components and configurations are never null, so a Java
  * build has nothing to report. Each mismatch is a {@link ErrorReporter#NULLABILITY_MISMATCH} on
- * the parameter that names the provider and says which side to change.
+ * the parameter that names the provider and says which side to change. Besides the exact match:
  *
- * <p>It also rejects a nullable EVENT-scoped producer injected into a longer-lived component:
- * that component receives a proxy resolving the current unit's value on each call, and the proxy
- * itself is never null.
- *
- * <p>{@code Picker<T>} points are skipped: they resolve among implementations at runtime, not to
- * one provider.
+ * <ul>
+ *   <li>A {@code Provider<T>} or {@code Picker<T>} wrapper is never null (the container always
+ *       passes one), so a nullable wrapper ({@code Provider<Foo>?}) is a mismatch.
+ *   <li>A {@code Picker<T>} hands out every provider of {@code T}: {@code list()} and
+ *       {@code byName} the ones producing exactly {@code T}, {@code byImplClass} those producing a
+ *       subtype. Any nullable producer it can reach is a mismatch for its non-null {@code T}.
+ *   <li>A {@code Picker<T?>} is rejected: it can't carry a null ({@code byName} answers with an
+ *       {@code Optional}, which reads a null as "absent", the optional meaning {@code ?} must never
+ *       have; {@code byImplClass} would fail on it).
+ *   <li>A nullable EVENT-scoped producer injected into a longer-lived component is rejected: that
+ *       component receives a proxy resolving the current unit's value on each call, and the proxy
+ *       itself is never null.
+ * </ul>
  */
 public final class NullabilityValidator {
 
     private final ProcessorContext context;
     private final ErrorReporter errors;
+    private final TypeUtil typeUtil;
 
     public NullabilityValidator(ProcessorContext context) {
         this.context = context;
         this.errors = context.getErrorReporter();
+        this.typeUtil = new TypeUtil(context.env().types());
     }
 
     /** {@code false} when a mismatch was reported. */
@@ -72,12 +82,18 @@ public final class NullabilityValidator {
     }
 
     private boolean validate(DependencyModel dependency, Consumer consumer) {
+        if (isWrapped(dependency) && dependency.getType().nullability() == Nullability.NULLABLE) {
+            reportNullableWrapper(dependency, consumer);
+            return false;
+        }
+        if (dependency.isPicker()) {
+            return validatePicker(dependency, consumer);
+        }
         var provider = provider(dependency);
         if (provider.isEmpty()) {
-            return true; // a Picker, or a missing dependency DependencyGraphValidator reports
+            return true; // a missing dependency, which DependencyGraphValidator reports
         }
-        var pointType = dependency.isProvider() ? dependency.getUnwrappedType().orElseThrow() : dependency.getType();
-        var pointNullable = pointType.nullability() == Nullability.NULLABLE;
+        var pointNullable = injectedType(dependency).nullability() == Nullability.NULLABLE;
         var providerNullable = provider.get().nullable();
         if (pointNullable != providerNullable) {
             reportMismatch(dependency, consumer, provider.get(), pointNullable);
@@ -90,11 +106,41 @@ public final class NullabilityValidator {
         return true;
     }
 
+    /** A {@code Picker<T?>} is rejected; a {@code Picker<T>} must reach no nullable producer. */
+    private boolean validatePicker(DependencyModel dependency, Consumer consumer) {
+        var base = dependency.getUnwrappedType();
+        if (base.isEmpty()) {
+            return true; // a raw Picker, which ComponentShapeValidator reports
+        }
+        if (base.get().nullability() == Nullability.NULLABLE) {
+            reportNullablePicker(dependency, consumer);
+            return false;
+        }
+        boolean valid = true;
+        for (var factory : context.getActiveFactoryMethods()) {
+            if (isNullable(factory) && reachableThrough(factory, base.get())) {
+                reportPickedNullable(dependency, consumer, factory);
+                valid = false;
+            }
+        }
+        return valid;
+    }
+
+    /**
+     * Whether a {@code Picker} of {@code base} can hand out the factory's output: it produces
+     * {@code base} itself ({@code list()}, {@code byName}) or a subtype of it ({@code byImplClass}).
+     * Compared on the declared classes, since generic {@code @Produces} returns are rejected.
+     */
+    private boolean reachableThrough(FactoryMethodModel factory, TypeRef base) {
+        var produced = TypeRefs.declared(factory.getReturnType());
+        var picked = TypeRefs.declared(base);
+        return produced.isPresent()
+                && picked.isPresent()
+                && typeUtil.isAssignable(produced.get().asType(), picked.get().asType());
+    }
+
     /** The provider the dependency resolves to, as {@link DependencyGraphValidator} resolves it. */
     private Optional<Provider> provider(DependencyModel dependency) {
-        if (dependency.isPicker()) {
-            return Optional.empty();
-        }
         if (dependency.isEventBus()) {
             return Optional.of(new Provider("the container's EventBus", false, null));
         }
@@ -107,10 +153,7 @@ public final class NullabilityValidator {
 
     private static Provider describe(Object provider) {
         if (provider instanceof FactoryMethodModel factory) {
-            return new Provider(
-                    "@Produces " + producerName(factory),
-                    factory.getReturnType().nullability() == Nullability.NULLABLE,
-                    factory);
+            return new Provider("@Produces " + producerName(factory), isNullable(factory), factory);
         }
         if (provider instanceof ComponentModel component) {
             return new Provider("@Component " + component.getClassName(), false, null);
@@ -125,15 +168,13 @@ public final class NullabilityValidator {
     private static boolean receivesProxy(Consumer consumer, Provider provider) {
         return consumer.component()
                 && provider.factory() != null
-                && provider.factory().requiresProxy()
-                // Scope constants are declared longest-lived first, as ComponentFactoryGenerator ranks them.
-                && consumer.scope().ordinal() < provider.factory().getScope().ordinal();
+                && provider.factory().isProxiedFor(consumer.scope());
     }
 
     private void reportMismatch(
             DependencyModel dependency, Consumer consumer, Provider provider, boolean pointNullable) {
         var type = simpleName(dependency);
-        var point = "parameter '" + dependency.getParameterName() + "' of " + consumer.name();
+        var point = point(dependency, consumer);
         if (pointNullable) {
             var fixes = new ArrayList<String>();
             fixes.add("Drop the ?: declare the parameter as " + code(pointText(dependency, false)) + ", not "
@@ -152,8 +193,7 @@ public final class NullabilityValidator {
                     fixes.toArray(String[]::new));
             return;
         }
-        var makeNonNull =
-                "make the producer non-null: return " + code(type) + " from " + producerName(provider.factory());
+        var makeNonNull = makeNonNull(provider.factory());
         if (!consumer.kotlin()) {
             errors.error(
                     ErrorReporter.NULLABILITY_MISMATCH,
@@ -180,18 +220,86 @@ public final class NullabilityValidator {
         errors.error(
                 ErrorReporter.NULLABILITY_MISMATCH,
                 dependency.getParameter().location(),
-                "Nullability mismatch: parameter '" + dependency.getParameterName() + "' of " + consumer.name()
-                        + " (" + consumer.scope() + ") receives the " + factory.getScope() + "-scoped "
-                        + provider.label() + " through a proxy that resolves the current unit's value on every"
-                        + " call. The proxy itself is never null, so it can't stand for a " + code(type + "?")
-                        + " that may be null.",
+                "Nullability mismatch: " + point(dependency, consumer) + " (" + consumer.scope() + ") receives the "
+                        + factory.getScope() + "-scoped " + provider.label() + " through a proxy that resolves the"
+                        + " current unit's value on every call. The proxy itself is never null, so it can't stand"
+                        + " for a " + code(type + "?") + " that may be null.",
                 "Make " + consumer.name() + " " + factory.getScope() + "-scoped so it receives the unit's value itself",
-                "Or make the producer non-null: return " + code(type) + " from " + producerName(factory));
+                "Or " + makeNonNull(factory));
+    }
+
+    private void reportNullableWrapper(DependencyModel dependency, Consumer consumer) {
+        var wrapper = wrapperName(dependency);
+        var declared = pointText(dependency, injectedType(dependency).nullability() == Nullability.NULLABLE);
+        errors.error(
+                ErrorReporter.NULLABILITY_MISMATCH,
+                dependency.getParameter().location(),
+                "Nullability mismatch: " + point(dependency, consumer) + " is declared " + code(declared + "?")
+                        + ", but the container always passes a " + wrapper + ", never null.",
+                "Drop the ?: declare the parameter as " + code(declared) + ", not " + code(declared + "?"));
+    }
+
+    private void reportNullablePicker(DependencyModel dependency, Consumer consumer) {
+        var type = simpleName(dependency);
+        errors.error(
+                ErrorReporter.NULLABILITY_MISMATCH,
+                dependency.getParameter().location(),
+                "Nullability mismatch: " + point(dependency, consumer) + " is declared "
+                        + code(pointText(dependency, true)) + ", but a Picker can't hand out null: byName() answers"
+                        + " with an Optional, which reads a null as absent, and byImplClass() would fail on it. A ?"
+                        + " never makes a dependency optional.",
+                "Declare the parameter as " + code(pointText(dependency, false)) + ", not "
+                        + code(pointText(dependency, true)),
+                "To inject a nullable producer's value, declare the parameter as " + code(type + "?")
+                        + " and let that producer provide it");
+    }
+
+    private void reportPickedNullable(DependencyModel dependency, Consumer consumer, FactoryMethodModel factory) {
+        var produced = TypeRefs.declared(factory.getReturnType())
+                .map(decl -> decl.className().simpleName())
+                .orElseGet(() -> factory.getReturnType().displayName());
+        var fixes = new ArrayList<String>();
+        fixes.add("A Picker can't hand out null, so " + makeNonNull(factory));
+        if (consumer.kotlin()) {
+            fixes.add("If the null is meaningful, inject " + code(produced + "?") + " from the producer directly"
+                    + " instead of picking it");
+        }
+        errors.error(
+                ErrorReporter.NULLABILITY_MISMATCH,
+                dependency.getParameter().location(),
+                "Nullability mismatch: " + point(dependency, consumer) + " is a " + code(pointText(dependency, false))
+                        + ", which can hand out the value of @Produces " + producerName(factory) + ", and that"
+                        + " producer returns " + code(produced + "?") + ", which may be null.",
+                fixes.toArray(String[]::new));
+    }
+
+    private static boolean isWrapped(DependencyModel dependency) {
+        return dependency.isProvider() || dependency.isPicker();
+    }
+
+    /** The type the point injects: {@code T} of a {@code Provider<T>} / {@code Picker<T>}, else the declared type. */
+    private static TypeRef injectedType(DependencyModel dependency) {
+        return isWrapped(dependency) ? dependency.getUnwrappedType().orElseThrow() : dependency.getType();
+    }
+
+    private static boolean isNullable(FactoryMethodModel factory) {
+        return factory.getReturnType().nullability() == Nullability.NULLABLE;
+    }
+
+    private static String point(DependencyModel dependency, Consumer consumer) {
+        return "parameter '" + dependency.getParameterName() + "' of " + consumer.name();
+    }
+
+    private static String makeNonNull(FactoryMethodModel factory) {
+        var type = TypeRefs.declared(factory.getReturnType())
+                .map(decl -> decl.className().simpleName())
+                .orElseGet(() -> factory.getReturnType().displayName());
+        return "make the producer non-null: return " + code(type) + " from " + producerName(factory);
     }
 
     /** The simple name of the type the point injects ({@code Foo} for {@code Foo?} and {@code Provider<Foo?>}). */
     private static String simpleName(DependencyModel dependency) {
-        var type = dependency.isProvider() ? dependency.getUnwrappedType().orElseThrow() : dependency.getType();
+        var type = injectedType(dependency);
         return TypeRefs.declared(type)
                 .map(decl -> decl.className().simpleName())
                 .orElseGet(type::displayName);
@@ -200,7 +308,11 @@ public final class NullabilityValidator {
     /** The point's type as Kotlin writes it, {@code Foo?} or {@code Provider<Foo?>} when nullable. */
     private static String pointText(DependencyModel dependency, boolean nullable) {
         var name = simpleName(dependency) + (nullable ? "?" : "");
-        return dependency.isProvider() ? "Provider<" + name + ">" : name;
+        return isWrapped(dependency) ? wrapperName(dependency) + "<" + name + ">" : name;
+    }
+
+    private static String wrapperName(DependencyModel dependency) {
+        return dependency.isPicker() ? "Picker" : "Provider";
     }
 
     private static String producerName(FactoryMethodModel factory) {

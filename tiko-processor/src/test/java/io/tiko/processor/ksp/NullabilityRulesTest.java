@@ -24,6 +24,7 @@ class NullabilityRulesTest {
     private static final String HEADER = """
             package app
 
+            import io.tiko.Picker
             import io.tiko.Provider
             import io.tiko.Scope
             import io.tiko.annotations.Component
@@ -47,6 +48,14 @@ class NullabilityRulesTest {
                 fun foo(): Foo = Foo()
             }
             """;
+
+    private static final String SHAPES = """
+            interface Shape
+            @Component(scope = Scope.SINGLETON) class Square : Shape
+            """;
+
+    private static final String GALLERY =
+            "@Component(scope = Scope.SINGLETON) class Gallery(val shapes: Picker<Shape>)";
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("rows")
@@ -132,7 +141,47 @@ class NullabilityRulesTest {
                         ErrorReporter.NULLABILITY_MISMATCH,
                         "Sessions.session",
                         "proxy",
-                        "make the producer non-null"));
+                        "make the producer non-null"),
+                rejected(
+                        "nullableProviderWrapperRejected",
+                        List.of(kotlin(NON_NULL_PRODUCER
+                                + "@Component(scope = Scope.SINGLETON) class User(val foo: Provider<Foo>?)")),
+                        ErrorReporter.NULLABILITY_MISMATCH,
+                        "`Provider<Foo>?`, but the container always passes a Provider",
+                        "declare the parameter as `Provider<Foo>`, not `Provider<Foo>?`"),
+                ok("nonNullPickerOverNonNullProviders", kotlin(SHAPES + GALLERY)),
+                rejected(
+                        "nullableProducerReachableThroughPickerList",
+                        List.of(kotlin(SHAPES + """
+                                @Component(scope = Scope.SINGLETON)
+                                class Shapes {
+                                    @Produces(scope = Scope.SINGLETON, name = "round")
+                                    fun round(): Shape? = null
+                                }
+                                """ + GALLERY)),
+                        ErrorReporter.NULLABILITY_MISMATCH,
+                        "can hand out the value of @Produces Shapes.round",
+                        "make the producer non-null"),
+                rejected(
+                        "nullableProducerReachableThroughPickerByImplClass",
+                        List.of(kotlin(SHAPES + """
+                                class Circle : Shape
+                                @Component(scope = Scope.SINGLETON)
+                                class Shapes {
+                                    @Produces(scope = Scope.SINGLETON)
+                                    fun circle(): Circle? = null
+                                }
+                                """ + GALLERY)),
+                        ErrorReporter.NULLABILITY_MISMATCH,
+                        "can hand out the value of @Produces Shapes.circle",
+                        "make the producer non-null"),
+                rejected(
+                        "nullablePickerRejected",
+                        List.of(kotlin(SHAPES
+                                + "@Component(scope = Scope.SINGLETON) class Gallery(val shapes: Picker<Shape?>)")),
+                        ErrorReporter.NULLABILITY_MISMATCH,
+                        "`Picker<Shape?>`, but a Picker can't hand out null",
+                        "the parameter as `Picker<Shape>`, not `Picker<Shape?>`"));
     }
 
     private static Arguments ok(String name, SourceFile... sources) {

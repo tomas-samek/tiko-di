@@ -19,7 +19,7 @@ import java.util.List;
  * Rejects the Kotlin constructs that would add DI semantics Java has no counterpart for (the
  * construct rule of the Kotlin support): an {@code object} or {@code companion object} as a
  * component, a {@code @Produces} or {@code @EventHandler} that is a top-level function or lives
- * in an object, a {@code suspend} DI method, and DI annotations on property accessors
+ * in an object, an extension or {@code suspend} DI method, and DI annotations on property accessors
  * ({@code @get:} / {@code @set:}). Each is reported as {@link ErrorReporter#KOTLIN_UNSUPPORTED}
  * on its declaration and marked rejected in the {@link ProcessorContext}, so the collectors that
  * run after it build no model for it.
@@ -27,7 +27,7 @@ import java.util.List;
  * <p>It runs on each round's annotated declarations <em>before</em> collection, because the
  * collectors assume what it rules out (a {@code @Produces} or {@code @EventHandler} always has a
  * declaring class). It decides on model facts only ({@link ClassDecl#kind()},
- * {@link MethodDecl#isTopLevel()}, {@link MethodDecl#isSuspend()},
+ * {@link MethodDecl#isTopLevel()}, {@link MethodDecl#isExtension()}, {@link MethodDecl#isSuspend()},
  * {@link ProcessingEnv#propertyAccessorsAnnotatedWith}); on javac none of them occur, so it
  * reports nothing for Java sources.
  */
@@ -71,6 +71,7 @@ public final class KotlinConstructValidator {
         }
         for (var annotation : List.of(PRODUCES, EVENT_HANDLER, POST_CONSTRUCT, PRE_DESTROY)) {
             for (var method : env.methodsAnnotatedWith(annotation)) {
+                validateNotExtension(method, annotation);
                 validateNotSuspend(method, annotation);
             }
         }
@@ -127,6 +128,22 @@ public final class KotlinConstructValidator {
                         + method.name() + "' in " + displayName(owner.get()) + ") is not supported: object"
                         + " declarations can't be components, so Tiko has no component instance to call it on.",
                 companion ? MOVE_TO_ENCLOSING : MOVE_INTO_COMPONENT);
+    }
+
+    /**
+     * Generated Java would have to pass an extension function's receiver, which no injection point
+     * declares; a regular function taking it as a parameter maps 1:1 onto Java.
+     */
+    private void validateNotExtension(MethodDecl method, String annotation) {
+        if (!method.isExtension() || context.isRejected(method)) {
+            return;
+        }
+        reject(
+                method,
+                label(annotation) + " on the extension function '" + qualifiedMethodName(method) + "' is not"
+                        + " supported: the generated container would have to pass its receiver, and Tiko injects"
+                        + " parameters only.",
+                "Drop the receiver: declare a regular fun that takes the receiver as a parameter");
     }
 
     /** Generated Java calls DI methods directly, without a coroutine; suspend handlers come with K2. */
