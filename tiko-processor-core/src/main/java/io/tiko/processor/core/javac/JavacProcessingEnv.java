@@ -7,7 +7,6 @@ import io.tiko.processor.core.ProcessingEnv;
 import io.tiko.processor.core.SourceVersionInfo;
 import io.tiko.processor.core.TypeOracle;
 import io.tiko.processor.core.model.ClassDecl;
-import io.tiko.processor.core.model.Location;
 import io.tiko.processor.core.model.MethodDecl;
 import java.util.List;
 import java.util.Map;
@@ -41,24 +40,6 @@ public final class JavacProcessingEnv implements ProcessingEnv {
     /** Wraps one round; create a new instance for every round. */
     public static JavacProcessingEnv of(ProcessingEnvironment env, RoundEnvironment round) {
         return new JavacProcessingEnv(env, round);
-    }
-
-    /**
-     * The wrapped javac environment.
-     *
-     * <p>Interim bridge for the tiko-processor port; removed in K1 Task 7.
-     */
-    public ProcessingEnvironment processingEnvironment() {
-        return env;
-    }
-
-    /**
-     * The location of a javac element, as the model's declarations report it.
-     *
-     * <p>Interim bridge for the tiko-processor port; removed in K1 Task 7.
-     */
-    public static Location location(Element element) {
-        return JavacLocation.of(element);
     }
 
     @Override
