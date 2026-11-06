@@ -35,9 +35,9 @@ import java.util.Optional;
  *   <li>A {@code Picker<T>} hands out every provider of {@code T}: {@code list()} and
  *       {@code byName} the ones producing exactly {@code T}, {@code byImplClass} those producing a
  *       subtype. Any nullable producer it can reach is a mismatch for its non-null {@code T}.
- *   <li>A {@code Picker<T?>} is rejected: it can't carry a null ({@code byName} answers with an
- *       {@code Optional}, which reads a null as "absent", the optional meaning {@code ?} must never
- *       have; {@code byImplClass} would fail on it).
+ *   <li>A {@code Picker<T?>} is rejected: it can't carry a null ({@code byName} and
+ *       {@code byImplClass} answer with an {@code Optional}, which reads a null as "absent", the
+ *       optional meaning {@code ?} must never have).
  *   <li>A nullable EVENT-scoped producer injected into a longer-lived component is rejected: that
  *       component receives a proxy resolving the current unit's value on each call, and the proxy
  *       itself is never null.
@@ -245,8 +245,9 @@ public final class NullabilityValidator {
                 ErrorReporter.NULLABILITY_MISMATCH,
                 dependency.getParameter().location(),
                 "Nullability mismatch: " + point(dependency, consumer) + " is declared "
-                        + code(pointText(dependency, true)) + ", but a Picker can't hand out null: byName() answers"
-                        + " with an Optional, which reads a null as absent, and byImplClass() would fail on it. A ?"
+                        + code(pointText(dependency, true))
+                        + ", but a Picker can't hand out null: byName() and byImplClass()"
+                        + " answer with an Optional, which reads a null as absent. A ?"
                         + " never makes a dependency optional.",
                 "Declare the parameter as " + code(pointText(dependency, false)) + ", not "
                         + code(pointText(dependency, true)),
