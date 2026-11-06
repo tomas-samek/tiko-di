@@ -1,9 +1,9 @@
 package io.tiko.processor.generator;
 
 import com.palantir.javapoet.*;
+import io.tiko.processor.core.GeneratorAnnotations;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.FactoryMethodModel;
-import io.tiko.processor.util.GeneratorAnnotations;
 import io.tiko.processor.util.ProcessorContext;
 import java.io.IOException;
 import java.util.ArrayList;

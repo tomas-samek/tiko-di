@@ -1,4 +1,4 @@
-package io.tiko.processor.topology;
+package io.tiko.processor.core;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

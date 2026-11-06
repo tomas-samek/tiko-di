@@ -1,9 +1,9 @@
 package io.tiko.processor.generator;
 
 import com.palantir.javapoet.*;
+import io.tiko.processor.core.GeneratorAnnotations;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
-import io.tiko.processor.util.GeneratorAnnotations;
 import io.tiko.processor.util.ProcessorContext;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -277,7 +277,7 @@ public final class ComponentFactoryGenerator {
                 // Named lookup routes through the typed get(Class, name) dispatcher — the per-class
                 // getter is no-arg and cannot take a qualifier (#242). The declared type keys the
                 // lookup, exactly like the container.get(Type.class, name) runtime API.
-                String qualifier = io.tiko.processor.util.CodeLiterals.javaString(
+                String qualifier = io.tiko.processor.core.CodeLiterals.javaString(
                         dependency.getQualifier().orElseThrow());
                 return String.format("container.get(%s.class, \"%s\")", typeName, qualifier);
             }
@@ -304,7 +304,7 @@ public final class ComponentFactoryGenerator {
             // Fallback to the requested type name. Same #242 rule: a qualified lookup goes through
             // the typed dispatcher, an unqualified one through the no-arg per-class getter.
             if (dependency.getQualifier().isPresent()) {
-                String qualifier = io.tiko.processor.util.CodeLiterals.javaString(
+                String qualifier = io.tiko.processor.core.CodeLiterals.javaString(
                         dependency.getQualifier().orElseThrow());
                 return String.format("container.get(%s.class, \"%s\")", typeName, qualifier);
             }

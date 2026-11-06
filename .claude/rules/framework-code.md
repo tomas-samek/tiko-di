@@ -24,6 +24,6 @@ paths:
   }
   ```
 - Annotation processor failures format their stack via
-  `TikoAnnotationProcessor.formatStackTrace(Throwable)` (multi-line `\n  at …`
+  `io.tiko.processor.core.StackTraces.format(Throwable)` (multi-line `\n  at …`
   with cause chain). Do not embed `Arrays.toString(e.getStackTrace())` in
   messager messages.

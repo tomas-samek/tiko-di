@@ -1,5 +1,6 @@
 package io.tiko.processor.topology;
 
+import io.tiko.processor.core.JsonWriter;
 import io.tiko.processor.model.WiringError;
 import java.io.IOException;
 import java.io.StringWriter;

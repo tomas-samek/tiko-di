@@ -29,6 +29,10 @@
             <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-kafka</artifactId>
         </dependency>
+        <dependency>
+            <groupId>io.github.tomas-samek</groupId>
+            <artifactId>tiko-processor-core</artifactId>
+        </dependency>
 
         <!-- Annotation processing -->
         <dependency>

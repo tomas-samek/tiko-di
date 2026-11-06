@@ -2,8 +2,10 @@ package io.tiko.kafka.processor.generator;
 
 import io.tiko.kafka.processor.model.KafkaSinkDescriptor;
 import io.tiko.kafka.processor.model.KafkaSourceDescriptor;
+import io.tiko.processor.core.JsonWriter;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
+import java.io.StringWriter;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -29,8 +31,7 @@ import javax.tools.StandardLocation;
  *       the local event that triggers the send (its first parameter type).</li>
  * </ul>
  *
- * <p>Hand-rolled JSON rather than reusing {@code tiko-processor}'s {@code JsonWriter}:
- * this module deliberately has no compile dependency on {@code tiko-processor}.
+ * <p>Written through the shared {@code JsonWriter} in {@code tiko-processor-core}.
  */
 public final class KafkaTopologyWriter {
 
@@ -55,87 +56,64 @@ public final class KafkaTopologyWriter {
 
     /** Serializes to a String — also used by unit tests so they don't need a Filer. */
     public static String render(List<KafkaSourceDescriptor> sources, List<KafkaSinkDescriptor> sinks) {
-        var sb = new StringBuilder();
-        sb.append("{\n");
-        sb.append("  \"schemaVersion\": ").append(SCHEMA_VERSION).append(",\n");
-        sb.append("  \"kafkaSources\": [");
-        appendSources(sb, sources);
-        sb.append("],\n");
-        sb.append("  \"kafkaSinks\": [");
-        appendSinks(sb, sinks);
-        sb.append("]\n");
-        sb.append("}\n");
-        return sb.toString();
+        var out = new StringWriter();
+        try (var jw = new JsonWriter(out, true)) {
+            jw.object().field("schemaVersion").value(SCHEMA_VERSION);
+            jw.field("kafkaSources").array();
+            for (var s : sources) {
+                writeSource(jw, s);
+            }
+            jw.endArray();
+            jw.field("kafkaSinks").array();
+            for (var s : sinks) {
+                writeSink(jw, s);
+            }
+            jw.endArray().endObject();
+        }
+        return out + "\n";
     }
 
-    private static void appendSources(StringBuilder sb, List<KafkaSourceDescriptor> sources) {
-        for (int i = 0; i < sources.size(); i++) {
-            KafkaSourceDescriptor s = sources.get(i);
-            sb.append(i == 0 ? "\n" : ",\n");
-            sb.append("    {\n");
-            field(sb, "declaringClass", s.enclosingClass().getQualifiedName().toString(), true);
-            field(sb, "methodName", s.method().getSimpleName().toString(), true);
-            field(sb, "topic", s.topic(), true);
-            field(sb, "consumerGroup", s.consumerGroup(), true);
-            field(sb, "serializer", typeName(s.serializerClass()), true);
-            field(sb, "eventName", s.eventName(), true);
-            field(sb, "payloadType", typeName(s.payloadType()), true);
-            field(sb, "eventType", typeName(s.producedEventType()), false);
-            sb.append("    }");
-        }
-        if (!sources.isEmpty()) sb.append("\n  ");
+    private static void writeSource(JsonWriter jw, KafkaSourceDescriptor s) {
+        jw.object()
+                .field("declaringClass")
+                .value(s.enclosingClass().getQualifiedName().toString())
+                .field("methodName")
+                .value(s.method().getSimpleName().toString())
+                .field("topic")
+                .value(s.topic())
+                .field("consumerGroup")
+                .value(s.consumerGroup())
+                .field("serializer")
+                .value(typeName(s.serializerClass()))
+                .field("eventName")
+                .value(s.eventName())
+                .field("payloadType")
+                .value(typeName(s.payloadType()))
+                .field("eventType")
+                .value(typeName(s.producedEventType()))
+                .endObject();
     }
 
-    private static void appendSinks(StringBuilder sb, List<KafkaSinkDescriptor> sinks) {
-        for (int i = 0; i < sinks.size(); i++) {
-            KafkaSinkDescriptor s = sinks.get(i);
-            sb.append(i == 0 ? "\n" : ",\n");
-            sb.append("    {\n");
-            field(sb, "declaringClass", s.enclosingClass().getQualifiedName().toString(), true);
-            field(sb, "methodName", s.method().getSimpleName().toString(), true);
-            field(sb, "topic", s.topic(), true);
-            field(sb, "partitionKey", s.partitionKey(), true);
-            field(sb, "serializer", typeName(s.serializerClass()), true);
-            field(sb, "eventType", typeName(s.eventType()), true);
-            field(sb, "payloadType", typeName(s.producedPayloadType()), false);
-            sb.append("    }");
-        }
-        if (!sinks.isEmpty()) sb.append("\n  ");
-    }
-
-    private static void field(StringBuilder sb, String key, String value, boolean trailingComma) {
-        sb.append("      \"").append(key).append("\": ");
-        if (value == null) {
-            sb.append("null");
-        } else {
-            sb.append('"').append(escape(value)).append('"');
-        }
-        sb.append(trailingComma ? ",\n" : "\n");
+    private static void writeSink(JsonWriter jw, KafkaSinkDescriptor s) {
+        jw.object()
+                .field("declaringClass")
+                .value(s.enclosingClass().getQualifiedName().toString())
+                .field("methodName")
+                .value(s.method().getSimpleName().toString())
+                .field("topic")
+                .value(s.topic())
+                .field("partitionKey")
+                .value(s.partitionKey())
+                .field("serializer")
+                .value(typeName(s.serializerClass()))
+                .field("eventType")
+                .value(typeName(s.eventType()))
+                .field("payloadType")
+                .value(typeName(s.producedPayloadType()))
+                .endObject();
     }
 
     private static String typeName(TypeMirror t) {
         return t == null ? null : t.toString();
-    }
-
-    private static String escape(String s) {
-        var sb = new StringBuilder(s.length() + 8);
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            switch (c) {
-                case '"' -> sb.append("\\\"");
-                case '\\' -> sb.append("\\\\");
-                case '\n' -> sb.append("\\n");
-                case '\r' -> sb.append("\\r");
-                case '\t' -> sb.append("\\t");
-                default -> {
-                    if (c < 0x20) {
-                        sb.append(String.format("\\u%04x", (int) c));
-                    } else {
-                        sb.append(c);
-                    }
-                }
-            }
-        }
-        return sb.toString();
     }
 }

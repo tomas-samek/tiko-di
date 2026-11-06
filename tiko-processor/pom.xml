@@ -22,6 +22,10 @@
         </dependency>
         <dependency>
             <groupId>io.github.tomas-samek</groupId>
+            <artifactId>tiko-processor-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-config</artifactId>
             <scope>provided</scope>
         </dependency>

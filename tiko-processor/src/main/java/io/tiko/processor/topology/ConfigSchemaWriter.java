@@ -2,6 +2,7 @@ package io.tiko.processor.topology;
 
 import io.tiko.processor.config.ConfigFieldModel;
 import io.tiko.processor.config.ConfigurationModel;
+import io.tiko.processor.core.JsonWriter;
 import io.tiko.processor.util.ProcessorContext;
 import java.io.IOException;
 import java.io.Writer;

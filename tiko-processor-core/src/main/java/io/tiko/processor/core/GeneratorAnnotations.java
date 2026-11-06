@@ -1,4 +1,4 @@
-package io.tiko.processor.util;
+package io.tiko.processor.core;
 
 import com.palantir.javapoet.AnnotationSpec;
 import com.palantir.javapoet.ClassName;

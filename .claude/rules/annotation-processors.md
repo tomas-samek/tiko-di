@@ -19,7 +19,7 @@ All code is generated in the `io.tiko.generated` package:
 Every top-level type emitted by an annotation processor carries
 `@javax.annotation.processing.Generated(...)`. Use the shared helper
 `GeneratorAnnotations.generatedBy(GeneratorClass.class)` (in
-`tiko-processor/util`). This lets IDEs grey out generated sources and coverage
+`tiko-processor-core`, package `io.tiko.processor.core`). This lets IDEs grey out generated sources and coverage
 tools exclude them.
 
 ## Error Message Format

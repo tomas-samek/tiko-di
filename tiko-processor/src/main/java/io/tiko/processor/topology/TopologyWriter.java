@@ -1,6 +1,7 @@
 package io.tiko.processor.topology;
 
 import io.tiko.processor.config.ConfigurationModel;
+import io.tiko.processor.core.JsonWriter;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.EventHandlerModel;
