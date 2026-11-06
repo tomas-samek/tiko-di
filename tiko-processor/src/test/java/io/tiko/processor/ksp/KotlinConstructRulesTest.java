@@ -310,6 +310,45 @@ class KotlinConstructRulesTest {
                         "@EventHandler 'Listener.onTenant' takes the Kotlin value class app.TenantId",
                         "Use a regular class"),
                 rejected(
+                        "valueClassPropertyInProxiedInterfaceRejected",
+                        """
+                        @JvmInline value class TenantId(val raw: String)
+                        interface Ctx { val id: TenantId }
+                        @Component(scope = Scope.EVENT) class CtxImpl : Ctx {
+                            override val id: TenantId = TenantId("a")
+                        }
+                        @Component(scope = Scope.SINGLETON) class Holder(val ctx: Ctx)
+                        """,
+                        ErrorReporter.KOTLIN_UNSUPPORTED,
+                        "Proxied interface member 'Ctx.getId' returns the Kotlin value class app.TenantId",
+                        "Use a regular class"),
+                rejected(
+                        "valueClassReturnInProxiedInterfaceRejected",
+                        """
+                        @JvmInline value class TenantId(val raw: String)
+                        interface Ctx { fun tenant(): TenantId }
+                        @Component(scope = Scope.EVENT) class CtxImpl : Ctx {
+                            override fun tenant(): TenantId = TenantId("a")
+                        }
+                        @Component(scope = Scope.SINGLETON) class Holder(val ctx: Ctx)
+                        """,
+                        ErrorReporter.KOTLIN_UNSUPPORTED,
+                        "Proxied interface member 'Ctx.tenant' returns the Kotlin value class app.TenantId",
+                        "Use a regular class"),
+                rejected(
+                        "valueClassParameterInProxiedInterfaceRejected",
+                        """
+                        @JvmInline value class TenantId(val raw: String)
+                        interface Ctx { fun use(id: TenantId) }
+                        @Component(scope = Scope.EVENT) class CtxImpl : Ctx {
+                            override fun use(id: TenantId) {}
+                        }
+                        @Component(scope = Scope.SINGLETON) class Holder(val ctx: Ctx)
+                        """,
+                        ErrorReporter.KOTLIN_UNSUPPORTED,
+                        "Proxied interface member 'Ctx.use' takes the Kotlin value class app.TenantId (parameter 'id')",
+                        "Use a regular class"),
+                rejected(
                         "javaKeywordJvmNameRejected",
                         """
                         @Component(scope = Scope.SINGLETON) class Factories {

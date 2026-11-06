@@ -13,8 +13,10 @@ import io.tiko.processor.core.KotlinConstructRules.Violation;
 import io.tiko.processor.core.ProcessingEnv;
 import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.MethodDecl;
+import io.tiko.processor.util.AbstractInterfaceMethods;
 import io.tiko.processor.util.ErrorReporter;
 import io.tiko.processor.util.ProcessorContext;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
 
@@ -50,6 +52,9 @@ public final class KotlinConstructValidator {
 
     /** The generated code calling DI methods. */
     private static final Caller CONTAINER = new Caller("the generated container", "Tiko injects parameters only");
+
+    /** The generated proxy overriding a proxied interface's members. */
+    private static final Caller PROXY = new Caller("the generated proxy", "Tiko proxies interface members only");
 
     private final ProcessorContext context;
     private final ErrorReporter errors;
@@ -102,6 +107,44 @@ public final class KotlinConstructValidator {
             for (var dependency : component.getDependencies()) {
                 var violation = KotlinConstructRules.valueClassInjected(
                         dependency.getParameter(), component.getClassName(), CONTAINER);
+                if (violation.isPresent()) {
+                    report(violation.get());
+                    valid = false;
+                }
+            }
+        }
+        return validateProxiedInterfaces() && valid;
+    }
+
+    /**
+     * Reports the abstract members of each proxied interface that name a value class or a mangled
+     * JVM name: the generated proxy would override them by JVM signature, which Java source can't
+     * write. It runs before proxy generation, so no proxy is written for a rejected interface.
+     */
+    private boolean validateProxiedInterfaces() {
+        var interfaces = new LinkedHashMap<String, ClassDecl>();
+        for (var component : context.getActiveComponents()) {
+            if (component.requiresProxy()) {
+                component
+                        .getImplementedInterface()
+                        .flatMap(type -> context.env().types().findClass(type.displayName()))
+                        .ifPresent(
+                                decl -> interfaces.putIfAbsent(decl.className().canonicalName(), decl));
+            }
+        }
+        for (var factory : context.getActiveFactoryMethods()) {
+            if (factory.requiresProxy()) {
+                context.env()
+                        .types()
+                        .findClass(factory.getReturnTypeName())
+                        .ifPresent(
+                                decl -> interfaces.putIfAbsent(decl.className().canonicalName(), decl));
+            }
+        }
+        var valid = true;
+        for (var decl : interfaces.values()) {
+            for (var method : AbstractInterfaceMethods.collect(decl)) {
+                var violation = KotlinConstructRules.valueClassInProxiedInterface(method, PROXY);
                 if (violation.isPresent()) {
                     report(violation.get());
                     valid = false;

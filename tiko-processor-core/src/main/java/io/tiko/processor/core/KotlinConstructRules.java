@@ -35,6 +35,9 @@ public final class KotlinConstructRules {
     private static final String VALUE_CLASS_FIX =
             "Use a regular class: drop @JvmInline and value (a data class keeps the value semantics)";
 
+    private static final String PROXY_VALUE_CLASS_FIX =
+            "Use a regular class in the interface: drop @JvmInline and value (a data class keeps the value semantics)";
+
     /** Java's reserved words and literals: a method with one of these names can't be called from Java source. */
     private static final Set<String> JAVA_KEYWORDS = Set.of(
             "abstract",
@@ -241,6 +244,43 @@ public final class KotlinConstructRules {
                                 + parameter.type().displayName() + " (parameter '" + parameter.name() + "')"
                                 + valueClassReason(caller),
                         VALUE_CLASS_FIX));
+    }
+
+    /**
+     * An abstract member of a proxied interface (a method or a property accessor) returning or
+     * taking a value class, or whose JVM name is mangled: the generated proxy overrides it by
+     * its JVM signature, so it can't be written in Java.
+     */
+    public static Optional<Violation> valueClassInProxiedInterface(MethodDecl method, Caller caller) {
+        var subject = "Proxied interface member '" + qualifiedMethodName(method) + "'";
+        if (isValueClass(method.returnType())) {
+            return Optional.of(new Violation(
+                    method.location(),
+                    subject + " returns the Kotlin value class "
+                            + method.returnType().displayName() + valueClassReason(caller),
+                    PROXY_VALUE_CLASS_FIX));
+        }
+        var valueClassParameter = method.parameters().stream()
+                .filter(parameter -> isValueClass(parameter.type()))
+                .findFirst();
+        if (valueClassParameter.isPresent()) {
+            var parameter = valueClassParameter.get();
+            return Optional.of(new Violation(
+                    method.location(),
+                    subject + " takes the Kotlin value class "
+                            + parameter.type().displayName() + " (parameter '" + parameter.name() + "')"
+                            + valueClassReason(caller),
+                    PROXY_VALUE_CLASS_FIX));
+        }
+        if (method.isConstructor() || isJavaIdentifier(method.jvmName())) {
+            return Optional.empty();
+        }
+        return Optional.of(new Violation(
+                method.location(),
+                subject + " has the JVM name '" + method.jvmName() + "', which " + caller.generated()
+                        + " can't override: it is not a Java identifier.",
+                "Give it a Java-callable name with @JvmName(\"...\"), or avoid value classes and internal members"
+                        + " in the interface"));
     }
 
     /**
