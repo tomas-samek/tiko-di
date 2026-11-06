@@ -250,6 +250,14 @@ Cross-module pickers work for free — the underlying `Container.get(Class)` / `
 
 ### Fluent `pick()` API on the container
 
+In a multi-module container, unqualified `container.get(Greeter.class)` and
+`container.getProvider(Greeter.class)` use the first matching module in discovery order when no
+runtime override applies. Discovery order is unspecified and can vary with packaging or class
+loading. For an explicit choice, request a registered concrete class such as
+`container.get(EnglishGreeter.class)` or use a unique qualifier such as
+`container.get(Greeter.class, "english")`. Use `container.getAll(Greeter.class)` to list all matches.
+Constructor dependencies follow the compile-time qualifier rules above.
+
 `container.get(Class)` and `container.get(Class, String)` are the 80% shortcuts. For anything else — a fallback when the bean is missing, a lazy `Provider`, or future axes — go through `container.pick(Class)`:
 
 ```java
