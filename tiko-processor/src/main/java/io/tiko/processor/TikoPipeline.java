@@ -331,6 +331,12 @@ public final class TikoPipeline {
         boolean valid = true;
         var typeUtil = new TypeUtil(context.env().types());
 
+        // A component injecting a Kotlin value class can't be constructed from generated Java;
+        // short-circuit so its (rejected) provider doesn't also read as a missing dependency.
+        if (!new KotlinConstructValidator(context).validateInjectionPoints()) {
+            return false;
+        }
+
         // Structural shape checks run first and short-circuit (#333): the validators below
         // assume well-shaped models — e.g. a raw Provider dependency NPEs the moment any
         // of them reads its dependency key.

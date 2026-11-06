@@ -492,11 +492,12 @@ class JavacModelTest {
                                         ClassDecl::visibility,
                                         ClassDecl::isAbstract,
                                         ClassDecl::isFinal,
-                                        ClassDecl::isStatic)
+                                        ClassDecl::isStatic,
+                                        ClassDecl::isValueClass)
                                 .containsExactly(
-                                        tuple(Visibility.PUBLIC, true, false, false),
-                                        tuple(Visibility.PUBLIC, false, false, true),
-                                        tuple(Visibility.PACKAGE, false, true, false)))),
+                                        tuple(Visibility.PUBLIC, true, false, false, false),
+                                        tuple(Visibility.PUBLIC, false, false, true, false),
+                                        tuple(Visibility.PACKAGE, false, true, false, false)))),
                 Arguments.of("memberVisibilityMapsFromJavac", shapes(), Check.model(env -> {
                     var shapes = find(env, "p.Shapes");
                     assertThat(Stream.of("make", "get", "pkg", "hidden")

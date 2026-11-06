@@ -113,6 +113,8 @@ class KspDeclarationFactsTest {
                 val entries: List<String> = listOf()
             }
 
+            @JvmInline value class Meters(val raw: Double)
+
             class Accessors {
                 val plain: String = ""
                 var mutable: Int = 0
@@ -434,6 +436,13 @@ class KspDeclarationFactsTest {
                 fact("kotlinClassIsFinalByDefault", env -> cls(env, "f.Circle").isFinal(), true),
                 fact("abstractClassIsNotFinal", env -> cls(env, "f.Base").isFinal(), false),
                 fact("javaClassIsNotFinal", env -> cls(env, "f.Legacy").isFinal(), false),
+                fact("valueClassIsValueClass", env -> cls(env, "f.Meters").isValueClass(), true),
+                fact(
+                        "classpathValueClassIsValueClass",
+                        env -> cls(env, "kotlin.time.Duration").isValueClass(),
+                        true),
+                fact("plainClassIsNoValueClass", env -> cls(env, "f.Circle").isValueClass(), false),
+                fact("javaClassIsNoValueClass", env -> cls(env, "f.Legacy").isValueClass(), false),
                 fact(
                         "javaStaticNestedClassIsStatic",
                         env -> cls(env, "f.Legacy.Nested").isStatic(),

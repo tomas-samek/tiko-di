@@ -182,7 +182,20 @@ class KspKafkaBridgeTest {
                             }
                         }
                         """,
-                        List.of("@KafkaSink inside a companion object", "move it to the enclosing @Component class")));
+                        List.of("@KafkaSink inside a companion object", "move it to the enclosing @Component class")),
+                Arguments.of(
+                        "valueClassPayloadRejected",
+                        """
+                        @JvmInline value class OrderId(val raw: String)
+                        @Component(scope = Scope.SINGLETON)
+                        class OrderConsumer {
+                            @KafkaSource(topic = "orders")
+                            fun fromKafka(id: OrderId) {}
+                        }
+                        """,
+                        List.of(
+                                "@KafkaSource 'OrderConsumer.fromKafka' takes the Kotlin value class demo.OrderId",
+                                "Use a regular class")));
     }
 
     private static com.tschuchort.compiletesting.SourceFile bridge() {

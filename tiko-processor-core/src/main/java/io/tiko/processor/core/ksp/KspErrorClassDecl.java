@@ -54,6 +54,11 @@ record KspErrorClassDecl(String name, TypeRef type) implements ClassDecl {
     }
 
     @Override
+    public boolean isValueClass() {
+        return false;
+    }
+
+    @Override
     public boolean isStatic() {
         return false;
     }

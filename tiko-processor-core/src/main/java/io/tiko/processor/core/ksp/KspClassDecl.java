@@ -120,6 +120,13 @@ final class KspClassDecl implements ClassDecl {
         return declaration.getModifiers().contains(Modifier.JAVA_STATIC) || kind() != DeclKind.CLASS;
     }
 
+    /** The {@code value} (or legacy {@code inline}) modifier, also on a classpath Kotlin class. */
+    @Override
+    public boolean isValueClass() {
+        var modifiers = declaration().getModifiers();
+        return modifiers.contains(Modifier.VALUE) || modifiers.contains(Modifier.INLINE);
+    }
+
     @Override
     public SourceLanguage language() {
         return KspModel.language(declaration().getOrigin());

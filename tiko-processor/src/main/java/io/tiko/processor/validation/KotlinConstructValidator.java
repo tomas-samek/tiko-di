@@ -22,8 +22,9 @@ import java.util.Optional;
  * Rejects the Kotlin constructs that would add DI semantics Java has no counterpart for (the
  * construct rule of the Kotlin support): an {@code object} or {@code companion object} as a
  * component, a {@code @Produces} or {@code @EventHandler} that is a top-level function or lives
- * in an object, an extension or {@code suspend} DI method, and DI annotations on property accessors
- * ({@code @get:} / {@code @set:}). Each is reported as {@link ErrorReporter#KOTLIN_UNSUPPORTED}
+ * in an object, an extension or {@code suspend} DI method, a value class as a component or in a
+ * DI method's signature, a DI method whose JVM name Java can't call, and DI annotations on
+ * property accessors ({@code @get:} / {@code @set:}). Each is reported as {@link ErrorReporter#KOTLIN_UNSUPPORTED}
  * on its declaration and marked rejected in the {@link ProcessorContext}, so the collectors that
  * run after it build no model for it.
  *
@@ -31,7 +32,8 @@ import java.util.Optional;
  * collectors assume what it rules out (a {@code @Produces} or {@code @EventHandler} always has a
  * declaring class). The rules themselves are {@link KotlinConstructRules}, shared with the Kafka
  * processor; they decide on model facts only, and on javac none of them occur, so it reports
- * nothing for Java sources.
+ * nothing for Java sources. Value-class injection points are checked after collection, by
+ * {@link #validateInjectionPoints}, once the injected constructor is known.
  */
 public final class KotlinConstructValidator {
 
@@ -61,7 +63,9 @@ public final class KotlinConstructValidator {
     public void validate(ProcessingEnv env) {
         for (var annotation : List.of(COMPONENT, ComponentCollector.TEST_COMPONENT_FQN)) {
             for (var decl : env.classesAnnotatedWith(annotation)) {
-                KotlinConstructRules.objectComponent(decl).ifPresent(violation -> reject(decl, violation));
+                KotlinConstructRules.objectComponent(decl)
+                        .or(() -> KotlinConstructRules.valueClassComponent(decl))
+                        .ifPresent(violation -> reject(decl, violation));
             }
         }
         for (var annotation : List.of(PRODUCES, EVENT_HANDLER)) {
@@ -73,6 +77,8 @@ public final class KotlinConstructValidator {
             for (var method : env.methodsAnnotatedWith(annotation)) {
                 reject(method, KotlinConstructRules.extension(method, annotation, CONTAINER));
                 reject(method, suspendViolation(method, annotation));
+                reject(method, KotlinConstructRules.valueClassInSignature(method, annotation, CONTAINER));
+                reject(method, KotlinConstructRules.uncallableJvmName(method, annotation, CONTAINER));
             }
         }
         for (var annotation : FUNCTION_ANNOTATIONS) {
@@ -80,6 +86,29 @@ public final class KotlinConstructValidator {
                 report(KotlinConstructRules.propertyAccessor(accessor, annotation));
             }
         }
+    }
+
+    /**
+     * Reports the collected components that inject a Kotlin value class: generated Java would pass
+     * it where the JVM constructor takes its underlying value. It runs after collection, which
+     * picks the injected constructor; a {@code @Produces} or handler taking one was already
+     * rejected by {@link #validate}.
+     *
+     * @return {@code false} when one was reported
+     */
+    public boolean validateInjectionPoints() {
+        var valid = true;
+        for (var component : context.getActiveComponents()) {
+            for (var dependency : component.getDependencies()) {
+                var violation = KotlinConstructRules.valueClassInjected(
+                        dependency.getParameter(), component.getClassName(), CONTAINER);
+                if (violation.isPresent()) {
+                    report(violation.get());
+                    valid = false;
+                }
+            }
+        }
+        return valid;
     }
 
     /** Suspend handlers come with K2; every other DI method is called directly, without a coroutine. */

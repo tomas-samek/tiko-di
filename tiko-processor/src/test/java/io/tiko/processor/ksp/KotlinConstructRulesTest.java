@@ -250,6 +250,66 @@ class KotlinConstructRulesTest {
                         "@PostConstruct on the setter of property 'ready'",
                         "declare a fun instead"),
                 rejected(
+                        "valueClassComponentRejected",
+                        """
+                        @Component(scope = Scope.SINGLETON) @JvmInline value class TenantId(val raw: String)
+                        """,
+                        ErrorReporter.KOTLIN_UNSUPPORTED,
+                        "TenantId is a Kotlin value class: value classes can't be components",
+                        "Make it a regular class"),
+                rejected(
+                        "valueClassProducedRejected",
+                        """
+                        @JvmInline value class TenantId(val raw: String)
+                        @Component(scope = Scope.SINGLETON) class Factories {
+                            @Produces fun tenant(): TenantId = TenantId("acme")
+                        }
+                        """,
+                        ErrorReporter.KOTLIN_UNSUPPORTED,
+                        "@Produces 'Factories.tenant' returns the Kotlin value class app.TenantId",
+                        "Use a regular class"),
+                rejected(
+                        "valueClassInjectedRejected",
+                        """
+                        @JvmInline value class TenantId(val raw: String)
+                        @Component(scope = Scope.SINGLETON) class Service(val tenant: TenantId)
+                        """,
+                        ErrorReporter.KOTLIN_UNSUPPORTED,
+                        "Service injects the Kotlin value class app.TenantId (parameter 'tenant')",
+                        "Use a regular class"),
+                rejected(
+                        "valueClassProducesParameterRejected",
+                        """
+                        @JvmInline value class TenantId(val raw: String)
+                        @Component(scope = Scope.SINGLETON) class Factories {
+                            @Produces fun clock(tenant: TenantId): Clock = Clock()
+                        }
+                        """,
+                        ErrorReporter.KOTLIN_UNSUPPORTED,
+                        "@Produces 'Factories.clock' takes the Kotlin value class app.TenantId (parameter 'tenant')",
+                        "Use a regular class"),
+                rejected(
+                        "valueClassEventRejected",
+                        """
+                        @JvmInline value class TenantId(val raw: String)
+                        @Component(scope = Scope.SINGLETON) class Listener {
+                            @EventHandler fun onTenant(event: TenantId) {}
+                        }
+                        """,
+                        ErrorReporter.KOTLIN_UNSUPPORTED,
+                        "@EventHandler 'Listener.onTenant' takes the Kotlin value class app.TenantId",
+                        "Use a regular class"),
+                rejected(
+                        "javaKeywordJvmNameRejected",
+                        """
+                        @Component(scope = Scope.SINGLETON) class Factories {
+                            @Produces fun new(): Clock = Clock()
+                        }
+                        """,
+                        ErrorReporter.KOTLIN_UNSUPPORTED,
+                        "@Produces 'Factories.new' has the JVM name 'new', which the generated container can't call",
+                        "@JvmName"),
+                rejected(
                         "varargConstructorParameterBehavesAsOnJavac",
                         """
                         @Component(scope = Scope.SINGLETON) class B

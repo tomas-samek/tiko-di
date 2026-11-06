@@ -4,15 +4,18 @@ import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.DeclKind;
 import io.tiko.processor.core.model.Location;
 import io.tiko.processor.core.model.MethodDecl;
+import io.tiko.processor.core.model.ParamDecl;
 import io.tiko.processor.core.model.PropertyAccessorDecl;
+import io.tiko.processor.core.model.TypeRef;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * The Kotlin construct rule, shared by the DI and Kafka processors: a Kotlin construct that maps
  * 1:1 onto a Java construct Tiko supports is supported; one that would add semantics generated
  * Java can't express is rejected with a Tiko-format error. Each rule reads model facts only
  * ({@link ClassDecl#kind()}, {@link MethodDecl#isTopLevel()}, {@link MethodDecl#isExtension()},
- * {@link MethodDecl#isSuspend()}), so none of them fires for Java
+ * {@link MethodDecl#isSuspend()}, {@link ClassDecl#isValueClass()}, {@link MethodDecl#jvmName()}), so none of them fires for Java
  * sources, and returns the {@link Violation} to report; the processors report it (DI as a
  * {@link #KIND} wiring error) and leave the declaration out of collection.
  *
@@ -28,6 +31,66 @@ public final class KotlinConstructRules {
     private static final String MOVE_TO_ENCLOSING =
             "Make it a member function: move it to the enclosing @Component class";
     private static final String DROP_SUSPEND = "Drop the suspend modifier: make it a regular fun";
+
+    private static final String VALUE_CLASS_FIX =
+            "Use a regular class: drop @JvmInline and value (a data class keeps the value semantics)";
+
+    /** Java's reserved words and literals: a method with one of these names can't be called from Java source. */
+    private static final Set<String> JAVA_KEYWORDS = Set.of(
+            "abstract",
+            "assert",
+            "boolean",
+            "break",
+            "byte",
+            "case",
+            "catch",
+            "char",
+            "class",
+            "const",
+            "continue",
+            "default",
+            "do",
+            "double",
+            "else",
+            "enum",
+            "extends",
+            "final",
+            "finally",
+            "float",
+            "for",
+            "goto",
+            "if",
+            "implements",
+            "import",
+            "instanceof",
+            "int",
+            "interface",
+            "long",
+            "native",
+            "new",
+            "package",
+            "private",
+            "protected",
+            "public",
+            "return",
+            "short",
+            "static",
+            "strictfp",
+            "super",
+            "switch",
+            "synchronized",
+            "this",
+            "throw",
+            "throws",
+            "transient",
+            "try",
+            "void",
+            "volatile",
+            "while",
+            "true",
+            "false",
+            "null",
+            "_");
 
     private KotlinConstructRules() {}
 
@@ -140,6 +203,80 @@ public final class KotlinConstructRules {
                 DROP_SUSPEND));
     }
 
+    /**
+     * A value class can't be a component: on the JVM it is passed as its underlying value, so
+     * generated Java can't construct, pass or return it as itself.
+     */
+    public static Optional<Violation> valueClassComponent(ClassDecl decl) {
+        if (!decl.isValueClass()) {
+            return Optional.empty();
+        }
+        return Optional.of(new Violation(
+                decl.location(),
+                displayName(decl) + " is a Kotlin value class: value classes can't be components. On the JVM"
+                        + " a value class is passed as its underlying value, so generated Java can't construct,"
+                        + " pass or return it as " + displayName(decl) + ".",
+                "Make it a regular class: drop @JvmInline and value (a data class keeps the value semantics)"));
+    }
+
+    /**
+     * A method returning or taking a value class: on the JVM the value class becomes its underlying
+     * value and the function name is mangled, so the caller can't call it with the declared types.
+     */
+    public static Optional<Violation> valueClassInSignature(MethodDecl method, String annotationFqn, Caller caller) {
+        var subject = label(annotationFqn) + " '" + qualifiedMethodName(method) + "'";
+        if (isValueClass(method.returnType())) {
+            return Optional.of(new Violation(
+                    method.location(),
+                    subject + " returns the Kotlin value class "
+                            + method.returnType().displayName() + valueClassReason(caller),
+                    VALUE_CLASS_FIX));
+        }
+        return method.parameters().stream()
+                .filter(parameter -> isValueClass(parameter.type()))
+                .findFirst()
+                .map(parameter -> new Violation(
+                        method.location(),
+                        subject + " takes the Kotlin value class "
+                                + parameter.type().displayName() + " (parameter '" + parameter.name() + "')"
+                                + valueClassReason(caller),
+                        VALUE_CLASS_FIX));
+    }
+
+    /**
+     * An injection point of a value class type, such as a constructor parameter: generated Java
+     * would pass the value class where the JVM signature takes its underlying value.
+     *
+     * @param consumer the injecting declaration's display name, as in "Service"
+     */
+    public static Optional<Violation> valueClassInjected(ParamDecl parameter, String consumer, Caller caller) {
+        if (!isValueClass(parameter.type())) {
+            return Optional.empty();
+        }
+        return Optional.of(new Violation(
+                parameter.location(),
+                consumer + " injects the Kotlin value class " + parameter.type().displayName() + " (parameter '"
+                        + parameter.name() + "')" + valueClassReason(caller),
+                VALUE_CLASS_FIX));
+    }
+
+    /**
+     * A method whose JVM name generated Java source can't call (not a Java identifier, or a Java
+     * keyword such as {@code new}); catches the mangled names the other rules don't name.
+     */
+    public static Optional<Violation> uncallableJvmName(MethodDecl method, String annotationFqn, Caller caller) {
+        var jvmName = method.jvmName();
+        if (method.isConstructor() || isJavaIdentifier(jvmName)) {
+            return Optional.empty();
+        }
+        return Optional.of(new Violation(
+                method.location(),
+                label(annotationFqn) + " '" + qualifiedMethodName(method) + "' has the JVM name '" + jvmName
+                        + "', which " + caller.generated() + " can't call: generated Java calls it by that name,"
+                        + " and it is not a Java identifier.",
+                "Rename the function, or give it a Java-callable name with @JvmName(\"...\")"));
+    }
+
     /** Tiko reads DI annotations on functions; an accessor ({@code @get:} / {@code @set:}) is not one. */
     public static Violation propertyAccessor(PropertyAccessorDecl accessor, String annotationFqn) {
         return new Violation(
@@ -148,6 +285,23 @@ public final class KotlinConstructRules {
                         + accessor.propertyName() + "' is not supported: Tiko reads DI annotations on"
                         + " functions, not on property accessors (@get: / @set:).",
                 "Move the annotation to a function: declare a fun instead");
+    }
+
+    /** Whether generated Java source can call a method by this name: a Java identifier, not a keyword. */
+    static boolean isJavaIdentifier(String name) {
+        if (name.isEmpty() || JAVA_KEYWORDS.contains(name) || !Character.isJavaIdentifierStart(name.charAt(0))) {
+            return false;
+        }
+        return name.chars().skip(1).allMatch(Character::isJavaIdentifierPart);
+    }
+
+    private static boolean isValueClass(TypeRef type) {
+        return type.declaration().map(ClassDecl::isValueClass).orElse(false);
+    }
+
+    private static String valueClassReason(Caller caller) {
+        return ": on the JVM a value class is passed as its underlying value and the functions taking or"
+                + " returning one get mangled names, so " + caller.generated() + " can't use it.";
     }
 
     private static boolean isObject(ClassDecl decl) {

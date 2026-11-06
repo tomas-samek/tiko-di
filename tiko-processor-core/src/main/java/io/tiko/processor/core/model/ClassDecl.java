@@ -26,6 +26,13 @@ public interface ClassDecl {
 
     boolean isStatic();
 
+    /**
+     * A Kotlin value class ({@code @JvmInline value class}). Always false on javac: javac sees a
+     * Kotlin-compiled value class on the classpath as the plain final class its values box to,
+     * which Java code constructs, passes and injects like any other class.
+     */
+    boolean isValueClass();
+
     SourceLanguage language();
 
     List<AnnotationRef> annotations();
