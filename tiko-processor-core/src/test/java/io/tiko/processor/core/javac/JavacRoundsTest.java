@@ -82,9 +82,7 @@ class JavacRoundsTest {
         assertThat(second).hasSameSizeAs(first).isNotEmpty();
         for (var i = 0; i < first.size(); i++) {
             assertThat(second.get(i)).as("%s in round 2", first.get(i)).isEqualTo(first.get(i));
-            assertThat(second.get(i).hashCode())
-                    .as("hash of %s in round 2", first.get(i))
-                    .isEqualTo(first.get(i).hashCode());
+            assertThat(second.get(i)).as("hash of %s in round 2", first.get(i)).hasSameHashCodeAs(first.get(i));
             for (var j = 0; j < first.size(); j++) {
                 if (i != j) {
                     assertThat(second.get(j))
