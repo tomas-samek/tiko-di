@@ -475,9 +475,11 @@ class JavacModelTest {
                                     subject.hadNoteContaining("unplaced note");
                                 })),
                 Arguments.of("foreignLocationIsRejected", shapes(), Check.model(env -> {
-                    assertThatThrownBy(() -> env.diagnostics().error(new Location() {}, "nowhere"))
+                    var diagnostics = env.diagnostics();
+                    var foreign = new Location() {};
+                    assertThatThrownBy(() -> diagnostics.error(foreign, "nowhere"))
                             .isInstanceOf(IllegalArgumentException.class);
-                    assertThat(env.diagnostics().hasErrors()).isFalse();
+                    assertThat(diagnostics.hasErrors()).isFalse();
                 })));
     }
 
