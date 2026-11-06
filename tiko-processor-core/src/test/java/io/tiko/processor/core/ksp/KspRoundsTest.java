@@ -56,7 +56,8 @@ class KspRoundsTest {
             FieldDecl field,
             AnnotationRef annotation,
             TypeRef parameterType,
-            MethodDecl topLevel) {}
+            MethodDecl topLevel,
+            MethodDecl accessor) {}
 
     /** One fact read in round two from what round one kept. */
     record RoundFact(String name, BiFunction<Kept, ProcessingEnv, Object> read, Object expected) {
@@ -90,7 +91,17 @@ class KspRoundsTest {
                         (kept, env) -> kept.type().methods().stream()
                                 .map(MethodDecl::name)
                                 .toList(),
-                        List.of("greet")),
+                        List.of("greet", "getName", "getCount", "setCount")),
+                new RoundFact(
+                        "accessorStillReadable",
+                        (kept, env) -> kept.accessor().jvmName() + " "
+                                + kept.accessor().parameters().get(0).type().displayName(),
+                        "setCount int"),
+                new RoundFact(
+                        "accessorEqualsItsReFoundSelf",
+                        (kept, env) ->
+                                kept.accessor().equals(type(env).methods().get(3)),
+                        true),
                 new RoundFact(
                         "methodEqualsItsReFoundSelf",
                         (kept, env) -> kept.method().equals(type(env).methods().get(0)),
@@ -195,7 +206,8 @@ class KspRoundsTest {
                     type.fields().get(1),
                     type.annotation("r.Mark").orElseThrow(),
                     method.parameters().get(0).type(),
-                    env.methodsAnnotatedWith("r.Mark").get(0));
+                    env.methodsAnnotatedWith("r.Mark").get(0),
+                    type.methods().get(3));
         }
 
         private static void generateLater(com.google.devtools.ksp.processing.SymbolProcessorEnvironment environment) {

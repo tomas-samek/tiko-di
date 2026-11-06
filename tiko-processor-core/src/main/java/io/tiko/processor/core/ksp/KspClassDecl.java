@@ -157,18 +157,28 @@ final class KspClassDecl implements ClassDecl {
         return Optional.ofNullable(declaration.getPrimaryConstructor()).map(model::methodDecl);
     }
 
+    /**
+     * The declared functions (without constructors), then the JVM accessors of the declared
+     * properties ({@code getX} / {@code isX} / {@code setX}, see {@link KspAccessorDecl}): the
+     * methods javac sees on the Kotlin-compiled class.
+     */
     @Override
     public List<MethodDecl> methods() {
-        return KspModel.functionsOf(declaration()).stream()
+        var declaration = declaration();
+        var methods = new ArrayList<MethodDecl>();
+        KspModel.functionsOf(declaration).stream()
                 .filter(function -> !UtilsKt.isConstructor(function))
                 .map(model::methodDecl)
-                .toList();
+                .forEach(methods::add);
+        methods.addAll(model.declaredAccessors(declaration));
+        return List.copyOf(methods);
     }
 
     /**
      * Declared and inherited member functions as KSP's {@code getAllFunctions} sees them, without
-     * constructors: an override appears once, private members of supertypes are left out. Kotlin
-     * property accessors are not functions here.
+     * constructors (an override appears once, private members of supertypes are left out), then
+     * the JVM accessors of the declared and inherited properties ({@code getAllProperties}, each
+     * override once).
      */
     @Override
     public List<MethodDecl> allMethods() {
@@ -178,7 +188,12 @@ final class KspClassDecl implements ClassDecl {
                 .filter(function -> !isStaticInterfaceMember(function))
                 .collect(Collectors.toCollection(ArrayList::new));
         functions.addAll(inheritedClassStatics(declaration, functions));
-        return functions.stream().map(model::methodDecl).distinct().toList();
+        var methods = new ArrayList<MethodDecl>();
+        functions.stream().map(model::methodDecl).forEach(methods::add);
+        SequencesKt.toList(declaration.getAllProperties()).stream()
+                .flatMap(property -> model.accessorDecls(property).stream())
+                .forEach(methods::add);
+        return methods.stream().distinct().toList();
     }
 
     /**
