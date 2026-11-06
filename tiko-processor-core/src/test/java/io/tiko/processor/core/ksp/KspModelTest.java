@@ -287,6 +287,47 @@ class KspModelTest {
                                         tuple("int[]", "int[]", Nullability.NON_NULL),
                                         tuple("java.lang.String[]", "java.lang.String[]", Nullability.NON_NULL)))),
                 Arguments.of(
+                        "varargOfTypeAliasIsTheArrayOfWhatItExpandsTo",
+                        KspCompiler.kotlin(
+                                "AliasVarargs.kt",
+                                "package p",
+                                "typealias Count = Int",
+                                "typealias Total = Long",
+                                "typealias Flag = Boolean",
+                                "typealias Chained = Count",
+                                "typealias Name = String",
+                                "typealias MaybeCount = Int?",
+                                "class Counts(vararg a: Count)",
+                                "class Totals(vararg b: Total)",
+                                "class Flags(vararg c: Flag)",
+                                "class Chains(vararg d: Chained)",
+                                "class Names(vararg e: Name)",
+                                "class Maybes(vararg f: MaybeCount)",
+                                "class NullableAlias(vararg g: Count?)"),
+                        check(env -> assertThat(Stream.of(
+                                                "p.Counts",
+                                                "p.Totals",
+                                                "p.Flags",
+                                                "p.Chains",
+                                                "p.Names",
+                                                "p.Maybes",
+                                                "p.NullableAlias")
+                                        .map(name -> find(env, name)
+                                                .constructors()
+                                                .get(0)
+                                                .parameters()
+                                                .get(0)
+                                                .type()))
+                                .extracting(TypeRef::displayName, TypeRef::erasedName)
+                                .containsExactly(
+                                        tuple("int[]", "int[]"),
+                                        tuple("long[]", "long[]"),
+                                        tuple("boolean[]", "boolean[]"),
+                                        tuple("int[]", "int[]"),
+                                        tuple("java.lang.String[]", "java.lang.String[]"),
+                                        tuple("java.lang.Integer[]", "java.lang.Integer[]"),
+                                        tuple("java.lang.Integer[]", "java.lang.Integer[]")))),
+                Arguments.of(
                         "genericClassAsTypeCarriesItsTypeParameters",
                         KspCompiler.kotlin("Box.kt", "package p", "class Box<T, out U : Number>"),
                         check(env -> {
