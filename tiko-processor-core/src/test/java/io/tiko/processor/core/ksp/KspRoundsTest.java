@@ -77,7 +77,7 @@ class KspRoundsTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("facts")
     void modelObjectsOutliveTheirRound(RoundFact fact) {
-        assertThat(results.get(fact.name())).isEqualTo(fact.expected());
+        assertThat(results).containsEntry(fact.name(), fact.expected());
     }
 
     static List<RoundFact> facts() {

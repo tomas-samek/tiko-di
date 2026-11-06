@@ -50,7 +50,7 @@ class KspUnresolvedFactsTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("facts")
     void unresolvedTypesMapToErrorTypesAndPlaceholders(Fact fact) {
-        assertThat(results.get(fact.name())).isEqualTo(fact.expected());
+        assertThat(results).containsEntry(fact.name(), fact.expected());
     }
 
     static List<Fact> facts() {

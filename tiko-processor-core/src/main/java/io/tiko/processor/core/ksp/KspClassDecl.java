@@ -293,8 +293,8 @@ final class KspClassDecl implements ClassDecl {
      * differ) cannot be told apart. That case, and a record with no matching constructor, fail with
      * {@link IllegalStateException} rather than guess.
      */
-    private KSFunctionDeclaration canonicalConstructor(KSClassDeclaration record) {
-        var functions = KspModel.functionsOf(record);
+    private KSFunctionDeclaration canonicalConstructor(KSClassDeclaration recordDecl) {
+        var functions = KspModel.functionsOf(recordDecl);
         var constructors = functions.stream().filter(UtilsKt::isConstructor).toList();
         var synthesized = constructors.stream()
                 .filter(constructor -> constructor.getOrigin() == Origin.SYNTHETIC)

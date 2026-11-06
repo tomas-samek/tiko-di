@@ -54,7 +54,8 @@ class KspCodeOutputTest {
 
     @Test
     void resourceIsRequestedByItsPathAsAggregatingOverItsOrigin() {
-        assertThat(requests).containsExactly(new Request(PATH, true, List.of("Origin.kt")));
+        var expected = new Request(PATH, true, List.of("Origin.kt"));
+        assertThat(requests).containsExactly(expected);
     }
 
     @Test

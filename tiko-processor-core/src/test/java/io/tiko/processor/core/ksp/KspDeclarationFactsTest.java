@@ -192,7 +192,7 @@ class KspDeclarationFactsTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("facts")
     void kspDeclarationsMapToTheNeutralModel(Fact fact) {
-        assertThat(results.get(fact.name())).isEqualTo(fact.expected());
+        assertThat(results).containsEntry(fact.name(), fact.expected());
     }
 
     static List<Fact> facts() {
@@ -814,8 +814,8 @@ class KspDeclarationFactsTest {
     }
 
     /** A record's components as {@code name:type}, in order. */
-    private static List<String> components(ProcessingEnv env, String record) {
-        return cls(env, record).recordComponents().stream()
+    private static List<String> components(ProcessingEnv env, String recordName) {
+        return cls(env, recordName).recordComponents().stream()
                 .map(component -> component.name() + ":" + component.type().displayName())
                 .toList();
     }

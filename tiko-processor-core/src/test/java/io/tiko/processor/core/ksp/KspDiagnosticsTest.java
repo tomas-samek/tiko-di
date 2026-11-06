@@ -46,7 +46,7 @@ class KspDiagnosticsTest {
                 diagnostics.warning(null, "a positionless warning");
                 diagnostics.error(target, "a located error");
                 facts.put("errorsAfterAnError", diagnostics.hasErrors());
-                facts.put("foreignLocationIsRejected", rejects(diagnostics, () -> Optional.empty()));
+                facts.put("foreignLocationIsRejected", rejects(diagnostics, Optional::empty));
             }
             return List.<KSAnnotated>of();
         };
@@ -84,7 +84,7 @@ class KspDiagnosticsTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("recorded")
     void diagnosticsTrackTheirState(String name, Object expected) {
-        assertThat(facts.get(name)).isEqualTo(expected);
+        assertThat(facts).containsEntry(name, expected);
     }
 
     static Stream<Arguments> recorded() {
