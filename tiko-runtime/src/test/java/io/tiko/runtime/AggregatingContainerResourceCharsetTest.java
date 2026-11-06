@@ -3,6 +3,7 @@ package io.tiko.runtime;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -20,6 +21,8 @@ class AggregatingContainerResourceCharsetTest {
             c.injectConfigs(Map.of(ÜberConfig.class, new ÜberConfig("x")));
         }
 
-        assertThat(StubContainer.INJECTED_CONFIG_TYPES).contains(ÜberConfig.class);
+        var injected = List.copyOf(StubContainer.INJECTED_CONFIG_TYPES);
+        assertThat(injected).hasSize(1);
+        assertThat(injected.get(0)).isEqualTo(ÜberConfig.class);
     }
 }
