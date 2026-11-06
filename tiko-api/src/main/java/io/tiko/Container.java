@@ -35,6 +35,12 @@ public interface Container extends AutoCloseable {
     /**
      * Retrieves an instance of the specified type from the container.
      *
+     * <p>In a multi-module container, an interface lookup without an override uses the first
+     * module in discovery order that resolves the interface. This order is unspecified and can
+     * vary with packaging or class loading. To choose an implementation explicitly, look up its
+     * registered concrete class or use a unique qualifier with {@link #get(Class, String)}. Use
+     * {@link #getAll(Class)} to retrieve all matches.
+     *
      * @param type the class of the component to retrieve
      * @param <T>  the type of the component
      * @return an instance of the component
@@ -72,6 +78,10 @@ public interface Container extends AutoCloseable {
 
     /**
      * Retrieves a Provider for the specified type, allowing lazy resolution.
+     *
+     * <p>Unqualified interface lookup across modules uses the same first-match rule as
+     * {@link #get(Class)}. Use {@link #getProvider(Class, String)} with a unique qualifier to
+     * select a named implementation.
      *
      * @param type the class of the component
      * @param <T>  the type of the component
