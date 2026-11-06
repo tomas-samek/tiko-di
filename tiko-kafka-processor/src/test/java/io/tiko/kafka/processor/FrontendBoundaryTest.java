@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -14,7 +15,9 @@ import org.junit.jupiter.api.Test;
  */
 class FrontendBoundaryTest {
 
-    private static final String JAVAC_ENTRY = "KafkaAnnotationProcessor.java";
+    private static final String JAVAC_ENTRY = "io/tiko/kafka/processor/KafkaAnnotationProcessor.java";
+
+    private static final List<String> JAVAC_PACKAGES = List.of("javax.lang.model", "javax.annotation.processing");
 
     /**
      * JavaPoet's builder vocabulary: {@code addModifiers} takes only this JDK enum. It carries no
@@ -22,15 +25,18 @@ class FrontendBoundaryTest {
      */
     private static final String JAVAPOET_MODIFIER_IMPORT = "import javax.lang.model.element.Modifier;";
 
+    /** The JavaPoet code generators. */
+    private static final List<String> JAVAPOET_GENERATORS = List.of("io/tiko/kafka/processor/generator/");
+
     @Test
     void mainSourcesImportNoJavacTypesOutsideEntry() throws IOException {
         var mainSources = Path.of(System.getProperty("user.dir"), "src", "main", "java");
 
         try (var files = Files.walk(mainSources)) {
             var offenders = files.filter(path -> path.toString().endsWith(".java"))
-                    .filter(path -> !path.getFileName().toString().equals(JAVAC_ENTRY))
-                    .filter(FrontendBoundaryTest::importsJavacTypes)
                     .map(path -> mainSources.relativize(path).toString().replace('\\', '/'))
+                    .filter(source -> !source.equals(JAVAC_ENTRY))
+                    .filter(source -> importsJavacTypes(mainSources, source))
                     .sorted()
                     .toList();
 
@@ -38,17 +44,20 @@ class FrontendBoundaryTest {
         }
     }
 
-    private static boolean importsJavacTypes(Path source) {
+    private static boolean importsJavacTypes(Path mainSources, String source) {
+        var generator = JAVAPOET_GENERATORS.stream().anyMatch(source::startsWith);
         try {
-            return Files.readAllLines(source).stream()
+            return Files.readAllLines(mainSources.resolve(source)).stream()
                     .map(String::strip)
-                    .filter(line -> !line.equals(JAVAPOET_MODIFIER_IMPORT))
-                    .anyMatch(line -> line.startsWith("import javax.lang.model")
-                            || line.startsWith("import javax.annotation.processing")
-                            || line.startsWith("import static javax.lang.model")
-                            || line.startsWith("import static javax.annotation.processing"));
+                    .filter(line -> !(generator && line.equals(JAVAPOET_MODIFIER_IMPORT)))
+                    .anyMatch(FrontendBoundaryTest::isJavacImport);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    private static boolean isJavacImport(String line) {
+        return JAVAC_PACKAGES.stream()
+                .anyMatch(pkg -> line.startsWith("import " + pkg) || line.startsWith("import static " + pkg));
     }
 }

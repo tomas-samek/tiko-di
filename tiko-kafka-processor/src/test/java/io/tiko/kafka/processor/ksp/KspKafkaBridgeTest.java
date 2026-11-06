@@ -4,8 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.tschuchort.compiletesting.KotlinCompilation;
 import io.tiko.processor.core.ksp.KspCompiler;
+import io.tiko.processor.core.ksp.RecordingCodeGenerator;
 import io.tiko.processor.core.ksp.RoundWatcher;
 import io.tiko.processor.ksp.TikoSymbolProcessorProvider;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -76,6 +78,50 @@ class KspKafkaBridgeTest {
                 .contains("must have an @Inject-annotated constructor or a single public constructor");
         assertThat(result.generatedJava("io.tiko.generated.KafkaTransportBootstrap"))
                 .isPresent();
+    }
+
+    /** Every Kafka output (bootstrap, service entry, topology) names each bridge's file, and only those. */
+    @Test
+    void kafkaOutputsNameTheBridgeFilesTheyDeriveFrom() {
+        var sink = KspCompiler.kotlin(
+                "Publisher.kt",
+                "package demo",
+                "",
+                "import io.tiko.Scope",
+                "import io.tiko.annotations.Component",
+                "import io.tiko.kafka.annotations.KafkaSink",
+                "",
+                "@Component(scope = Scope.SINGLETON)",
+                "class OrderPublisher {",
+                "    @KafkaSink(topic = \"orders-out\")",
+                "    fun toKafka(placed: OrderPlaced): OrderPlaced = placed",
+                "}");
+        var unrelated = KspCompiler.kotlin(
+                "Unrelated.kt",
+                "package demo",
+                "",
+                "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
+                "class Unrelated");
+        var requests = new ArrayList<RecordingCodeGenerator.Request>();
+
+        var result = KspCompiler.compile(
+                List.of(
+                        new TikoSymbolProcessorProvider(),
+                        RecordingCodeGenerator.recording(new KafkaSymbolProcessorProvider(), requests)),
+                Map.of(),
+                bridge(),
+                sink,
+                unrelated);
+
+        assertThat(result.exitCode()).as(result.messages()).isEqualTo(KotlinCompilation.ExitCode.OK);
+        assertThat(requests)
+                .extracting(RecordingCodeGenerator.Request::path)
+                .anyMatch(path -> path.endsWith("KafkaTransportBootstrap.java"))
+                .contains("META-INF/services/io.tiko.TransportBootstrap");
+        assertThat(requests).hasSizeGreaterThanOrEqualTo(3).allSatisfy(request -> {
+            assertThat(request.aggregating()).as(request.path()).isTrue();
+            assertThat(request.originatingFiles()).as(request.path()).containsExactly("Orders.kt", "Publisher.kt");
+        });
     }
 
     /**
