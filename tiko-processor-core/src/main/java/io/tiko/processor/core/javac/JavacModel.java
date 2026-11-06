@@ -6,10 +6,12 @@ import io.tiko.processor.core.model.MethodDecl;
 import io.tiko.processor.core.model.SourceLanguage;
 import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.core.model.Visibility;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import javax.lang.model.element.AnnotationMirror;
+import javax.lang.model.element.AnnotationValue;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
@@ -25,6 +27,8 @@ import javax.tools.JavaFileObject;
  * on it.
  */
 record JavacModel(Elements elements, Types types) {
+
+    private static final String REPEATABLE = "java.lang.annotation.Repeatable";
 
     ClassDecl classDecl(TypeElement element) {
         return new JavacClassDecl(element, this);
@@ -53,6 +57,52 @@ record JavacModel(Elements elements, Types types) {
                 .filter(mirror -> annotationName(mirror).equals(annotationFqn))
                 .findFirst()
                 .map(mirror -> annotationRef(mirror, element));
+    }
+
+    /**
+     * Direct occurrences plus those inside the annotation's {@code @Repeatable} container, in the
+     * order the element carries them, as {@code AnnotatedElement.getAnnotationsByType} reads them.
+     */
+    List<AnnotationRef> annotationsByType(Element element, String annotationFqn) {
+        var container = repeatableContainer(annotationFqn);
+        var found = new ArrayList<AnnotationRef>();
+        for (var mirror : element.getAnnotationMirrors()) {
+            var name = annotationName(mirror);
+            if (name.equals(annotationFqn)) {
+                found.add(annotationRef(mirror, element));
+            } else if (container.isPresent() && name.equals(container.get())) {
+                contained(mirror).stream()
+                        .filter(item -> annotationName(item).equals(annotationFqn))
+                        .forEach(item -> found.add(annotationRef(item, element)));
+            }
+        }
+        return List.copyOf(found);
+    }
+
+    /** The container named by the annotation type's {@code @Repeatable}; empty when it has none. */
+    private Optional<String> repeatableContainer(String annotationFqn) {
+        var annotationType = elements.getTypeElement(annotationFqn);
+        if (annotationType == null) {
+            return Optional.empty();
+        }
+        return annotation(annotationType, REPEATABLE)
+                .flatMap(repeatable -> repeatable.type("value"))
+                .map(TypeRef::erasedName);
+    }
+
+    /** The annotations a container holds in its {@code value} member. */
+    private List<AnnotationMirror> contained(AnnotationMirror container) {
+        var items = new ArrayList<AnnotationMirror>();
+        elements.getElementValuesWithDefaults(container).forEach((member, value) -> {
+            if (member.getSimpleName().contentEquals("value") && value.getValue() instanceof List<?> values) {
+                values.stream()
+                        .map(item -> ((AnnotationValue) item).getValue())
+                        .filter(AnnotationMirror.class::isInstance)
+                        .map(AnnotationMirror.class::cast)
+                        .forEach(items::add);
+            }
+        });
+        return items;
     }
 
     static String annotationName(AnnotationMirror mirror) {

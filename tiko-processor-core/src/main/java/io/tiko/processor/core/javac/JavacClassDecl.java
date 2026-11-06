@@ -13,6 +13,7 @@ import io.tiko.processor.core.model.Visibility;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.TypeKind;
@@ -79,6 +80,11 @@ record JavacClassDecl(TypeElement element, JavacModel model) implements ClassDec
     }
 
     @Override
+    public List<AnnotationRef> annotationsByType(String annotationFqn) {
+        return model.annotationsByType(element, annotationFqn);
+    }
+
+    @Override
     public List<MethodDecl> constructors() {
         return ElementFilter.constructorsIn(element.getEnclosedElements()).stream()
                 .map(model::methodDecl)
@@ -108,6 +114,21 @@ record JavacClassDecl(TypeElement element, JavacModel model) implements ClassDec
     public List<FieldDecl> fields() {
         return ElementFilter.fieldsIn(element.getEnclosedElements()).stream()
                 .<FieldDecl>map(field -> new JavacFieldDecl(field, model))
+                .toList();
+    }
+
+    @Override
+    public List<FieldDecl> recordComponents() {
+        return ElementFilter.recordComponentsIn(element.getEnclosedElements()).stream()
+                .<FieldDecl>map(component -> new JavacFieldDecl(component, model))
+                .toList();
+    }
+
+    @Override
+    public List<String> enumConstants() {
+        return element.getEnclosedElements().stream()
+                .filter(member -> member.getKind() == ElementKind.ENUM_CONSTANT)
+                .map(constant -> constant.getSimpleName().toString())
                 .toList();
     }
 

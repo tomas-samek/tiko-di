@@ -37,6 +37,11 @@ record JavacParamDecl(VariableElement element, JavacModel model) implements Para
     }
 
     @Override
+    public List<AnnotationRef> annotationsByType(String annotationFqn) {
+        return model.annotationsByType(element, annotationFqn);
+    }
+
+    @Override
     public Location location() {
         return JavacLocation.of(element);
     }

@@ -13,8 +13,9 @@ import java.util.Optional;
  * annotation as {@code AnnotationRef}. The typed accessors cast that value and throw
  * {@link NoSuchElementException} when the annotation has no such member.
  *
- * <p>A {@code Class} value whose type does not resolve (on javac an erroneous class literal, for
- * example a class another processor has yet to generate) is left out: a single such value reads as
+ * <p>A {@code Class} value whose type does not resolve (on javac an erroneous class literal, read
+ * as {@code "<error>"} or as a type of kind {@code ERROR}; for example a class another processor
+ * has yet to generate) is left out: a single such value reads as
  * an empty list, and an array omits it. {@link #types(String)} and {@link #type(String)} therefore
  * never see it; the compiler reports the unresolved symbol itself.
  *
