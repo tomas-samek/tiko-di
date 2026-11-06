@@ -4,6 +4,8 @@ import com.palantir.javapoet.JavaFile;
 import io.tiko.processor.core.CodeOutput;
 import io.tiko.processor.core.model.ClassDecl;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import javax.annotation.processing.Filer;
@@ -44,7 +46,8 @@ final class JavacCodeOutput implements CodeOutput {
     public void writeResource(String path, String content, List<ClassDecl> originating) throws IOException {
         var elements = originating.stream().map(JavacModel::element).toArray(Element[]::new);
         var resource = filer.createResource(StandardLocation.CLASS_OUTPUT, "", path, elements);
-        try (var writer = resource.openWriter()) {
+        // Not openWriter(): that encodes with the compiler's -encoding, and resources are UTF-8.
+        try (var writer = new OutputStreamWriter(resource.openOutputStream(), StandardCharsets.UTF_8)) {
             writer.write(content);
         }
     }

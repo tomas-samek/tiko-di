@@ -14,6 +14,6 @@ public interface CodeOutput {
      */
     void writeJava(JavaFile file, List<ClassDecl> originating, boolean aggregating) throws IOException;
 
-    /** Writes a resource file at {@code path}, relative to the class output root. */
+    /** Writes a resource file at {@code path}, relative to the class output root, encoded as UTF-8. */
     void writeResource(String path, String content, List<ClassDecl> originating) throws IOException;
 }

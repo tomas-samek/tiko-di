@@ -15,8 +15,16 @@ public interface TypeRef {
     /** The JavaPoet form generators emit. */
     TypeName javaPoet();
 
-    /** Fully qualified name without type arguments; {@code "int"} for primitives. */
+    /** Fully qualified name without type arguments; {@code "int"} for primitives, {@code "void"} for void. */
     String erasedName();
+
+    /**
+     * The frontend's human-readable rendering of the type, with type arguments; on javac exactly
+     * {@code TypeMirror.toString()}. For messages and descriptive output such as topology text;
+     * never for type identity (see {@link #erasedName()} and
+     * {@link io.tiko.processor.core.TypeOracle#isSameType}).
+     */
+    String displayName();
 
     List<TypeRef> typeArguments();
 
@@ -24,6 +32,12 @@ public interface TypeRef {
 
     boolean isPrimitive();
 
-    /** The declaring class; empty for primitives, arrays and type variables. */
+    /** A {@code void} return type (on KSP, also a Kotlin {@code Unit} return type). */
+    boolean isVoid();
+
+    /**
+     * The declaring class; empty for primitives, arrays and type variables. A type that does not
+     * resolve still has one: a placeholder named as written, with no members.
+     */
     Optional<ClassDecl> declaration();
 }

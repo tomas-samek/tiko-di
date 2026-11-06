@@ -98,6 +98,13 @@ record JavacClassDecl(TypeElement element, JavacModel model) implements ClassDec
     }
 
     @Override
+    public List<MethodDecl> allMethods() {
+        return ElementFilter.methodsIn(model.elements().getAllMembers(element)).stream()
+                .map(model::methodDecl)
+                .toList();
+    }
+
+    @Override
     public List<FieldDecl> fields() {
         return ElementFilter.fieldsIn(element.getEnclosedElements()).stream()
                 .<FieldDecl>map(field -> new JavacFieldDecl(field, model))

@@ -104,6 +104,103 @@ class JavacModelTest {
                             assertThat(pick.types("value").get(0).erasedName()).isEqualTo("p.Foo");
                         })),
                 Arguments.of(
+                        "unresolvedClassValueReadsAsAbsent",
+                        source(
+                                "p.Uses",
+                                "package p;",
+                                "import io.tiko.annotations.Pick;",
+                                "@interface Refs { Class<?>[] value(); }",
+                                "public class Uses {",
+                                "    @Refs({String.class, Missing.class}) void refs() {}",
+                                "    public Uses(@Pick(Missing.class) Object missing) {}",
+                                "}"),
+                        Check.compiled(
+                                env -> {
+                                    var uses = find(env, "p.Uses");
+                                    var pick = uses.constructors()
+                                            .get(0)
+                                            .parameters()
+                                            .get(0)
+                                            .annotation(PICK)
+                                            .orElseThrow();
+                                    assertThat(pick.types("value")).isEmpty();
+                                    assertThat(pick.type("value")).isEmpty();
+                                    var refs = method(uses, "refs")
+                                            .annotation("p.Refs")
+                                            .orElseThrow();
+                                    assertThat(refs.types("value"))
+                                            .extracting(TypeRef::erasedName)
+                                            .containsExactly("java.lang.String");
+                                },
+                                compilation -> CompilationSubject.assertThat(compilation)
+                                        .hadErrorContaining("cannot find symbol"))),
+                Arguments.of(
+                        "unresolvedTypeKeepsPlaceholderDeclaration",
+                        source("p.Holds", "package p;", "public class Holds {", "    Missing missing;", "}"),
+                        Check.compiled(
+                                env -> {
+                                    var type =
+                                            find(env, "p.Holds").fields().get(0).type();
+                                    var declaration = type.declaration().orElseThrow();
+                                    assertThat(declaration.qualifiedName()).isEqualTo("Missing");
+                                    assertThat(declaration.allMethods()).isEmpty();
+                                },
+                                compilation -> CompilationSubject.assertThat(compilation)
+                                        .hadErrorContaining("cannot find symbol"))),
+                Arguments.of(
+                        "allMethodsIncludeInheritedOnceEach",
+                        source(
+                                "p.Child",
+                                "package p;",
+                                "class Base { public String id() { return null; } public String name() { return null; } }",
+                                "public class Child extends Base {",
+                                "    @Override public String name() { return null; }",
+                                "    void own() {}",
+                                "}"),
+                        Check.model(env -> {
+                            var child = find(env, "p.Child");
+                            var names = child.allMethods().stream()
+                                    .map(MethodDecl::name)
+                                    .toList();
+                            assertThat(names).contains("own", "id", "hashCode");
+                            assertThat(names).containsOnlyOnce("name");
+                            assertThat(child.allMethods())
+                                    .filteredOn(m -> m.name().equals("name"))
+                                    .allMatch(m -> m.owner().orElseThrow().equals(child));
+                        })),
+                Arguments.of(
+                        "voidReturnIsVoid",
+                        source(
+                                "p.Acts",
+                                "package p;",
+                                "public class Acts {",
+                                "    void act() {}",
+                                "    String give() { return null; }",
+                                "}"),
+                        Check.model(env -> {
+                            var acts = find(env, "p.Acts");
+                            assertThat(method(acts, "act").returnType().isVoid())
+                                    .isTrue();
+                            assertThat(method(acts, "act").returnType().erasedName())
+                                    .isEqualTo("void");
+                            assertThat(method(acts, "give").returnType().isVoid())
+                                    .isFalse();
+                        })),
+                Arguments.of(
+                        "displayNameIsJavacRendering",
+                        source(
+                                "p.Shown",
+                                "package p;",
+                                "public class Shown {",
+                                "    java.util.Map<String, java.util.List<Integer>> map;",
+                                "}"),
+                        Check.model(env -> assertThat(find(env, "p.Shown")
+                                        .fields()
+                                        .get(0)
+                                        .type()
+                                        .displayName())
+                                .isEqualTo("java.util.Map<java.lang.String,java.util.List<java.lang.Integer>>"))),
+                Arguments.of(
                         "javaTypesAreNonNull",
                         source(
                                 "p.Plain",
@@ -209,19 +306,19 @@ class JavacModelTest {
                                         env.classpath().readResource("META-INF/tiko-core-test/present.txt"))
                                 .hasValueSatisfying(text -> assertThat(text).contains("probe-marker")))),
                 Arguments.of(
-                        "writtenResourceLandsInClassOutput",
+                        "writtenResourceLandsInClassOutputAsUtf8",
                         source("p.Origin", "package p;", "public class Origin {}"),
                         Check.compiled(
                                 env -> write(() -> env.output()
                                         .writeResource(
                                                 "META-INF/tiko-core-test/out.txt",
-                                                "hello\n",
+                                                "h\u00e9llo\n",
                                                 List.of(find(env, "p.Origin")))),
                                 compilation -> CompilationSubject.assertThat(compilation)
                                         .generatedFile(
                                                 StandardLocation.CLASS_OUTPUT, "", "META-INF/tiko-core-test/out.txt")
                                         .contentsAsUtf8String()
-                                        .isEqualTo("hello\n"))),
+                                        .isEqualTo("h\u00e9llo\n"))),
                 Arguments.of(
                         "writtenJavaFileCompiles",
                         source("p.Origin", "package p;", "public class Origin {}"),

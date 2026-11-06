@@ -4,9 +4,9 @@ import io.tiko.Scope;
 import io.tiko.annotations.Component;
 import io.tiko.kafka.processor.model.KafkaSinkDescriptor;
 import io.tiko.kafka.processor.model.KafkaSourceDescriptor;
+import io.tiko.processor.core.Diagnostics;
+import io.tiko.processor.core.model.ClassDecl;
 import java.util.List;
-import javax.annotation.processing.Messager;
-import javax.tools.Diagnostic;
 
 /**
  * Validates that every Kafka bridge component is {@code @Component(scope = Scope.SINGLETON)}.
@@ -15,35 +15,38 @@ import javax.tools.Diagnostic;
  */
 public final class SingletonBridgeValidator {
 
+    private static final String COMPONENT = Component.class.getCanonicalName();
+
     private SingletonBridgeValidator() {}
 
     public static boolean validate(
-            Messager messager, List<KafkaSourceDescriptor> sources, List<KafkaSinkDescriptor> sinks) {
+            Diagnostics diagnostics, List<KafkaSourceDescriptor> sources, List<KafkaSinkDescriptor> sinks) {
         boolean ok = true;
         for (KafkaSourceDescriptor s : sources) {
             if (!isSingleton(s.enclosingClass())) {
-                messager.printMessage(
-                        Diagnostic.Kind.ERROR,
+                diagnostics.error(
+                        s.method().location(),
                         "@KafkaSource bridge component must be declared @Component(scope = Scope.SINGLETON). "
-                                + "Kafka consumer threads run outside any unit of work (EVENT scope).",
-                        s.method());
+                                + "Kafka consumer threads run outside any unit of work (EVENT scope).");
                 ok = false;
             }
         }
         for (KafkaSinkDescriptor s : sinks) {
             if (!isSingleton(s.enclosingClass())) {
-                messager.printMessage(
-                        Diagnostic.Kind.ERROR,
-                        "@KafkaSink bridge component must be declared @Component(scope = Scope.SINGLETON).",
-                        s.method());
+                diagnostics.error(
+                        s.method().location(),
+                        "@KafkaSink bridge component must be declared @Component(scope = Scope.SINGLETON).");
                 ok = false;
             }
         }
         return ok;
     }
 
-    private static boolean isSingleton(javax.lang.model.element.TypeElement type) {
-        Component c = type.getAnnotation(Component.class);
-        return c != null && c.scope() == Scope.SINGLETON;
+    /** {@code scope} reads with its declared default, so a bare {@code @Component} is not a singleton. */
+    private static boolean isSingleton(ClassDecl type) {
+        return type.annotation(COMPONENT)
+                .map(component -> component.enumName("scope"))
+                .filter(Scope.SINGLETON.name()::equals)
+                .isPresent();
     }
 }
