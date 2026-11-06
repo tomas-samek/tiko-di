@@ -37,12 +37,11 @@ import org.apache.kafka.common.header.internals.RecordHeaders;
  * <p>The offset acknowledges successful delivery <em>to the bus</em>, not handler
  * outcome. The redelivery boundary is the bridge: a deserialize / dispatch / publish
  * failure routes a {@code KafkaIngestError} and seeks back, so the record is delivered
- * at-least-once and handlers must be idempotent. Once {@code publish} returns, the
- * offset commits — handler execution is at-most-once per delivery: a throwing sync
- * handler routes to the ErrorHandler (the bus isolates it from the publisher), and an
- * async handler runs entirely after the commit. Holding the offset hostage to N
- * independent in-process handlers would invert the event model's isolation contract;
- * handler-side recovery is the dead-letter story (#111).
+ * at-least-once and handlers must be idempotent. Kafka commits the offset after
+ * {@code publish} returns successfully. Handler exceptions go to the ErrorHandler
+ * without triggering redelivery. Async work may start before the commit, and an
+ * invocation that runs inline under {@code CALLER_RUNS} completes before publish
+ * returns. Handler-side recovery is the dead-letter story (#111).
  */
 public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
 

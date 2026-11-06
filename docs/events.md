@@ -52,7 +52,7 @@ These are explicit, not accidents of implementation. A handler that depends on d
 
 - **Delivery semantics — at-least-once to the bus, at-most-once per handler execution.** Delivery is at-least-once: a transport failure before the event reaches the bus (deserialize, bridge dispatch, publish) is redelivered, so handlers must be idempotent — a handler that breaks under redelivery is buggy regardless of transport. Handler *outcome* is not part of the acknowledgment: once an event is on the bus, the transport's job is done (Kafka commits the offset), and a failing handler routes to the `ErrorHandler` without triggering redelivery — see [Error handling](#error-handling).
 - **Ordering — per-source FIFO only, no cross-source merge.** Local events preserve publisher order. Future distributed transports preserve their own intra-partition order. A handler subscribed to both sees them in arrival order at the handler — there is no synthesized global ordering.
-- **Backpressure — publishers never block on handler work.** Async handlers run on a bounded executor; `bus.publish(...)` returns once the event is enqueued. Synchronous in-process delivery is the default for handlers without `async = true`, and remains an option per handler — it is not the publisher's responsibility to throttle.
+- **Backpressure — the executor's policy governs async dispatch.** Handlers are synchronous by default. With `async = true`, Tiko submits the work to the event executor. When the default executor is saturated, `CALLER_RUNS` runs the handler on the publisher's thread and `BLOCK` waits for queue space. A custom executor uses its own rejection policy. See [Tuning the default executor's backpressure](#tuning-the-default-executors-backpressure).
 - **Transactional semantics — unit-of-work buffering built in, outbox recommended for crash safety.** Events published inside `runInEventScope` are buffered and only released when the scope exits successfully; on failure they are dropped. Persistence-backed outbox (for crash safety across the JVM boundary) is the consumer's responsibility — Tiko does not own a database.
 - **Error handling — log + isolate by default, per-handler policy configurable.** A throwing handler does not propagate to the publisher and does not break sibling handlers. See [Error handling](#error-handling) below.
 - **Routing is by event type, not by name.** A handler subscribes to a payload *type*; an event reaches every `@EventHandler` of that type. Tiko deliberately has no name-keyed dispatch — model distinct intents as distinct types (`CustomerAdded` / `SupplierAdded`), not as one type fanned out by string name. `@EventTrigger(eventName = "...")` is therefore an optional trace label for the topology view, never a routing key. This keeps wiring compile-time-checked: a typo or rename can't silently misroute an event, because there is no name to mistype.
@@ -61,7 +61,7 @@ These are explicit, not accidents of implementation. A handler that depends on d
 
 If an `@EventHandler` method throws, the exception is routed to the configured `ErrorHandler` (default: logs at `WARNING` via `java.lang.System.Logger`). It does not propagate to the publisher and does not prevent other handlers from running.
 
-The same isolation defines the transport boundary: a handler failure does **not** rewind the transport. On Kafka, the offset commits once the event is successfully published to the bus — a throwing sync handler is routed to the `ErrorHandler` and the message is not redelivered, and an `async = true` handler executes entirely after the commit. Redelivery exists for failures *before* the bus (deserialize/bridge/publish — those seek back and replay); recovery for failed handler executions is the dead-letter direction tracked for the resiliency milestone. If a handler must never lose its input, do its critical work synchronously in the bridge path or persist intent before returning.
+The same isolation defines the transport boundary. Kafka commits the offset after a successful publish to the bus. Handler exceptions go to the `ErrorHandler` and do not trigger redelivery. An async handler can start before the commit, and with `CALLER_RUNS` an inline handler completes before publish returns. Failures in deserialization, bridge dispatch, or publish can seek back and replay the record. Recovery for failed handler executions is the dead-letter direction tracked for the resiliency milestone. If a handler must never lose its input, do its critical work synchronously in the bridge path or persist intent before returning.
 
 The framework itself has zero logging-binding dependencies — `System.Logger` is in the JDK, so `Tiko.create()` works without adding any logging artifact to your classpath. Its default routing is JUL; route through slf4j or log4j2 by adding their `LoggerFinder` bridge to your classpath. See the [Logging section](../README.md#logging) in the main README.
 
@@ -94,7 +94,7 @@ The hook is for **observability**, not control flow. Exceptions are an error pat
 
 ## Async events
 
-Mark a handler `@EventHandler(async = true)` to run it off the publisher thread:
+Mark a handler `@EventHandler(async = true)` to submit it to the configured event executor:
 
 ```java
 @EventHandler(async = true)
@@ -103,7 +103,7 @@ public void onSlowOperation(SlowEvent event) {
 }
 ```
 
-The framework dispatches via a bounded `ThreadPoolExecutor` sized for typical small-to-medium services:
+The default executor is a bounded `ThreadPoolExecutor` sized for typical small-to-medium services. Under saturation, its default `CALLER_RUNS` policy runs the invocation inline and `publish(...)` waits for that invocation to finish.
 
 | Knob              | Value                                              |
 |-------------------|----------------------------------------------------|
@@ -186,7 +186,7 @@ public void onSlowOperation(SlowEvent event) {
 If the handler runs longer than the budget, its worker thread is interrupted, the executor slot is freed, and the overrun is routed to the `ErrorHandler` as an `EventHandlerError` whose `cause()` is a `java.util.concurrent.TimeoutException`. Subsequent events keep flowing.
 
 - **Opt-in:** the default is no timeout.
-- **Async-only:** `timeout` requires `async = true`. A timeout on a synchronous handler is a **compile-time error** — a sync handler runs on the publisher's thread (and its unit-of-work scope), which cannot be preempted; time-boxing requires the off-thread, own-scope execution that `async = true` provides.
+- **Async-only:** `timeout` requires `async = true`. A timeout on a synchronous handler is a **compile-time error**. An invocation that the executor runs inline under `CALLER_RUNS` also runs to completion before the timeout can take effect.
 - **Best-effort:** interruption can only stop a handler that respects `Thread.interrupt()` (e.g. is blocked on I/O or checks the flag). A handler running a tight uninterruptible loop will keep going — the timeout is reported, but Java cannot force-stop the thread.
 
 ### Retries with backoff
@@ -242,9 +242,8 @@ As with every overflow policy, `ROUTE_TO_DLQ` degrades to a logged drop once the
 
 ### Async handlers own their unit of work
 
-An `@EventHandler(async = true)` invocation runs inside its **own fresh EVENT unit** on the
-executor thread — the in-process mirror of transport consumption (a Kafka-consumed message
-gets the same shape). Concretely:
+An `@EventHandler(async = true)` invocation runs inside its **own fresh EVENT unit**,
+including when `CALLER_RUNS` runs it inline. Concretely:
 
 - EVENT-scoped beans resolve inside the handler and bind to that invocation's unit;
   they are torn down (`@PreDestroy`, LIFO) when the handler completes — success, failure,

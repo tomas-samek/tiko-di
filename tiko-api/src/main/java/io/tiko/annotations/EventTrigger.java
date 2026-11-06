@@ -45,7 +45,6 @@ import java.lang.annotation.Target;
  * @EventHandler
  * @EventTrigger(async = true)
  * public NotificationResult onUserRegistered(UserRegisteredEvent event) {
- *     // Published asynchronously — doesn't block the handler's completion.
  *     return new NotificationResult(event.userId());
  * }
  * }</pre>
@@ -107,9 +106,10 @@ public @interface EventTrigger {
     /**
      * Whether to trigger the event asynchronously.
      *
-     * <p>When {@code true}, the event is published asynchronously and does not
-     * block the handler's completion. Useful for side effects like notifications,
-     * logging, or metrics that don't need to complete before returning.</p>
+     * <p>When {@code true}, Tiko submits the triggered publish to the event executor.
+     * The same overflow rules apply as for {@link EventHandler#async()}. In particular,
+     * the default {@code CALLER_RUNS} policy can publish the event inline when the
+     * executor is saturated.</p>
      *
      * <p>Default: {@code false} (synchronous)</p>
      *
