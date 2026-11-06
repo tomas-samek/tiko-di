@@ -66,7 +66,7 @@ One that would add new DI semantics is rejected at compile time with error kind
 | `@Inject` on a secondary constructor | That constructor is injected instead of the primary one. | — |
 | `@JvmOverloads` constructor | The primary constructor is injected with all its parameters; the extra JVM overloads are ignored. | — |
 | Interface with properties (`val id: String`, `var name: String`) behind an `EVENT` proxy | Supported. The proxy overrides the JVM accessors (`getId()`, `getName()` / `setName(...)`). | — |
-| `@Configuration` on a `@JvmRecord data class` | Supported: bound like a Java record. Components are the primary constructor's parameters, in order; `@Key` / `@Default` go on those parameters. | — |
+| `@Configuration` on a `@JvmRecord data class` | Supported: bound like a Java record. Components are the primary constructor's parameters, in order; `@Key` / `@Default` go on those parameters. A Kotlin default value (`val port: Int = 8080`) or a nullable type (`String?`) does not make a key optional: the key stays required, and boot fails without it. | For a key that may be absent, use `@Default("8080")` (a default value) or `Optional<T>` (no value). |
 | `@Configuration` on a plain `data class` or `class` | Rejected: `@Configuration` needs a record. | Annotate it `@JvmRecord` (a `data class` with `val` parameters). |
 | `vararg` constructor parameter | An array dependency, as on Java (`B[]`); normally a missing dependency. | Declare a plain `B` parameter, or a `Picker<B>`. |
 | Java / platform types | Count as non-null. | — |
