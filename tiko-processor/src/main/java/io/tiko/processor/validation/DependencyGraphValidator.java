@@ -20,6 +20,10 @@ import io.tiko.processor.util.TypeUtil;
  * {@code @Component} class implements the requested type but does not expose it
  * via {@code @Component(expose = {...})}. That distinct error helps users with
  * Spring-style mental models notice the opt-in restriction.
+ *
+ * <p>An absence that only follows from a component rejected during collection (a dependency it
+ * would have provided, an instance factory declared on it) fails validation without a report of
+ * its own: the rejection's located error already names the cause (#589).
  */
 public final class DependencyGraphValidator {
 
@@ -68,14 +72,8 @@ public final class DependencyGraphValidator {
             if (dependency.isPicker() || dependency.isEventBus()) {
                 continue;
             }
-            String depKey = dependency.getDependencyKey();
-            boolean resolved = dependency.isPicked()
-                    ? (dependency.getQualifier().isPresent()
-                            ? context.findComponentOrFactory(depKey).isPresent()
-                            : context.findByImplClass(depKey).isPresent())
-                    : context.findComponentOrFactory(depKey).isPresent();
-            if (!resolved) {
-                reportUnresolved(component.getDecl().location(), depKey, component.getClassName());
+            if (!isResolved(dependency)) {
+                reportUnresolved(component.getDecl().location(), dependency, component.getClassName());
                 valid = false;
             }
         }
@@ -93,7 +91,9 @@ public final class DependencyGraphValidator {
         if (!factory.isStatic()) {
             String declaringClassKey = factory.getDeclaringClass().qualifiedName();
 
-            if (!context.getComponents().containsKey(declaringClassKey)) {
+            if (context.isRejected(factory.getDeclaringClass())) {
+                valid = false; // the declaring component's rejection was reported
+            } else if (!context.getComponents().containsKey(declaringClassKey)) {
                 context.getErrorReporter()
                         .error(
                                 factory.getMethod().location(),
@@ -119,14 +119,8 @@ public final class DependencyGraphValidator {
             if (dependency.isPicker() || dependency.isEventBus()) {
                 continue;
             }
-            String depKey = dependency.getDependencyKey();
-            boolean resolved = dependency.isPicked()
-                    ? (dependency.getQualifier().isPresent()
-                            ? context.findComponentOrFactory(depKey).isPresent()
-                            : context.findByImplClass(depKey).isPresent())
-                    : context.findComponentOrFactory(depKey).isPresent();
-            if (!resolved) {
-                reportUnresolved(factory.getMethod().location(), depKey, factory.getFactoryIdentifier());
+            if (!isResolved(dependency)) {
+                reportUnresolved(factory.getMethod().location(), dependency, factory.getFactoryIdentifier());
                 valid = false;
             }
         }
@@ -134,12 +128,25 @@ public final class DependencyGraphValidator {
         return valid;
     }
 
+    private boolean isResolved(DependencyModel dependency) {
+        String depKey = dependency.getDependencyKey();
+        if (dependency.isPicked() && dependency.getQualifier().isEmpty()) {
+            return context.findByImplClass(depKey).isPresent();
+        }
+        return context.findComponentOrFactory(depKey).isPresent();
+    }
+
     /**
-     * Reports a missing dependency. If a {@code @Component} class implements the requested
-     * type but doesn't expose it via {@code @Component(expose = {...})}, emit the targeted
-     * diagnostic instead of the generic "cannot resolve" message.
+     * Reports a missing dependency, unless a rejected component would have provided it. If a
+     * {@code @Component} class implements the requested type but doesn't expose it via
+     * {@code @Component(expose = {...})}, emit the targeted diagnostic instead of the generic
+     * "cannot resolve" message.
      */
-    private void reportUnresolved(Location location, String depKey, String injectingIdentifier) {
+    private void reportUnresolved(Location location, DependencyModel dependency, String injectingIdentifier) {
+        if (providedByRejectedComponent(dependency)) {
+            return; // the rejection was reported; this absence only follows from it
+        }
+        String depKey = dependency.getDependencyKey();
         ComponentModel hider = findComponentHidingType(depKey);
         if (hider != null) {
             context.getErrorReporter()
@@ -147,6 +154,27 @@ public final class DependencyGraphValidator {
             return;
         }
         context.getErrorReporter().missingDependency(location, depKey);
+    }
+
+    /**
+     * Whether a rejected component would have been a candidate for the dependency: its class is
+     * the picked class, or is assignable to the requested type under a matching (or no) qualifier.
+     */
+    private boolean providedByRejectedComponent(DependencyModel dependency) {
+        String qualifier = dependency.getQualifier().orElse("");
+        TypeRef requested = dependency.getUnwrappedType().orElse(dependency.getType());
+        for (var rejected : context.getRejectedComponents()) {
+            if (!qualifier.isEmpty() && !qualifier.equals(rejected.name())) continue;
+            TypeRef rejectedType = rejected.decl().asType();
+            boolean candidate = dependency
+                    .getPickedType()
+                    .map(picked -> typeUtil.isSameType(rejectedType, picked))
+                    .orElseGet(() -> typeUtil.isAssignable(rejectedType, requested));
+            if (candidate) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

@@ -62,9 +62,12 @@ public final class ProcessorContext {
     // annotation processing runs single-threaded, so the simple ArrayList is fine.
     private final List<WiringError> wiringErrors = new ArrayList<>();
 
-    // Declarations KotlinConstructValidator rejected before collection; the collectors skip them,
-    // so no model is built for a construct DI cannot represent (a top-level @Produces has no owner).
-    private final Set<ClassDecl> rejectedClasses = new HashSet<>();
+    // Component classes rejected with a located error, by qualified name: by KotlinConstructValidator
+    // before collection (a construct DI cannot represent; the collectors skip it) or by
+    // ComponentCollector when the class's model could not be built. No model exists for them, and
+    // the validators skip what only follows from that absence (#589). Methods KotlinConstructValidator
+    // rejected (a top-level @Produces has no owner) are skipped the same way.
+    private final Map<String, RejectedComponent> rejectedComponents = new LinkedHashMap<>();
     private final Set<MethodDecl> rejectedMethods = new HashSet<>();
 
     // Active profiles (for filtering components during generation)
@@ -118,9 +121,20 @@ public final class ProcessorContext {
         return List.copyOf(activeProfiles);
     }
 
-    /** Marks a class as rejected (already reported): the collectors build no model for it. */
-    public void reject(ClassDecl decl) {
-        rejectedClasses.add(decl);
+    /**
+     * Marks a component class as rejected (already reported): the collectors build no model for
+     * it, and the validators report nothing that only follows from its absence.
+     *
+     * @param componentAnnotation the qualified name of the annotation that made it a component
+     *     ({@code @Component} or {@code @TestComponent}), whose {@code name} it would be wired under
+     */
+    public void reject(ClassDecl decl, String componentAnnotation) {
+        var name = decl.annotation(componentAnnotation)
+                .flatMap(annotation -> annotation.value("name"))
+                .filter(String.class::isInstance)
+                .map(String.class::cast)
+                .orElse("");
+        rejectedComponents.putIfAbsent(decl.qualifiedName(), new RejectedComponent(decl, name));
     }
 
     /** Marks a method as rejected (already reported): the collectors build no model for it. */
@@ -129,7 +143,12 @@ public final class ProcessorContext {
     }
 
     public boolean isRejected(ClassDecl decl) {
-        return rejectedClasses.contains(decl);
+        return rejectedComponents.containsKey(decl.qualifiedName());
+    }
+
+    /** The rejected component classes, in rejection order. */
+    public List<RejectedComponent> getRejectedComponents() {
+        return List.copyOf(rejectedComponents.values());
     }
 
     public boolean isRejected(MethodDecl method) {
@@ -543,6 +562,12 @@ public final class ProcessorContext {
     public Set<String> getShadowedMainKeys() {
         return Collections.unmodifiableSet(new LinkedHashSet<>(shadowedByTestOverride.keySet()));
     }
+
+    /**
+     * A component class that was rejected with a located error, and the {@code name} qualifier it
+     * declared ({@code ""} when none): what it would have been wired under.
+     */
+    public record RejectedComponent(ClassDecl decl, String name) {}
 
     /** Forwards to the current round's {@link Diagnostics}, whichever round that is. */
     private final class CurrentRoundDiagnostics implements Diagnostics {

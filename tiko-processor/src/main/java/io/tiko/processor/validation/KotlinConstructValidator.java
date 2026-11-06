@@ -70,7 +70,7 @@ public final class KotlinConstructValidator {
             for (var decl : env.classesAnnotatedWith(annotation)) {
                 KotlinConstructRules.objectComponent(decl)
                         .or(() -> KotlinConstructRules.valueClassComponent(decl))
-                        .ifPresent(violation -> reject(decl, violation));
+                        .ifPresent(violation -> reject(decl, annotation, violation));
             }
         }
         for (var annotation : List.of(PRODUCES, EVENT_HANDLER)) {
@@ -161,9 +161,9 @@ public final class KotlinConstructValidator {
                 : KotlinConstructRules.suspendCalledDirectly(method, annotation, CONTAINER);
     }
 
-    private void reject(ClassDecl decl, Violation violation) {
+    private void reject(ClassDecl decl, String componentAnnotation, Violation violation) {
         report(violation);
-        context.reject(decl);
+        context.reject(decl, componentAnnotation);
     }
 
     /** Reports and rejects the method, unless an earlier rule already did. */
