@@ -65,6 +65,11 @@ record JavacTypeRef(TypeMirror mirror, JavacModel model) implements TypeRef {
     }
 
     @Override
+    public boolean isError() {
+        return mirror.getKind() == TypeKind.ERROR;
+    }
+
+    @Override
     public boolean isVoid() {
         return mirror.getKind() == TypeKind.VOID;
     }

@@ -31,6 +31,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 import javax.annotation.processing.AbstractProcessor;
@@ -136,6 +137,40 @@ class JavacModelTest {
                                 compilation -> CompilationSubject.assertThat(compilation)
                                         .hadErrorContaining("cannot find symbol"))),
                 Arguments.of(
+                        "isUnresolvedFlagsClassValuesThatDidNotResolve",
+                        source(
+                                "p.Flags",
+                                "package p;",
+                                "@interface Refs { Class<?>[] value(); String label() default \"\"; }",
+                                "@interface One { Class<?> value(); }",
+                                "public class Flags {",
+                                "    @Refs({String.class, Integer.class}) void resolvedArray() {}",
+                                "    @One(String.class) void resolvedSingle() {}",
+                                "    @One(Missing.class) void unresolvedSingle() {}",
+                                "    @Refs({String.class, Missing.class}) void oneUnresolvedElement() {}",
+                                "}"),
+                        Check.compiled(
+                                env -> {
+                                    var flags = find(env, "p.Flags");
+                                    Function<String, AnnotationRef> on = name ->
+                                            method(flags, name).annotations().get(0);
+                                    assertThat(Stream.of(
+                                                            "resolvedArray",
+                                                            "resolvedSingle",
+                                                            "unresolvedSingle",
+                                                            "oneUnresolvedElement")
+                                                    .map(name -> on.apply(name).isUnresolved("value")))
+                                            .containsExactly(false, false, true, true);
+                                    assertThat(on.apply("oneUnresolvedElement").isUnresolved("label"))
+                                            .isFalse();
+                                    var resolvedSingle = on.apply("resolvedSingle");
+                                    assertThatThrownBy(() -> resolvedSingle.isUnresolved("absent"))
+                                            .isInstanceOf(NoSuchElementException.class)
+                                            .hasMessage("@p.One has no member 'absent'");
+                                },
+                                compilation -> CompilationSubject.assertThat(compilation)
+                                        .hadErrorContaining("cannot find symbol"))),
+                Arguments.of(
                         "unresolvedTypeKeepsPlaceholderDeclaration",
                         source("p.Holds", "package p;", "public class Holds {", "    Missing missing;", "}"),
                         Check.compiled(
@@ -143,11 +178,71 @@ class JavacModelTest {
                                     var type =
                                             find(env, "p.Holds").fields().get(0).type();
                                     var declaration = type.declaration().orElseThrow();
+                                    assertThat(type.isError()).isTrue();
                                     assertThat(declaration.qualifiedName()).isEqualTo("Missing");
                                     assertThat(declaration.allMethods()).isEmpty();
                                 },
                                 compilation -> CompilationSubject.assertThat(compilation)
                                         .hadErrorContaining("cannot find symbol"))),
+                Arguments.of(
+                        "annotationsByTypeUnwrapsRepeatableContainers",
+                        source(
+                                "p.Hinted",
+                                "package p;",
+                                "import java.lang.annotation.Repeatable;",
+                                "@Repeatable(Hints.class) @interface Hint { String value(); }",
+                                "@interface Hints { Hint[] value(); }",
+                                "@Hint(\"type\")",
+                                "public class Hinted {",
+                                "    @Hint(\"one\") void single() {}",
+                                "    @Hint(\"a\") @Hint(\"b\") void twice() {}",
+                                "    @Hint(\"first\") @Hints({@Hint(\"c1\"), @Hint(\"c2\")}) void mixed() {}",
+                                "    @Deprecated void none() {}",
+                                "    Hinted(@Hint(\"p1\") @Hint(\"p2\") String in) {}",
+                                "}"),
+                        Check.model(env -> {
+                            var hinted = find(env, "p.Hinted");
+                            Function<List<AnnotationRef>, List<String>> values = refs -> refs.stream()
+                                    .map(ref -> ref.string("value"))
+                                    .toList();
+                            assertThat(Stream.of("single", "twice", "mixed", "none")
+                                            .map(name -> values.apply(
+                                                    method(hinted, name).annotationsByType("p.Hint"))))
+                                    .containsExactly(
+                                            List.of("one"), List.of("a", "b"), List.of("first", "c1", "c2"), List.of());
+                            assertThat(values.apply(hinted.annotationsByType("p.Hint")))
+                                    .containsExactly("type");
+                            assertThat(values.apply(hinted.constructors()
+                                            .get(0)
+                                            .parameters()
+                                            .get(0)
+                                            .annotationsByType("p.Hint")))
+                                    .containsExactly("p1", "p2");
+                            assertThat(method(hinted, "none").annotationsByType("java.lang.Deprecated"))
+                                    .hasSize(1);
+                            assertThat(method(hinted, "none").annotationsByType("no.such.Annotation"))
+                                    .isEmpty();
+                        })),
+                Arguments.of(
+                        "recordComponentsAndEnumConstantsInDeclarationOrder",
+                        source(
+                                "p.Pair",
+                                "package p;",
+                                "enum Mode { FAST, SLOW; static final int X = 1; }",
+                                "public record Pair(@Deprecated int left, String right) { static int count; }"),
+                        Check.model(env -> {
+                            var pair = find(env, "p.Pair");
+                            assertThat(pair.recordComponents())
+                                    .extracting(
+                                            FieldDecl::name,
+                                            component -> component.type().erasedName())
+                                    .containsExactly(tuple("left", "int"), tuple("right", "java.lang.String"));
+                            assertThat(pair.recordComponents().get(0).location().enclosingClassName())
+                                    .contains("p.Pair");
+                            assertThat(find(env, "p.Mode").enumConstants()).containsExactly("FAST", "SLOW");
+                            assertThat(find(env, "p.Mode").recordComponents()).isEmpty();
+                            assertThat(pair.enumConstants()).isEmpty();
+                        })),
                 Arguments.of(
                         "allMethodsIncludeInheritedOnceEach",
                         source(
@@ -227,6 +322,7 @@ class JavacModelTest {
                             var type = find(env, "p.Counter").fields().get(0).type();
                             assertThat(type.erasedName()).isEqualTo("int");
                             assertThat(type.isPrimitive()).isTrue();
+                            assertThat(type.isError()).isFalse();
                             assertThat(type.declaration()).isEmpty();
                         })),
                 Arguments.of(

@@ -386,7 +386,15 @@ class ProcessorContextTest {
                 ProcessorContext ctxCfg =
                         new ProcessorContext(JavacProcessingEnv.of(processingEnv, roundEnv), List.of());
                 ctxCfg.registerConfiguration(new io.tiko.processor.config.ConfigurationModel(
-                        main, "demo", "DbConfig", "demo.DbConfig", "db", List.of()));
+                        ctxCfg.env()
+                                .types()
+                                .findClass(main.getQualifiedName().toString())
+                                .orElseThrow(),
+                        "demo",
+                        "DbConfig",
+                        "demo.DbConfig",
+                        "db",
+                        List.of()));
                 findComponentOrFactoryResolvesConfiguration =
                         ctxCfg.findComponentOrFactory("demo.DbConfig").isPresent();
 

@@ -32,6 +32,14 @@ public interface ClassDecl {
 
     Optional<AnnotationRef> annotation(String annotationFqn);
 
+    /**
+     * Every occurrence of the annotation, with the semantics of
+     * {@link java.lang.reflect.AnnotatedElement#getAnnotationsByType}: written directly or wrapped
+     * in its {@link java.lang.annotation.Repeatable @Repeatable} container, in source order (a
+     * container's contents at the container's position). Empty when the annotation is absent.
+     */
+    List<AnnotationRef> annotationsByType(String annotationFqn);
+
     List<MethodDecl> constructors();
 
     /** The Kotlin primary constructor; always empty for Java. */
@@ -50,6 +58,12 @@ public interface ClassDecl {
 
     /** Fields declared directly on this type. */
     List<FieldDecl> fields();
+
+    /** The record components in declaration order; empty for anything but a record. */
+    List<FieldDecl> recordComponents();
+
+    /** The names of the enum constants in declaration order; empty for anything but an enum. */
+    List<String> enumConstants();
 
     /** The declared superclass (if any) followed by the declared interfaces. */
     List<TypeRef> directSupertypes();

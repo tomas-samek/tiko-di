@@ -86,6 +86,11 @@ record JavacMethodDecl(ExecutableElement element, JavacModel model) implements M
     }
 
     @Override
+    public List<AnnotationRef> annotationsByType(String annotationFqn) {
+        return model.annotationsByType(element, annotationFqn);
+    }
+
+    @Override
     public Optional<ClassDecl> owner() {
         return element.getEnclosingElement() instanceof TypeElement owner
                 ? Optional.of(model.classDecl(owner))

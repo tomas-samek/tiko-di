@@ -3,6 +3,8 @@ package io.tiko.processor.topology;
 import io.tiko.processor.config.ConfigurationModel;
 import io.tiko.processor.core.CodeOutput;
 import io.tiko.processor.core.JsonWriter;
+import io.tiko.processor.core.model.MethodDecl;
+import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.EventHandlerModel;
@@ -118,8 +120,7 @@ public final class TopologyWriter {
         jw.field("eventHandlers").array();
         for (EventHandlerModel h : context.getEventHandlers()) {
             jw.object();
-            jw.field("declaringClass")
-                    .value(h.getDeclaringClass().getQualifiedName().toString());
+            jw.field("declaringClass").value(h.getOwner().qualifiedName());
             jw.field("methodName").value(h.getMethodName());
             jw.field("eventType").value(h.getEventTypeName());
             jw.field("async").value(h.isAsync());
@@ -134,16 +135,15 @@ public final class TopologyWriter {
         for (EventHandlerModel h : context.getEventHandlers()) {
             for (EventTriggerModel t : h.getEventTriggers()) {
                 jw.object();
-                jw.field("handlerClass")
-                        .value(h.getDeclaringClass().getQualifiedName().toString());
+                jw.field("handlerClass").value(h.getOwner().qualifiedName());
                 jw.field("handlerMethod").value(h.getMethodName());
                 jw.field("eventName").value(t.getEventName());
-                jw.field("eventType").value(triggerReturnTypeFqn(h.getMethodElement()));
+                jw.field("eventType").value(triggerReturnTypeFqn(h.getMethod()));
                 jw.field("async").value(t.isAsync());
                 jw.field("spread").value(t.isSpread());
                 jw.field("guards").array();
-                for (TypeMirror g : t.getGuardClasses()) {
-                    jw.value(g.toString());
+                for (TypeRef g : t.getGuardClasses()) {
+                    jw.value(g.displayName());
                 }
                 jw.endArray();
                 jw.endObject();
@@ -158,12 +158,12 @@ public final class TopologyWriter {
      * spread payload); {@code @EventTrigger(eventName = "...")} is just a user label
      * and isn't a reliable join key on its own.
      */
-    private static String triggerReturnTypeFqn(ExecutableElement method) {
-        var ret = method.getReturnType();
-        if (ret == null || ret.getKind() == javax.lang.model.type.TypeKind.VOID) {
+    private static String triggerReturnTypeFqn(MethodDecl method) {
+        var ret = method.returnType();
+        if (ret == null || ret.isVoid()) {
             return null;
         }
-        return ret.toString();
+        return ret.displayName();
     }
 
     private void writeConfigurations(JsonWriter jw) {
@@ -177,9 +177,9 @@ public final class TopologyWriter {
                 jw.object();
                 jw.field("name").value(f.fieldName());
                 jw.field("yamlKey").value(f.yamlKey());
-                jw.field("type").value(f.type().toString());
+                jw.field("type").value(f.type().displayName());
                 jw.field("cardinality").value(f.cardinality().name());
-                writeDefaultValue(jw, f.type().toString(), f.defaultValue());
+                writeDefaultValue(jw, f.type().displayName(), f.defaultValue());
                 jw.endObject();
             }
             jw.endArray();

@@ -1,21 +1,21 @@
 package io.tiko.processor.model;
 
 import io.tiko.annotations.BackoffStrategy;
+import io.tiko.processor.core.model.ClassDecl;
+import io.tiko.processor.core.model.MethodDecl;
+import io.tiko.processor.core.model.TypeRef;
 import java.util.ArrayList;
 import java.util.List;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.TypeMirror;
 
 /**
  * Represents an @EventHandler method.
  */
 public final class EventHandlerModel {
 
-    private final ExecutableElement methodElement;
-    private final TypeElement declaringClass;
+    private final MethodDecl method;
+    private final ClassDecl owner;
     private final String methodName;
-    private final TypeMirror eventType;
+    private final TypeRef eventType;
     private final String eventTypeName;
     private final boolean async;
     private final boolean hasEventWrapper; // Second parameter is Event<?> wrapper
@@ -26,8 +26,8 @@ public final class EventHandlerModel {
     private final List<EventTriggerModel> eventTriggers;
 
     private EventHandlerModel(Builder builder) {
-        this.methodElement = builder.methodElement;
-        this.declaringClass = builder.declaringClass;
+        this.method = builder.method;
+        this.owner = builder.owner;
         this.methodName = builder.methodName;
         this.eventType = builder.eventType;
         this.eventTypeName = builder.eventTypeName;
@@ -44,19 +44,21 @@ public final class EventHandlerModel {
         return new Builder();
     }
 
-    public ExecutableElement getMethodElement() {
-        return methodElement;
+    /** The handler method; generated dispatch calls it by {@link MethodDecl#jvmName()}. */
+    public MethodDecl getMethod() {
+        return method;
     }
 
-    public TypeElement getDeclaringClass() {
-        return declaringClass;
+    /** The class declaring the handler. */
+    public ClassDecl getOwner() {
+        return owner;
     }
 
     public String getMethodName() {
         return methodName;
     }
 
-    public TypeMirror getEventType() {
+    public TypeRef getEventType() {
         return eventType;
     }
 
@@ -110,14 +112,14 @@ public final class EventHandlerModel {
      * Returns the component key that declares this handler.
      */
     public String getDeclaringComponentKey() {
-        return declaringClass.getQualifiedName().toString();
+        return owner.qualifiedName();
     }
 
     public static final class Builder {
-        private ExecutableElement methodElement;
-        private TypeElement declaringClass;
+        private MethodDecl method;
+        private ClassDecl owner;
         private String methodName;
-        private TypeMirror eventType;
+        private TypeRef eventType;
         private String eventTypeName;
         private boolean async = false;
         private boolean hasEventWrapper = false;
@@ -129,13 +131,13 @@ public final class EventHandlerModel {
 
         private Builder() {}
 
-        public Builder methodElement(ExecutableElement methodElement) {
-            this.methodElement = methodElement;
+        public Builder method(MethodDecl method) {
+            this.method = method;
             return this;
         }
 
-        public Builder declaringClass(TypeElement declaringClass) {
-            this.declaringClass = declaringClass;
+        public Builder owner(ClassDecl owner) {
+            this.owner = owner;
             return this;
         }
 
@@ -144,7 +146,7 @@ public final class EventHandlerModel {
             return this;
         }
 
-        public Builder eventType(TypeMirror eventType) {
+        public Builder eventType(TypeRef eventType) {
             this.eventType = eventType;
             return this;
         }
@@ -195,8 +197,8 @@ public final class EventHandlerModel {
         }
 
         public EventHandlerModel build() {
-            if (methodElement == null || declaringClass == null || eventType == null) {
-                throw new IllegalStateException("MethodElement, declaringClass, and eventType are required");
+            if (method == null || owner == null || eventType == null) {
+                throw new IllegalStateException("method, owner, and eventType are required");
             }
             return new EventHandlerModel(this);
         }

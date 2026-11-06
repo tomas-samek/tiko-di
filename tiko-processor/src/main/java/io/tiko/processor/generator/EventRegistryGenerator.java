@@ -4,16 +4,14 @@ import com.palantir.javapoet.*;
 import io.tiko.Event;
 import io.tiko.EventBus;
 import io.tiko.processor.core.GeneratorAnnotations;
+import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.model.EventHandlerModel;
 import io.tiko.processor.model.EventTriggerModel;
-import io.tiko.processor.util.JavacBridge;
 import io.tiko.processor.util.ProcessorContext;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import javax.lang.model.element.Modifier;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
 
 /**
  * Generates the EventRegistry class that registers all @EventHandler methods.
@@ -74,8 +72,7 @@ public final class EventRegistryGenerator {
         // Emit one HANDLER_INFO_<n> static constant per handler
         for (int i = 0; i < eventHandlers.size(); i++) {
             EventHandlerModel handler = eventHandlers.get(i);
-            ClassName declaring = ClassName.bestGuess(
-                    handler.getDeclaringClass().getQualifiedName().toString());
+            ClassName declaring = ClassName.bestGuess(handler.getOwner().qualifiedName());
             ClassName eventClass = ClassName.bestGuess(handler.getEventTypeName());
 
             FieldSpec info = FieldSpec.builder(
@@ -128,7 +125,7 @@ public final class EventRegistryGenerator {
 
     /** True when the handler's declaring component is a proxied EVENT bean (#331). */
     private boolean isProxiedComponent(EventHandlerModel handler) {
-        String fqn = handler.getDeclaringClass().getQualifiedName().toString();
+        String fqn = handler.getOwner().qualifiedName();
         return context.getComponents().values().stream()
                 .anyMatch(c -> c.getQualifiedName().equals(fqn) && c.requiresProxy());
     }
@@ -146,13 +143,12 @@ public final class EventRegistryGenerator {
     private MethodSpec createDispatcherMethod(EventHandlerModel handler, int index) {
         ClassName containerClass = ClassName.get(GENERATED_PACKAGE, context.getContainerClassName());
         ClassName eventClass = ClassName.bestGuess(handler.getEventTypeName());
-        ClassName declaringClass = ClassName.bestGuess(
-                handler.getDeclaringClass().getQualifiedName().toString());
+        ClassName declaringClass = ClassName.bestGuess(handler.getOwner().qualifiedName());
         // Proxied EVENT components: the plain getter returns the interface-typed proxy, which
         // cannot be assigned to the concrete handler variable — resolve the current unit's
         // instance via the concrete-typed getCurrentXxx delegate instead (#331).
         String getterName = (isProxiedComponent(handler) ? "getCurrent" : "get")
-                + handler.getDeclaringClass().getSimpleName();
+                + handler.getOwner().className().simpleName();
 
         MethodSpec.Builder method = MethodSpec.methodBuilder(dispatcherName(handler, index))
                 .addModifiers(Modifier.PRIVATE, Modifier.STATIC)
@@ -194,8 +190,8 @@ public final class EventRegistryGenerator {
                 getterName,
                 shouldCaptureResult(handler),
                 handler.hasEventWrapper()
-                        ? "__handler." + handler.getMethodName() + "(event, __wrapper)"
-                        : "__handler." + handler.getMethodName() + "(event)");
+                        ? "__handler." + handler.getMethod().jvmName() + "(event, __wrapper)"
+                        : "__handler." + handler.getMethod().jvmName() + "(event)");
 
         if (handler.isAsync()) {
             emitAsyncDispatch(method, handler, index, plan);
@@ -217,12 +213,12 @@ public final class EventRegistryGenerator {
      */
     private boolean shouldCaptureResult(EventHandlerModel handler) {
         boolean hasTriggers = !handler.getEventTriggers().isEmpty();
-        boolean returnsValue = handler.getMethodElement().getReturnType().getKind() != TypeKind.VOID;
+        boolean returnsValue = !handler.getMethod().returnType().isVoid();
         if (hasTriggers && !returnsValue) {
             context.env()
                     .diagnostics()
                     .warning(
-                            JavacBridge.location(handler.getMethodElement()),
+                            handler.getMethod().location(),
                             "@EventTrigger on a void-returning @EventHandler has no payload to publish — ignored");
         }
         return hasTriggers && returnsValue;
@@ -252,7 +248,7 @@ public final class EventRegistryGenerator {
     private void emitAsyncDispatch(MethodSpec.Builder method, EventHandlerModel handler, int index, DispatchPlan plan) {
         ClassName errorHandler = ClassName.get("io.tiko", "ErrorHandler");
         ClassName executorServiceClass = ClassName.get(ExecutorService.class);
-        TypeMirror returnType = handler.getMethodElement().getReturnType();
+        TypeRef returnType = handler.getMethod().returnType();
 
         method.addStatement("$T __exec = container.getEventExecutor()", executorServiceClass);
         method.addStatement("$T __err = container.getErrorHandler()", errorHandler);
@@ -266,7 +262,7 @@ public final class EventRegistryGenerator {
         runBody.addStatement("$T<?> __asyncPrev = $T.enter(__asyncWrapper)", Event.class, CHAIN_CONTEXT);
         runBody.beginControlFlow("try");
         if (plan.captureResult()) {
-            runBody.addStatement("$T __result = $L", TypeName.get(returnType), plan.invocation());
+            runBody.addStatement("$T __result = $L", returnType.javaPoet(), plan.invocation());
             for (EventTriggerModel trigger : handler.getEventTriggers()) {
                 emitTriggerInto(runBody, trigger, index);
             }
@@ -340,11 +336,11 @@ public final class EventRegistryGenerator {
     private void emitSyncDispatch(MethodSpec.Builder method, EventHandlerModel handler, int index, DispatchPlan plan) {
         ClassName errorHandler = ClassName.get("io.tiko", "ErrorHandler");
         ClassName eventHandlerError = ClassName.get("io.tiko", "EventHandlerError");
-        TypeMirror returnType = handler.getMethodElement().getReturnType();
+        TypeRef returnType = handler.getMethod().returnType();
 
         method.beginControlFlow("try");
         if (plan.captureResult()) {
-            method.addStatement("$T __result = $L", TypeName.get(returnType), plan.invocation());
+            method.addStatement("$T __result = $L", returnType.javaPoet(), plan.invocation());
             for (EventTriggerModel trigger : handler.getEventTriggers()) {
                 emitTrigger(method, trigger, index);
             }
@@ -397,7 +393,7 @@ public final class EventRegistryGenerator {
         for (int i = 0; i < trigger.getGuardClasses().size(); i++) {
             if (i > 0) condition.append(" && ");
             condition.append("new $T().shouldTrigger(__result, event)");
-            args[i] = ClassName.get(trigger.getGuardClasses().get(i));
+            args[i] = trigger.getGuardClasses().get(i).javaPoet();
         }
 
         method.beginControlFlow("if (" + condition + ")", args);
@@ -442,7 +438,7 @@ public final class EventRegistryGenerator {
         for (int i = 0; i < trigger.getGuardClasses().size(); i++) {
             if (i > 0) condition.append(" && ");
             condition.append("new $T().shouldTrigger(__result, event)");
-            args[i] = ClassName.get(trigger.getGuardClasses().get(i));
+            args[i] = trigger.getGuardClasses().get(i).javaPoet();
         }
 
         block.beginControlFlow("if (" + condition + ")", args);
@@ -453,6 +449,6 @@ public final class EventRegistryGenerator {
     private static String dispatcherName(EventHandlerModel handler, int index) {
         // Include both class and method names for readability when debugging generated code,
         // and an index so two methods with the same name on different classes don't collide.
-        return "dispatch_" + handler.getDeclaringClass().getSimpleName() + "_" + handler.getMethodName() + "_" + index;
+        return "dispatch_" + handler.getOwner().className().simpleName() + "_" + handler.getMethodName() + "_" + index;
     }
 }

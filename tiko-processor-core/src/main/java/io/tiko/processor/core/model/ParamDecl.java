@@ -22,5 +22,13 @@ public interface ParamDecl {
 
     Optional<AnnotationRef> annotation(String fqn);
 
+    /**
+     * Every occurrence of the annotation, with the semantics of
+     * {@link java.lang.reflect.AnnotatedElement#getAnnotationsByType}: written directly or wrapped
+     * in its {@link java.lang.annotation.Repeatable @Repeatable} container, in source order (a
+     * container's contents at the container's position). Empty when the annotation is absent.
+     */
+    List<AnnotationRef> annotationsByType(String annotationFqn);
+
     Location location();
 }

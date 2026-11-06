@@ -4,14 +4,13 @@ package io.tiko.processor.config;
 import io.tiko.config.internal.coercers.CoercionException;
 import io.tiko.config.internal.coercers.TypeCoercer;
 import io.tiko.config.internal.coercers.TypeCoercerRegistry;
+import io.tiko.processor.core.model.DeclKind;
+import io.tiko.processor.core.model.TypeRef;
+import io.tiko.processor.util.TypeRefs;
 import java.util.List;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
-import javax.lang.model.util.Types;
 
 /**
- * Bridge between processor element types and the runtime coercer set.
+ * Bridge between processor model types and the runtime coercer set.
  * Centralised so error messages, validation, and codegen all consult the same
  * source of truth for "is this type bindable?".
  */
@@ -23,17 +22,17 @@ public final class ConfigSupportedTypes {
      * X is itself supported (a scalar or a record), an {@code Optional<X>}, or
      * a record (nested binding).
      */
-    public static boolean isSupported(TypeMirror type, Types types) {
-        if (type.getKind().isPrimitive()) return primitiveSupported(type.getKind());
-        if (type.getKind() != TypeKind.DECLARED) return false;
-        TypeElement el = (TypeElement) types.asElement(type);
-        if (el == null) return false;
-        String fqn = el.getQualifiedName().toString();
+    public static boolean isSupported(TypeRef type) {
+        if (type.isPrimitive()) return primitiveSupported(type.erasedName());
+        var declared = TypeRefs.declared(type);
+        if (declared.isEmpty()) return false;
+        var el = declared.get();
+        var fqn = el.qualifiedName();
 
         // Records (nested binding) — ConfigBinderGenerator emits a recursive call.
-        if (el.getKind().name().equals("RECORD")) return true;
+        if (el.kind() == DeclKind.RECORD) return true;
 
-        if (el.getKind() == javax.lang.model.element.ElementKind.ENUM) return true;
+        if (el.kind() == DeclKind.ENUM) return true;
 
         // Optional / List / Set / Map are accepted; the generator inspects the type argument.
         if (fqn.equals("java.util.Optional")
@@ -52,9 +51,9 @@ public final class ConfigSupportedTypes {
         }
     }
 
-    private static boolean primitiveSupported(TypeKind kind) {
-        return switch (kind) {
-            case INT, LONG, BOOLEAN, DOUBLE, FLOAT, SHORT, BYTE, CHAR -> true;
+    private static boolean primitiveSupported(String primitive) {
+        return switch (primitive) {
+            case "int", "long", "boolean", "double", "float", "short", "byte", "char" -> true;
             default -> false;
         };
     }

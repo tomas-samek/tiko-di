@@ -39,6 +39,14 @@ public interface MethodDecl {
 
     Optional<AnnotationRef> annotation(String annotationFqn);
 
+    /**
+     * Every occurrence of the annotation, with the semantics of
+     * {@link java.lang.reflect.AnnotatedElement#getAnnotationsByType}: written directly or wrapped
+     * in its {@link java.lang.annotation.Repeatable @Repeatable} container, in source order (a
+     * container's contents at the container's position). Empty when the annotation is absent.
+     */
+    List<AnnotationRef> annotationsByType(String annotationFqn);
+
     /** The declaring class; empty only for Kotlin top-level functions. */
     Optional<ClassDecl> owner();
 

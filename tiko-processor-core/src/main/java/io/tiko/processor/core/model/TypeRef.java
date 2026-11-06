@@ -32,6 +32,12 @@ public interface TypeRef {
 
     boolean isPrimitive();
 
+    /**
+     * A type that does not resolve: on javac {@code TypeKind.ERROR}, for example a class another
+     * processor has yet to generate. Its {@link #declaration()} is the placeholder.
+     */
+    boolean isError();
+
     /** A {@code void} return type (on KSP, also a Kotlin {@code Unit} return type). */
     boolean isVoid();
 

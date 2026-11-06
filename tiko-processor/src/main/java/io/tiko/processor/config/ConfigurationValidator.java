@@ -1,27 +1,22 @@
 package io.tiko.processor.config;
 
-import io.tiko.processor.util.JavacBridge;
+import io.tiko.processor.core.model.ClassDecl;
+import io.tiko.processor.core.model.DeclKind;
+import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.util.ProcessorContext;
+import io.tiko.processor.util.TypeRefs;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
-import javax.lang.model.util.Types;
 
 /** All compile-time checks against the collected {@link ConfigurationModel}s. */
 public final class ConfigurationValidator {
 
     private final ProcessorContext ctx;
-    private final Types types;
 
-    public ConfigurationValidator(ProcessorContext ctx, Types types) {
+    public ConfigurationValidator(ProcessorContext ctx) {
         this.ctx = ctx;
-        this.types = types;
     }
 
     public boolean validate() {
@@ -43,7 +38,7 @@ public final class ConfigurationValidator {
             if (prior != null) {
                 ctx.getErrorReporter()
                         .error(
-                                JavacBridge.location(cfg.element()),
+                                cfg.declaration().location(),
                                 prior.simpleName() + ".java, " + cfg.simpleName()
                                         + ".java — Both records declare prefix '" + cfg.prefix() + "'."
                                         + " Each prefix must be unique.",
@@ -64,7 +59,7 @@ public final class ConfigurationValidator {
         if (unsafe) {
             ctx.getErrorReporter()
                     .error(
-                            JavacBridge.location(cfg.element()),
+                            cfg.declaration().location(),
                             cfg.simpleName() + ".java — the @Configuration prefix contains a line break,"
                                     + " another control character or '='.",
                             "Use a dot-separated path such as 'tiko.my-app'");
@@ -76,12 +71,12 @@ public final class ConfigurationValidator {
         boolean ok = true;
         for (ConfigFieldModel f : cfg.fields()) {
             // 1. Type-set membership
-            TypeMirror inner = unwrapOptional(f.type());
-            if (!ConfigSupportedTypes.isSupported(inner, types)) {
+            TypeRef inner = unwrapOptional(f.type());
+            if (!ConfigSupportedTypes.isSupported(inner)) {
                 String typeName = simpleName(inner);
                 ctx.getErrorReporter()
                         .error(
-                                JavacBridge.location(f.element()),
+                                f.component().location(),
                                 "Field '" + f.fieldName() + "' uses unsupported config type '" + typeName + "'."
                                         + " See *Components → Supported types* in the spec.",
                                 "Use one of: " + String.join(", ", ConfigSupportedTypes.bundledTypeNames()),
@@ -93,7 +88,7 @@ public final class ConfigurationValidator {
             if (f.cardinality() == ConfigFieldModel.Cardinality.OPTIONAL && f.defaultValue() != null) {
                 ctx.getErrorReporter()
                         .error(
-                                JavacBridge.location(f.element()),
+                                f.component().location(),
                                 "@Default cannot be combined with Optional<X> on field '" + f.fieldName() + "'."
                                         + " They mean different things.",
                                 "Drop the Optional wrapper, or remove @Default");
@@ -108,7 +103,7 @@ public final class ConfigurationValidator {
                     if (err != null) {
                         ctx.getErrorReporter()
                                 .error(
-                                        JavacBridge.location(f.element()),
+                                        f.component().location(),
                                         "@Default('" + f.defaultValue() + "') on " + simpleName(inner) + " field '"
                                                 + f.fieldName() + "' is not a valid " + effective.getSimpleName() + ": "
                                                 + err,
@@ -123,63 +118,54 @@ public final class ConfigurationValidator {
 
     private boolean checkNoRecursion(ConfigurationModel cfg) {
         Set<String> visiting = new HashSet<>();
-        return walk(cfg.element(), visiting, cfg);
+        return walk(cfg.declaration(), visiting, cfg);
     }
 
-    private boolean walk(TypeElement type, Set<String> visiting, ConfigurationModel root) {
-        String fqn = type.getQualifiedName().toString();
+    private boolean walk(ClassDecl type, Set<String> visiting, ConfigurationModel root) {
+        String fqn = type.qualifiedName();
         if (!visiting.add(fqn)) {
             ctx.getErrorReporter()
                     .error(
-                            JavacBridge.location(root.element()),
+                            root.declaration().location(),
                             "Recursive record reference detected at " + fqn,
                             "Break the cycle: a @Configuration record cannot reference itself, directly or transitively",
                             "Flatten the recursive component into a separate top-level @Configuration record");
             return false;
         }
-        for (var member : type.getEnclosedElements()) {
-            if (member.getKind() != ElementKind.RECORD_COMPONENT) continue;
-            var t = unwrapOptional(member.asType());
-            if (t.getKind() == TypeKind.DECLARED) {
-                var child = (TypeElement) ((DeclaredType) t).asElement();
-                if (child.getKind() == ElementKind.RECORD) {
-                    if (!walk(child, visiting, root)) return false;
-                }
+        for (var member : type.recordComponents()) {
+            var child = TypeRefs.declared(unwrapOptional(member.type()));
+            if (child.isPresent() && child.get().kind() == DeclKind.RECORD && !walk(child.get(), visiting, root)) {
+                return false;
             }
         }
         visiting.remove(fqn);
         return true;
     }
 
-    private TypeMirror unwrapOptional(TypeMirror type) {
-        if (type.getKind() != TypeKind.DECLARED) return type;
-        DeclaredType dt = (DeclaredType) type;
-        TypeElement el = (TypeElement) dt.asElement();
-        if (!el.getQualifiedName().toString().equals("java.util.Optional")) return type;
-        if (dt.getTypeArguments().isEmpty()) return type;
-        return dt.getTypeArguments().get(0);
+    private TypeRef unwrapOptional(TypeRef type) {
+        if (!TypeRefs.isDeclared(type, "java.util.Optional")) return type;
+        if (type.typeArguments().isEmpty()) return type;
+        return type.typeArguments().get(0);
     }
 
-    private static Class<?> effectiveClass(TypeMirror type) {
-        if (type.getKind().isPrimitive()) {
-            return switch (type.getKind()) {
-                case INT -> int.class;
-                case LONG -> long.class;
-                case BOOLEAN -> boolean.class;
-                case DOUBLE -> double.class;
-                case FLOAT -> float.class;
-                case SHORT -> short.class;
-                case BYTE -> byte.class;
-                case CHAR -> char.class;
+    private static Class<?> effectiveClass(TypeRef type) {
+        if (type.isPrimitive()) {
+            return switch (type.erasedName()) {
+                case "int" -> int.class;
+                case "long" -> long.class;
+                case "boolean" -> boolean.class;
+                case "double" -> double.class;
+                case "float" -> float.class;
+                case "short" -> short.class;
+                case "byte" -> byte.class;
+                case "char" -> char.class;
                 default -> null;
             };
         }
-        if (type.getKind() == TypeKind.DECLARED) {
-            String fqn = ((TypeElement) ((DeclaredType) type).asElement())
-                    .getQualifiedName()
-                    .toString();
+        var declared = TypeRefs.declared(type);
+        if (declared.isPresent()) {
             try {
-                return Class.forName(fqn);
+                return Class.forName(declared.get().qualifiedName());
             } catch (ClassNotFoundException e) {
                 return null;
             }
@@ -187,13 +173,11 @@ public final class ConfigurationValidator {
         return null;
     }
 
-    private static String simpleName(TypeMirror type) {
-        if (type.getKind().isPrimitive()) return type.getKind().name().toLowerCase();
-        if (type.getKind() == TypeKind.DECLARED) {
-            return ((TypeElement) ((DeclaredType) type).asElement())
-                    .getSimpleName()
-                    .toString();
-        }
-        return type.toString();
+    /** A primitive's keyword ({@code int}), a declared type's simple name, else its rendering. */
+    private static String simpleName(TypeRef type) {
+        if (type.isPrimitive()) return type.erasedName();
+        return TypeRefs.declared(type)
+                .map(decl -> decl.className().simpleName())
+                .orElseGet(type::displayName);
     }
 }

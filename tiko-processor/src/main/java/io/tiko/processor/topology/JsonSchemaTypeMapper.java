@@ -1,13 +1,12 @@
 package io.tiko.processor.topology;
 
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
+import io.tiko.processor.core.model.ClassDecl;
+import io.tiko.processor.core.model.DeclKind;
+import io.tiko.processor.core.model.TypeRef;
+import io.tiko.processor.util.TypeRefs;
 
 /**
- * Maps a {@link TypeMirror} (as collected from a {@code @Configuration} record
+ * Maps a {@link TypeRef} (as collected from a {@code @Configuration} record
  * component) to a JSON Schema fragment string. Composes recursively for arrays,
  * sets, maps, and nested records.
  *
@@ -16,28 +15,30 @@ import javax.lang.model.type.TypeMirror;
  */
 public final class JsonSchemaTypeMapper {
 
-    public String mapType(TypeMirror type) {
-        if (type.getKind().isPrimitive()) {
-            return switch (type.getKind()) {
-                case BOOLEAN -> "{\"type\":\"boolean\"}";
-                case INT, LONG, SHORT, BYTE -> "{\"type\":\"integer\"}";
-                case FLOAT, DOUBLE -> "{\"type\":\"number\"}";
-                case CHAR -> "{\"type\":\"string\"}";
-                default -> "{\"type\":\"string\"}";
+    private static final String STRING_SCHEMA = "{\"type\":\"string\"}";
+
+    public String mapType(TypeRef type) {
+        if (type.isPrimitive()) {
+            return switch (type.erasedName()) {
+                case "boolean" -> "{\"type\":\"boolean\"}";
+                case "int", "long", "short", "byte" -> "{\"type\":\"integer\"}";
+                case "float", "double" -> "{\"type\":\"number\"}";
+                case "char" -> STRING_SCHEMA;
+                default -> STRING_SCHEMA;
             };
         }
-        if (type.getKind() == TypeKind.DECLARED) {
-            return mapDeclared((DeclaredType) type);
+        var declared = TypeRefs.declared(type);
+        if (declared.isPresent()) {
+            return mapDeclared(type, declared.get());
         }
-        return "{\"type\":\"string\"}";
+        return STRING_SCHEMA;
     }
 
-    private String mapDeclared(DeclaredType dt) {
-        var el = (TypeElement) dt.asElement();
-        var fqn = el.getQualifiedName().toString();
+    private String mapDeclared(TypeRef dt, ClassDecl el) {
+        var fqn = el.qualifiedName();
 
         return switch (fqn) {
-            case "java.lang.String", "java.lang.Character" -> "{\"type\":\"string\"}";
+            case "java.lang.String", "java.lang.Character" -> STRING_SCHEMA;
             case "java.lang.Boolean" -> "{\"type\":\"boolean\"}";
             case "java.lang.Integer", "java.lang.Long", "java.lang.Short", "java.lang.Byte" -> "{\"type\":\"integer\"}";
             case "java.lang.Float", "java.lang.Double" -> "{\"type\":\"number\"}";
@@ -48,60 +49,56 @@ public final class JsonSchemaTypeMapper {
                     "java.time.LocalDateTime" -> "{\"type\":\"string\",\"format\":\"date-time\"}";
             case "java.time.LocalDate" -> "{\"type\":\"string\",\"format\":\"date\"}";
             case "java.time.LocalTime" -> "{\"type\":\"string\",\"format\":\"time\"}";
-            case "java.time.ZoneId" -> "{\"type\":\"string\"}";
+            case "java.time.ZoneId" -> STRING_SCHEMA;
             case "java.net.URI", "java.net.URL" -> "{\"type\":\"string\",\"format\":\"uri\"}";
             case "java.util.UUID",
                     "java.math.BigDecimal",
                     "java.util.regex.Pattern",
                     "java.nio.charset.Charset",
-                    "java.nio.file.Path" -> "{\"type\":\"string\"}";
+                    "java.nio.file.Path" -> STRING_SCHEMA;
             case "java.util.List", "java.util.Set" -> "{\"type\":\"array\",\"items\":" + itemSchema(dt, 0) + "}";
             case "java.util.Map" -> "{\"type\":\"object\",\"additionalProperties\":" + itemSchema(dt, 1) + "}";
             case "java.util.Optional" -> itemSchema(dt, 0);
             default -> {
-                if (el.getKind() == ElementKind.ENUM) {
+                if (el.kind() == DeclKind.ENUM) {
                     yield enumSchema(el);
                 }
-                if (el.getKind() == ElementKind.RECORD) {
+                if (el.kind() == DeclKind.RECORD) {
                     yield recordSchema(el);
                 }
-                yield "{\"type\":\"string\"}";
+                yield STRING_SCHEMA;
             }
         };
     }
 
-    private String itemSchema(DeclaredType collection, int typeArgIndex) {
-        var args = collection.getTypeArguments();
+    private String itemSchema(TypeRef collection, int typeArgIndex) {
+        var args = collection.typeArguments();
         if (args.size() <= typeArgIndex) {
-            return "{\"type\":\"string\"}";
+            return STRING_SCHEMA;
         }
         return mapType(args.get(typeArgIndex));
     }
 
-    private String enumSchema(TypeElement el) {
+    private String enumSchema(ClassDecl el) {
         var sb = new StringBuilder("{\"type\":\"string\",\"enum\":[");
         var first = true;
-        for (var member : el.getEnclosedElements()) {
-            if (member.getKind() == ElementKind.ENUM_CONSTANT) {
-                if (!first) sb.append(',');
-                sb.append('"').append(member.getSimpleName()).append('"');
-                first = false;
-            }
+        for (var constant : el.enumConstants()) {
+            if (!first) sb.append(',');
+            sb.append('"').append(constant).append('"');
+            first = false;
         }
         sb.append("]}");
         return sb.toString();
     }
 
-    private String recordSchema(TypeElement record) {
+    private String recordSchema(ClassDecl recordDecl) {
         var sb = new StringBuilder("{\"type\":\"object\",\"properties\":{");
         var first = true;
-        for (var member : record.getEnclosedElements()) {
-            if (member.getKind() == ElementKind.RECORD_COMPONENT) {
-                if (!first) sb.append(',');
-                sb.append('"').append(member.getSimpleName()).append("\":");
-                sb.append(mapType(member.asType()));
-                first = false;
-            }
+        for (var member : recordDecl.recordComponents()) {
+            if (!first) sb.append(',');
+            sb.append('"').append(member.name()).append("\":");
+            sb.append(mapType(member.type()));
+            first = false;
         }
         sb.append("},\"additionalProperties\":false}");
         return sb.toString();
