@@ -6,10 +6,9 @@ import io.tiko.kafka.annotations.KafkaSink;
 import io.tiko.kafka.annotations.KafkaSource;
 import io.tiko.kafka.processor.model.KafkaSinkDescriptor;
 import io.tiko.kafka.processor.model.KafkaSourceDescriptor;
+import io.tiko.processor.core.Diagnostics;
+import io.tiko.processor.core.model.MethodDecl;
 import java.util.List;
-import javax.annotation.processing.Messager;
-import javax.lang.model.element.ExecutableElement;
-import javax.tools.Diagnostic;
 
 /**
  * Validates the required sibling annotations on each bridge method:
@@ -25,42 +24,44 @@ import javax.tools.Diagnostic;
  */
 public final class RequiredSiblingValidator {
 
+    private static final String KAFKA_SOURCE = KafkaSource.class.getCanonicalName();
+    private static final String KAFKA_SINK = KafkaSink.class.getCanonicalName();
+    private static final String EVENT_TRIGGER = EventTrigger.class.getCanonicalName();
+    private static final String EVENT_HANDLER = EventHandler.class.getCanonicalName();
+
     private RequiredSiblingValidator() {}
 
     public static boolean validate(
-            Messager messager, List<KafkaSourceDescriptor> sources, List<KafkaSinkDescriptor> sinks) {
+            Diagnostics diagnostics, List<KafkaSourceDescriptor> sources, List<KafkaSinkDescriptor> sinks) {
         boolean ok = true;
         for (KafkaSourceDescriptor s : sources) {
-            ExecutableElement m = s.method();
-            if (m.getAnnotation(KafkaSink.class) != null) {
-                messager.printMessage(
-                        Diagnostic.Kind.ERROR, "@KafkaSource and @KafkaSink cannot coexist on the same method.", m);
+            MethodDecl m = s.method();
+            if (m.annotation(KAFKA_SINK).isPresent()) {
+                diagnostics.error(m.location(), "@KafkaSource and @KafkaSink cannot coexist on the same method.");
                 ok = false;
                 continue;
             }
-            if (m.getAnnotation(EventTrigger.class) == null) {
-                messager.printMessage(
-                        Diagnostic.Kind.ERROR,
+            if (m.annotation(EVENT_TRIGGER).isEmpty()) {
+                diagnostics.error(
+                        m.location(),
                         "@KafkaSource requires a sibling @EventTrigger(eventName = \"...\") on the same method "
-                                + "so the deserialized event has a name to publish under.",
-                        m);
+                                + "so the deserialized event has a name to publish under.");
                 ok = false;
             }
         }
         for (KafkaSinkDescriptor s : sinks) {
-            ExecutableElement m = s.method();
-            if (m.getAnnotation(KafkaSource.class) != null) {
+            MethodDecl m = s.method();
+            if (m.annotation(KAFKA_SOURCE).isPresent()) {
                 // already reported above
                 continue;
             }
-            if (m.getAnnotation(EventHandler.class) != null) {
-                messager.printMessage(
-                        Diagnostic.Kind.ERROR,
+            if (m.annotation(EVENT_HANDLER).isPresent()) {
+                diagnostics.error(
+                        m.location(),
                         "@KafkaSink must NOT be combined with @EventHandler. The Kafka runtime subscribes its "
                                 + "own EventBus callback for the sink event type; adding @EventHandler would "
                                 + "double-fire the method (once as a local handler, once as a Kafka egress "
-                                + "callback). Remove @EventHandler from this @KafkaSink method.",
-                        m);
+                                + "callback). Remove @EventHandler from this @KafkaSink method.");
                 ok = false;
             }
         }

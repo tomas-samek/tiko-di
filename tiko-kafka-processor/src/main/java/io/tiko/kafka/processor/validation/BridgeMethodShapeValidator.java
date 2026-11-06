@@ -2,12 +2,10 @@ package io.tiko.kafka.processor.validation;
 
 import io.tiko.kafka.processor.model.KafkaSinkDescriptor;
 import io.tiko.kafka.processor.model.KafkaSourceDescriptor;
+import io.tiko.processor.core.Diagnostics;
+import io.tiko.processor.core.model.MethodDecl;
+import io.tiko.processor.core.model.TypeRef;
 import java.util.List;
-import javax.annotation.processing.Messager;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.TypeKind;
-import javax.tools.Diagnostic;
 
 /**
  * Validates bridge method shapes:
@@ -24,59 +22,55 @@ public final class BridgeMethodShapeValidator {
     private BridgeMethodShapeValidator() {}
 
     public static boolean validate(
-            Messager messager, List<KafkaSourceDescriptor> sources, List<KafkaSinkDescriptor> sinks) {
+            Diagnostics diagnostics, List<KafkaSourceDescriptor> sources, List<KafkaSinkDescriptor> sinks) {
         boolean ok = true;
         for (KafkaSourceDescriptor s : sources) {
-            ExecutableElement m = s.method();
-            List<? extends VariableElement> params = m.getParameters();
+            MethodDecl m = s.method();
+            var params = m.parameters();
             if (params.isEmpty()) {
-                messager.printMessage(
-                        Diagnostic.Kind.ERROR,
-                        "@KafkaSource method must declare at least one parameter (the deserialized payload).",
-                        m);
+                diagnostics.error(
+                        m.location(),
+                        "@KafkaSource method must declare at least one parameter (the deserialized payload).");
                 ok = false;
                 continue;
             }
             if (params.size() >= 2) {
-                if (!params.get(1).asType().toString().equals(KAFKA_CONTEXT_FQN)) {
-                    messager.printMessage(
-                            Diagnostic.Kind.ERROR,
+                if (!isKafkaContext(params.get(1).type())) {
+                    diagnostics.error(
+                            m.location(),
                             "KafkaContext, if present, must be the second parameter and typed exactly "
-                                    + KAFKA_CONTEXT_FQN + " (no subtype).",
-                            m);
+                                    + KAFKA_CONTEXT_FQN + " (no subtype).");
                     ok = false;
                 }
                 if (params.size() > 2) {
-                    messager.printMessage(
-                            Diagnostic.Kind.ERROR,
-                            "@KafkaSource method accepts at most two parameters (payload[, KafkaContext]).",
-                            m);
+                    diagnostics.error(
+                            m.location(),
+                            "@KafkaSource method accepts at most two parameters (payload[, KafkaContext]).");
                     ok = false;
                 }
             }
-            if (m.getReturnType().getKind() == TypeKind.VOID) {
-                messager.printMessage(
-                        Diagnostic.Kind.ERROR,
-                        "@KafkaSource method must return the local event payload (non-void).",
-                        m);
+            if (m.returnType().isVoid()) {
+                diagnostics.error(m.location(), "@KafkaSource method must return the local event payload (non-void).");
                 ok = false;
             }
         }
         for (KafkaSinkDescriptor s : sinks) {
-            ExecutableElement m = s.method();
-            if (m.getParameters().size() != 1) {
-                messager.printMessage(
-                        Diagnostic.Kind.ERROR,
-                        "@KafkaSink method must declare exactly one parameter (the local event).",
-                        m);
+            MethodDecl m = s.method();
+            if (m.parameters().size() != 1) {
+                diagnostics.error(
+                        m.location(), "@KafkaSink method must declare exactly one parameter (the local event).");
                 ok = false;
             }
-            if (m.getReturnType().getKind() == TypeKind.VOID) {
-                messager.printMessage(
-                        Diagnostic.Kind.ERROR, "@KafkaSink method must return a non-void payload to send to Kafka.", m);
+            if (m.returnType().isVoid()) {
+                diagnostics.error(m.location(), "@KafkaSink method must return a non-void payload to send to Kafka.");
                 ok = false;
             }
         }
         return ok;
+    }
+
+    /** Exactly {@code KafkaContext}: a declared type, so neither a subtype nor a type variable bounded by it. */
+    public static boolean isKafkaContext(TypeRef type) {
+        return type.declaration().isPresent() && type.erasedName().equals(KAFKA_CONTEXT_FQN);
     }
 }

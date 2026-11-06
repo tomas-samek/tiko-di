@@ -8,16 +8,11 @@ import com.palantir.javapoet.TypeName;
 import com.palantir.javapoet.TypeSpec;
 import io.tiko.kafka.processor.model.KafkaSinkDescriptor;
 import io.tiko.kafka.processor.model.KafkaSourceDescriptor;
+import io.tiko.processor.core.CodeOutput;
 import io.tiko.processor.core.GeneratorAnnotations;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
-import javax.annotation.processing.Filer;
-import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.Modifier;
-import javax.tools.StandardLocation;
 
 /**
  * Emits one {@code io.tiko.generated.KafkaTransportBootstrap} class per compilation unit
@@ -44,10 +39,12 @@ public final class KafkaTransportBootstrapGenerator {
     private static final ClassName KAFKA_SINK_DESCRIPTOR =
             ClassName.get("io.tiko.kafka.runtime", "GeneratedSinkDescriptor");
 
-    private final ProcessingEnvironment env;
+    private static final String SERVICE_FILE = "META-INF/services/io.tiko.TransportBootstrap";
 
-    public KafkaTransportBootstrapGenerator(ProcessingEnvironment env) {
-        this.env = env;
+    private final CodeOutput output;
+
+    public KafkaTransportBootstrapGenerator(CodeOutput output) {
+        this.output = output;
     }
 
     public void generate(List<KafkaSourceDescriptor> sources, List<KafkaSinkDescriptor> sinks) throws IOException {
@@ -82,9 +79,9 @@ public final class KafkaTransportBootstrapGenerator {
             }
         }
 
-        JavaFile.builder(GENERATED_PACKAGE, cls.build()).build().writeTo(env.getFiler());
+        output.writeJava(JavaFile.builder(GENERATED_PACKAGE, cls.build()).build(), List.of(), true);
 
-        writeServiceLoaderEntry(env.getFiler());
+        output.writeResource(SERVICE_FILE, GENERATED_PACKAGE + "." + CLASS_NAME + "\n", List.of());
     }
 
     private MethodSpec buildStartMethod(List<KafkaSourceDescriptor> sources, List<KafkaSinkDescriptor> sinks) {
@@ -138,8 +135,8 @@ public final class KafkaTransportBootstrapGenerator {
                     s.topic(),
                     s.consumerGroup(),
                     s.eventName(),
-                    TypeName.get(s.payloadType()),
-                    TypeName.get(s.serializerClass()),
+                    s.payloadType().javaPoet(),
+                    s.serializerClass().javaPoet(),
                     s.wantsKafkaContext(),
                     i);
         }
@@ -170,8 +167,8 @@ public final class KafkaTransportBootstrapGenerator {
                         KAFKA_SINK_DESCRIPTOR,
                         s.topic(),
                         s.partitionKey(),
-                        TypeName.get(s.eventType()),
-                        TypeName.get(s.serializerClass()),
+                        s.eventType().javaPoet(),
+                        s.serializerClass().javaPoet(),
                         i);
             } else {
                 b.addStatement(
@@ -179,8 +176,8 @@ public final class KafkaTransportBootstrapGenerator {
                         KAFKA_SINK_DESCRIPTOR,
                         s.topic(),
                         s.partitionKey(),
-                        TypeName.get(s.eventType()),
-                        TypeName.get(s.serializerClass()),
+                        s.eventType().javaPoet(),
+                        s.serializerClass().javaPoet(),
                         i,
                         CLASS_NAME,
                         i);
@@ -191,8 +188,8 @@ public final class KafkaTransportBootstrapGenerator {
     }
 
     private MethodSpec buildSourceDispatcher(KafkaSourceDescriptor s, int index) {
-        ClassName bridgeClass = ClassName.get(s.enclosingClass());
-        TypeName payloadName = TypeName.get(s.payloadType());
+        ClassName bridgeClass = s.enclosingClass().className();
+        TypeName payloadName = s.payloadType().javaPoet();
 
         MethodSpec.Builder b = MethodSpec.methodBuilder("source" + index)
                 .addModifiers(Modifier.PRIVATE)
@@ -203,16 +200,16 @@ public final class KafkaTransportBootstrapGenerator {
 
         b.addStatement("$T bridge = container.get($T.class)", bridgeClass, bridgeClass);
         if (s.wantsKafkaContext()) {
-            b.addStatement("return bridge.$L(($T) payload, ctx)", s.method().getSimpleName(), payloadName);
+            b.addStatement("return bridge.$L(($T) payload, ctx)", s.method().jvmName(), payloadName);
         } else {
-            b.addStatement("return bridge.$L(($T) payload)", s.method().getSimpleName(), payloadName);
+            b.addStatement("return bridge.$L(($T) payload)", s.method().jvmName(), payloadName);
         }
         return b.build();
     }
 
     private MethodSpec buildSinkDispatcher(KafkaSinkDescriptor s, int index) {
-        ClassName bridgeClass = ClassName.get(s.enclosingClass());
-        TypeName eventName = TypeName.get(s.eventType());
+        ClassName bridgeClass = s.enclosingClass().className();
+        TypeName eventName = s.eventType().javaPoet();
 
         MethodSpec.Builder b = MethodSpec.methodBuilder("sink" + index)
                 .addModifiers(Modifier.PRIVATE)
@@ -221,12 +218,12 @@ public final class KafkaTransportBootstrapGenerator {
                 .addParameter(Object.class, "event");
 
         b.addStatement("$T bridge = container.get($T.class)", bridgeClass, bridgeClass);
-        b.addStatement("return bridge.$L(($T) event)", s.method().getSimpleName(), eventName);
+        b.addStatement("return bridge.$L(($T) event)", s.method().jvmName(), eventName);
         return b.build();
     }
 
     private MethodSpec buildSinkKeyExtractor(KafkaSinkDescriptor s, int index) {
-        TypeName payloadName = TypeName.get(s.producedPayloadType());
+        TypeName payloadName = s.producedPayloadType().javaPoet();
         return MethodSpec.methodBuilder("key" + index)
                 .addModifiers(Modifier.PRIVATE, Modifier.STATIC)
                 .returns(String.class)
@@ -236,14 +233,5 @@ public final class KafkaTransportBootstrapGenerator {
                 .addStatement("$T v = (($T) p).$L()", Object.class, payloadName, s.partitionKey())
                 .addStatement("return v == null ? null : $T.valueOf(v)", String.class)
                 .build();
-    }
-
-    private void writeServiceLoaderEntry(Filer filer) throws IOException {
-        var resource =
-                filer.createResource(StandardLocation.CLASS_OUTPUT, "", "META-INF/services/io.tiko.TransportBootstrap");
-        try (Writer w = new OutputStreamWriter(resource.openOutputStream(), StandardCharsets.UTF_8)) {
-            w.write(GENERATED_PACKAGE + "." + CLASS_NAME);
-            w.write("\n");
-        }
     }
 }

@@ -1,14 +1,14 @@
 package io.tiko.kafka.processor.model;
 
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.TypeMirror;
+import io.tiko.processor.core.model.ClassDecl;
+import io.tiko.processor.core.model.MethodDecl;
+import io.tiko.processor.core.model.TypeRef;
 
 /**
  * Compile-time descriptor for one {@code @KafkaSink}-annotated bridge method.
  *
  * @param enclosingClass         declaring {@code @Component} class
- * @param method                 the bridge method element
+ * @param method                 the bridge method
  * @param topic                  {@code @KafkaSink(topic)}
  * @param partitionKey           {@code @KafkaSink(partitionKey)}; empty means null key
  * @param serializerClass        {@code @KafkaSink(serializer)} or {@code KafkaSerializer.Default.class}
@@ -16,10 +16,10 @@ import javax.lang.model.type.TypeMirror;
  * @param producedPayloadType    the bridge method's return type (the Kafka payload)
  */
 public record KafkaSinkDescriptor(
-        TypeElement enclosingClass,
-        ExecutableElement method,
+        ClassDecl enclosingClass,
+        MethodDecl method,
         String topic,
         String partitionKey,
-        TypeMirror serializerClass,
-        TypeMirror eventType,
-        TypeMirror producedPayloadType) {}
+        TypeRef serializerClass,
+        TypeRef eventType,
+        TypeRef producedPayloadType) {}

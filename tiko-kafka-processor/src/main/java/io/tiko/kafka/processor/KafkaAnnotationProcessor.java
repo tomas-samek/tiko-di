@@ -1,50 +1,30 @@
 package io.tiko.kafka.processor;
 
 import com.google.auto.service.AutoService;
-import io.tiko.annotations.EventTrigger;
-import io.tiko.kafka.KafkaSerializer;
 import io.tiko.kafka.annotations.KafkaSink;
 import io.tiko.kafka.annotations.KafkaSource;
-import io.tiko.kafka.processor.generator.KafkaTopologyWriter;
-import io.tiko.kafka.processor.generator.KafkaTransportBootstrapGenerator;
-import io.tiko.kafka.processor.model.KafkaSinkDescriptor;
-import io.tiko.kafka.processor.model.KafkaSourceDescriptor;
-import io.tiko.kafka.processor.validation.BridgeMethodShapeValidator;
-import io.tiko.kafka.processor.validation.PartitionKeyValidator;
-import io.tiko.kafka.processor.validation.RequiredSiblingValidator;
-import io.tiko.kafka.processor.validation.SingletonBridgeValidator;
-import java.util.List;
+import io.tiko.processor.core.javac.JavacProcessingEnv;
 import java.util.Set;
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Generated;
 import javax.annotation.processing.Processor;
 import javax.annotation.processing.RoundEnvironment;
 import javax.lang.model.SourceVersion;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.AnnotationValue;
-import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.MirroredTypeException;
-import javax.lang.model.type.TypeMirror;
 
 /**
- * Main entry point for the Kafka annotation processor. Independent of
+ * The javac entry point of the Kafka annotation processor. Independent of
  * {@code TikoAnnotationProcessor}: both register via {@code @AutoService} and both run
  * on the user's annotation-processor path.
  *
- * <p>Pipeline:
- * <ol>
- *   <li>Discover all {@code @KafkaSource} and {@code @KafkaSink} methods, build descriptors.</li>
- *   <li>Run validations (see {@link KafkaSourceValidator}, {@link KafkaSinkValidator}).</li>
- *   <li>If no errors: emit {@code io.tiko.generated.KafkaTransportBootstrap} + the
- *       {@code META-INF/services/io.tiko.TransportBootstrap} entry.</li>
- * </ol>
+ * <p>A thin frontend shell: each round it wraps javac in a {@link JavacProcessingEnv} and hands
+ * it to the {@link KafkaPipeline}, which collects, validates and generates. This class only
+ * decides what javac needs decided: which annotations to claim and when to call the pipeline.
  */
 @AutoService(Processor.class)
 public final class KafkaAnnotationProcessor extends AbstractProcessor {
 
-    private boolean done;
+    private final KafkaPipeline pipeline = new KafkaPipeline();
 
     /**
      * Supported only so the processor can claim it on its generated bootstrap in the rounds
@@ -70,106 +50,21 @@ public final class KafkaAnnotationProcessor extends AbstractProcessor {
 
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
-        if (roundEnv.processingOver()) return false;
+        var env = JavacProcessingEnv.of(processingEnv, roundEnv);
+        if (roundEnv.processingOver()) {
+            // No-op on javac: the output went out in the round that carried the bridges, if any.
+            pipeline.finish(env);
+            return false;
+        }
         // Rounds after generation: claim @Generated on the previous round's output.
-        if (done) return true;
+        if (pipeline.finished()) return true;
         // Only foreign @Generated sources this round: nothing to bridge, and not ours to claim.
         if (annotations.stream().allMatch(a -> a.getQualifiedName().contentEquals(GENERATED_FQN))) return false;
 
-        List<KafkaSourceDescriptor> sources = roundEnv.getElementsAnnotatedWith(KafkaSource.class).stream()
-                .filter(ExecutableElement.class::isInstance)
-                .map(e -> buildSourceDescriptor((ExecutableElement) e))
-                .toList();
-
-        List<KafkaSinkDescriptor> sinks = roundEnv.getElementsAnnotatedWith(KafkaSink.class).stream()
-                .filter(ExecutableElement.class::isInstance)
-                .map(e -> buildSinkDescriptor((ExecutableElement) e))
-                .toList();
-
-        if (!sources.isEmpty() || !sinks.isEmpty()) {
-            boolean ok = true;
-            ok &= SingletonBridgeValidator.validate(processingEnv.getMessager(), sources, sinks);
-            ok &= RequiredSiblingValidator.validate(processingEnv.getMessager(), sources, sinks);
-            ok &= BridgeMethodShapeValidator.validate(processingEnv.getMessager(), sources, sinks);
-            ok &= PartitionKeyValidator.validate(processingEnv, processingEnv.getMessager(), sinks);
-            if (!ok) return false;
-            try {
-                new KafkaTransportBootstrapGenerator(processingEnv).generate(sources, sinks);
-                // Companion topology fragment (#312): lets the MCP topology store see the
-                // transport edges the core Kafka-agnostic topology.json cannot.
-                new KafkaTopologyWriter(processingEnv.getFiler()).write(sources, sinks);
-            } catch (java.io.IOException ex) {
-                processingEnv
-                        .getMessager()
-                        .printMessage(
-                                javax.tools.Diagnostic.Kind.ERROR,
-                                "Failed to generate KafkaTransportBootstrap: " + ex.getMessage());
-            }
-        }
-
-        done = true;
+        pipeline.process(env);
+        if (pipeline.failed()) return false;
+        // Generate in this round, not at processingOver(): see KafkaPipeline's timing notes.
+        pipeline.finish(env);
         return true; // Claim @KafkaSource / @KafkaSink
-    }
-
-    private KafkaSourceDescriptor buildSourceDescriptor(ExecutableElement method) {
-        KafkaSource ann = method.getAnnotation(KafkaSource.class);
-        EventTrigger trigger = method.getAnnotation(EventTrigger.class);
-
-        TypeElement enclosing = (TypeElement) method.getEnclosingElement();
-        List<? extends VariableElement> params = method.getParameters();
-        TypeMirror payload = params.isEmpty() ? null : params.get(0).asType();
-        boolean wantsContext =
-                params.size() >= 2 && params.get(1).asType().toString().equals("io.tiko.kafka.KafkaContext");
-
-        return new KafkaSourceDescriptor(
-                enclosing,
-                method,
-                ann.topic(),
-                ann.consumerGroup(),
-                readClassValue(method, KafkaSource.class, "serializer", KafkaSerializer.Default.class),
-                trigger == null ? "" : trigger.eventName(),
-                payload,
-                method.getReturnType(),
-                wantsContext);
-    }
-
-    private KafkaSinkDescriptor buildSinkDescriptor(ExecutableElement method) {
-        KafkaSink ann = method.getAnnotation(KafkaSink.class);
-
-        TypeElement enclosing = (TypeElement) method.getEnclosingElement();
-        List<? extends VariableElement> params = method.getParameters();
-        TypeMirror eventType = params.isEmpty() ? null : params.get(0).asType();
-
-        return new KafkaSinkDescriptor(
-                enclosing,
-                method,
-                ann.topic(),
-                ann.partitionKey(),
-                readClassValue(method, KafkaSink.class, "serializer", KafkaSerializer.Default.class),
-                eventType,
-                method.getReturnType());
-    }
-
-    /**
-     * Reads a {@code Class<?>} annotation value via {@link MirroredTypeException}, the only
-     * reliable way to get a {@code TypeMirror} for an annotation's class-literal parameter
-     * during annotation processing.
-     */
-    private TypeMirror readClassValue(
-            ExecutableElement method, Class<?> annotation, String memberName, Class<?> defaultClass) {
-        for (AnnotationMirror am : method.getAnnotationMirrors()) {
-            if (!am.getAnnotationType().toString().equals(annotation.getCanonicalName())) continue;
-            for (var entry : am.getElementValues().entrySet()) {
-                if (entry.getKey().getSimpleName().contentEquals(memberName)) {
-                    AnnotationValue v = entry.getValue();
-                    return (TypeMirror) v.getValue();
-                }
-            }
-        }
-        // No explicit value — return the default class's TypeMirror.
-        return processingEnv
-                .getElementUtils()
-                .getTypeElement(defaultClass.getCanonicalName())
-                .asType();
     }
 }
