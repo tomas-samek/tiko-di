@@ -1,6 +1,7 @@
 package io.tiko.processor.core.ksp;
 
 import com.google.devtools.ksp.UtilsKt;
+import com.google.devtools.ksp.processing.Resolver;
 import com.google.devtools.ksp.symbol.ClassKind;
 import com.google.devtools.ksp.symbol.KSClassDeclaration;
 import com.google.devtools.ksp.symbol.KSDeclaration;
@@ -39,6 +40,7 @@ import kotlin.sequences.SequencesKt;
 final class KspClassDecl implements ClassDecl {
 
     private static final String RECORD = "java.lang.Record";
+    private static final String JVM_RECORD = "kotlin.jvm.JvmRecord";
     private static final String ANY = "kotlin.Any";
 
     private final KspRef<KSClassDeclaration> ref;
@@ -70,7 +72,7 @@ final class KspClassDecl implements ClassDecl {
         var declaration = declaration();
         return switch (declaration.getClassKind()) {
             case INTERFACE -> DeclKind.INTERFACE;
-            case CLASS -> isRecord(declaration) ? DeclKind.RECORD : DeclKind.CLASS;
+            case CLASS -> isRecord(declaration) || isJvmRecord(declaration) ? DeclKind.RECORD : DeclKind.CLASS;
             case ENUM_CLASS -> DeclKind.ENUM;
             case ANNOTATION_CLASS -> DeclKind.ANNOTATION;
             case OBJECT -> declaration.isCompanionObject() ? DeclKind.KOTLIN_COMPANION : DeclKind.KOTLIN_OBJECT;
@@ -85,6 +87,16 @@ final class KspClassDecl implements ClassDecl {
                     var resolved = superType.resolve().getDeclaration().getQualifiedName();
                     return resolved != null && resolved.asString().equals(RECORD);
                 });
+    }
+
+    /**
+     * A Kotlin {@code @JvmRecord} class, which Kotlin compiles to a Java record: javac sees a
+     * record whose components are the primary constructor's properties.
+     */
+    private boolean isJvmRecord(KSClassDeclaration declaration) {
+        return !KspModel.isJava(declaration)
+                && KspAnnotationRef.first(ref, JVM_RECORD, key(), qualifiedName(), model)
+                        .isPresent();
     }
 
     @Override
@@ -282,9 +294,10 @@ final class KspClassDecl implements ClassDecl {
     }
 
     /**
-     * A Java record's components, in header order. KSP shows a Java record as its accessor
-     * functions and constructors, without fields, so the components are read off the canonical
-     * constructor (see {@link #canonicalConstructor}).
+     * A record's components, in header order. KSP shows a Java record as its accessor functions
+     * and constructors, without fields, so the components are read off the canonical constructor
+     * (see {@link #canonicalConstructor}); a Kotlin {@code @JvmRecord} class's are its primary
+     * constructor's parameters, which Kotlin makes the canonical constructor.
      *
      * @throws IllegalStateException when the canonical constructor cannot be told apart (see
      *     {@link #canonicalConstructor}): guessing would silently bind the wrong components
@@ -294,7 +307,13 @@ final class KspClassDecl implements ClassDecl {
         if (kind() != DeclKind.RECORD) {
             return List.of();
         }
-        return model.methodDecl(canonicalConstructor(declaration())).parameters().stream()
+        var declaration = declaration();
+        var canonical =
+                KspModel.isJava(declaration) ? canonicalConstructor(declaration) : declaration.getPrimaryConstructor();
+        if (canonical == null) {
+            return List.of();
+        }
+        return model.methodDecl(canonical).parameters().stream()
                 .<FieldDecl>map(parameter -> new KspRecordComponent(parameter, key() + "." + parameter.name()))
                 .toList();
     }
@@ -384,7 +403,7 @@ final class KspClassDecl implements ClassDecl {
     /**
      * The declared superclass, or the implicit one: {@code java.lang.Object} for a class or object
      * (Kotlin's implicit {@code Any}), {@code java.lang.Enum<E>} for an enum, {@code
-     * java.lang.Record} for a Java record. Empty for interfaces, annotations and {@code Any}
+     * java.lang.Record} for a Java record or a Kotlin {@code @JvmRecord} class. Empty for interfaces, annotations and {@code Any}
      * itself. An unresolved supertype counts as the superclass.
      */
     @Override
@@ -393,6 +412,10 @@ final class KspClassDecl implements ClassDecl {
         var kind = declaration.getClassKind();
         if (kind == ClassKind.INTERFACE || kind == ClassKind.ANNOTATION_CLASS || kotlinName.equals(ANY)) {
             return Optional.empty();
+        }
+        // A @JvmRecord class extends no class, so its listed Any stands for java.lang.Record.
+        if (isJvmRecord(declaration)) {
+            return Optional.of(model.typeRef(model.ref(recordType(model.resolver()), KspClassDecl::recordType)));
         }
         var superTypes = superTypes(declaration);
         for (var i = 0; i < superTypes.size(); i++) {
@@ -403,6 +426,10 @@ final class KspClassDecl implements ClassDecl {
         return Optional.of(model.typeRef(model.ref(
                 model.resolver().getBuiltIns().getAnyType(),
                 resolver -> resolver.getBuiltIns().getAnyType())));
+    }
+
+    private static KSType recordType(Resolver resolver) {
+        return KspModel.findClass(resolver, RECORD).asType(List.of());
     }
 
     /** The interfaces named in the supertype list, in declaration order; {@code Any} is never one. */

@@ -115,6 +115,10 @@ class KspDeclarationFactsTest {
 
             @JvmInline value class Meters(val raw: Double)
 
+            @JvmRecord data class Span(val start: Int, val label: String)
+
+            data class PlainData(val start: Int)
+
             class Accessors {
                 val plain: String = ""
                 var mutable: Int = 0
@@ -436,6 +440,19 @@ class KspDeclarationFactsTest {
                 fact("kotlinClassIsFinalByDefault", env -> cls(env, "f.Circle").isFinal(), true),
                 fact("abstractClassIsNotFinal", env -> cls(env, "f.Base").isFinal(), false),
                 fact("javaClassIsNotFinal", env -> cls(env, "f.Legacy").isFinal(), false),
+                fact("jvmRecordIsARecord", env -> cls(env, "f.Span").kind(), DeclKind.RECORD),
+                fact("plainDataClassIsAClass", env -> cls(env, "f.PlainData").kind(), DeclKind.CLASS),
+                fact(
+                        "jvmRecordComponentsArePrimaryConstructorParameters",
+                        env -> cls(env, "f.Span").recordComponents().stream()
+                                .map(component -> component.name() + ":"
+                                        + component.type().displayName())
+                                .toList(),
+                        List.of("start:int", "label:java.lang.String")),
+                fact(
+                        "jvmRecordSuperclassIsRecord",
+                        env -> cls(env, "f.Span").superclass().map(TypeRef::displayName),
+                        java.util.Optional.of("java.lang.Record")),
                 fact("valueClassIsValueClass", env -> cls(env, "f.Meters").isValueClass(), true),
                 fact(
                         "classpathValueClassIsValueClass",

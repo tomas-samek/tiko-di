@@ -10,6 +10,7 @@ import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.DeclKind;
 import io.tiko.processor.core.model.FieldDecl;
 import io.tiko.processor.core.model.ParamDecl;
+import io.tiko.processor.core.model.SourceLanguage;
 import io.tiko.processor.util.ProcessorContext;
 import io.tiko.processor.util.TypeRefs;
 import java.util.ArrayList;
@@ -45,8 +46,11 @@ public final class ConfigurationCollector {
     /** Registers the record's model, or reports why the type cannot be a configuration. */
     private void collectRecord(ClassDecl type, TypeOracle types) {
         if (type.kind() != DeclKind.RECORD) {
-            ctx.getErrorReporter()
-                    .error(type.location(), "@Configuration must be applied to a record", "Change `class` to `record`");
+            var fix = type.language() == SourceLanguage.KOTLIN
+                    ? "Annotate it with @JvmRecord: a `@JvmRecord data class` with `val` parameters compiles to a"
+                            + " record"
+                    : "Change `class` to `record`";
+            ctx.getErrorReporter().error(type.location(), "@Configuration must be applied to a record", fix);
             return;
         }
 
