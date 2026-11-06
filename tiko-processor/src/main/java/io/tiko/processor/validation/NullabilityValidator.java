@@ -45,6 +45,11 @@ import java.util.Optional;
  */
 public final class NullabilityValidator {
 
+    private static final String MISMATCH = "Nullability mismatch: ";
+    private static final String IS_DECLARED = " is declared ";
+    private static final String NOT_SEP = ", not ";
+    private static final String MAY_BE_NULL = ", which may be null.";
+
     private final ProcessorContext context;
     private final ErrorReporter errors;
     private final TypeUtil typeUtil;
@@ -177,7 +182,7 @@ public final class NullabilityValidator {
         var point = point(dependency, consumer);
         if (pointNullable) {
             var fixes = new ArrayList<String>();
-            fixes.add("Drop the ?: declare the parameter as " + code(pointText(dependency, false)) + ", not "
+            fixes.add("Drop the ?: declare the parameter as " + code(pointText(dependency, false)) + NOT_SEP
                     + code(pointText(dependency, true)));
             if (provider.factory() != null
                     && provider.factory().getDeclaringClass().language() == SourceLanguage.KOTLIN) {
@@ -187,7 +192,7 @@ public final class NullabilityValidator {
             errors.error(
                     ErrorReporter.NULLABILITY_MISMATCH,
                     dependency.getParameter().location(),
-                    "Nullability mismatch: " + point + " is declared " + code(pointText(dependency, true))
+                    MISMATCH + point + IS_DECLARED + code(pointText(dependency, true))
                             + ", but its provider " + provider.label() + " is never null. A ? on an injection"
                             + " point means its provider may return null; it never makes a dependency optional.",
                     fixes.toArray(String[]::new));
@@ -198,18 +203,18 @@ public final class NullabilityValidator {
             errors.error(
                     ErrorReporter.NULLABILITY_MISMATCH,
                     dependency.getParameter().location(),
-                    "Nullability mismatch: " + point + " is a Java parameter, which Tiko treats as non-null, but"
+                    MISMATCH + point + " is a Java parameter, which Tiko treats as non-null, but"
                             + " its provider " + provider.label() + " returns " + code(type + "?")
-                            + ", which may be null.",
+                            + MAY_BE_NULL,
                     "Java parameters can't be declared nullable, so " + makeNonNull);
             return;
         }
         errors.error(
                 ErrorReporter.NULLABILITY_MISMATCH,
                 dependency.getParameter().location(),
-                "Nullability mismatch: " + point + " is declared " + code(pointText(dependency, false))
+                MISMATCH + point + IS_DECLARED + code(pointText(dependency, false))
                         + " (non-null), but its provider " + provider.label() + " returns " + code(type + "?")
-                        + ", which may be null.",
+                        + MAY_BE_NULL,
                 "If null is a valid value here, declare the parameter as " + code(pointText(dependency, true)),
                 "Otherwise " + makeNonNull);
     }
@@ -220,7 +225,7 @@ public final class NullabilityValidator {
         errors.error(
                 ErrorReporter.NULLABILITY_MISMATCH,
                 dependency.getParameter().location(),
-                "Nullability mismatch: " + point(dependency, consumer) + " (" + consumer.scope() + ") receives the "
+                MISMATCH + point(dependency, consumer) + " (" + consumer.scope() + ") receives the "
                         + factory.getScope() + "-scoped " + provider.label() + " through a proxy that resolves the"
                         + " current unit's value on every call. The proxy itself is never null, so it can't stand"
                         + " for a " + code(type + "?") + " that may be null.",
@@ -234,9 +239,9 @@ public final class NullabilityValidator {
         errors.error(
                 ErrorReporter.NULLABILITY_MISMATCH,
                 dependency.getParameter().location(),
-                "Nullability mismatch: " + point(dependency, consumer) + " is declared " + code(declared + "?")
+                MISMATCH + point(dependency, consumer) + IS_DECLARED + code(declared + "?")
                         + ", but the container always passes a " + wrapper + ", never null.",
-                "Drop the ?: declare the parameter as " + code(declared) + ", not " + code(declared + "?"));
+                "Drop the ?: declare the parameter as " + code(declared) + NOT_SEP + code(declared + "?"));
     }
 
     private void reportNullablePicker(DependencyModel dependency, Consumer consumer) {
@@ -244,12 +249,12 @@ public final class NullabilityValidator {
         errors.error(
                 ErrorReporter.NULLABILITY_MISMATCH,
                 dependency.getParameter().location(),
-                "Nullability mismatch: " + point(dependency, consumer) + " is declared "
+                MISMATCH + point(dependency, consumer) + IS_DECLARED
                         + code(pointText(dependency, true))
                         + ", but a Picker can't hand out null: byName() and byImplClass()"
                         + " answer with an Optional, which reads a null as absent. A ?"
                         + " never makes a dependency optional.",
-                "Declare the parameter as " + code(pointText(dependency, false)) + ", not "
+                "Declare the parameter as " + code(pointText(dependency, false)) + NOT_SEP
                         + code(pointText(dependency, true)),
                 "To inject a nullable producer's value, declare the parameter as " + code(type + "?")
                         + " and let that producer provide it");
@@ -268,9 +273,9 @@ public final class NullabilityValidator {
         errors.error(
                 ErrorReporter.NULLABILITY_MISMATCH,
                 dependency.getParameter().location(),
-                "Nullability mismatch: " + point(dependency, consumer) + " is a " + code(pointText(dependency, false))
+                MISMATCH + point(dependency, consumer) + " is a " + code(pointText(dependency, false))
                         + ", which can hand out the value of @Produces " + producerName(factory) + ", and that"
-                        + " producer returns " + code(produced + "?") + ", which may be null.",
+                        + " producer returns " + code(produced + "?") + MAY_BE_NULL,
                 fixes.toArray(String[]::new));
     }
 

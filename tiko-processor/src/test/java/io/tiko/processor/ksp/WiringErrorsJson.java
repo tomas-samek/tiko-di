@@ -26,7 +26,7 @@ final class WiringErrorsJson {
         assertThat(result.exitCode()).as(result.messages()).isEqualTo(KotlinCompilation.ExitCode.COMPILATION_ERROR);
         assertThat(result.messages()).contains(fragments);
         assertThat(errors(result)).as("wiring-errors.json").anySatisfy(error -> {
-            assertThat(error.get("kind")).isEqualTo(kind);
+            assertThat(error).containsEntry("kind", kind);
             assertThat(String.valueOf(error.get("message"))).contains(fragments.get(0));
         });
     }

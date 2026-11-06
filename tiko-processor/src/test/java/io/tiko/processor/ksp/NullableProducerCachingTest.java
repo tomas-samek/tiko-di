@@ -48,7 +48,7 @@ class NullableProducerCachingTest {
     }
 
     @Test
-    void nullCloseableSingletonShutsDownCleanly() throws Exception {
+    void nullCloseableSingletonShutsDownCleanly() {
         var source = KspCompiler.kotlin(
                 "Graph.kt",
                 "package app",

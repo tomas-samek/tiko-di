@@ -758,7 +758,7 @@ public final class ContainerGenerator {
             emitUnitFrameGuard(method, storageKey);
             method.addStatement("$T __existing = eventScoped.get().get($S)", Object.class, storageKey);
             method.beginControlFlow(IF_EXISTING_NULL);
-            method.addStatement("__existing = $L", masked);
+            method.addStatement(ASSIGN_EXISTING, masked);
             method.addStatement("eventScoped.get().put($S, __existing)", storageKey);
             method.endControlFlow();
         }
@@ -1083,6 +1083,8 @@ public final class ContainerGenerator {
     private static final ClassName CONTAINER_SHUT_DOWN = ClassName.get(TIKO_PACKAGE, "ContainerShutDownException");
     /** Shared get-or-create statement fragments (S1192) — used by scoped and singleton emission. */
     private static final String IF_EXISTING_NULL = "if (__existing == null)";
+
+    private static final String ASSIGN_EXISTING = "__existing = $L";
 
     /** Lifecycle-publish gate shared by start/shutdown and both scope brackets (#45, #339). */
     private static final String IF_PUBLISH_LIFECYCLE = "if (publishLifecycleEvents)";

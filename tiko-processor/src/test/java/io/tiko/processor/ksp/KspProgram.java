@@ -35,7 +35,11 @@ final class KspProgram implements AutoCloseable {
 
     /** Boots {@code Tiko.create()} over the compiled program. */
     static KspProgram boot(KspResult result) {
-        var loader = new URLClassLoader(classpath(result.outputRoots()), ClassLoader.getPlatformClassLoader());
+        return boot(new URLClassLoader(classpath(result.outputRoots()), ClassLoader.getPlatformClassLoader()));
+    }
+
+    /** Boots over {@code loader}, which is closed again when the boot fails and owned by the program otherwise. */
+    private static KspProgram boot(URLClassLoader loader) {
         var thread = Thread.currentThread();
         var previous = thread.getContextClassLoader();
         thread.setContextClassLoader(loader);
