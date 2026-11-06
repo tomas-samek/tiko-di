@@ -5,17 +5,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.google.testing.compile.CompilationSubject;
 import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.io.Writer;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Stream;
-import javax.annotation.processing.AbstractProcessor;
-import javax.annotation.processing.RoundEnvironment;
-import javax.lang.model.SourceVersion;
-import javax.lang.model.element.TypeElement;
 import javax.tools.JavaFileObject;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -107,36 +99,5 @@ class UnresolvedClassLiteralTest {
         assertThat(compilation.errors()).hasSize(1);
         CompilationSubject.assertThat(compilation)
                 .hadNoteContaining("Tiko DI: Collected 0 components, 0 factories, 0 event handlers");
-    }
-
-    /** Generates the interface {@code p.Gen} in the first round, as a second processor would. */
-    private static final class GenGenerator extends AbstractProcessor {
-
-        private boolean done;
-
-        @Override
-        public Set<String> getSupportedAnnotationTypes() {
-            return Set.of("*");
-        }
-
-        @Override
-        public SourceVersion getSupportedSourceVersion() {
-            return SourceVersion.latestSupported();
-        }
-
-        @Override
-        public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
-            if (done) {
-                return false;
-            }
-            done = true;
-            try (Writer writer =
-                    processingEnv.getFiler().createSourceFile("p.Gen").openWriter()) {
-                writer.write("package p; public interface Gen {}");
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
-            }
-            return false;
-        }
     }
 }

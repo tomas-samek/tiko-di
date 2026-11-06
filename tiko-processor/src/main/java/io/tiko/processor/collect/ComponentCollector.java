@@ -27,7 +27,7 @@ import java.util.Set;
  * Builds a {@link ComponentModel} for every {@code @Component} class of the round, plus every
  * {@code @TestComponent} class when the optional test-support annotation is on the classpath, and
  * registers it with the {@link ProcessorContext}. A class whose model cannot be built is reported
- * and skipped.
+ * and marked rejected in the context, so the validators don't report its absence as well (#589).
  */
 public final class ComponentCollector {
 
@@ -65,13 +65,13 @@ public final class ComponentCollector {
         var collector = new ComponentCollector(env, ctx);
         for (var decl : env.classesAnnotatedWith(COMPONENT)) {
             if (!ctx.isRejected(decl)) {
-                collector.register(collector.buildComponentModel(decl));
+                collector.register(decl, COMPONENT, collector.buildComponentModel(decl));
             }
         }
         // Empty when the test-support annotation is not on the classpath.
         for (var decl : env.classesAnnotatedWith(TEST_COMPONENT_FQN)) {
             if (!ctx.isRejected(decl)) {
-                collector.registerTestComponent(decl);
+                collector.register(decl, TEST_COMPONENT_FQN, collector.buildTestComponent(decl));
             }
         }
     }
@@ -98,13 +98,17 @@ public final class ComponentCollector {
                 .orElse(Set.of());
     }
 
-    private void register(ComponentModel component) {
+    /** Registers the model; marks the class rejected when it has none (an error was reported). */
+    private void register(ClassDecl decl, String componentAnnotation, ComponentModel component) {
         if (component != null) {
             context.registerComponent(component);
+        } else {
+            context.reject(decl, componentAnnotation);
         }
     }
 
-    private void registerTestComponent(ClassDecl decl) {
+    /** The test component's model; {@code null} when an error was reported. */
+    private ComponentModel buildTestComponent(ClassDecl decl) {
         if (isInProductionSources(decl)) {
             var name = decl.className().simpleName();
             errors.error(
@@ -114,9 +118,9 @@ public final class ComponentCollector {
                             + " they ship in the jar as test wiring (#497).",
                     "Move " + name + " under src/test/java",
                     "Use @Component if " + name + " is a real production implementation");
-            return;
+            return null;
         }
-        register(buildTestComponentModel(decl));
+        return buildTestComponentModel(decl);
     }
 
     /**
@@ -285,13 +289,16 @@ public final class ComponentCollector {
             // Standard path: require a usable constructor.
             constructor = findInjectConstructor(decl);
             if (constructor == null) {
-                errors.error(
-                        decl.location(),
-                        attributes.annotationLabel()
-                                + " must have an @Inject-annotated constructor or a single public constructor",
-                        "Add @Inject annotation to a constructor",
-                        "Ensure only one public constructor exists if not using @Inject",
-                        "If instantiation goes through a static @Produces factory, no usable constructor is required");
+                // findInjectConstructor already reported more than one @Inject constructor.
+                if (!hasMultipleInjectConstructors(decl)) {
+                    errors.error(
+                            decl.location(),
+                            attributes.annotationLabel()
+                                    + " must have an @Inject-annotated constructor or a single public constructor",
+                            "Add @Inject annotation to a constructor",
+                            "Ensure only one public constructor exists if not using @Inject",
+                            "If instantiation goes through a static @Produces factory, no usable constructor is required");
+                }
                 return null;
             }
             dependencies = DependencyResolver.resolve(constructor, typeUtil, errors);
@@ -386,6 +393,13 @@ public final class ComponentCollector {
             return primary.get();
         }
         return publicConstructors.size() == 1 ? publicConstructors.get(0) : null;
+    }
+
+    private static boolean hasMultipleInjectConstructors(ClassDecl decl) {
+        return decl.constructors().stream()
+                        .filter(constructor -> constructor.annotation(INJECT).isPresent())
+                        .count()
+                > 1;
     }
 
     /** The methods declared on {@code decl} that carry the annotation and were not rejected, in declaration order. */

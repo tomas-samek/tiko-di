@@ -20,7 +20,7 @@ import java.util.List;
 /**
  * Builds an {@link EventHandlerModel} for every {@code @EventHandler} method of the round and
  * registers it with the {@link ProcessorContext}. Invalid timeout and retry declarations are
- * reported here, and the handler is skipped.
+ * reported here, and the handler is skipped; so is a handler on a rejected component.
  */
 public final class EventHandlerCollector {
 
@@ -37,8 +37,10 @@ public final class EventHandlerCollector {
             if (ctx.isRejected(method)) {
                 continue; // a Kotlin construct DI does not support, already reported
             }
+            // A handler on a rejected component is still checked, but not registered: there is no
+            // component to call it on, and the component's own error already says why (#589).
             var handler = buildEventHandlerModel(method, ctx.getErrorReporter());
-            if (handler != null) {
+            if (handler != null && !ctx.isRejected(handler.getOwner())) {
                 ctx.registerEventHandler(handler);
             }
         }
