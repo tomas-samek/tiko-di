@@ -17,4 +17,33 @@ class StackTracesTest {
                 .contains("\n  at ")
                 .contains("\nCaused by: java.lang.IllegalStateException: inner");
     }
+
+    @Test
+    void omitsSeparatorForNullMessage() {
+        var text = StackTraces.format(new IllegalStateException());
+
+        assertThat(text).startsWith("java.lang.IllegalStateException\n  at ").doesNotContain("null");
+    }
+
+    @Test
+    void doesNotRecurseIntoSelfReferentialCause() {
+        var selfCaused = new SelfCaused("loop");
+
+        var text = StackTraces.format(selfCaused);
+
+        assertThat(text).startsWith(SelfCaused.class.getName() + ": loop").doesNotContain("Caused by");
+    }
+
+    /** {@code getCause()} returning the throwable itself, as some legacy exceptions do. */
+    private static final class SelfCaused extends RuntimeException {
+
+        SelfCaused(String message) {
+            super(message);
+        }
+
+        @Override
+        public synchronized Throwable getCause() {
+            return this;
+        }
+    }
 }

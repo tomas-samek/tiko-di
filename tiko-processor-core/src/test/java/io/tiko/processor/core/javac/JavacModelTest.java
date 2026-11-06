@@ -107,6 +107,29 @@ class JavacModelTest {
                             assertThat(pick.types("value").get(0).erasedName()).isEqualTo("p.Foo");
                         })),
                 Arguments.of(
+                        "singleClassValueReadsAsType",
+                        source(
+                                "p.Bar",
+                                "package p;",
+                                "import io.tiko.annotations.Pick;",
+                                "class Foo {}",
+                                "public class Bar {",
+                                "    public Bar(@Pick(Foo.class) Object foo) {}",
+                                "}"),
+                        Check.model(env -> {
+                            var pick = find(env, "p.Bar")
+                                    .constructors()
+                                    .get(0)
+                                    .parameters()
+                                    .get(0)
+                                    .annotation(PICK)
+                                    .orElseThrow();
+                            assertThat(pick.type("value"))
+                                    .map(TypeRef::erasedName)
+                                    .hasValue("p.Foo");
+                            assertThat(pick.isUnresolved("value")).isFalse();
+                        })),
+                Arguments.of(
                         "unresolvedClassValueReadsAsAbsent",
                         source(
                                 "p.Uses",
