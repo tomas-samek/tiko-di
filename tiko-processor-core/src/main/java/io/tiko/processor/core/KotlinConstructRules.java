@@ -241,7 +241,7 @@ public final class KotlinConstructRules {
                 .map(parameter -> new Violation(
                         method.location(),
                         subject + " takes the Kotlin value class "
-                                + parameter.type().displayName() + " (parameter '" + parameter.name() + "')"
+                                + parameter.type().displayName() + parameterNote(parameter)
                                 + valueClassReason(caller),
                         VALUE_CLASS_FIX));
     }
@@ -268,7 +268,7 @@ public final class KotlinConstructRules {
             return Optional.of(new Violation(
                     method.location(),
                     subject + " takes the Kotlin value class "
-                            + parameter.type().displayName() + " (parameter '" + parameter.name() + "')"
+                            + parameter.type().displayName() + parameterNote(parameter)
                             + valueClassReason(caller),
                     PROXY_VALUE_CLASS_FIX));
         }
@@ -295,8 +295,8 @@ public final class KotlinConstructRules {
         }
         return Optional.of(new Violation(
                 parameter.location(),
-                consumer + " injects the Kotlin value class " + parameter.type().displayName() + " (parameter '"
-                        + parameter.name() + "')" + valueClassReason(caller),
+                consumer + " injects the Kotlin value class " + parameter.type().displayName()
+                        + parameterNote(parameter) + valueClassReason(caller),
                 VALUE_CLASS_FIX));
     }
 
@@ -337,6 +337,10 @@ public final class KotlinConstructRules {
 
     private static boolean isValueClass(TypeRef type) {
         return type.declaration().map(ClassDecl::isValueClass).orElse(false);
+    }
+
+    private static String parameterNote(ParamDecl parameter) {
+        return " (parameter '" + parameter.name() + "')";
     }
 
     private static String valueClassReason(Caller caller) {
