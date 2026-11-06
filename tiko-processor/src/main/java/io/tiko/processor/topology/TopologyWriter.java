@@ -38,7 +38,7 @@ public final class TopologyWriter {
 
     /** Writes the JSON resource through the supplied output. */
     public void write(CodeOutput output) throws IOException {
-        output.writeResource(PATH, render(), List.of());
+        output.writeResource(PATH, render(), context.getOriginatingDeclarations());
     }
 
     /** Serializes to a String — also used by unit tests so they don't need an output. */

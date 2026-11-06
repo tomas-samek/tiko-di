@@ -59,7 +59,8 @@ public final class KafkaAnnotationProcessor extends AbstractProcessor {
         // Rounds after generation: claim @Generated on the previous round's output.
         if (pipeline.finished()) return true;
         // Only foreign @Generated sources this round: nothing to bridge, and not ours to claim.
-        if (annotations.stream().allMatch(a -> a.getQualifiedName().contentEquals(GENERATED_FQN))) return false;
+        if (!KafkaPipeline.isEntryPointRound(
+                name -> annotations.stream().anyMatch(a -> a.getQualifiedName().contentEquals(name)))) return false;
 
         pipeline.process(env);
         if (pipeline.failed()) return false;

@@ -67,6 +67,11 @@
         <logback.version>1.5.38</logback.version>
         <junit.version>5.10.1</junit.version>
         <compile-testing.version>0.21.0</compile-testing.version>
+        <!-- KSP2 (the processors' Kotlin frontend) and the Kotlin stdlib its API is written against:
+             both provided in tiko-processor-core. kctfork drives KSP2 in tests only (MPL-2.0). -->
+        <ksp.version>2.3.13</ksp.version>
+        <kotlin.version>2.4.21</kotlin.version>
+        <kctfork.version>0.14.0</kctfork.version>
         <snakeyaml.version>2.3</snakeyaml.version>
         <kafka-clients.version>3.9.2</kafka-clients.version>
         <!-- kafka-clients 3.9.2 pulls lz4-java 1.10.1 (GHSA-4v53-57pg-c464, GHSA-6cx8-rjf8-pr8g,
@@ -195,6 +200,18 @@
                 <version>${javapoet.version}</version>
             </dependency>
 
+            <!-- Kotlin frontend (KSP2) -->
+            <dependency>
+                <groupId>com.google.devtools.ksp</groupId>
+                <artifactId>symbol-processing-api</artifactId>
+                <version>${ksp.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jetbrains.kotlin</groupId>
+                <artifactId>kotlin-stdlib</artifactId>
+                <version>${kotlin.version}</version>
+            </dependency>
+
             <!-- Logging -->
             <dependency>
                 <groupId>org.slf4j</groupId>
@@ -259,6 +276,26 @@
                 <artifactId>compile-testing</artifactId>
                 <version>${compile-testing.version}</version>
                 <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>dev.zacsweers.kctfork</groupId>
+                <artifactId>core</artifactId>
+                <version>${kctfork.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>dev.zacsweers.kctfork</groupId>
+                <artifactId>ksp</artifactId>
+                <version>${kctfork.version}</version>
+                <scope>test</scope>
+                <exclusions>
+                    <!-- A pom-packaged artifact kctfork's POM declares as a jar (Gradle reads the
+                         module metadata instead); Maven cannot resolve it, and it carries no classes. -->
+                    <exclusion>
+                        <groupId>com.google.devtools.ksp</groupId>
+                        <artifactId>symbol-processing</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
             <dependency>
                 <groupId>org.apache.kafka</groupId>
@@ -352,6 +389,13 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>3.6.1</version>
+                </plugin>
+                <!-- The version Maven 3.9's default lifecycle binds; pinned so tiko-processor-core's
+                     test-jar execution builds on the same plugin as every module's main jar. -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>3.4.1</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>

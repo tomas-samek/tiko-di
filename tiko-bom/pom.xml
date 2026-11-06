@@ -66,6 +66,7 @@
         <assertj.version>3.27.7</assertj.version>
         <mockito.version>5.7.0</mockito.version>
         <mcp-sdk.version>2.0.1</mcp-sdk.version>
+        <kctfork.version>0.14.0</kctfork.version>
 
         <!-- Release-plugin versions (mirrored from the parent POM; tiko-bom intentionally
              has no <parent>, so it cannot inherit them). Keep in sync with root pom.xml. -->
@@ -147,6 +148,8 @@
                 <artifactId>javapoet</artifactId>
                 <version>${javapoet.version}</version>
             </dependency>
+            <!-- No symbol-processing-api or kotlin-stdlib here: the processors use them only as provided
+                 dependencies, and a consumer's own KSP and Kotlin toolchain chooses their versions. -->
 
             <!-- Logging -->
             <dependency>
@@ -209,6 +212,26 @@
                 <artifactId>tiko-test</artifactId>
                 <version>${tiko.version}</version>
                 <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>dev.zacsweers.kctfork</groupId>
+                <artifactId>core</artifactId>
+                <version>${kctfork.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>dev.zacsweers.kctfork</groupId>
+                <artifactId>ksp</artifactId>
+                <version>${kctfork.version}</version>
+                <scope>test</scope>
+                <exclusions>
+                    <!-- A pom-packaged artifact kctfork's POM declares as a jar (Gradle reads the
+                         module metadata instead); Maven cannot resolve it, and it carries no classes. -->
+                    <exclusion>
+                        <groupId>com.google.devtools.ksp</groupId>
+                        <artifactId>symbol-processing</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
         </dependencies>
     </dependencyManagement>

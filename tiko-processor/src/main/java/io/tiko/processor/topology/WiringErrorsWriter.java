@@ -2,6 +2,7 @@ package io.tiko.processor.topology;
 
 import io.tiko.processor.core.CodeOutput;
 import io.tiko.processor.core.JsonWriter;
+import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.model.WiringError;
 import java.io.IOException;
 import java.io.StringWriter;
@@ -30,9 +31,9 @@ public final class WiringErrorsWriter {
         this.errors = errors;
     }
 
-    /** Writes the JSON resource through the supplied output. */
-    public void write(CodeOutput output) throws IOException {
-        output.writeResource(PATH, render(), List.of());
+    /** Writes the JSON resource through the supplied output, derived from {@code originating}. */
+    public void write(CodeOutput output, List<ClassDecl> originating) throws IOException {
+        output.writeResource(PATH, render(), originating);
     }
 
     /** Serializes to a String — also used by unit tests so they don't need an output. */

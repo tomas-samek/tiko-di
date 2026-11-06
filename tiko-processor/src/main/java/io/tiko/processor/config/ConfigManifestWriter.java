@@ -39,6 +39,9 @@ public final class ConfigManifestWriter {
                     .append(cfg.prefix())
                     .append('\n');
         }
-        output.writeResource(path, manifest.toString(), List.of());
+        output.writeResource(
+                path,
+                manifest.toString(),
+                configs.stream().map(ConfigurationModel::declaration).toList());
     }
 }

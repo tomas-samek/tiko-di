@@ -1,0 +1,128 @@
+package io.tiko.processor.core.ksp;
+
+import com.google.devtools.ksp.UtilsKt;
+import com.google.devtools.ksp.processing.CodeGenerator;
+import com.google.devtools.ksp.processing.KSPLogger;
+import com.google.devtools.ksp.processing.Resolver;
+import com.google.devtools.ksp.symbol.KSClassDeclaration;
+import com.google.devtools.ksp.symbol.KSFunctionDeclaration;
+import io.tiko.processor.core.ClasspathProbe;
+import io.tiko.processor.core.CodeOutput;
+import io.tiko.processor.core.Diagnostics;
+import io.tiko.processor.core.ProcessingEnv;
+import io.tiko.processor.core.SourceVersionInfo;
+import io.tiko.processor.core.TypeOracle;
+import io.tiko.processor.core.model.ClassDecl;
+import io.tiko.processor.core.model.MethodDecl;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import kotlin.sequences.SequencesKt;
+
+/**
+ * The KSP2 {@link ProcessingEnv}: one round of a {@code SymbolProcessor}.
+ *
+ * <p>The first round's env comes from {@link #of}, every later one from {@link #nextRound} on the
+ * previous env. The rounds share a session, and that is what keeps the model usable across them:
+ * KSP2 symbols die with their round (once a round has generated files, touching a symbol from
+ * before it throws {@code KaInvalidLifetimeOwnerAccessException}, "PSI has changed since
+ * creation"), so every model object finds its symbol again through the current round's resolver
+ * the first time it is read in a later round. Model objects from different rounds stay equal when
+ * they denote the same declaration, as the model contract requires.
+ *
+ * <p>{@link #classpath()} never finds anything: classpath probing is not supported on KSP yet.
+ * {@link #sourceVersion()} is the running JDK's release, as KSP does not expose a Java one.
+ */
+public final class KspProcessingEnv implements ProcessingEnv {
+
+    private final Resolver resolver;
+    private final KspModel model;
+    private final CodeGenerator codeGenerator;
+    private final KSPLogger logger;
+    private final Map<String, String> options;
+    private final Diagnostics diagnostics;
+    private final CodeOutput output;
+    private final TypeOracle types;
+
+    private KspProcessingEnv(
+            Resolver resolver,
+            KspModel model,
+            CodeGenerator codeGenerator,
+            KSPLogger logger,
+            Map<String, String> options) {
+        this.resolver = resolver;
+        this.model = model;
+        this.codeGenerator = codeGenerator;
+        this.logger = logger;
+        this.options = Map.copyOf(options);
+        this.diagnostics = new KspDiagnostics(logger);
+        this.output = new KspCodeOutput(codeGenerator);
+        this.types = new KspTypeOracle(model);
+    }
+
+    /** Wraps the first round of a compilation; later rounds come from {@link #nextRound}. */
+    public static KspProcessingEnv of(
+            Resolver resolver, CodeGenerator codeGenerator, KSPLogger logger, Map<String, String> options) {
+        return new KspProcessingEnv(resolver, new KspModel(new KspSession(resolver)), codeGenerator, logger, options);
+    }
+
+    /**
+     * Wraps the next round of the same compilation. Model objects made through earlier rounds' envs
+     * now resolve through {@code next}; do not use the earlier envs any more.
+     */
+    public KspProcessingEnv nextRound(Resolver next) {
+        model.session().enterRound(next);
+        return new KspProcessingEnv(next, model, codeGenerator, logger, options);
+    }
+
+    @Override
+    public Diagnostics diagnostics() {
+        return diagnostics;
+    }
+
+    @Override
+    public CodeOutput output() {
+        return output;
+    }
+
+    @Override
+    public TypeOracle types() {
+        return types;
+    }
+
+    @Override
+    public ClasspathProbe classpath() {
+        return path -> Optional.empty();
+    }
+
+    @Override
+    public Map<String, String> options() {
+        return options;
+    }
+
+    @Override
+    public SourceVersionInfo sourceVersion() {
+        return new SourceVersionInfo(Runtime.version().feature());
+    }
+
+    /** Classes in this round's new files (and deferred symbols) carrying the annotation, in source order. */
+    @Override
+    public List<ClassDecl> classesAnnotatedWith(String annotationFqn) {
+        return SequencesKt.toList(resolver.getSymbolsWithAnnotation(annotationFqn, false)).stream()
+                .filter(KSClassDeclaration.class::isInstance)
+                .map(KSClassDeclaration.class::cast)
+                .map(model::classDecl)
+                .toList();
+    }
+
+    /** Functions (not constructors) carrying the annotation, top-level functions included, in source order. */
+    @Override
+    public List<MethodDecl> methodsAnnotatedWith(String annotationFqn) {
+        return SequencesKt.toList(resolver.getSymbolsWithAnnotation(annotationFqn, false)).stream()
+                .filter(KSFunctionDeclaration.class::isInstance)
+                .map(KSFunctionDeclaration.class::cast)
+                .filter(function -> !UtilsKt.isConstructor(function))
+                .map(model::methodDecl)
+                .toList();
+    }
+}

@@ -21,6 +21,9 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.function.Predicate;
 
 /**
  * The Kafka processor's logic, independent of the compiler frontend: it collects the
@@ -42,14 +45,28 @@ import java.util.Optional;
  * <p>Timing per frontend: javac calls {@code finish} in the same round as {@code process}, the
  * first round that carries bridges, and again (as a no-op) when processing is over. Files written
  * in javac's final round are not processed further and draw a "created in the last round"
- * warning, which fails {@code -Xlint:processing -Werror} builds. KSP calls {@code finish} from
- * {@code SymbolProcessor.finish()}.
+ * warning, which fails {@code -Xlint:processing -Werror} builds. KSP calls {@code finish} in the
+ * first round whose new files carry no bridge after a round that did, else from
+ * {@code SymbolProcessor.finish()}, whose output KSP still compiles.
  */
 public final class KafkaPipeline {
 
     private static final String KAFKA_SOURCE = KafkaSource.class.getCanonicalName();
     private static final String KAFKA_SINK = KafkaSink.class.getCanonicalName();
     private static final String EVENT_TRIGGER = EventTrigger.class.getCanonicalName();
+
+    /** The bridge annotations: a round carrying neither has nothing for this pipeline. */
+    public static final Set<String> BRIDGE_ANNOTATIONS = Set.of(KAFKA_SOURCE, KAFKA_SINK);
+
+    /**
+     * Whether a round carries a bridge annotation ({@link #BRIDGE_ANNOTATIONS}): the one rule both
+     * frontends use to decide which rounds go to {@link #process}.
+     *
+     * @param roundCarries whether the round carries the annotation with this qualified name
+     */
+    public static boolean isEntryPointRound(Predicate<String> roundCarries) {
+        return BRIDGE_ANNOTATIONS.stream().anyMatch(roundCarries);
+    }
 
     private final List<KafkaSourceDescriptor> sources = new ArrayList<>();
     private final List<KafkaSinkDescriptor> sinks = new ArrayList<>();
@@ -89,13 +106,25 @@ public final class KafkaPipeline {
         if (finished || failed) return;
         finished = true;
         try {
-            new KafkaTransportBootstrapGenerator(env.output()).generate(sources, sinks);
+            var originating = bridgeClasses();
+            new KafkaTransportBootstrapGenerator(env.output()).generate(sources, sinks, originating);
             // Companion topology fragment (#312): lets the MCP topology store see the
             // transport edges the core Kafka-agnostic topology.json cannot.
-            new KafkaTopologyWriter(env.output()).write(sources, sinks);
+            new KafkaTopologyWriter(env.output()).write(sources, sinks, originating);
         } catch (IOException ex) {
             env.diagnostics().error(null, "Failed to generate KafkaTransportBootstrap: " + ex.getMessage());
         }
+    }
+
+    /**
+     * The bridges' declaring classes, once each and by qualified name: the output's originating
+     * declarations (javac Filer originating elements; KSP incremental inputs).
+     */
+    private List<ClassDecl> bridgeClasses() {
+        var classes = new TreeMap<String, ClassDecl>();
+        sources.forEach(s -> classes.putIfAbsent(s.enclosingClass().qualifiedName(), s.enclosingClass()));
+        sinks.forEach(s -> classes.putIfAbsent(s.enclosingClass().qualifiedName(), s.enclosingClass()));
+        return List.copyOf(classes.values());
     }
 
     /** Whether a bridge failed validation in any round; {@link #finish} then writes nothing. */
@@ -103,7 +132,11 @@ public final class KafkaPipeline {
         return failed;
     }
 
-    /** Whether {@link #finish} has run (and written the output, if there was any to write). */
+    /**
+     * Whether {@link #finish} has run and written the output (if there was any to write). Stays
+     * {@code false} after a validation failure, as {@code finish} then writes nothing and leaves
+     * the pipeline unfinished.
+     */
     public boolean finished() {
         return finished;
     }

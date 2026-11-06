@@ -4,6 +4,7 @@ import io.tiko.kafka.processor.model.KafkaSinkDescriptor;
 import io.tiko.kafka.processor.model.KafkaSourceDescriptor;
 import io.tiko.processor.core.CodeOutput;
 import io.tiko.processor.core.JsonWriter;
+import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.TypeRef;
 import java.io.IOException;
 import java.io.StringWriter;
@@ -40,11 +41,15 @@ public final class KafkaTopologyWriter {
         this.output = output;
     }
 
-    /** Writes the fragment when there is at least one source or sink; a no-op otherwise. */
-    public void write(List<KafkaSourceDescriptor> sources, List<KafkaSinkDescriptor> sinks) throws IOException {
+    /**
+     * Writes the fragment when there is at least one source or sink; a no-op otherwise.
+     * {@code originating} are the bridges' declaring classes.
+     */
+    public void write(List<KafkaSourceDescriptor> sources, List<KafkaSinkDescriptor> sinks, List<ClassDecl> originating)
+            throws IOException {
         if (sources.isEmpty() && sinks.isEmpty()) return;
 
-        output.writeResource(PATH, render(sources, sinks), List.of());
+        output.writeResource(PATH, render(sources, sinks), originating);
     }
 
     /** Serializes to a String — also used by unit tests so they don't need a {@link CodeOutput}. */

@@ -10,6 +10,7 @@ import io.tiko.kafka.processor.model.KafkaSinkDescriptor;
 import io.tiko.kafka.processor.model.KafkaSourceDescriptor;
 import io.tiko.processor.core.CodeOutput;
 import io.tiko.processor.core.GeneratorAnnotations;
+import io.tiko.processor.core.model.ClassDecl;
 import java.io.IOException;
 import java.util.List;
 import javax.lang.model.element.Modifier;
@@ -47,7 +48,10 @@ public final class KafkaTransportBootstrapGenerator {
         this.output = output;
     }
 
-    public void generate(List<KafkaSourceDescriptor> sources, List<KafkaSinkDescriptor> sinks) throws IOException {
+    /** Writes the bootstrap and its service entry; {@code originating} are the bridges' declaring classes. */
+    public void generate(
+            List<KafkaSourceDescriptor> sources, List<KafkaSinkDescriptor> sinks, List<ClassDecl> originating)
+            throws IOException {
         if (sources.isEmpty() && sinks.isEmpty()) return;
 
         TypeSpec.Builder cls = TypeSpec.classBuilder(CLASS_NAME)
@@ -79,9 +83,9 @@ public final class KafkaTransportBootstrapGenerator {
             }
         }
 
-        output.writeJava(JavaFile.builder(GENERATED_PACKAGE, cls.build()).build(), List.of(), true);
+        output.writeJava(JavaFile.builder(GENERATED_PACKAGE, cls.build()).build(), originating, true);
 
-        output.writeResource(SERVICE_FILE, GENERATED_PACKAGE + "." + CLASS_NAME + "\n", List.of());
+        output.writeResource(SERVICE_FILE, GENERATED_PACKAGE + "." + CLASS_NAME + "\n", originating);
     }
 
     private MethodSpec buildStartMethod(List<KafkaSourceDescriptor> sources, List<KafkaSinkDescriptor> sinks) {

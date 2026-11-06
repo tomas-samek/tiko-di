@@ -30,6 +30,9 @@ public final class ConfigBinderServicesWriter {
                     .append(cfg.binderSimpleName())
                     .append('\n');
         }
-        output.writeResource(PATH, services.toString(), List.of());
+        output.writeResource(
+                PATH,
+                services.toString(),
+                configs.stream().map(ConfigurationModel::declaration).toList());
     }
 }

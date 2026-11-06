@@ -8,7 +8,6 @@ import io.tiko.processor.util.ProcessorContext;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.Writer;
-import java.util.List;
 
 /**
  * Emits {@code META-INF/tiko/config-schema.json} — a JSON Schema draft 2020-12
@@ -30,7 +29,12 @@ public final class ConfigSchemaWriter {
     public void write(CodeOutput output) throws IOException {
         var json = new StringWriter();
         renderTo(json);
-        output.writeResource(PATH, json.toString(), List.of());
+        output.writeResource(
+                PATH,
+                json.toString(),
+                context.getConfigurations().stream()
+                        .map(ConfigurationModel::declaration)
+                        .toList());
     }
 
     private void renderTo(Writer w) {
