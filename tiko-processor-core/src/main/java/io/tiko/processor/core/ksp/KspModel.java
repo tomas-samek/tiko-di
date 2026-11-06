@@ -257,8 +257,12 @@ final class KspModel {
             key = ownerName + "#?" + property.getSimpleName().asString() + "@" + System.identityHashCode(property);
         }
         return kinds.stream()
-                .<MethodDecl>map(setter -> new KspAccessorDecl(ref, setter, key + (setter ? ":set" : ":get"), this))
+                .<MethodDecl>map(setter -> accessor(ref, Boolean.TRUE.equals(setter), key))
                 .toList();
+    }
+
+    private MethodDecl accessor(KspRef<KSPropertyDeclaration> ref, boolean setter, String key) {
+        return new KspAccessorDecl(ref, setter, key + (setter ? ":set" : ":get"), this);
     }
 
     private static List<KSPropertyDeclaration> declaredProperties(KSClassDeclaration declaration) {
