@@ -59,8 +59,9 @@ class KspKafkaBridgeTest {
                 "package demo",
                 "",
                 "@io.tiko.annotations.Component",
-                "class Ambiguous(val name: String) {",
-                "    constructor() : this(\"\")",
+                "class Ambiguous {",
+                "    constructor(name: String)",
+                "    constructor()",
                 "}");
 
         var result = KspCompiler.compile(
@@ -70,6 +71,9 @@ class KspKafkaBridgeTest {
                 broken);
 
         assertThat(result.exitCode()).isEqualTo(KotlinCompilation.ExitCode.COMPILATION_ERROR);
+        assertThat(result.messages())
+                .as("the DI processor's collection error")
+                .contains("must have an @Inject-annotated constructor or a single public constructor");
         assertThat(result.generatedJava("io.tiko.generated.KafkaTransportBootstrap"))
                 .isPresent();
     }

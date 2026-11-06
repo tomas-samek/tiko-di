@@ -86,6 +86,16 @@ class KotlinConstructRulesTest {
                         @Component(scope = Scope.SINGLETON) class B
                         @Component(scope = Scope.SINGLETON) class A(val b: B = B())
                         """, "() -> container.getB())", "new A(b)"),
+                supported(
+                        "jvmOverloadsConstructorInjectsAllParameters",
+                        """
+                        @Component(scope = Scope.SINGLETON) class B
+                        @Component(scope = Scope.SINGLETON) class C
+                        @Component(scope = Scope.SINGLETON) class A @JvmOverloads constructor(val b: B, val c: C = C())
+                        """,
+                        "() -> container.getB()",
+                        "() -> container.getC()",
+                        "new A(b, c)"),
                 supported("primaryConstructorInjectedOverSecondary", """
                         @Component(scope = Scope.SINGLETON) class B
                         @Component(scope = Scope.SINGLETON) class A(val b: B) {
