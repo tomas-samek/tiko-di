@@ -93,7 +93,8 @@ release → next-snapshot dance — you only supply two version strings.
 
    The workflow runs `mvn versions:set` for both versions (and patches the two inline
    `<tiko.version>` properties in `tiko-bom/pom.xml` and the archetype-resources
-   template that `versions:set` doesn't reach), commits as `github-actions[bot]`,
+   template that `versions:set` doesn't reach, plus `tikoVersion` in
+   `tiko-examples-gradle/kotlin-quickstart/gradle.properties`), commits as `github-actions[bot]`,
    tags the release commit, and pushes both commits + the tag using
    `RELEASE_PUSH_TOKEN`. Between the two commits it runs `mvn -B -Prelease deploy`,
    which builds with `-Prelease` (attaches `-sources`/`-javadoc`, GPG-signs every

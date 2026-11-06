@@ -50,3 +50,7 @@ build/
 
 # maven-shade-plugin emits these in module roots when createDependencyReducedPom=true
 dependency-reduced-pom.xml
+
+### Gradle example (tiko-examples-gradle) ###
+tiko-examples-gradle/**/build/
+.gradle/

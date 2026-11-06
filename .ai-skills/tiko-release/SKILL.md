@@ -257,7 +257,8 @@ react when sync lands.
 
 The release workflow sets every **POM** to the new version, plus the
 archetype's `archetype-resources/pom.xml` `<tiko.version>` and its
-`.mcp.json` `tiko-mcp:X.Y.Z` coordinate (`release.yml`, "Set release
+`.mcp.json` `tiko-mcp:X.Y.Z` coordinate, plus `tikoVersion` in
+`tiko-examples-gradle/kotlin-quickstart/gradle.properties` (`release.yml`, "Set release
 version in all poms" step) — those need no manual bump. It does **not** touch the
 prose docs. These advertise the install coordinate as
 literal text and go stale silently — exactly what left the README saying

@@ -105,3 +105,24 @@ jobs:
             **/target/site/jacoco/jacoco.xml
             tiko-coverage/target/site/jacoco-aggregate/jacoco.xml
           if-no-files-found: warn
+
+  # Kotlin on KSP, end to end: a separate Gradle build (not a Maven module) that consumes the
+  # reactor's artifacts from mavenLocal. A non-zero exit from `build` (incl. the test) or `run`
+  # (the example exits 1 if the expected event chain did not arrive) fails the job.
+  kotlin-gradle:
+    name: Kotlin + KSP example (Gradle)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up JDK 21
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+      - name: Install Tiko artifacts to the local Maven repository
+        run: mvn -B install -DskipTests --file pom.xml
+      - name: Build, test and run the Gradle example
+        working-directory: tiko-examples-gradle/kotlin-quickstart
+        run: ./gradlew build run
