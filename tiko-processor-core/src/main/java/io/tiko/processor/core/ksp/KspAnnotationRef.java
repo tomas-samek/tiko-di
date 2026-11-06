@@ -245,7 +245,7 @@ final class KspAnnotationRef implements AnnotationRef {
                 resolver -> KspModel.findClass(resolver, kotlinName)
                         .asStarProjectedType()
                         .makeNotNullable());
-        return new KspTypeRef(ref, Variance.INVARIANT, false, true, model);
+        return new KspTypeRef(ref, Variance.INVARIANT, false, true, false, model);
     }
 
     /** A nested annotation, found again through this one by member and position. */

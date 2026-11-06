@@ -142,14 +142,25 @@ final class KspModel {
                     ownerName + "#" + index,
                     this);
         }
-        // Not declared on its parent (a member KSP synthesizes, such as a substitution override):
-        // address it among the parent's members instead.
+        // Not declared on its parent: a member KSP synthesizes, such as the substitution override
+        // a subclass of Base<String> sees. javac's getAllMembers hands out the declaration itself,
+        // so map it to the function it stands for, keeping one identity per declaration.
+        if (function.findOverridee() instanceof KSFunctionDeclaration original
+                && original != function
+                && !original.equals(function)
+                && original.getParentDeclaration() instanceof KSClassDeclaration originalOwner
+                && indexOf(functionsOf(originalOwner), original) >= 0) {
+            return methodDecl(original);
+        }
+        // Otherwise address it among the parent's members.
         var all = SequencesKt.toList(parent.getAllFunctions());
         var allIndex = indexOf(all, function);
         if (allIndex < 0) {
-            // Nowhere to find it again: usable in this round only.
+            // Nowhere to find it again: usable in this round only, and its key is unique to it.
             return new KspMethodDecl(
-                    ref(function, resolver -> null), ownerName + "#?" + function.getSimpleName(), this);
+                    ref(function, resolver -> null),
+                    ownerName + "#?" + function.getSimpleName().asString() + "@" + System.identityHashCode(function),
+                    this);
         }
         return new KspMethodDecl(
                 ref(
@@ -209,7 +220,12 @@ final class KspModel {
 
     /** A type at a top-level position: a parameter, return or field type, or a class's own type. */
     TypeRef typeRef(KspRef<KSType> type) {
-        return new KspTypeRef(type, Variance.INVARIANT, false, false, this);
+        return typeRef(type, false);
+    }
+
+    /** As {@link #typeRef(KspRef)}; {@code javaDeclared} for a type a Java declaration uses (always non-null). */
+    TypeRef typeRef(KspRef<KSType> type, boolean javaDeclared) {
+        return new KspTypeRef(type, Variance.INVARIANT, false, false, javaDeclared, this);
     }
 
     /** The annotations on {@code annotated}, keyed under {@code ownerKey} for equality. */

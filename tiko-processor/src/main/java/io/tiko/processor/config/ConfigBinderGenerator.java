@@ -324,7 +324,7 @@ public final class ConfigBinderGenerator {
                 .addMethod(doCoerce.build())
                 .build();
 
-        output.writeJava(JavaFile.builder(GENERATED_PACKAGE, coercerClass).build(), List.of(), false);
+        output.writeJava(JavaFile.builder(GENERATED_PACKAGE, coercerClass).build(), List.of(recordDecl), false);
     }
 
     /**

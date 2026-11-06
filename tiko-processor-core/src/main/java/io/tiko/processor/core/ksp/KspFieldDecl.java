@@ -42,7 +42,7 @@ final class KspFieldDecl implements FieldDecl {
     /** The property's type; for an enum entry, the enum's type. */
     @Override
     public TypeRef type() {
-        return model.typeRef(ref.derive(KspFieldDecl::typeOf));
+        return model.typeRef(ref.derive(KspFieldDecl::typeOf), KspModel.isJava(ref.get()));
     }
 
     private static KSType typeOf(KSDeclaration declaration) {

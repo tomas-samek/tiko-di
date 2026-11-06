@@ -147,6 +147,41 @@ final class KspTypeNames {
         };
     }
 
+    /**
+     * The type as javac's {@code TypeMirror.toString()} renders it, which DI keys and messages
+     * compare as text: type arguments joined by {@code ","} without a space, {@code ?},
+     * {@code ? extends X} and {@code ? super X} for wildcards, {@code X[]} for arrays, and nested
+     * classes by their canonical name ({@code a.Outer.Inner}). JavaPoet's own {@code toString()}
+     * differs (it joins arguments with {@code ", "}), so it is never used for this text.
+     */
+    static String javacText(TypeName name) {
+        return switch (name) {
+            case ParameterizedTypeName parameterized -> {
+                var raw = parameterized.enclosingType() == null
+                        ? parameterized.rawType().canonicalName()
+                        : javacText(parameterized.enclosingType()) + "."
+                                + parameterized.rawType().simpleName();
+                var arguments = parameterized.typeArguments().stream()
+                        .map(KspTypeNames::javacText)
+                        .toList();
+                yield raw + "<" + String.join(",", arguments) + ">";
+            }
+            case ClassName className -> className.canonicalName();
+            case ArrayTypeName array -> javacText(array.componentType()) + "[]";
+            case WildcardTypeName wildcard -> wildcardText(wildcard);
+            case TypeVariableName variable -> variable.name();
+            default -> name.toString(); // primitives and void
+        };
+    }
+
+    private static String wildcardText(WildcardTypeName wildcard) {
+        if (!wildcard.lowerBounds().isEmpty()) {
+            return "? super " + javacText(wildcard.lowerBounds().get(0));
+        }
+        var upper = wildcard.upperBounds().get(0);
+        return ClassName.OBJECT.equals(upper) ? "?" : "? extends " + javacText(upper);
+    }
+
     /** As written: {@code a.b.C} or a bare {@code C}. */
     private static TypeName errorName(String written) {
         var lastDot = written.lastIndexOf('.');

@@ -3,6 +3,7 @@ package io.tiko.processor.util;
 import io.tiko.processor.config.ConfigurationModel;
 import io.tiko.processor.core.Diagnostics;
 import io.tiko.processor.core.ProcessingEnv;
+import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.Location;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.EventHandlerModel;
@@ -210,6 +211,23 @@ public final class ProcessorContext {
                         .thenComparing(EventHandlerModel::getMethodName)
                         .thenComparing(EventHandlerModel::getEventTypeName))
                 .toList();
+    }
+
+    /**
+     * Every declaration the aggregated output is derived from: the classes of all collected
+     * components, the declaring classes of all factory methods, the owners of all event handlers
+     * and all configuration records, once each and ordered by qualified name. Aggregating outputs
+     * (container, registry, descriptors) name them as their originating declarations: on javac
+     * these are only the Filer's originating elements, on KSP they are the incremental inputs.
+     */
+    public List<ClassDecl> getOriginatingDeclarations() {
+        var declarations = new TreeMap<String, ClassDecl>();
+        components.values().forEach(c -> declarations.putIfAbsent(c.getDecl().qualifiedName(), c.getDecl()));
+        getFactoryMethods()
+                .forEach(f -> declarations.putIfAbsent(f.getDeclaringClass().qualifiedName(), f.getDeclaringClass()));
+        eventHandlers.forEach(h -> declarations.putIfAbsent(h.getOwner().qualifiedName(), h.getOwner()));
+        configurations.forEach(c -> declarations.putIfAbsent(c.declaration().qualifiedName(), c.declaration()));
+        return List.copyOf(declarations.values());
     }
 
     public void registerConfiguration(ConfigurationModel cfg) {

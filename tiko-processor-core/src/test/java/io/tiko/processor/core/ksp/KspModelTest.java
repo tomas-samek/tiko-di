@@ -1,37 +1,32 @@
 package io.tiko.processor.core.ksp;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.groups.Tuple.tuple;
 
-import com.google.devtools.ksp.processing.CodeGenerator;
-import com.google.devtools.ksp.processing.Dependencies;
 import com.google.devtools.ksp.processing.Resolver;
 import com.google.devtools.ksp.processing.SymbolProcessor;
 import com.google.devtools.ksp.processing.SymbolProcessorEnvironment;
 import com.google.devtools.ksp.processing.SymbolProcessorProvider;
 import com.google.devtools.ksp.symbol.KSAnnotated;
-import com.google.devtools.ksp.symbol.KSClassDeclaration;
-import com.google.devtools.ksp.symbol.KSFile;
-import com.google.devtools.ksp.symbol.KSFunctionDeclaration;
-import com.google.devtools.ksp.symbol.KSPropertyDeclaration;
 import com.palantir.javapoet.JavaFile;
 import com.palantir.javapoet.TypeSpec;
 import com.tschuchort.compiletesting.KotlinCompilation;
 import com.tschuchort.compiletesting.SourceFile;
 import io.tiko.processor.core.ProcessingEnv;
+import io.tiko.processor.core.ksp.RecordingCodeGenerator.Request;
 import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.DeclKind;
 import io.tiko.processor.core.model.MethodDecl;
 import io.tiko.processor.core.model.Nullability;
+import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.core.model.Visibility;
-import java.io.File;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -47,7 +42,7 @@ class KspModelTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("rows")
-    void mapsKspSymbolsToNeutralModel(String name, SourceFile source, BiConsumer<ProcessingEnv, Recorded> check) {
+    void mapsKspSymbolsToNeutralModel(String name, SourceFile source, BiConsumer<ProcessingEnv, List<Request>> check) {
         var probe = new Probe(check);
 
         var result = KspCompiler.compile(List.of(probe), Map.of(), source);
@@ -86,6 +81,24 @@ class KspModelTest {
                             assertThat(parameter.type().nullability()).isEqualTo(Nullability.NON_NULL);
                         })),
                 Arguments.of(
+                        "javaNullableAnnotatedTypesAreNonNull",
+                        KspCompiler.java(
+                                "p/Annotated.java",
+                                "package p;",
+                                "import org.jetbrains.annotations.Nullable;",
+                                "public class Annotated {",
+                                "  public Annotated(@Nullable String s) {}",
+                                "  @Nullable public String value() { return null; }",
+                                "}"),
+                        check(env -> {
+                            var annotated = find(env, "p.Annotated");
+                            var parameter =
+                                    annotated.constructors().get(0).parameters().get(0);
+                            assertThat(parameter.type().nullability()).isEqualTo(Nullability.NON_NULL);
+                            assertThat(annotated.methods().get(0).returnType().nullability())
+                                    .isEqualTo(Nullability.NON_NULL);
+                        })),
+                Arguments.of(
                         "jvmNameComesFromResolver",
                         KspCompiler.kotlin(
                                 "Names.kt",
@@ -98,9 +111,9 @@ class KspModelTest {
                         check(env -> assertThat(find(env, "p.Names").methods())
                                 .extracting(MethodDecl::name, MethodDecl::jvmName)
                                 .contains(
-                                        org.assertj.core.groups.Tuple.tuple("hidden", "hidden$main"),
-                                        org.assertj.core.groups.Tuple.tuple("named", "renamed"),
-                                        org.assertj.core.groups.Tuple.tuple("plain", "plain")))),
+                                        tuple("hidden", "hidden$main"),
+                                        tuple("named", "renamed"),
+                                        tuple("plain", "plain")))),
                 Arguments.of(
                         "suspendComesFromModifier",
                         KspCompiler.kotlin(
@@ -112,9 +125,7 @@ class KspModelTest {
                                 "}"),
                         check(env -> assertThat(find(env, "p.Waits").methods())
                                 .extracting(MethodDecl::name, MethodDecl::isSuspend)
-                                .containsExactlyInAnyOrder(
-                                        org.assertj.core.groups.Tuple.tuple("later", true),
-                                        org.assertj.core.groups.Tuple.tuple("now", false)))),
+                                .containsExactlyInAnyOrder(tuple("later", true), tuple("now", false)))),
                 Arguments.of(
                         "objectAndCompanionKinds",
                         KspCompiler.kotlin(
@@ -172,48 +183,131 @@ class KspModelTest {
                                         MethodDecl::name,
                                         MethodDecl::isTopLevel,
                                         method -> method.owner().isPresent())
-                                .containsExactly(
-                                        org.assertj.core.groups.Tuple.tuple("topLevel", true, false),
-                                        org.assertj.core.groups.Tuple.tuple("member", false, true)))),
+                                .containsExactly(tuple("topLevel", true, false), tuple("member", false, true)))),
                 Arguments.of(
                         "displayNameRendersTheMappedJavaType",
                         KspCompiler.kotlin(
                                 "Mapped.kt",
                                 "package p",
-                                "class Mapped(a: String, b: Int, c: Int?, d: List<String>, e: Map<String, Any>)"),
-                        check(env -> assertThat(find(env, "p.Mapped")
-                                        .constructors()
-                                        .get(0)
-                                        .parameters())
-                                .extracting(parameter -> parameter.type().displayName())
-                                .containsExactly(
-                                        "java.lang.String",
-                                        "int",
-                                        "java.lang.Integer",
-                                        "java.util.List<java.lang.String>",
-                                        "java.util.Map<java.lang.String, java.lang.Object>"))),
+                                "class Mapped(a: String, b: Int, c: Int?, d: List<String>, e: Array<String>, f: IntArray)"),
+                        displayNames(
+                                "p.Mapped",
+                                "java.lang.String",
+                                "int",
+                                "java.lang.Integer",
+                                "java.util.List<java.lang.String>",
+                                "java.lang.String[]",
+                                "int[]")),
+                Arguments.of(
+                        "displayNameJoinsTypeArgumentsAsJavacDoes",
+                        KspCompiler.kotlin(
+                                "Pairs.kt", "package p", "class Pairs(a: Map<String, Any>, b: Map<String, List<Int>>)"),
+                        displayNames(
+                                "p.Pairs",
+                                "java.util.Map<java.lang.String,java.lang.Object>",
+                                "java.util.Map<java.lang.String,java.util.List<java.lang.Integer>>")),
+                Arguments.of(
+                        "displayNameRendersWildcardsAsJavacDoes",
+                        KspCompiler.kotlin(
+                                "Wild.kt",
+                                "package p",
+                                "class Wild(a: List<out Number>, b: List<*>, c: Comparable<in String>)"),
+                        displayNames(
+                                "p.Wild",
+                                "java.util.List<? extends java.lang.Number>",
+                                "java.util.List<?>",
+                                "java.lang.Comparable<? super java.lang.String>")),
+                Arguments.of(
+                        "displayNameRendersNestedClassTypeArgumentAsJavacDoes",
+                        KspCompiler.kotlin(
+                                "Outer.kt",
+                                "package p",
+                                "class Outer { class Inner }",
+                                "class Holds(a: List<Outer.Inner>, b: Outer.Inner)"),
+                        displayNames("p.Holds", "java.util.List<p.Outer.Inner>", "p.Outer.Inner")),
+                Arguments.of(
+                        "genericClassAsTypeCarriesItsTypeParameters",
+                        KspCompiler.kotlin("Box.kt", "package p", "class Box<T, out U : Number>"),
+                        check(env -> {
+                            var type = find(env, "p.Box").asType();
+                            assertThat(type.displayName()).isEqualTo("p.Box<T,U>");
+                            assertThat(type.typeArguments())
+                                    .extracting(TypeRef::displayName)
+                                    .containsExactly("T", "U");
+                            assertThat(env.types()
+                                            .isSameType(type, find(env, "p.Box").asType()))
+                                    .isTrue();
+                        })),
+                Arguments.of(
+                        "allMethodsFollowsJls848",
+                        KspCompiler.java(
+                                "p/Sub.java",
+                                "package p;",
+                                "interface Iface {",
+                                "  static void ifaceStatic() {}",
+                                "  default void inheritedDefault() {}",
+                                "  void implemented();",
+                                "}",
+                                "class Base {",
+                                "  private void hidden() {}",
+                                "  static void baseStatic() {}",
+                                "  public void overridden() {}",
+                                "}",
+                                "public class Sub extends Base implements Iface {",
+                                "  @Override public void overridden() {}",
+                                "  @Override public void implemented() {}",
+                                "}"),
+                        check(env -> {
+                            var all = find(env, "p.Sub").allMethods();
+                            assertThat(all)
+                                    .extracting(MethodDecl::name)
+                                    .contains("inheritedDefault", "implemented", "baseStatic", "overridden")
+                                    .doesNotContain("hidden", "ifaceStatic")
+                                    .doesNotHaveDuplicates();
+                            assertThat(all)
+                                    .filteredOn(method -> method.name().equals("overridden"))
+                                    .extracting(method ->
+                                            method.owner().orElseThrow().qualifiedName())
+                                    .containsExactly("p.Sub");
+                        })),
+                Arguments.of(
+                        "inheritedGenericMemberEqualsItsDeclaration",
+                        KspCompiler.kotlin(
+                                "Inherit.kt",
+                                "package p",
+                                "open class Base<T> { fun take(t: T) {}; fun take(t: T, n: Int) {} }",
+                                "class Sub : Base<String>()"),
+                        check(env -> {
+                            var declared = find(env, "p.Base").methods();
+                            var inherited = find(env, "p.Sub").allMethods().stream()
+                                    .filter(method -> method.name().equals("take"))
+                                    .toList();
+                            assertThat(inherited).hasSize(2).containsExactlyInAnyOrderElementsOf(declared);
+                        })),
                 Arguments.of(
                         "generatedJavaUsesAggregatingOrIsolatingDependencies",
                         KspCompiler.kotlin("Origin.kt", "package p", "class Origin"),
-                        (BiConsumer<ProcessingEnv, Recorded>) (env, recorded) -> {
+                        (BiConsumer<ProcessingEnv, List<Request>>) (env, requests) -> {
                             var origin = find(env, "p.Origin");
                             write(env, "Isolated", List.of(origin), false);
                             write(env, "Aggregated", List.of(origin), true);
-                            assertThat(recorded.dependencies)
-                                    .extracting(
-                                            dependencies -> dependencies.getAggregating(),
-                                            dependencies -> dependencies.getOriginatingFiles().stream()
-                                                    .map(KSFile::getFileName)
-                                                    .toList())
+                            assertThat(requests)
                                     .containsExactly(
-                                            org.assertj.core.groups.Tuple.tuple(false, List.of("Origin.kt")),
-                                            org.assertj.core.groups.Tuple.tuple(true, List.of("Origin.kt")));
-                            assertThat(recorded.files).containsExactly("p.Isolated.java", "p.Aggregated.java");
+                                            new Request("p/Isolated.java", false, List.of("Origin.kt")),
+                                            new Request("p/Aggregated.java", true, List.of("Origin.kt")));
                         }));
     }
 
-    private static BiConsumer<ProcessingEnv, Recorded> check(java.util.function.Consumer<ProcessingEnv> check) {
-        return (env, recorded) -> check.accept(env);
+    private static BiConsumer<ProcessingEnv, List<Request>> check(Consumer<ProcessingEnv> check) {
+        return (env, requests) -> check.accept(env);
+    }
+
+    /** The display names of the first constructor's parameter types. */
+    private static BiConsumer<ProcessingEnv, List<Request>> displayNames(String className, String... expected) {
+        return check(
+                env -> assertThat(find(env, className).constructors().get(0).parameters())
+                        .extracting(parameter -> parameter.type().displayName())
+                        .containsExactly(expected));
     }
 
     private static ClassDecl find(ProcessingEnv env, String qualifiedName) {
@@ -233,27 +327,21 @@ class KspModelTest {
         }
     }
 
-    /** What the probe's {@link CodeGenerator} was asked to create. */
-    static final class Recorded {
-        final List<Dependencies> dependencies = new ArrayList<>();
-        final List<String> files = new ArrayList<>();
-    }
-
     /** Runs the check once, in the first round, over a {@link KspProcessingEnv}. */
     private static final class Probe implements SymbolProcessorProvider {
 
-        private final BiConsumer<ProcessingEnv, Recorded> check;
+        private final BiConsumer<ProcessingEnv, List<Request>> check;
         private boolean ran;
         private Throwable failure;
 
-        Probe(BiConsumer<ProcessingEnv, Recorded> check) {
+        Probe(BiConsumer<ProcessingEnv, List<Request>> check) {
             this.check = check;
         }
 
         @Override
         public SymbolProcessor create(SymbolProcessorEnvironment environment) {
-            var recorded = new Recorded();
-            var generator = new RecordingCodeGenerator(environment.getCodeGenerator(), recorded);
+            var requests = new ArrayList<Request>();
+            var generator = new RecordingCodeGenerator(environment.getCodeGenerator(), requests);
             return new SymbolProcessor() {
                 @Override
                 public List<KSAnnotated> process(Resolver resolver) {
@@ -262,7 +350,7 @@ class KspModelTest {
                         try {
                             var env = KspProcessingEnv.of(
                                     resolver, generator, environment.getLogger(), environment.getOptions());
-                            check.accept(env, recorded);
+                            check.accept(env, requests);
                         } catch (Throwable t) {
                             failure = t;
                         }
@@ -282,65 +370,6 @@ class KspModelTest {
             if (failure != null) {
                 throw new AssertionError(failure);
             }
-        }
-    }
-
-    /** Records each file request, then delegates to KSP's own generator. */
-    private record RecordingCodeGenerator(CodeGenerator delegate, Recorded recorded) implements CodeGenerator {
-
-        @Override
-        public OutputStream createNewFile(
-                Dependencies dependencies, String packageName, String fileName, String extensionName) {
-            recorded.dependencies.add(dependencies);
-            recorded.files.add(packageName + "." + fileName + "." + extensionName);
-            return delegate.createNewFile(dependencies, packageName, fileName, extensionName);
-        }
-
-        @Override
-        public OutputStream createNewFileByPath(Dependencies dependencies, String path, String extensionName) {
-            recorded.dependencies.add(dependencies);
-            recorded.files.add(path + "." + extensionName);
-            return delegate.createNewFileByPath(dependencies, path, extensionName);
-        }
-
-        @Override
-        public void associate(
-                List<? extends KSFile> sources, String packageName, String fileName, String extensionName) {
-            delegate.associate(sources, packageName, fileName, extensionName);
-        }
-
-        @Override
-        public void associateByPath(List<? extends KSFile> sources, String path, String extensionName) {
-            delegate.associateByPath(sources, path, extensionName);
-        }
-
-        @Override
-        public void associateWithClasses(
-                List<? extends KSClassDeclaration> classes, String packageName, String fileName, String extensionName) {
-            delegate.associateWithClasses(classes, packageName, fileName, extensionName);
-        }
-
-        @Override
-        public void associateWithFunctions(
-                List<? extends KSFunctionDeclaration> functions,
-                String packageName,
-                String fileName,
-                String extensionName) {
-            delegate.associateWithFunctions(functions, packageName, fileName, extensionName);
-        }
-
-        @Override
-        public void associateWithProperties(
-                List<? extends KSPropertyDeclaration> properties,
-                String packageName,
-                String fileName,
-                String extensionName) {
-            delegate.associateWithProperties(properties, packageName, fileName, extensionName);
-        }
-
-        @Override
-        public Collection<File> getGeneratedFile() {
-            return delegate.getGeneratedFile();
         }
     }
 }

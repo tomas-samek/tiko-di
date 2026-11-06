@@ -22,9 +22,12 @@ import kotlin.sequences.SequencesKt;
  * {@link KspTypeNames}).
  *
  * <p>{@code variance} is the use-site variance of a type argument ({@code INVARIANT} elsewhere),
- * {@code typeArgument} marks a type-argument position (where Kotlin primitives are boxed), and
- * {@code raw} drops the type arguments (an erasure, a class literal). Nullability never shows in
- * the Java rendering; it is {@link #nullability()} alone. Identity equality: compare types with
+ * {@code typeArgument} marks a type-argument position (where Kotlin primitives are boxed),
+ * {@code raw} drops the type arguments (an erasure, a class literal), and {@code javaDeclared}
+ * marks a type a Java declaration uses (a platform type, non-null whatever its annotations say).
+ * Nullability never shows in the Java rendering; it is {@link #nullability()} alone.
+ * {@link #displayName()} is javac's {@code TypeMirror.toString()} rendering (see
+ * {@link KspTypeNames#javacText}). Identity equality: compare types with
  * {@link io.tiko.processor.core.TypeOracle#isSameType} or {@link #erasedName()}.
  */
 final class KspTypeRef implements TypeRef {
@@ -33,13 +36,21 @@ final class KspTypeRef implements TypeRef {
     private final Variance variance;
     private final boolean typeArgument;
     private final boolean raw;
+    private final boolean javaDeclared;
     private final KspModel model;
 
-    KspTypeRef(KspRef<KSType> type, Variance variance, boolean typeArgument, boolean raw, KspModel model) {
+    KspTypeRef(
+            KspRef<KSType> type,
+            Variance variance,
+            boolean typeArgument,
+            boolean raw,
+            boolean javaDeclared,
+            KspModel model) {
         this.type = type;
         this.variance = variance;
         this.typeArgument = typeArgument;
         this.raw = raw;
+        this.javaDeclared = javaDeclared;
         this.model = model;
     }
 
@@ -69,7 +80,7 @@ final class KspTypeRef implements TypeRef {
 
     @Override
     public String displayName() {
-        return javaPoet().toString();
+        return KspTypeNames.javacText(javaPoet());
     }
 
     /** A class type's arguments; empty for raw types, arrays, primitives and type variables. */
@@ -90,7 +101,8 @@ final class KspTypeRef implements TypeRef {
 
     private TypeRef argument(KSType owner, int index) {
         var argumentVariance = owner.getArguments().get(index).getVariance();
-        return new KspTypeRef(type.derive(t -> argumentType(t, index)), argumentVariance, true, false, model);
+        return new KspTypeRef(
+                type.derive(t -> argumentType(t, index)), argumentVariance, true, false, javaDeclared, model);
     }
 
     /** A star projection reads as its bound, {@code Any?}. */
@@ -101,9 +113,10 @@ final class KspTypeRef implements TypeRef {
                 : argument.getType().resolve();
     }
 
+    /** {@code NULLABLE} iff the Kotlin type is marked nullable; a Java declaration's types are always {@code NON_NULL}. */
     @Override
     public Nullability nullability() {
-        return ksType().isMarkedNullable() ? Nullability.NULLABLE : Nullability.NON_NULL;
+        return !javaDeclared && ksType().isMarkedNullable() ? Nullability.NULLABLE : Nullability.NON_NULL;
     }
 
     @Override
@@ -141,7 +154,7 @@ final class KspTypeRef implements TypeRef {
 
     /** This type with its arguments dropped; a type variable becomes its first bound. */
     KspTypeRef erased() {
-        return new KspTypeRef(type.derive(this::erasure), Variance.INVARIANT, typeArgument, true, model);
+        return new KspTypeRef(type.derive(this::erasure), Variance.INVARIANT, typeArgument, true, javaDeclared, model);
     }
 
     private KSType erasure(KSType type) {

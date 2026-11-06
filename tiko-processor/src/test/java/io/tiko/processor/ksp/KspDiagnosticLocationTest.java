@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Test;
 class KspDiagnosticLocationTest {
 
     @Test
-    void missingDependencyReportedOnKotlinParameterLine() {
+    void missingDependencyReportedOnKotlinClassLine() {
         var source = KspCompiler.kotlin(
                 "Consumer.kt",
                 "package app", // 1

@@ -85,7 +85,7 @@ public final class ProxyGenerator {
 
         JavaFile javaFile = JavaFile.builder(GENERATED_PACKAGE, proxyClass).build();
 
-        context.env().output().writeJava(javaFile, List.of(), false);
+        context.env().output().writeJava(javaFile, List.of(component.getDecl()), false);
         return true;
     }
 
@@ -125,7 +125,7 @@ public final class ProxyGenerator {
 
         JavaFile javaFile = JavaFile.builder(GENERATED_PACKAGE, proxyClass).build();
 
-        context.env().output().writeJava(javaFile, List.of(), false);
+        context.env().output().writeJava(javaFile, List.of(factory.getDeclaringClass()), false);
         return true;
     }
 

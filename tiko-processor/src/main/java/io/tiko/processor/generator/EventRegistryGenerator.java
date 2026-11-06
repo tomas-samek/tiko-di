@@ -95,7 +95,10 @@ public final class EventRegistryGenerator {
 
         context.env()
                 .output()
-                .writeJava(JavaFile.builder(GENERATED_PACKAGE, registry.build()).build(), List.of(), true);
+                .writeJava(
+                        JavaFile.builder(GENERATED_PACKAGE, registry.build()).build(),
+                        context.getOriginatingDeclarations(),
+                        true);
     }
 
     /**

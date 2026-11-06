@@ -17,7 +17,8 @@ import java.util.List;
  * <p>A thin frontend shell: each round it wraps KSP in a {@link KspProcessingEnv} and hands it to
  * the {@link TikoPipeline}, which collects, validates and generates. It only decides which rounds
  * to hand over and when to finish: in the first round whose new files carry no entry point after
- * a round that did, else in {@link SymbolProcessor#finish()}. Waiting for such a round lets a
+ * a round that did, else in {@link SymbolProcessor#finish()} (or {@link SymbolProcessor#onError()},
+ * which KSP calls instead after a round that logged an error). Waiting for such a round lets a
  * component another processor generates in a later round join the container.
  */
 public final class TikoSymbolProcessorProvider implements SymbolProcessorProvider {
@@ -61,6 +62,16 @@ public final class TikoSymbolProcessorProvider implements SymbolProcessorProvide
             if (env != null) {
                 pipeline.finish(env);
             }
+        }
+
+        /**
+         * KSP calls this instead of {@link #finish()} after a round that logged an error (a
+         * collection-time one, say). Finishing anyway keeps javac's behaviour: the collected
+         * sources are still validated and {@code wiring-errors.json} is still written.
+         */
+        @Override
+        public void onError() {
+            finish();
         }
     }
 }

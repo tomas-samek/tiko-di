@@ -5,8 +5,6 @@ import com.google.devtools.ksp.processing.SymbolProcessor;
 import com.google.devtools.ksp.processing.SymbolProcessorEnvironment;
 import com.google.devtools.ksp.processing.SymbolProcessorProvider;
 import com.google.devtools.ksp.symbol.KSAnnotated;
-import io.tiko.kafka.annotations.KafkaSink;
-import io.tiko.kafka.annotations.KafkaSource;
 import io.tiko.kafka.processor.KafkaPipeline;
 import io.tiko.processor.core.ksp.KspProcessingEnv;
 import java.util.List;
@@ -19,12 +17,10 @@ import java.util.List;
  * <p>A thin frontend shell: each round it wraps KSP in a {@link KspProcessingEnv} and hands it to
  * the {@link KafkaPipeline}. It only decides which rounds to hand over (those whose new files
  * carry a bridge) and when to finish: in the first round without bridges after one that had them,
- * else in {@link SymbolProcessor#finish()}.
+ * else in {@link SymbolProcessor#finish()} or, after a round that logged an error, in
+ * {@link SymbolProcessor#onError()}.
  */
 public final class KafkaSymbolProcessorProvider implements SymbolProcessorProvider {
-
-    private static final List<String> BRIDGES =
-            List.of(KafkaSource.class.getCanonicalName(), KafkaSink.class.getCanonicalName());
 
     @Override
     public SymbolProcessor create(SymbolProcessorEnvironment environment) {
@@ -48,10 +44,8 @@ public final class KafkaSymbolProcessorProvider implements SymbolProcessorProvid
                     ? KspProcessingEnv.of(
                             resolver, environment.getCodeGenerator(), environment.getLogger(), environment.getOptions())
                     : env.nextRound(resolver);
-            if (BRIDGES.stream()
-                    .anyMatch(name -> resolver.getSymbolsWithAnnotation(name, false)
-                            .iterator()
-                            .hasNext())) {
+            if (KafkaPipeline.isEntryPointRound(name ->
+                    resolver.getSymbolsWithAnnotation(name, false).iterator().hasNext())) {
                 pipeline.process(env);
                 sawBridges = true;
             } else if (sawBridges) {
@@ -65,6 +59,12 @@ public final class KafkaSymbolProcessorProvider implements SymbolProcessorProvid
             if (sawBridges) {
                 pipeline.finish(env);
             }
+        }
+
+        /** KSP calls this instead of {@link #finish()} after a round that logged an error; finish as javac does. */
+        @Override
+        public void onError() {
+            finish();
         }
     }
 }

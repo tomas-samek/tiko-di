@@ -19,8 +19,10 @@ import io.tiko.processor.core.model.SourceLanguage;
 import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.core.model.Visibility;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import kotlin.sequences.SequencesKt;
 
@@ -165,11 +167,55 @@ final class KspClassDecl implements ClassDecl {
      */
     @Override
     public List<MethodDecl> allMethods() {
-        return SequencesKt.toList(declaration().getAllFunctions()).stream()
+        var declaration = declaration();
+        var functions = SequencesKt.toList(declaration.getAllFunctions()).stream()
                 .filter(function -> !UtilsKt.isConstructor(function))
                 .filter(function -> !isStaticInterfaceMember(function))
-                .map(model::methodDecl)
+                .collect(Collectors.toCollection(ArrayList::new));
+        functions.addAll(inheritedClassStatics(declaration, functions));
+        return functions.stream().map(model::methodDecl).distinct().toList();
+    }
+
+    /**
+     * Static methods of Java superclasses, which JLS 8.4.8 counts as inherited (unless private or
+     * hidden by a static of the same signature further down) but KSP's member scope leaves out.
+     */
+    private List<KSFunctionDeclaration> inheritedClassStatics(
+            KSClassDeclaration declaration, List<KSFunctionDeclaration> present) {
+        var signatures = present.stream().map(this::signature).collect(Collectors.toCollection(HashSet::new));
+        var statics = new ArrayList<KSFunctionDeclaration>();
+        var superclass = superclassDeclaration(declaration);
+        while (superclass != null) {
+            for (var function : SequencesKt.toList(UtilsKt.getDeclaredFunctions(superclass))) {
+                if (function.getModifiers().contains(Modifier.JAVA_STATIC)
+                        && !function.getModifiers().contains(Modifier.PRIVATE)
+                        && signatures.add(signature(function))) {
+                    statics.add(function);
+                }
+            }
+            superclass = superclassDeclaration(superclass);
+        }
+        return statics;
+    }
+
+    /** The declared superclass's declaration; {@code null} for none, an interface or an unresolved one. */
+    private static KSClassDeclaration superclassDeclaration(KSClassDeclaration declaration) {
+        for (var superType : superTypes(declaration)) {
+            if (!superType.isError()
+                    && superType.getDeclaration() instanceof KSClassDeclaration superclass
+                    && superclass.getClassKind() != ClassKind.INTERFACE) {
+                return superclass;
+            }
+        }
+        return null;
+    }
+
+    /** Name and erased parameter types: what hiding and overriding compare. */
+    private String signature(KSFunctionDeclaration function) {
+        var parameters = function.getParameters().stream()
+                .map(parameter -> KspTypeNames.erasedName(parameter.getType().resolve(), false, model))
                 .toList();
+        return function.getSimpleName().asString() + parameters;
     }
 
     /** Interface static methods are not inherited (JLS 8.4.8). */
@@ -279,7 +325,7 @@ final class KspClassDecl implements ClassDecl {
     }
 
     private TypeRef supertype(int index) {
-        return model.typeRef(ref.derive(owner -> superTypes(owner).get(index)));
+        return model.typeRef(ref.derive(owner -> superTypes(owner).get(index)), KspModel.isJava(declaration()));
     }
 
     /** The containing file's path with {@code /} separators; empty for classpath declarations. */
@@ -289,10 +335,13 @@ final class KspClassDecl implements ClassDecl {
                 .map(file -> file.getFilePath().replace('\\', '/'));
     }
 
-    /** The declared type, with the class's own type parameters as arguments. */
+    /**
+     * The declared type, with the class's own type parameters as arguments ({@code Box<T>}, as
+     * javac's {@code asType()}): KSP2's {@code asType} with no arguments applies them.
+     */
     @Override
     public TypeRef asType() {
-        return model.typeRef(ref.derive(owner -> owner.asType(List.of())));
+        return model.typeRef(ref.derive(owner -> owner.asType(List.of())), KspModel.isJava(declaration()));
     }
 
     @Override

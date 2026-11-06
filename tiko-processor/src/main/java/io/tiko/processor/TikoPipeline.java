@@ -76,7 +76,8 @@ import java.util.function.Predicate;
  * {@code finish} in the first round whose new files carry no entry point after a round that did,
  * so components another processor generates in a later round are still wired; when no such round
  * comes, it calls {@code finish} from {@code SymbolProcessor.finish()}, whose output KSP still
- * compiles.
+ * compiles, or from {@code SymbolProcessor.onError()}, which KSP calls instead after a round that
+ * logged an error.
  */
 public final class TikoPipeline {
 
@@ -288,7 +289,7 @@ public final class TikoPipeline {
         if (!topologyBundleEnabled()) return;
         try {
             new WiringErrorsWriter(context.getWiringErrors())
-                    .write(context.env().output());
+                    .write(context.env().output(), context.getOriginatingDeclarations());
         } catch (IOException e) {
             context.env().diagnostics().warning(null, "Tiko DI: failed to emit wiring-errors.json: " + e.getMessage());
         }

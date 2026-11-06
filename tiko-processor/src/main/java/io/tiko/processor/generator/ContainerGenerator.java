@@ -154,14 +154,17 @@ public final class ContainerGenerator {
                 .build();
         context.env()
                 .output()
-                .writeJava(JavaFile.builder(GENERATED_PACKAGE, module).build(), List.of(), true);
+                .writeJava(
+                        JavaFile.builder(GENERATED_PACKAGE, module).build(),
+                        context.getOriginatingDeclarations(),
+                        true);
 
         context.env()
                 .output()
                 .writeResource(
                         "META-INF/services/io.tiko.TikoModule",
                         GENERATED_PACKAGE + "." + moduleClassName + "\n",
-                        List.of());
+                        context.getOriginatingDeclarations());
     }
 
     /**
@@ -191,7 +194,12 @@ public final class ContainerGenerator {
                     .append(testComponent.getQualifiedName())
                     .append("\n");
         }
-        context.env().output().writeResource("META-INF/tiko/test-shadows.properties", content.toString(), List.of());
+        context.env()
+                .output()
+                .writeResource(
+                        "META-INF/tiko/test-shadows.properties",
+                        content.toString(),
+                        context.getOriginatingDeclarations());
     }
 
     /**
@@ -290,7 +298,7 @@ public final class ContainerGenerator {
 
         JavaFile javaFile = JavaFile.builder(GENERATED_PACKAGE, containerClass).build();
 
-        context.env().output().writeJava(javaFile, List.of(), true);
+        context.env().output().writeJava(javaFile, context.getOriginatingDeclarations(), true);
 
         // Descriptor pointing at this container — main and test paths use the same shape
         // (just a different filename) so the runtime preference logic in Tiko.createInternal
@@ -2022,7 +2030,7 @@ public final class ContainerGenerator {
         String fullClassName = GENERATED_PACKAGE + "." + containerClassName;
         String descriptor = "# Tiko DI Container Metadata\nimpl=" + fullClassName + "\n";
 
-        context.env().output().writeResource(resourcePath, descriptor, List.of());
+        context.env().output().writeResource(resourcePath, descriptor, context.getOriginatingDeclarations());
     }
 
     /**
@@ -2204,6 +2212,6 @@ public final class ContainerGenerator {
             // Use binary name (with '$' for nested classes) so Class.forName() works at runtime
             content.append(component.getDecl().className().reflectionName()).append("\n");
         }
-        context.env().output().writeResource(resourcePath, content.toString(), List.of());
+        context.env().output().writeResource(resourcePath, content.toString(), context.getOriginatingDeclarations());
     }
 }

@@ -1,5 +1,6 @@
 package io.tiko.processor.core.ksp;
 
+import com.google.devtools.ksp.symbol.KSDeclaration;
 import com.google.devtools.ksp.symbol.KSValueParameter;
 import io.tiko.processor.core.model.AnnotationRef;
 import io.tiko.processor.core.model.Location;
@@ -35,7 +36,9 @@ final class KspParamDecl implements ParamDecl {
 
     @Override
     public TypeRef type() {
-        return model.typeRef(ref.derive(parameter -> parameter.getType().resolve()));
+        var parameter = ref.get();
+        var javaDeclared = parameter.getParent() instanceof KSDeclaration owner && KspModel.isJava(owner);
+        return model.typeRef(ref.derive(p -> p.getType().resolve()), javaDeclared);
     }
 
     @Override

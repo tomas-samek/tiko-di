@@ -122,7 +122,7 @@ final class KspMethodDecl implements MethodDecl {
                     model.resolver().getBuiltIns().getUnitType(),
                     resolver -> resolver.getBuiltIns().getUnitType()));
         }
-        return model.typeRef(ref.derive(KspMethodDecl::returnTypeOf));
+        return model.typeRef(ref.derive(KspMethodDecl::returnTypeOf), KspModel.isJava(function()));
     }
 
     private static KSType returnTypeOf(KSFunctionDeclaration function) {
