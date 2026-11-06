@@ -27,6 +27,7 @@ import java.io.UncheckedIOException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -423,6 +424,31 @@ class JavacModelTest {
                             .containsExactly("java.lang.Deprecated");
                     assertThat(shapes.enclosingClass()).isEmpty();
                 })),
+                Arguments.of("locationsKnowTheirEnclosingClass", shapes(), Check.model(env -> {
+                    var shapes = find(env, "p.Shapes");
+                    var tagged = method(shapes, "tagged");
+                    var constructorParameter =
+                            shapes.constructors().get(0).parameters().get(0);
+                    assertThat(Stream.of(
+                                    shapes.location(),
+                                    tagged.location(),
+                                    constructorParameter.location(),
+                                    field(shapes, "names").location(),
+                                    tagged.annotation("p.Tags").orElseThrow().location(),
+                                    find(env, "p.Shapes.Nested").location()))
+                            .map(Location::enclosingClassName)
+                            .containsExactly(
+                                    Optional.of("p.Shapes"),
+                                    Optional.of("p.Shapes"),
+                                    Optional.of("p.Shapes"),
+                                    Optional.of("p.Shapes"),
+                                    Optional.of("p.Shapes"),
+                                    Optional.of("p.Shapes.Nested"));
+                    var javac = ((JavacProcessingEnv) env).processingEnvironment();
+                    var pkg = javac.getElementUtils().getPackageElement("p");
+                    assertThat(JavacProcessingEnv.location(pkg).enclosingClassName())
+                            .isEmpty();
+                })),
                 Arguments.of("directSupertypesAreSuperclassThenInterfaces", shapes(), Check.model(env -> {
                     assertThat(find(env, "p.Shapes").directSupertypes())
                             .extracting(TypeRef::erasedName)
@@ -573,7 +599,7 @@ class JavacModelTest {
                                 })),
                 Arguments.of("foreignLocationIsRejected", shapes(), Check.model(env -> {
                     var diagnostics = env.diagnostics();
-                    var foreign = new Location() {};
+                    Location foreign = Optional::empty;
                     assertThatThrownBy(() -> diagnostics.error(foreign, "nowhere"))
                             .isInstanceOf(IllegalArgumentException.class);
                     assertThat(diagnostics.hasErrors()).isFalse();

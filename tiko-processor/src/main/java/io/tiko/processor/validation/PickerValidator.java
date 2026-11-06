@@ -3,6 +3,7 @@ package io.tiko.processor.validation;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
+import io.tiko.processor.util.JavacBridge;
 import io.tiko.processor.util.ProcessorContext;
 import javax.lang.model.type.TypeMirror;
 
@@ -69,14 +70,15 @@ public final class PickerValidator {
         // For now: warn so the user notices, don't fail.
         context.getErrorReporter()
                 .warning(
-                        dep.getParameter(),
+                        JavacBridge.location(dep.getParameter()),
                         "Picker<" + simpleName(baseFqn)
                                 + "> has no impls registered in this module. If the impls live in another module this is fine; otherwise the picker will always be empty.");
     }
 
     private boolean anyComponentAssignableTo(TypeMirror baseType) {
         for (ComponentModel component : context.getActiveComponents()) {
-            if (context.getTypeUtils().isAssignable(component.getTypeElement().asType(), baseType)) {
+            if (JavacBridge.types(context.env())
+                    .isAssignable(component.getTypeElement().asType(), baseType)) {
                 return true;
             }
         }
@@ -85,7 +87,7 @@ public final class PickerValidator {
 
     private boolean anyFactoryAssignableTo(TypeMirror baseType) {
         for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
-            if (context.getTypeUtils().isAssignable(factory.getReturnType(), baseType)) {
+            if (JavacBridge.types(context.env()).isAssignable(factory.getReturnType(), baseType)) {
                 return true;
             }
         }

@@ -1,15 +1,12 @@
 package io.tiko.processor.topology;
 
+import io.tiko.processor.core.CodeOutput;
 import io.tiko.processor.core.JsonWriter;
 import io.tiko.processor.model.WiringError;
 import java.io.IOException;
 import java.io.StringWriter;
-import java.io.UncheckedIOException;
 import java.io.Writer;
 import java.util.List;
-import javax.annotation.processing.Filer;
-import javax.tools.FileObject;
-import javax.tools.StandardLocation;
 
 /**
  * Emits {@code META-INF/tiko/wiring-errors.json} — a structured snapshot of every
@@ -33,17 +30,12 @@ public final class WiringErrorsWriter {
         this.errors = errors;
     }
 
-    /** Writes the JSON resource via the supplied Filer. */
-    public void write(Filer filer) throws IOException {
-        FileObject f = filer.createResource(StandardLocation.CLASS_OUTPUT, "", PATH);
-        try (Writer w = f.openWriter()) {
-            renderTo(w);
-        } catch (UncheckedIOException uncheckedIo) {
-            throw uncheckedIo.getCause();
-        }
+    /** Writes the JSON resource through the supplied output. */
+    public void write(CodeOutput output) throws IOException {
+        output.writeResource(PATH, render(), List.of());
     }
 
-    /** Serializes to a String — used by unit tests so they don't need a Filer. */
+    /** Serializes to a String — also used by unit tests so they don't need an output. */
     public String render() {
         var sw = new StringWriter();
         renderTo(sw);

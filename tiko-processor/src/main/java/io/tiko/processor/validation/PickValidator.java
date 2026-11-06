@@ -3,6 +3,7 @@ package io.tiko.processor.validation;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
+import io.tiko.processor.util.JavacBridge;
 import io.tiko.processor.util.ProcessorContext;
 import java.util.List;
 import javax.lang.model.element.VariableElement;
@@ -74,7 +75,7 @@ public final class PickValidator {
         if (isCollectionType(dep.getType())) {
             context.getErrorReporter()
                     .error(
-                            param,
+                            JavacBridge.location(param),
                             "@Pick cannot be applied to collection or iterable parameters",
                             "Use @Pick on a single-bean parameter (T or Provider<T>)",
                             "For multi-impl iteration, inject Set<T> or List<T> without @Pick");
@@ -85,10 +86,10 @@ public final class PickValidator {
         TypeMirror targetType = dep.getUnwrappedType().orElse(dep.getType());
 
         // Rule: redundant @Pick — picked class equals the parameter type.
-        if (context.getTypeUtils().isSameType(pickedType, targetType)) {
+        if (JavacBridge.types(context.env()).isSameType(pickedType, targetType)) {
             context.getErrorReporter()
                     .error(
-                            param,
+                            JavacBridge.location(param),
                             "@Pick references the parameter type itself — no disambiguation possible",
                             "Remove @Pick when there is no specific implementation to choose",
                             "Reference a concrete @Component class implementing " + simpleName(toFqn(targetType)));
@@ -96,10 +97,10 @@ public final class PickValidator {
         }
 
         // Rule: assignability.
-        if (!context.getTypeUtils().isAssignable(pickedType, targetType)) {
+        if (!JavacBridge.types(context.env()).isAssignable(pickedType, targetType)) {
             context.getErrorReporter()
                     .error(
-                            param,
+                            JavacBridge.location(param),
                             "@Pick(" + simpleName(pickedFqn) + ".class) is not assignable to parameter type "
                                     + simpleName(toFqn(targetType)),
                             "Reference a class implementing or extending " + simpleName(toFqn(targetType)),
@@ -114,7 +115,7 @@ public final class PickValidator {
             if (matches.size() > 1) {
                 context.getErrorReporter()
                         .error(
-                                param,
+                                JavacBridge.location(param),
                                 "@Pick(" + simpleName(pickedFqn) + ".class) is ambiguous: " + matches.size()
                                         + " providers return this type",
                                 "Add @Named(\"...\") to select one of the @Produces methods",

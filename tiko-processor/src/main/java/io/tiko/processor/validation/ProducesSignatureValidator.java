@@ -2,6 +2,7 @@ package io.tiko.processor.validation;
 
 import io.tiko.processor.model.FactoryMethodModel;
 import io.tiko.processor.util.ErrorReporter;
+import io.tiko.processor.util.JavacBridge;
 import io.tiko.processor.util.ProcessorContext;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
@@ -119,6 +120,7 @@ public final class ProducesSignatureValidator {
     }
 
     private void report(ExecutableElement method, String problem, String... suggestedFixes) {
-        context.getErrorReporter().error(ErrorReporter.KIND_BAD_PRODUCES, method, problem, suggestedFixes);
+        context.getErrorReporter()
+                .error(ErrorReporter.KIND_BAD_PRODUCES, JavacBridge.location(method), problem, suggestedFixes);
     }
 }

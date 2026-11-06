@@ -83,7 +83,7 @@ public final class ComponentFactoryGenerator {
 
         JavaFile javaFile = JavaFile.builder(GENERATED_PACKAGE, factoryClass).build();
 
-        javaFile.writeTo(context.getFiler());
+        context.env().output().writeJava(javaFile, List.of(), false);
     }
 
     /**

@@ -6,6 +6,7 @@ import io.tiko.EventBus;
 import io.tiko.processor.core.GeneratorAnnotations;
 import io.tiko.processor.model.EventHandlerModel;
 import io.tiko.processor.model.EventTriggerModel;
+import io.tiko.processor.util.JavacBridge;
 import io.tiko.processor.util.ProcessorContext;
 import java.io.IOException;
 import java.util.List;
@@ -13,7 +14,6 @@ import java.util.concurrent.ExecutorService;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
-import javax.tools.Diagnostic;
 
 /**
  * Generates the EventRegistry class that registers all @EventHandler methods.
@@ -96,7 +96,9 @@ public final class EventRegistryGenerator {
             registry.addMethod(createDispatcherMethod(eventHandlers.get(i), i));
         }
 
-        JavaFile.builder(GENERATED_PACKAGE, registry.build()).build().writeTo(context.getFiler());
+        context.env()
+                .output()
+                .writeJava(JavaFile.builder(GENERATED_PACKAGE, registry.build()).build(), List.of(), true);
     }
 
     /**
@@ -217,11 +219,11 @@ public final class EventRegistryGenerator {
         boolean hasTriggers = !handler.getEventTriggers().isEmpty();
         boolean returnsValue = handler.getMethodElement().getReturnType().getKind() != TypeKind.VOID;
         if (hasTriggers && !returnsValue) {
-            context.getMessager()
-                    .printMessage(
-                            Diagnostic.Kind.WARNING,
-                            "@EventTrigger on a void-returning @EventHandler has no payload to publish — ignored",
-                            handler.getMethodElement());
+            context.env()
+                    .diagnostics()
+                    .warning(
+                            JavacBridge.location(handler.getMethodElement()),
+                            "@EventTrigger on a void-returning @EventHandler has no payload to publish — ignored");
         }
         return hasTriggers && returnsValue;
     }

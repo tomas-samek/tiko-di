@@ -4,6 +4,7 @@ import com.palantir.javapoet.*;
 import io.tiko.processor.core.GeneratorAnnotations;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.FactoryMethodModel;
+import io.tiko.processor.util.JavacBridge;
 import io.tiko.processor.util.ProcessorContext;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -63,7 +64,7 @@ public final class ProxyGenerator {
                 .getImplementedInterface()
                 .orElseThrow(() -> new IllegalStateException("Proxy required but no interface found"));
 
-        TypeElement interfaceElement = context.getElementUtils().getTypeElement(interfaceType.toString());
+        TypeElement interfaceElement = JavacBridge.elements(context.env()).getTypeElement(interfaceType.toString());
         if (interfaceElement == null) {
             return false;
         }
@@ -81,7 +82,7 @@ public final class ProxyGenerator {
 
         JavaFile javaFile = JavaFile.builder(GENERATED_PACKAGE, proxyClass).build();
 
-        javaFile.writeTo(context.getFiler());
+        context.env().output().writeJava(javaFile, List.of(), false);
         return true;
     }
 
@@ -102,7 +103,7 @@ public final class ProxyGenerator {
         }
 
         TypeMirror returnType = factory.getReturnType();
-        TypeElement interfaceElement = context.getElementUtils().getTypeElement(factory.getReturnTypeName());
+        TypeElement interfaceElement = JavacBridge.elements(context.env()).getTypeElement(factory.getReturnTypeName());
         if (interfaceElement == null) {
             return false;
         }
@@ -120,7 +121,7 @@ public final class ProxyGenerator {
 
         JavaFile javaFile = JavaFile.builder(GENERATED_PACKAGE, proxyClass).build();
 
-        javaFile.writeTo(context.getFiler());
+        context.env().output().writeJava(javaFile, List.of(), false);
         return true;
     }
 
@@ -218,7 +219,8 @@ public final class ProxyGenerator {
     }
 
     private List<ExecutableElement> collectAbstractMethods(TypeElement interfaceElement) {
-        return io.tiko.processor.util.AbstractInterfaceMethods.collect(interfaceElement, context.getTypeUtils());
+        return io.tiko.processor.util.AbstractInterfaceMethods.collect(
+                interfaceElement, JavacBridge.types(context.env()));
     }
 
     private MethodSpec createFactoryDelegatingMethod(ExecutableElement method, String delegateCall) {

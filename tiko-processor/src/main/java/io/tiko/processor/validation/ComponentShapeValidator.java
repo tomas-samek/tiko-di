@@ -5,6 +5,7 @@ import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.EventHandlerModel;
 import io.tiko.processor.model.FactoryMethodModel;
+import io.tiko.processor.util.JavacBridge;
 import io.tiko.processor.util.ProcessorContext;
 import io.tiko.processor.util.TypeUtil;
 import java.util.LinkedHashMap;
@@ -67,7 +68,8 @@ public final class ComponentShapeValidator {
             List<ComponentModel> sharing = entry.getValue();
             if (sharing.size() <= 1) continue;
             String fqns = sharing.stream().map(ComponentModel::getQualifiedName).collect(Collectors.joining(", "));
-            context.getErrorReporter().duplicateSimpleNames(sharing.get(0).getTypeElement(), entry.getKey(), fqns);
+            context.getErrorReporter()
+                    .duplicateSimpleNames(JavacBridge.location(sharing.get(0).getTypeElement()), entry.getKey(), fqns);
             valid = false;
         }
 
@@ -78,7 +80,7 @@ public final class ComponentShapeValidator {
             if (!onComponent) {
                 context.getErrorReporter()
                         .eventHandlerOutsideComponent(
-                                handler.getMethodElement(),
+                                JavacBridge.location(handler.getMethodElement()),
                                 handler.getDeclaringClass().getSimpleName().toString());
                 valid = false;
             } else {
@@ -121,7 +123,7 @@ public final class ComponentShapeValidator {
         String kind = constructor ? "constructor" : "method";
         context.getErrorReporter()
                 .error(
-                        member,
+                        JavacBridge.location(member),
                         annotation + " " + kind + " '" + owner + (constructor ? "" : "." + name) + "' must be public;"
                                 + " the generated code calls it from the io.tiko.generated package.",
                         "Add the public modifier to " + (constructor ? "the constructor" : "'" + name + "'"));
@@ -133,7 +135,7 @@ public final class ComponentShapeValidator {
         if (!typeUtil.isConcreteClass(el)) {
             context.getErrorReporter()
                     .nonInstantiableComponent(
-                            el,
+                            JavacBridge.location(el),
                             component.getClassName(),
                             "it is not a concrete class",
                             "Make " + component.getClassName() + " a concrete (non-abstract) class",
@@ -143,7 +145,7 @@ public final class ComponentShapeValidator {
         if (el.getNestingKind().isNested() && !el.getModifiers().contains(Modifier.STATIC)) {
             context.getErrorReporter()
                     .nonInstantiableComponent(
-                            el,
+                            JavacBridge.location(el),
                             component.getClassName(),
                             "non-static nested classes need an enclosing instance the container cannot provide",
                             "Declare " + component.getClassName() + " as a static nested class",
@@ -160,7 +162,9 @@ public final class ComponentShapeValidator {
                     && dep.getUnwrappedType().isEmpty();
             if (rawWrapper) {
                 String wrapper = dep.isProvider() ? "Provider" : "Picker";
-                context.getErrorReporter().rawWrapperInjection(dep.getParameter(), owner, wrapper);
+                context.getErrorReporter()
+                        .rawWrapperInjection(
+                                JavacBridge.location(dep.getParameter()), JavacBridge.location(owner), wrapper);
                 valid = false;
             }
         }

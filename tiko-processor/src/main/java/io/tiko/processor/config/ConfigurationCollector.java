@@ -3,6 +3,7 @@ package io.tiko.processor.config;
 import io.tiko.annotations.Configuration;
 import io.tiko.annotations.Default;
 import io.tiko.annotations.Key;
+import io.tiko.processor.util.JavacBridge;
 import io.tiko.processor.util.ProcessorContext;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -38,14 +39,17 @@ public final class ConfigurationCollector {
             if (!(el instanceof TypeElement type)) {
                 ctx.getErrorReporter()
                         .error(
-                                el,
+                                JavacBridge.location(el),
                                 "@Configuration can only be applied to types",
                                 "Move @Configuration to a record type");
                 continue;
             }
             if (type.getKind() != ElementKind.RECORD) {
                 ctx.getErrorReporter()
-                        .error(type, "@Configuration must be applied to a record", "Change `class` to `record`");
+                        .error(
+                                JavacBridge.location(type),
+                                "@Configuration must be applied to a record",
+                                "Change `class` to `record`");
                 continue;
             }
 
@@ -62,7 +66,7 @@ public final class ConfigurationCollector {
                         : enclosing.getSimpleName().toString();
                 ctx.getErrorReporter()
                         .error(
-                                type,
+                                JavacBridge.location(type),
                                 "@Configuration record '" + type.getSimpleName()
                                         + "' must be top-level (declared inside '" + enclosingName
                                         + "'). Move it to its own .java file.",
@@ -98,7 +102,7 @@ public final class ConfigurationCollector {
      * constructor that coincidentally has the same number of parameters but different types.
      */
     private Map<String, VariableElement> buildCanonicalCtorParamMap(TypeElement type) {
-        Types types = ctx.getTypeUtils();
+        Types types = JavacBridge.types(ctx.env());
 
         List<VariableElement> components = type.getEnclosedElements().stream()
                 .filter(e -> e.getKind() == ElementKind.RECORD_COMPONENT)

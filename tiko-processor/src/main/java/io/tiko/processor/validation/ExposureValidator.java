@@ -1,5 +1,6 @@
 package io.tiko.processor.validation;
 
+import io.tiko.processor.util.JavacBridge;
 import io.tiko.processor.util.ProcessorContext;
 import io.tiko.processor.util.TypeUtil;
 import javax.lang.model.type.TypeMirror;
@@ -31,7 +32,7 @@ public final class ExposureValidator {
                 if (!typeUtil.isAssignable(componentType, exposed)) {
                     context.getErrorReporter()
                             .error(
-                                    component.getTypeElement(),
+                                    JavacBridge.location(component.getTypeElement()),
                                     "@Component(expose = {...}) lists " + exposed + ", but "
                                             + component.getQualifiedName()
                                             + " does not implement or extend it",

@@ -1,6 +1,9 @@
 package io.tiko.processor.util;
 
 import io.tiko.processor.config.ConfigurationModel;
+import io.tiko.processor.core.Diagnostics;
+import io.tiko.processor.core.ProcessingEnv;
+import io.tiko.processor.core.model.Location;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.EventHandlerModel;
 import io.tiko.processor.model.FactoryMethodModel;
@@ -15,23 +18,19 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
-import javax.annotation.processing.Filer;
-import javax.annotation.processing.Messager;
-import javax.annotation.processing.ProcessingEnvironment;
-import javax.lang.model.util.Elements;
-import javax.lang.model.util.Types;
 
 /**
  * Shared context for annotation processing.
  * Holds discovered components, factories, event handlers, and utilities.
+ *
+ * <p>The context lives for the whole compilation (what one round collects can be validated
+ * and generated in a later one), while a {@link ProcessingEnv} describes a single round. The
+ * processor hands every round's env to {@link #enterRound}; {@link #env()} and the
+ * {@link ErrorReporter} always report into the current round.
  */
 public final class ProcessorContext {
 
-    private final ProcessingEnvironment processingEnv;
-    private final Elements elementUtils;
-    private final Types typeUtils;
-    private final Filer filer;
-    private final Messager messager;
+    private ProcessingEnv env;
     private final ErrorReporter errorReporter;
 
     // Discovered components and factories. Sorted maps (#334): generated members, dispatch
@@ -66,39 +65,26 @@ public final class ProcessorContext {
     // Generated container class name (set during code generation)
     private String containerClassName;
 
-    public ProcessorContext(ProcessingEnvironment processingEnv, List<String> activeProfiles) {
-        this.processingEnv = processingEnv;
-        this.elementUtils = processingEnv.getElementUtils();
-        this.typeUtils = processingEnv.getTypeUtils();
-        this.filer = processingEnv.getFiler();
-        this.messager = processingEnv.getMessager();
+    /** Creates the context for the compilation; {@code env} is its first round. */
+    public ProcessorContext(ProcessingEnv env, List<String> activeProfiles) {
+        this.env = Objects.requireNonNull(env, "env");
         // ErrorReporter forwards every recorded error to this context's wiring-errors
-        // list so the JSON sibling artifact captures the same diagnostics the Messager
+        // list so the JSON sibling artifact captures the same diagnostics the compiler
         // prints. Lambda is a `this::addWiringError` style sink — keeps ErrorReporter
-        // dependency-free of ProcessorContext.
-        this.errorReporter = new ErrorReporter(messager, this::addWiringError);
+        // dependency-free of ProcessorContext. Its diagnostics always go to the current
+        // round's env; its own error flag spans the compilation, as before.
+        this.errorReporter = new ErrorReporter(new CurrentRoundDiagnostics(), this::addWiringError);
         this.activeProfiles = new ArrayList<>(activeProfiles);
     }
 
-    // Getters for processing utilities
-    public ProcessingEnvironment getProcessingEnv() {
-        return processingEnv;
+    /** Makes {@code env} the current round; call it at the start of every round. */
+    public void enterRound(ProcessingEnv env) {
+        this.env = Objects.requireNonNull(env, "env");
     }
 
-    public Elements getElementUtils() {
-        return elementUtils;
-    }
-
-    public Types getTypeUtils() {
-        return typeUtils;
-    }
-
-    public Filer getFiler() {
-        return filer;
-    }
-
-    public Messager getMessager() {
-        return messager;
+    /** The current round's processing environment. */
+    public ProcessingEnv env() {
+        return env;
     }
 
     public ErrorReporter getErrorReporter() {
@@ -108,7 +94,7 @@ public final class ProcessorContext {
     /**
      * Records a structured wiring diagnostic for {@code META-INF/tiko/wiring-errors.json}.
      * Called by {@link ErrorReporter} for every reported error, and directly by a few
-     * call sites that bypass {@code ErrorReporter} (raw {@code messager.printMessage}
+     * call sites that bypass {@code ErrorReporter} (direct {@link Diagnostics}
      * users in the generator and leak validator).
      */
     public void addWiringError(WiringError error) {
@@ -129,7 +115,7 @@ public final class ProcessorContext {
         String key = component.getComponentKey();
         if (components.containsKey(key)) {
             errorReporter.error(
-                    component.getTypeElement(),
+                    JavacBridge.location(component.getTypeElement()),
                     "Duplicate component: " + key + " is already registered",
                     "Give one of the components a unique @Component(name = \"...\")",
                     "Remove the duplicate @Component declaration");
@@ -147,7 +133,7 @@ public final class ProcessorContext {
             if (profilesOverlap(factory.getProfiles(), other.getProfiles())) {
                 errorReporter.error(
                         ErrorReporter.KIND_BAD_PRODUCES,
-                        factory.getMethodElement(),
+                        JavacBridge.location(factory.getMethodElement()),
                         "Duplicate factory method: " + key + " is already registered with overlapping profiles",
                         "Give one of the @Produces methods a unique @Produces(name = \"...\")",
                         "Restrict the @Produces(profiles = {...}) so the methods don't both apply at build time",
@@ -160,7 +146,7 @@ public final class ProcessorContext {
             if (profilesOverlap(factory.getProfiles(), colliding.getProfiles())) {
                 errorReporter.error(
                         ErrorReporter.KIND_BAD_PRODUCES,
-                        factory.getMethodElement(),
+                        JavacBridge.location(factory.getMethodElement()),
                         "Factory method produces type " + key + " which is already provided by a @Component",
                         "Give the @Produces method or the @Component a distinct name qualifier",
                         "Restrict the profiles so the @Produces and @Component don't both apply at build time",
@@ -513,5 +499,30 @@ public final class ProcessorContext {
     /** Snapshot of the shadowed main-component keys. Iteration order is registration order. */
     public Set<String> getShadowedMainKeys() {
         return Collections.unmodifiableSet(new LinkedHashSet<>(shadowedByTestOverride.keySet()));
+    }
+
+    /** Forwards to the current round's {@link Diagnostics}, whichever round that is. */
+    private final class CurrentRoundDiagnostics implements Diagnostics {
+
+        @Override
+        public void error(Location at, String message) {
+            env.diagnostics().error(at, message);
+        }
+
+        @Override
+        public void warning(Location at, String message) {
+            env.diagnostics().warning(at, message);
+        }
+
+        @Override
+        public void note(Location at, String message) {
+            env.diagnostics().note(at, message);
+        }
+
+        /** Per round, like the underlying {@link Diagnostics}. */
+        @Override
+        public boolean hasErrors() {
+            return env.diagnostics().hasErrors();
+        }
     }
 }

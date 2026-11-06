@@ -4,6 +4,7 @@ import io.tiko.Scope;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
+import io.tiko.processor.util.JavacBridge;
 import io.tiko.processor.util.ProcessorContext;
 import java.util.Optional;
 import javax.lang.model.element.ElementKind;
@@ -132,15 +133,18 @@ public final class ScopeValidator {
 
         if (providerObj instanceof ComponentModel component) {
             if (component.getImplementedInterface().isEmpty()) {
-                context.getErrorReporter().missingInterface(consumerElement, providerTypeName, reason);
+                context.getErrorReporter()
+                        .missingInterface(JavacBridge.location(consumerElement), providerTypeName, reason);
                 return false;
             }
         } else if (providerObj instanceof FactoryMethodModel factory) {
             // A @Produces output is proxied against its return type, so the return type must
             // itself be an interface (the proxy does `implements <returnType>`).
-            TypeElement returnTypeElement = context.getElementUtils().getTypeElement(factory.getReturnTypeName());
+            TypeElement returnTypeElement =
+                    JavacBridge.elements(context.env()).getTypeElement(factory.getReturnTypeName());
             if (returnTypeElement != null && returnTypeElement.getKind() != ElementKind.INTERFACE) {
-                context.getErrorReporter().missingInterface(consumerElement, factory.getReturnTypeName(), reason);
+                context.getErrorReporter()
+                        .missingInterface(JavacBridge.location(consumerElement), factory.getReturnTypeName(), reason);
                 return false;
             }
         }
@@ -164,7 +168,7 @@ public final class ScopeValidator {
                 && component.getQualifiedName().equals(typePart)) {
             context.getErrorReporter()
                     .proxiedConcreteInjection(
-                            consumerElement,
+                            JavacBridge.location(consumerElement),
                             component.getClassName(),
                             component.getImplementedInterface().orElseThrow().toString());
             return false;

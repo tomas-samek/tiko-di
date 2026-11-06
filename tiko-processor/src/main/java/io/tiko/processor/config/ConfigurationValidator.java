@@ -1,5 +1,6 @@
 package io.tiko.processor.config;
 
+import io.tiko.processor.util.JavacBridge;
 import io.tiko.processor.util.ProcessorContext;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -42,7 +43,7 @@ public final class ConfigurationValidator {
             if (prior != null) {
                 ctx.getErrorReporter()
                         .error(
-                                cfg.element(),
+                                JavacBridge.location(cfg.element()),
                                 prior.simpleName() + ".java, " + cfg.simpleName()
                                         + ".java — Both records declare prefix '" + cfg.prefix() + "'."
                                         + " Each prefix must be unique.",
@@ -63,7 +64,7 @@ public final class ConfigurationValidator {
         if (unsafe) {
             ctx.getErrorReporter()
                     .error(
-                            cfg.element(),
+                            JavacBridge.location(cfg.element()),
                             cfg.simpleName() + ".java — the @Configuration prefix contains a line break,"
                                     + " another control character or '='.",
                             "Use a dot-separated path such as 'tiko.my-app'");
@@ -80,7 +81,7 @@ public final class ConfigurationValidator {
                 String typeName = simpleName(inner);
                 ctx.getErrorReporter()
                         .error(
-                                f.element(),
+                                JavacBridge.location(f.element()),
                                 "Field '" + f.fieldName() + "' uses unsupported config type '" + typeName + "'."
                                         + " See *Components → Supported types* in the spec.",
                                 "Use one of: " + String.join(", ", ConfigSupportedTypes.bundledTypeNames()),
@@ -92,7 +93,7 @@ public final class ConfigurationValidator {
             if (f.cardinality() == ConfigFieldModel.Cardinality.OPTIONAL && f.defaultValue() != null) {
                 ctx.getErrorReporter()
                         .error(
-                                f.element(),
+                                JavacBridge.location(f.element()),
                                 "@Default cannot be combined with Optional<X> on field '" + f.fieldName() + "'."
                                         + " They mean different things.",
                                 "Drop the Optional wrapper, or remove @Default");
@@ -107,7 +108,7 @@ public final class ConfigurationValidator {
                     if (err != null) {
                         ctx.getErrorReporter()
                                 .error(
-                                        f.element(),
+                                        JavacBridge.location(f.element()),
                                         "@Default('" + f.defaultValue() + "') on " + simpleName(inner) + " field '"
                                                 + f.fieldName() + "' is not a valid " + effective.getSimpleName() + ": "
                                                 + err,
@@ -130,7 +131,7 @@ public final class ConfigurationValidator {
         if (!visiting.add(fqn)) {
             ctx.getErrorReporter()
                     .error(
-                            root.element(),
+                            JavacBridge.location(root.element()),
                             "Recursive record reference detected at " + fqn,
                             "Break the cycle: a @Configuration record cannot reference itself, directly or transitively",
                             "Flatten the recursive component into a separate top-level @Configuration record");

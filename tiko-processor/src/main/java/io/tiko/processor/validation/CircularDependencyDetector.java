@@ -3,6 +3,7 @@ package io.tiko.processor.validation;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
+import io.tiko.processor.util.JavacBridge;
 import io.tiko.processor.util.ProcessorContext;
 import java.util.*;
 
@@ -135,7 +136,7 @@ public final class CircularDependencyDetector {
      */
     private void reportCycle(ComponentModel component, List<String> path) {
         String cycle = String.join(" -> ", path);
-        context.getErrorReporter().circularDependency(component.getTypeElement(), cycle);
+        context.getErrorReporter().circularDependency(JavacBridge.location(component.getTypeElement()), cycle);
     }
 
     /**
@@ -143,6 +144,6 @@ public final class CircularDependencyDetector {
      */
     private void reportCycleForFactory(FactoryMethodModel factory, List<String> path) {
         String cycle = String.join(" -> ", path);
-        context.getErrorReporter().circularDependency(factory.getMethodElement(), cycle);
+        context.getErrorReporter().circularDependency(JavacBridge.location(factory.getMethodElement()), cycle);
     }
 }
