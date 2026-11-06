@@ -19,10 +19,13 @@ public interface TypeRef {
     String erasedName();
 
     /**
-     * The frontend's human-readable rendering of the type, with type arguments; on javac exactly
-     * {@code TypeMirror.toString()}. For messages and descriptive output such as topology text;
-     * never for type identity (see {@link #erasedName()} and
-     * {@link io.tiko.processor.core.TypeOracle#isSameType}).
+     * The Java-source rendering of the type, with type arguments: on javac exactly
+     * {@code TypeMirror.toString()}, on KSP the same text for the Java type javac sees
+     * ({@code kotlin.String} renders as {@code java.lang.String}). It is identical across
+     * frontends for the same Java type, and nullability never shows in it. DI uses it as the
+     * dependency-key and class-lookup text, besides messages and topology output. It is not
+     * semantic type equality: compare types with
+     * {@link io.tiko.processor.core.TypeOracle#isSameType} or {@link #erasedName()}.
      */
     String displayName();
 

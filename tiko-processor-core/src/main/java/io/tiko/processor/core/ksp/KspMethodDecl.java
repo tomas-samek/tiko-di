@@ -159,11 +159,13 @@ final class KspMethodDecl implements MethodDecl {
 
     @Override
     public List<TypeVariableName> typeVariables() {
-        return function().getTypeParameters().stream().map(this::typeVariable).toList();
+        return function().getTypeParameters().stream()
+                .map(parameter -> typeVariable(parameter, model))
+                .toList();
     }
 
     /** A type parameter with its bounds, leaving out Kotlin's implicit {@code Any?}. */
-    private TypeVariableName typeVariable(KSTypeParameter parameter) {
+    static TypeVariableName typeVariable(KSTypeParameter parameter, KspModel model) {
         var bounds = SequencesKt.toList(parameter.getBounds()).stream()
                 .map(KSTypeReference::resolve)
                 .map(bound -> KspTypeNames.of(bound, true, false, model))

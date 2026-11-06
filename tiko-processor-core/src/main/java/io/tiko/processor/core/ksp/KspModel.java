@@ -9,6 +9,7 @@ import com.google.devtools.ksp.symbol.KSAnnotated;
 import com.google.devtools.ksp.symbol.KSClassDeclaration;
 import com.google.devtools.ksp.symbol.KSDeclaration;
 import com.google.devtools.ksp.symbol.KSFunctionDeclaration;
+import com.google.devtools.ksp.symbol.KSPropertyDeclaration;
 import com.google.devtools.ksp.symbol.KSType;
 import com.google.devtools.ksp.symbol.Origin;
 import com.google.devtools.ksp.symbol.Variance;
@@ -198,7 +199,7 @@ final class KspModel {
      * The position of {@code function} in the list. KSP caches its symbols, so this is mostly an
      * identity match; a source position settles the rest.
      */
-    private static int indexOf(List<KSFunctionDeclaration> functions, KSFunctionDeclaration function) {
+    private static <T extends KSDeclaration> int indexOf(List<T> functions, T function) {
         for (var i = 0; i < functions.size(); i++) {
             if (functions.get(i) == function || functions.get(i).equals(function)) {
                 return i;
@@ -214,6 +215,58 @@ final class KspModel {
             }
         }
         return -1;
+    }
+
+    // ----- property accessors -----
+
+    /** The JVM accessors of the properties the class declares, in source order (see {@link KspAccessorDecl}). */
+    List<MethodDecl> declaredAccessors(KSClassDeclaration declaration) {
+        return SequencesKt.toList(UtilsKt.getDeclaredProperties(declaration)).stream()
+                .flatMap(property -> accessorDecls(property).stream())
+                .toList();
+    }
+
+    /**
+     * The JVM accessors of a member property, getter first, found again in later rounds by the
+     * property's position among its declaring class's properties. A property KSP synthesizes for a
+     * subclass (a substitution override) maps to the declaration it stands for.
+     */
+    List<MethodDecl> accessorDecls(KSPropertyDeclaration property) {
+        var kinds = KspAccessorDecl.accessorKinds(property, this);
+        if (kinds.isEmpty() || !(property.getParentDeclaration() instanceof KSClassDeclaration parent)) {
+            return List.of();
+        }
+        var ownerName = parent.getQualifiedName().asString();
+        var index = indexOf(declaredProperties(parent), property);
+        KspRef<KSPropertyDeclaration> ref;
+        String key;
+        if (index >= 0) {
+            ref = ref(
+                    property,
+                    resolver ->
+                            declaredProperties(findClass(resolver, ownerName)).get(index));
+            key = ownerName + "#property" + index;
+        } else if (property.findOverridee() instanceof KSPropertyDeclaration original
+                && !original.equals(property)
+                && original.getParentDeclaration() instanceof KSClassDeclaration originalOwner
+                && indexOf(declaredProperties(originalOwner), original) >= 0) {
+            return accessorDecls(original);
+        } else {
+            // Nowhere to find it again: usable in this round only, and its key is unique to it.
+            ref = ref(property, resolver -> null);
+            key = ownerName + "#?" + property.getSimpleName().asString() + "@" + System.identityHashCode(property);
+        }
+        return kinds.stream()
+                .<MethodDecl>map(setter -> accessor(ref, Boolean.TRUE.equals(setter), key))
+                .toList();
+    }
+
+    private MethodDecl accessor(KspRef<KSPropertyDeclaration> ref, boolean setter, String key) {
+        return new KspAccessorDecl(ref, setter, key + (setter ? ":set" : ":get"), this);
+    }
+
+    private static List<KSPropertyDeclaration> declaredProperties(KSClassDeclaration declaration) {
+        return SequencesKt.toList(UtilsKt.getDeclaredProperties(declaration));
     }
 
     // ----- types and annotations -----

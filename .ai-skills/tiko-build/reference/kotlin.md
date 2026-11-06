@@ -33,13 +33,22 @@ kotlin { jvmToolchain(21) }
 - The processors go on the `ksp(...)` configuration. There are no separate `*-ksp` artifacts.
 - No Tiko Gradle plugin exists; use the standard KSP plugin.
 - Gradle is the supported build for Kotlin.
-- **Maven + Kotlin:** works with any Maven plugin that runs a KSP `SymbolProcessorProvider`.
-  Untested.
+- **Maven + Kotlin:** may work with any Maven plugin that runs a KSP `SymbolProcessorProvider`;
+  untested.
 
 ## What does not work on KSP yet
 
 - `@TikoTest` and `@TestComponent` (the `tiko-test` module) don't work on KSP yet. Planned.
-- `suspend` event handlers: rejected until Tiko's coroutine support.
+- `suspend` event handlers and `suspend` `@KafkaSource` bridges: rejected until Tiko's
+  coroutine support.
+
+## Where KSP differs from javac
+
+- **Sources another processor generates in a later round.** On javac, Tiko generates the
+  container in the first round that has components, so a Tiko-annotated source another
+  processor writes in a later round is an error ("appeared in a later annotation-processing
+  round", #334). On KSP, Tiko waits for the first round without new Tiko sources, so such
+  components are wired into the container.
 
 ## Construct rules
 
@@ -53,7 +62,12 @@ One that would add new DI semantics is rejected at compile time with error kind
 | `internal` class, constructor or member | Supported. Generated Java calls `internal` members by their JVM (mangled) names. | — |
 | Use-site target `@param:` on constructor properties | Supported. `@Named` and `@Pick` target parameters only, so write `@param:Named("x")`; `@field:Named` does not compile. | — |
 | Default parameter values | Supported, but never optional: Tiko injects the primary constructor with **all** parameters; defaults are not used. | — |
-| Secondary constructors | Ignored; the primary constructor is injected. | — |
+| Primary + secondary constructors, no `@Inject` | The primary constructor is injected. (In Java, two public constructors without `@Inject` are an error.) | — |
+| `@Inject` on a secondary constructor | That constructor is injected instead of the primary one. | — |
+| `@JvmOverloads` constructor | The primary constructor is injected with all its parameters; the extra JVM overloads are ignored. | — |
+| Interface with properties (`val id: String`, `var name: String`) behind an `EVENT` proxy | Supported. The proxy overrides the JVM accessors (`getId()`, `getName()` / `setName(...)`). | — |
+| `@Configuration` on a `@JvmRecord data class` | Supported: bound like a Java record. Components are the primary constructor's parameters, in order; `@Key` / `@Default` go on those parameters. A Kotlin default value (`val port: Int = 8080`) or a nullable type (`String?`) does not make a key optional: the key stays required, and boot fails without it. | For a key that may be absent, use `@Default("8080")` (a default value) or `Optional<T>` (no value). |
+| `@Configuration` on a plain `data class` or `class` | Rejected: `@Configuration` needs a record. | Annotate it `@JvmRecord` (a `data class` with `val` parameters). |
 | `vararg` constructor parameter | An array dependency, as on Java (`B[]`); normally a missing dependency. | Declare a plain `B` parameter, or a `Picker<B>`. |
 | Java / platform types | Count as non-null. | — |
 | `@Produces` / `@EventHandler` on a top-level function | Rejected (`KOTLIN_UNSUPPORTED`): no component instance to call it on. | Move it into a `@Component` class. |
@@ -65,6 +79,12 @@ One that would add new DI semantics is rejected at compile time with error kind
 | `@get:` / `@set:` DI annotation on a property (`@get:Produces`, `@set:PostConstruct`, ...) | Rejected: Tiko reads DI annotations on functions. | Declare a `fun` instead. |
 | `suspend` `@EventHandler` | Rejected until coroutine support. | Make it a regular `fun`. |
 | `suspend` `@Produces` / `@PostConstruct` / `@PreDestroy` | Rejected: the container calls them outside a coroutine. | Drop `suspend`. |
+| Value class (`@JvmInline value class`) as a component, injected type, `@Produces` return or parameter, or handler event | Rejected: on the JVM it is passed as its underlying value under a mangled function name, so generated Java can't use it. | Use a regular class (a `data class` keeps value semantics). |
+| DI function whose JVM name Java can't call (e.g. `fun new()`) | Rejected. | Rename it, or set a callable name with `@JvmName`. |
+| `@KafkaSource` / `@KafkaSink` on a top-level function, or inside an `object` / `companion object` | Rejected: no component instance to call it on. | Move it into (or, from a companion, to the enclosing) `@Component` class. |
+| `@KafkaSource` / `@KafkaSink` on an extension function | Rejected: the bootstrap passes only the payload (and `KafkaContext`). | Declare a regular `fun` taking the receiver as a parameter. |
+| `suspend` `@KafkaSource` | Rejected until coroutine support. | Make it a regular `fun`. |
+| `suspend` `@KafkaSink`, or a value class in a bridge's signature | Rejected. | Drop `suspend`; use a regular class. |
 
 ## Nullability
 

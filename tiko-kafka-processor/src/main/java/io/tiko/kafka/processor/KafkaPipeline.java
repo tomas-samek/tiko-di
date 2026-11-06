@@ -8,6 +8,7 @@ import io.tiko.kafka.processor.generator.KafkaTransportBootstrapGenerator;
 import io.tiko.kafka.processor.model.KafkaSinkDescriptor;
 import io.tiko.kafka.processor.model.KafkaSourceDescriptor;
 import io.tiko.kafka.processor.validation.BridgeMethodShapeValidator;
+import io.tiko.kafka.processor.validation.KotlinBridgeValidator;
 import io.tiko.kafka.processor.validation.PartitionKeyValidator;
 import io.tiko.kafka.processor.validation.RequiredSiblingValidator;
 import io.tiko.kafka.processor.validation.SingletonBridgeValidator;
@@ -79,13 +80,17 @@ public final class KafkaPipeline {
         var diagnostics = env.diagnostics();
         var roundSources = new ArrayList<KafkaSourceDescriptor>();
         var roundSinks = new ArrayList<KafkaSinkDescriptor>();
-        boolean ok = true;
+        // Before collection: it rules out what collection assumes (a bridge has a declaring class).
+        var rejected = KotlinBridgeValidator.rejected(env);
+        boolean ok = rejected.isEmpty();
         for (MethodDecl method : env.methodsAnnotatedWith(KAFKA_SOURCE)) {
+            if (rejected.contains(method)) continue;
             var source = sourceDescriptor(method, diagnostics);
             ok &= source.isPresent();
             source.ifPresent(roundSources::add);
         }
         for (MethodDecl method : env.methodsAnnotatedWith(KAFKA_SINK)) {
+            if (rejected.contains(method)) continue;
             var sink = sinkDescriptor(method, diagnostics);
             ok &= sink.isPresent();
             sink.ifPresent(roundSinks::add);
@@ -199,7 +204,7 @@ public final class KafkaPipeline {
         return serializer;
     }
 
-    /** The declaring class; a Java method always has one. */
+    /** The declaring class; a Java method always has one, and {@link KotlinBridgeValidator} rejected the rest. */
     private static ClassDecl owner(MethodDecl method) {
         return method.owner()
                 .orElseThrow(() -> new IllegalStateException("Kafka bridge without a declaring class: " + method));

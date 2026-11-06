@@ -8,7 +8,11 @@ import io.tiko.processor.core.ksp.RoundWatcher;
 import io.tiko.processor.ksp.TikoSymbolProcessorProvider;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 /** The Kafka processor runs on KSP2 over a Kotlin bridge, next to the DI processor. */
 class KspKafkaBridgeTest {
@@ -55,8 +59,9 @@ class KspKafkaBridgeTest {
                 "package demo",
                 "",
                 "@io.tiko.annotations.Component",
-                "class Ambiguous(val name: String) {",
-                "    constructor() : this(\"\")",
+                "class Ambiguous {",
+                "    constructor(name: String)",
+                "    constructor()",
                 "}");
 
         var result = KspCompiler.compile(
@@ -66,8 +71,186 @@ class KspKafkaBridgeTest {
                 broken);
 
         assertThat(result.exitCode()).isEqualTo(KotlinCompilation.ExitCode.COMPILATION_ERROR);
+        assertThat(result.messages())
+                .as("the DI processor's collection error")
+                .contains("must have an @Inject-annotated constructor or a single public constructor");
         assertThat(result.generatedJava("io.tiko.generated.KafkaTransportBootstrap"))
                 .isPresent();
+    }
+
+    /**
+     * The Kotlin construct rule for bridges: a construct the generated bootstrap can't call is a
+     * located Tiko error before collection (no processor crash, no javac error on generated code),
+     * and no bootstrap is written.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("unsupportedBridges")
+    void unsupportedKotlinBridgeIsRejected(String name, String body, List<String> fragments) {
+        var source = KspCompiler.kotlin(
+                "Bridges.kt",
+                "package demo",
+                "",
+                "import io.tiko.Scope",
+                "import io.tiko.annotations.Component",
+                "import io.tiko.kafka.annotations.KafkaSink",
+                "import io.tiko.kafka.annotations.KafkaSource",
+                "",
+                "data class OrderPlaced(val orderId: String)",
+                "",
+                body);
+
+        var result = KspCompiler.compile(
+                List.of(new TikoSymbolProcessorProvider(), new KafkaSymbolProcessorProvider()), Map.of(), source);
+
+        assertThat(result.exitCode()).as(result.messages()).isEqualTo(KotlinCompilation.ExitCode.COMPILATION_ERROR);
+        assertThat(result.messages())
+                .as("located Tiko error")
+                .contains("Bridges.kt:")
+                .contains(fragments)
+                .contains("Suggested fixes:")
+                .doesNotContain("INTERNAL_ERROR")
+                .doesNotContain("KafkaTransportBootstrap.java");
+        assertThat(result.generatedJava("io.tiko.generated.KafkaTransportBootstrap"))
+                .isEmpty();
+    }
+
+    static Stream<Arguments> unsupportedBridges() {
+        return Stream.of(
+                Arguments.of(
+                        "topLevelSourceRejected",
+                        """
+                        @KafkaSource(topic = "orders")
+                        fun fromKafka(placed: OrderPlaced) {}
+                        """,
+                        List.of("@KafkaSource on a top-level function 'fromKafka'", "move it into a @Component class")),
+                Arguments.of(
+                        "topLevelSinkRejected",
+                        """
+                        @KafkaSink(topic = "orders")
+                        fun toKafka(placed: OrderPlaced): OrderPlaced = placed
+                        """,
+                        List.of("@KafkaSink on a top-level function 'toKafka'", "move it into a @Component class")),
+                Arguments.of(
+                        "suspendSourceRejectedUntilK2",
+                        """
+                        @Component(scope = Scope.SINGLETON)
+                        class OrderConsumer {
+                            @KafkaSource(topic = "orders")
+                            suspend fun fromKafka(placed: OrderPlaced) {}
+                        }
+                        """,
+                        List.of(
+                                "suspend @KafkaSource is not supported yet",
+                                "'OrderConsumer.fromKafka' is a suspend fun",
+                                "coroutine support (K2)")),
+                Arguments.of(
+                        "suspendSinkRejected",
+                        """
+                        @Component(scope = Scope.SINGLETON)
+                        class OrderPublisher {
+                            @KafkaSink(topic = "orders")
+                            suspend fun toKafka(placed: OrderPlaced): OrderPlaced = placed
+                        }
+                        """,
+                        List.of("suspend @KafkaSink is not supported", "make it a regular fun")),
+                Arguments.of(
+                        "extensionSourceRejected",
+                        """
+                        class Config
+                        @Component(scope = Scope.SINGLETON)
+                        class OrderConsumer {
+                            @KafkaSource(topic = "orders")
+                            fun Config.fromKafka(placed: OrderPlaced) {}
+                        }
+                        """,
+                        List.of(
+                                "@KafkaSource on the extension function 'OrderConsumer.fromKafka'",
+                                "declare a regular fun that takes the receiver as a parameter")),
+                Arguments.of(
+                        "objectSourceRejected",
+                        """
+                        object OrderConsumer {
+                            @KafkaSource(topic = "orders")
+                            fun fromKafka(placed: OrderPlaced) {}
+                        }
+                        """,
+                        List.of("@KafkaSource inside an object declaration", "move it into a @Component class")),
+                Arguments.of(
+                        "companionSinkRejected",
+                        """
+                        @Component(scope = Scope.SINGLETON)
+                        class OrderPublisher {
+                            companion object {
+                                @KafkaSink(topic = "orders")
+                                fun toKafka(placed: OrderPlaced): OrderPlaced = placed
+                            }
+                        }
+                        """,
+                        List.of("@KafkaSink inside a companion object", "move it to the enclosing @Component class")),
+                Arguments.of(
+                        "valueClassPayloadRejected",
+                        """
+                        @JvmInline value class OrderId(val raw: String)
+                        @Component(scope = Scope.SINGLETON)
+                        class OrderConsumer {
+                            @KafkaSource(topic = "orders")
+                            fun fromKafka(id: OrderId) {}
+                        }
+                        """,
+                        List.of(
+                                "@KafkaSource 'OrderConsumer.fromKafka' takes the Kotlin value class demo.OrderId",
+                                "Use a regular class")));
+    }
+
+    /**
+     * Kotlin compiles a {@code @JvmRecord} component to the record accessor {@code orderId()}, so
+     * that is the partition key, as on javac over the compiled record; the bootstrap calls it.
+     */
+    @Test
+    void jvmRecordPartitionKeyIsTheRecordAccessor() {
+        var result = KspCompiler.compile(
+                List.of(new TikoSymbolProcessorProvider(), new KafkaSymbolProcessorProvider()),
+                Map.of(),
+                jvmRecordSink("orderId"));
+
+        assertThat(result.exitCode()).as(result.messages()).isEqualTo(KotlinCompilation.ExitCode.OK);
+        assertThat(result.generatedJava("io.tiko.generated.KafkaTransportBootstrap"))
+                .hasValueSatisfying(bootstrap -> assertThat(bootstrap).contains("p).orderId()"));
+    }
+
+    /** {@code getOrderId} does not exist on the compiled record: a located Tiko error, not a javac one. */
+    @Test
+    void jvmRecordGetterNameIsNoPartitionKey() {
+        var result = KspCompiler.compile(
+                List.of(new TikoSymbolProcessorProvider(), new KafkaSymbolProcessorProvider()),
+                Map.of(),
+                jvmRecordSink("getOrderId"));
+
+        assertThat(result.exitCode()).as(result.messages()).isEqualTo(KotlinCompilation.ExitCode.COMPILATION_ERROR);
+        assertThat(result.messages())
+                .as("located Tiko error")
+                .contains("Sinks.kt:")
+                .contains(
+                        "@KafkaSink partitionKey 'getOrderId' does not resolve to a zero-arg method on demo.OrderPlaced")
+                .doesNotContain("KafkaTransportBootstrap.java");
+    }
+
+    private static com.tschuchort.compiletesting.SourceFile jvmRecordSink(String partitionKey) {
+        return KspCompiler.kotlin(
+                "Sinks.kt",
+                "package demo",
+                "",
+                "import io.tiko.Scope",
+                "import io.tiko.annotations.Component",
+                "import io.tiko.kafka.annotations.KafkaSink",
+                "",
+                "@JvmRecord data class OrderPlaced(val orderId: String)",
+                "",
+                "@Component(scope = Scope.SINGLETON)",
+                "class OrderPublisher {",
+                "    @KafkaSink(topic = \"orders\", partitionKey = \"" + partitionKey + "\")",
+                "    fun toKafka(placed: OrderPlaced): OrderPlaced = placed",
+                "}");
     }
 
     private static com.tschuchort.compiletesting.SourceFile bridge() {

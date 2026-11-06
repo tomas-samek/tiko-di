@@ -35,17 +35,34 @@ final class KspProgram implements AutoCloseable {
 
     /** Boots {@code Tiko.create()} over the compiled program. */
     static KspProgram boot(KspResult result) {
-        return boot(new URLClassLoader(classpath(result.outputRoots()), ClassLoader.getPlatformClassLoader()));
+        return boot(result, null);
+    }
+
+    /**
+     * Boots {@code Tiko.create(ConfigSources.file(yaml))} over the compiled program: the
+     * {@code @Configuration} records bind from that YAML file.
+     */
+    static KspProgram boot(KspResult result, Path yaml) {
+        return boot(new URLClassLoader(classpath(result.outputRoots()), ClassLoader.getPlatformClassLoader()), yaml);
     }
 
     /** Boots over {@code loader}, which is closed again when the boot fails and owned by the program otherwise. */
-    private static KspProgram boot(URLClassLoader loader) {
+    private static KspProgram boot(URLClassLoader loader, Path yaml) {
         var thread = Thread.currentThread();
         var previous = thread.getContextClassLoader();
         thread.setContextClassLoader(loader);
         try (var guard = new LoaderGuard(loader)) {
-            var container =
-                    loader.loadClass("io.tiko.runtime.Tiko").getMethod("create").invoke(null);
+            var tiko = loader.loadClass("io.tiko.runtime.Tiko");
+            Object container;
+            if (yaml == null) {
+                container = tiko.getMethod("create").invoke(null);
+            } else {
+                var sourceType = loader.loadClass("io.tiko.ConfigSource");
+                var source = loader.loadClass("io.tiko.config.ConfigSources")
+                        .getMethod("file", Path.class)
+                        .invoke(null, yaml);
+                container = tiko.getMethod("create", sourceType).invoke(null, source);
+            }
             return new KspProgram(guard.release(), container);
         } catch (ReflectiveOperationException e) {
             throw new AssertionError("Tiko.create() failed", unwrap(e));

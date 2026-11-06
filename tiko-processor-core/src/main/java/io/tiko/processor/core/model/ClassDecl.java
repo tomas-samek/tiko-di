@@ -26,6 +26,14 @@ public interface ClassDecl {
 
     boolean isStatic();
 
+    /**
+     * A Kotlin value class ({@code @JvmInline value class}). Always false on javac: javac sees a
+     * Kotlin-compiled value class on the classpath as the plain final class its values box to,
+     * which Java code can pass and inject like any other class but not construct: its JVM
+     * constructor is private, so Java has no {@code new} for it.
+     */
+    boolean isValueClass();
+
     SourceLanguage language();
 
     List<AnnotationRef> annotations();
@@ -45,7 +53,11 @@ public interface ClassDecl {
     /** The Kotlin primary constructor; always empty for Java. */
     Optional<MethodDecl> primaryConstructor();
 
-    /** Methods declared directly on this type (not inherited ones). */
+    /**
+     * Methods declared directly on this type (not inherited ones). A Kotlin property contributes the
+     * accessor methods the JVM has for it ({@code getX} / {@code isX} / {@code setX}, named by
+     * {@link MethodDecl#jvmName()}), as javac sees a Kotlin-compiled class.
+     */
     List<MethodDecl> methods();
 
     /**
@@ -54,7 +66,8 @@ public interface ClassDecl {
      * override; private methods of supertypes and static interface methods are not inherited and
      * do not appear; constructors never do. The root class's methods are included
      * ({@code java.lang.Object}'s on javac; on KSP Kotlin's {@code Any}, which declares only
-     * {@code equals}, {@code hashCode} and {@code toString}). The order is unspecified.
+     * {@code equals}, {@code hashCode} and {@code toString}). Kotlin properties contribute their
+     * accessor methods, as in {@link #methods()}. The order is unspecified.
      */
     List<MethodDecl> allMethods();
 

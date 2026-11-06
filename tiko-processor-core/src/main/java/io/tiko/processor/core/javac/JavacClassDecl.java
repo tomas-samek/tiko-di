@@ -64,6 +64,12 @@ record JavacClassDecl(TypeElement element, JavacModel model) implements ClassDec
         return element.getModifiers().contains(Modifier.STATIC);
     }
 
+    /** Never: a classpath value class is its box class to javac (see {@link ClassDecl#isValueClass()}). */
+    @Override
+    public boolean isValueClass() {
+        return false;
+    }
+
     @Override
     public SourceLanguage language() {
         return model.language(element);

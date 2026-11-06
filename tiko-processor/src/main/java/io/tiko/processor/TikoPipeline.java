@@ -325,16 +325,25 @@ public final class TikoPipeline {
     }
 
     /**
+     * The checks that run first and short-circuit. Generated Java can't construct a component
+     * that injects a Kotlin value class, and stopping here keeps its rejected provider from also
+     * reading as a missing dependency. The validators after these assume well-shaped models
+     * (#333): a raw Provider dependency, for one, NPEs the moment any of them reads its
+     * dependency key.
+     */
+    private boolean wellShaped(TypeUtil typeUtil) {
+        return new KotlinConstructValidator(context).validateInjectionPoints()
+                && new ComponentShapeValidator(context, typeUtil).validate();
+    }
+
+    /**
      * Validates the dependency graph.
      */
     private boolean validate() {
         boolean valid = true;
         var typeUtil = new TypeUtil(context.env().types());
 
-        // Structural shape checks run first and short-circuit (#333): the validators below
-        // assume well-shaped models — e.g. a raw Provider dependency NPEs the moment any
-        // of them reads its dependency key.
-        if (!new ComponentShapeValidator(context, typeUtil).validate()) {
+        if (!wellShaped(typeUtil)) {
             return false;
         }
 

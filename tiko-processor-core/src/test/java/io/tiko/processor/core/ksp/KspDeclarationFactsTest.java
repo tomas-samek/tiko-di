@@ -113,6 +113,38 @@ class KspDeclarationFactsTest {
                 val entries: List<String> = listOf()
             }
 
+            @JvmInline value class Meters(val raw: Double)
+
+            @JvmRecord data class Span(val start: Int, val label: String)
+
+            data class PlainData(val start: Int)
+
+            class Accessors {
+                val plain: String = ""
+                var mutable: Int = 0
+                val isReady: Boolean = true
+                internal val hidden: String = ""
+                @get:JvmName("label") val tag: String = ""
+                var guarded: String = ""
+                    private set
+                private val secretProp: String = ""
+                @JvmField val field: String = ""
+                fun plainFun() {}
+                companion object {
+                    const val LIMIT = 1
+                }
+            }
+
+            interface WithProps {
+                val id: String
+                var note: String?
+                val described: String get() = "x"
+            }
+
+            class Props(override val id: String) : WithProps {
+                override var note: String? = null
+            }
+
             @Tag("top")
             fun topLevelHelper() {}
             """;
@@ -408,6 +440,26 @@ class KspDeclarationFactsTest {
                 fact("kotlinClassIsFinalByDefault", env -> cls(env, "f.Circle").isFinal(), true),
                 fact("abstractClassIsNotFinal", env -> cls(env, "f.Base").isFinal(), false),
                 fact("javaClassIsNotFinal", env -> cls(env, "f.Legacy").isFinal(), false),
+                fact("jvmRecordIsARecord", env -> cls(env, "f.Span").kind(), DeclKind.RECORD),
+                fact("plainDataClassIsAClass", env -> cls(env, "f.PlainData").kind(), DeclKind.CLASS),
+                fact(
+                        "jvmRecordComponentsArePrimaryConstructorParameters",
+                        env -> cls(env, "f.Span").recordComponents().stream()
+                                .map(component -> component.name() + ":"
+                                        + component.type().displayName())
+                                .toList(),
+                        List.of("start:int", "label:java.lang.String")),
+                fact(
+                        "jvmRecordSuperclassIsRecord",
+                        env -> cls(env, "f.Span").superclass().map(TypeRef::displayName),
+                        java.util.Optional.of("java.lang.Record")),
+                fact("valueClassIsValueClass", env -> cls(env, "f.Meters").isValueClass(), true),
+                fact(
+                        "classpathValueClassIsValueClass",
+                        env -> cls(env, "kotlin.time.Duration").isValueClass(),
+                        true),
+                fact("plainClassIsNoValueClass", env -> cls(env, "f.Circle").isValueClass(), false),
+                fact("javaClassIsNoValueClass", env -> cls(env, "f.Legacy").isValueClass(), false),
                 fact(
                         "javaStaticNestedClassIsStatic",
                         env -> cls(env, "f.Legacy.Nested").isStatic(),
@@ -472,6 +524,97 @@ class KspDeclarationFactsTest {
                         "allMethodsLeaveOutConstructors",
                         env -> cls(env, "f.Circle").allMethods().stream().anyMatch(MethodDecl::isConstructor),
                         false),
+                // ----- property accessors -----
+                fact(
+                        "propertiesContributeTheirJvmAccessors",
+                        env -> cls(env, "f.Accessors").methods().stream()
+                                .map(MethodDecl::name)
+                                .sorted()
+                                .toList(),
+                        List.of(
+                                "getGuarded",
+                                "getHidden",
+                                "getMutable",
+                                "getPlain",
+                                "getTag",
+                                "isReady",
+                                "plainFun",
+                                "setMutable")),
+                fact(
+                        "accessorJvmNameFollowsJvmName",
+                        env -> method(env, "f.Accessors", "getTag").jvmName(),
+                        "label"),
+                fact(
+                        "internalAccessorJvmNameIsMangled",
+                        env -> method(env, "f.Accessors", "getHidden").jvmName().startsWith("getHidden$"),
+                        true),
+                fact(
+                        "setterTakesTheValueAndReturnsVoid",
+                        env -> {
+                            var setter = method(env, "f.Accessors", "setMutable");
+                            return setter.returnType().isVoid() + " "
+                                    + setter.parameters().get(0).type().displayName();
+                        },
+                        "true int"),
+                fact(
+                        "getterReturnsThePropertyType",
+                        env -> method(env, "f.Accessors", "isReady")
+                                .returnType()
+                                .displayName(),
+                        "boolean"),
+                fact(
+                        "abstractPropertyAccessorsAreAbstract",
+                        env -> cls(env, "f.WithProps").methods().stream()
+                                .filter(MethodDecl::isAbstract)
+                                .map(MethodDecl::name)
+                                .sorted()
+                                .toList(),
+                        List.of("getId", "getNote", "setNote")),
+                fact(
+                        "interfacePropertyWithBodyIsDefault",
+                        env -> method(env, "f.WithProps", "getDescribed").isDefault(),
+                        true),
+                fact(
+                        "nullablePropertyAccessorKeepsNullability",
+                        env -> method(env, "f.WithProps", "getNote")
+                                .returnType()
+                                .nullability(),
+                        io.tiko.processor.core.model.Nullability.NULLABLE),
+                fact(
+                        "allMethodsIncludeInheritedAccessorsOnce",
+                        env -> cls(env, "f.Props").allMethods().stream()
+                                .map(MethodDecl::name)
+                                .filter(name -> name.startsWith("get") || name.startsWith("set"))
+                                .sorted()
+                                .toList(),
+                        List.of("getDescribed", "getId", "getNote", "setNote")),
+                fact(
+                        "mappedBuiltInPropertiesAreNoAccessors",
+                        env -> cls(env, "f.Color").allMethods().stream()
+                                .map(MethodDecl::name)
+                                .filter(List.of("getName", "getOrdinal")::contains)
+                                .toList(),
+                        List.of()),
+                fact(
+                        "jvmRecordComponentAccessorsAreRecordAccessors",
+                        env -> cls(env, "f.Span").methods().stream()
+                                .filter(method -> List.of("start", "label", "getStart", "getLabel")
+                                        .contains(method.name()))
+                                .map(method -> method.name() + "/" + method.jvmName())
+                                .sorted()
+                                .toList(),
+                        List.of("label/label", "start/start")),
+                fact(
+                        "plainDataClassPropertyKeepsItsGetter",
+                        env -> {
+                            var getter = method(env, "f.PlainData", "getStart");
+                            return getter.name() + "/" + getter.jvmName();
+                        },
+                        "getStart/getStart"),
+                fact(
+                        "accessorEqualityAcrossLookups",
+                        env -> method(env, "f.Accessors", "getPlain").equals(method(env, "f.Accessors", "getPlain")),
+                        true),
                 // ----- fields -----
                 fact(
                         "kotlinFieldsAreBackingFieldProperties",

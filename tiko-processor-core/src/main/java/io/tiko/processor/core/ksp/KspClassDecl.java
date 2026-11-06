@@ -1,6 +1,7 @@
 package io.tiko.processor.core.ksp;
 
 import com.google.devtools.ksp.UtilsKt;
+import com.google.devtools.ksp.processing.Resolver;
 import com.google.devtools.ksp.symbol.ClassKind;
 import com.google.devtools.ksp.symbol.KSClassDeclaration;
 import com.google.devtools.ksp.symbol.KSDeclaration;
@@ -39,6 +40,7 @@ import kotlin.sequences.SequencesKt;
 final class KspClassDecl implements ClassDecl {
 
     private static final String RECORD = "java.lang.Record";
+    private static final String JVM_RECORD = "kotlin.jvm.JvmRecord";
     private static final String ANY = "kotlin.Any";
 
     private final KspRef<KSClassDeclaration> ref;
@@ -70,7 +72,7 @@ final class KspClassDecl implements ClassDecl {
         var declaration = declaration();
         return switch (declaration.getClassKind()) {
             case INTERFACE -> DeclKind.INTERFACE;
-            case CLASS -> isRecord(declaration) ? DeclKind.RECORD : DeclKind.CLASS;
+            case CLASS -> isRecord(declaration) || isJvmRecord(declaration) ? DeclKind.RECORD : DeclKind.CLASS;
             case ENUM_CLASS -> DeclKind.ENUM;
             case ANNOTATION_CLASS -> DeclKind.ANNOTATION;
             case OBJECT -> declaration.isCompanionObject() ? DeclKind.KOTLIN_COMPANION : DeclKind.KOTLIN_OBJECT;
@@ -85,6 +87,16 @@ final class KspClassDecl implements ClassDecl {
                     var resolved = superType.resolve().getDeclaration().getQualifiedName();
                     return resolved != null && resolved.asString().equals(RECORD);
                 });
+    }
+
+    /**
+     * A Kotlin {@code @JvmRecord} class, which Kotlin compiles to a Java record: javac sees a
+     * record whose components are the primary constructor's properties.
+     */
+    private boolean isJvmRecord(KSClassDeclaration declaration) {
+        return !KspModel.isJava(declaration)
+                && KspAnnotationRef.first(ref, JVM_RECORD, key(), qualifiedName(), model)
+                        .isPresent();
     }
 
     @Override
@@ -118,6 +130,13 @@ final class KspClassDecl implements ClassDecl {
             return !declaration.getModifiers().contains(Modifier.INNER);
         }
         return declaration.getModifiers().contains(Modifier.JAVA_STATIC) || kind() != DeclKind.CLASS;
+    }
+
+    /** The {@code value} (or legacy {@code inline}) modifier, also on a classpath Kotlin class. */
+    @Override
+    public boolean isValueClass() {
+        var modifiers = declaration().getModifiers();
+        return modifiers.contains(Modifier.VALUE) || modifiers.contains(Modifier.INLINE);
     }
 
     @Override
@@ -157,18 +176,28 @@ final class KspClassDecl implements ClassDecl {
         return Optional.ofNullable(declaration.getPrimaryConstructor()).map(model::methodDecl);
     }
 
+    /**
+     * The declared functions (without constructors), then the JVM accessors of the declared
+     * properties ({@code getX} / {@code isX} / {@code setX}, see {@link KspAccessorDecl}): the
+     * methods javac sees on the Kotlin-compiled class.
+     */
     @Override
     public List<MethodDecl> methods() {
-        return KspModel.functionsOf(declaration()).stream()
+        var declaration = declaration();
+        var methods = new ArrayList<MethodDecl>();
+        KspModel.functionsOf(declaration).stream()
                 .filter(function -> !UtilsKt.isConstructor(function))
                 .map(model::methodDecl)
-                .toList();
+                .forEach(methods::add);
+        methods.addAll(model.declaredAccessors(declaration));
+        return List.copyOf(methods);
     }
 
     /**
      * Declared and inherited member functions as KSP's {@code getAllFunctions} sees them, without
-     * constructors: an override appears once, private members of supertypes are left out. Kotlin
-     * property accessors are not functions here.
+     * constructors (an override appears once, private members of supertypes are left out), then
+     * the JVM accessors of the declared and inherited properties ({@code getAllProperties}, each
+     * override once).
      */
     @Override
     public List<MethodDecl> allMethods() {
@@ -178,7 +207,12 @@ final class KspClassDecl implements ClassDecl {
                 .filter(function -> !isStaticInterfaceMember(function))
                 .collect(Collectors.toCollection(ArrayList::new));
         functions.addAll(inheritedClassStatics(declaration, functions));
-        return functions.stream().map(model::methodDecl).distinct().toList();
+        var methods = new ArrayList<MethodDecl>();
+        functions.stream().map(model::methodDecl).forEach(methods::add);
+        SequencesKt.toList(declaration.getAllProperties()).stream()
+                .flatMap(property -> model.accessorDecls(property).stream())
+                .forEach(methods::add);
+        return methods.stream().distinct().toList();
     }
 
     /**
@@ -260,9 +294,10 @@ final class KspClassDecl implements ClassDecl {
     }
 
     /**
-     * A Java record's components, in header order. KSP shows a Java record as its accessor
-     * functions and constructors, without fields, so the components are read off the canonical
-     * constructor (see {@link #canonicalConstructor}).
+     * A record's components, in header order. KSP shows a Java record as its accessor functions
+     * and constructors, without fields, so the components are read off the canonical constructor
+     * (see {@link #canonicalConstructor}); a Kotlin {@code @JvmRecord} class's are its primary
+     * constructor's parameters, which Kotlin makes the canonical constructor.
      *
      * @throws IllegalStateException when the canonical constructor cannot be told apart (see
      *     {@link #canonicalConstructor}): guessing would silently bind the wrong components
@@ -272,7 +307,13 @@ final class KspClassDecl implements ClassDecl {
         if (kind() != DeclKind.RECORD) {
             return List.of();
         }
-        return model.methodDecl(canonicalConstructor(declaration())).parameters().stream()
+        var declaration = declaration();
+        var canonical =
+                KspModel.isJava(declaration) ? canonicalConstructor(declaration) : declaration.getPrimaryConstructor();
+        if (canonical == null) {
+            return List.of();
+        }
+        return model.methodDecl(canonical).parameters().stream()
                 .<FieldDecl>map(parameter -> new KspRecordComponent(parameter, key() + "." + parameter.name()))
                 .toList();
     }
@@ -362,7 +403,7 @@ final class KspClassDecl implements ClassDecl {
     /**
      * The declared superclass, or the implicit one: {@code java.lang.Object} for a class or object
      * (Kotlin's implicit {@code Any}), {@code java.lang.Enum<E>} for an enum, {@code
-     * java.lang.Record} for a Java record. Empty for interfaces, annotations and {@code Any}
+     * java.lang.Record} for a Java record or a Kotlin {@code @JvmRecord} class. Empty for interfaces, annotations and {@code Any}
      * itself. An unresolved supertype counts as the superclass.
      */
     @Override
@@ -371,6 +412,10 @@ final class KspClassDecl implements ClassDecl {
         var kind = declaration.getClassKind();
         if (kind == ClassKind.INTERFACE || kind == ClassKind.ANNOTATION_CLASS || kotlinName.equals(ANY)) {
             return Optional.empty();
+        }
+        // A @JvmRecord class extends no class, so its listed Any stands for java.lang.Record.
+        if (isJvmRecord(declaration)) {
+            return Optional.of(model.typeRef(model.ref(recordType(model.resolver()), KspClassDecl::recordType)));
         }
         var superTypes = superTypes(declaration);
         for (var i = 0; i < superTypes.size(); i++) {
@@ -381,6 +426,10 @@ final class KspClassDecl implements ClassDecl {
         return Optional.of(model.typeRef(model.ref(
                 model.resolver().getBuiltIns().getAnyType(),
                 resolver -> resolver.getBuiltIns().getAnyType())));
+    }
+
+    private static KSType recordType(Resolver resolver) {
+        return KspModel.findClass(resolver, RECORD).asType(List.of());
     }
 
     /** The interfaces named in the supertype list, in declaration order; {@code Any} is never one. */

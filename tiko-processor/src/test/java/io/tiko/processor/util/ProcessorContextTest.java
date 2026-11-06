@@ -114,7 +114,7 @@ class ProcessorContextTest {
     @Test
     void registerComponentTwiceEmitsDuplicateError() {
         DuplicateRegisterProbe.reset();
-        // The probe-side error reporter routes to processingEnv.getMessager(), which surfaces
+        // The probe-side error reporter routes to the round's Diagnostics, which surfaces
         // as a compile diagnostic. Compilation should fail (error severity).
         Compilation c = compileExpectingFailure(
                 new DuplicateRegisterProbe(), source("demo.Main", "package demo; public class Main {}"));
