@@ -74,8 +74,21 @@ public interface ClassDecl {
     /** Fields declared directly on this type. */
     List<FieldDecl> fields();
 
-    /** The record components in declaration order; empty for anything but a record. */
+    /**
+     * The record components in declaration order; empty for anything but a record.
+     *
+     * @throws IllegalStateException when they are unknown (see {@link #recordComponentsKnown()})
+     */
     List<FieldDecl> recordComponents();
+
+    /**
+     * Whether {@link #recordComponents()} is known. Always on javac, which reads the record
+     * header. KSP doesn't expose a Java record's header, so its components come from the
+     * canonical constructor, and they are unknown when the record declares its canonical
+     * constructor next to another constructor whose parameters all match accessors: either could
+     * be the canonical one. True for anything but a record.
+     */
+    boolean recordComponentsKnown();
 
     /** The names of the enum constants in declaration order; empty for anything but an enum. */
     List<String> enumConstants();

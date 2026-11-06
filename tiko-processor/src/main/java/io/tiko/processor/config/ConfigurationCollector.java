@@ -15,9 +15,11 @@ import io.tiko.processor.util.ProcessorContext;
 import io.tiko.processor.util.TypeRefs;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Walks {@code @Configuration}-annotated types and builds {@link ConfigurationModel}s.
@@ -31,6 +33,9 @@ public final class ConfigurationCollector {
     private static final String DEFAULT = Default.class.getCanonicalName();
 
     private final ProcessorContext ctx;
+
+    /** The records reported for unknown components, so one shared by several configurations is reported once. */
+    private final Set<String> unknownRecordsReported = new HashSet<>();
 
     public ConfigurationCollector(ProcessorContext ctx) {
         this.ctx = ctx;
@@ -70,6 +75,10 @@ public final class ConfigurationCollector {
                                     + enclosing.get().qualifiedName()
                                     + "'). Move it to its own .java file.",
                             "Move " + simple + " to its own top-level .java file");
+            return;
+        }
+        // Before any component is read: unknown components are reported, never guessed (#583).
+        if (!new ConfigurationValidator(ctx).checkComponentsKnown(type, unknownRecordsReported)) {
             return;
         }
         var pkg = type.className().packageName();

@@ -131,6 +131,11 @@ record JavacClassDecl(TypeElement element, JavacModel model) implements ClassDec
     }
 
     @Override
+    public boolean recordComponentsKnown() {
+        return true;
+    }
+
+    @Override
     public List<String> enumConstants() {
         return element.getEnclosedElements().stream()
                 .filter(member -> member.getKind() == ElementKind.ENUM_CONSTANT)

@@ -7,6 +7,7 @@ import static io.tiko.processor.core.ksp.KspFacts.method;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.tiko.processor.core.ProcessingEnv;
+import io.tiko.processor.core.RecordShapes;
 import io.tiko.processor.core.ksp.KspFacts.Fact;
 import io.tiko.processor.core.ksp.KspFacts.Threw;
 import io.tiko.processor.core.model.AnnotationRef;
@@ -18,6 +19,7 @@ import io.tiko.processor.core.model.ParamDecl;
 import io.tiko.processor.core.model.SourceLanguage;
 import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.core.model.Visibility;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -173,35 +175,6 @@ class KspDeclarationFactsTest {
 
             record Point(int x, int y) {}
 
-            record Shorter(int a, String b) {
-                Shorter(int a) { this(a, ""); }
-            }
-
-            record Reordered(int a, String b) {
-                Reordered(String b, int a) { this(a, b); }
-            }
-
-            record Compact(int a, String b) {
-                Compact {}
-                Compact(String b, int a) { this(a, b); }
-            }
-
-            record Full(int a, String b) {
-                Full(String b, int a) { this(a, b); }
-                Full(int a, String b) { this.a = a; this.b = b; }
-            }
-
-            record Declared(int a, String b) {
-                Declared(int a) { this(a, ""); }
-                Declared(int a, String b) { this.a = a; this.b = b; }
-            }
-
-            record Explicit(int a, String b) {
-                int sum() { return a; }
-                public String b() { return b; }
-                Explicit(int a, String b, int extra) { this(a + extra, b); }
-            }
-
             @Repeatable(Roles.class)
             @interface Role { String value(); }
 
@@ -225,7 +198,8 @@ class KspDeclarationFactsTest {
                 facts(),
                 Map.of(OPTION, "on"),
                 KspCompiler.kotlin("Facts.kt", KOTLIN),
-                KspCompiler.java("Legacy.java", JAVA));
+                KspCompiler.java("Legacy.java", JAVA),
+                KspCompiler.java("r/Records.java", RecordShapes.SOURCE));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -235,6 +209,46 @@ class KspDeclarationFactsTest {
     }
 
     static List<Fact> facts() {
+        var facts = new ArrayList<>(declarationFacts());
+        facts.addAll(recordShapeFacts());
+        return facts;
+    }
+
+    /**
+     * The {@link RecordShapes}: a record's components on KSP are its header's, as javac reads them,
+     * or unknown where a declared canonical constructor can't be told apart from another
+     * constructor taking only accessor-matching parameters. Unknown components are never guessed:
+     * reading them throws, and the processors reject the record first. That divergence from javac
+     * is intended.
+     */
+    private static List<Fact> recordShapeFacts() {
+        var facts = new ArrayList<Fact>();
+        RecordShapes.HEADERS.forEach((recordName, header) -> {
+            var simpleName = recordName.substring(recordName.lastIndexOf('.') + 1);
+            if (RecordShapes.UNKNOWN_ON_KSP.contains(recordName)) {
+                facts.add(fact(
+                        "recordComponentsOf" + simpleName + "AreUnknownOnKsp",
+                        env -> cls(env, recordName).recordComponentsKnown(),
+                        false));
+                facts.add(fact(
+                        "recordComponentsOf" + simpleName + "AreNeverGuessedOnKsp",
+                        env -> components(env, recordName),
+                        new Threw(IllegalStateException.class)));
+            } else {
+                facts.add(fact(
+                        "recordComponentsOf" + simpleName + "AreKnown",
+                        env -> cls(env, recordName).recordComponentsKnown(),
+                        true));
+                facts.add(fact(
+                        "recordComponentsOf" + simpleName + "AreTheHeader",
+                        env -> components(env, recordName),
+                        header));
+            }
+        });
+        return facts;
+    }
+
+    private static List<Fact> declarationFacts() {
         return List.of(
                 // ----- types -----
                 fact(
@@ -348,30 +362,6 @@ class KspDeclarationFactsTest {
                 fact("enumConstants", env -> cls(env, "f.Color").enumConstants(), List.of("RED", "GREEN")),
                 fact("annotationKind", env -> cls(env, "f.Rich").kind(), DeclKind.ANNOTATION),
                 fact("interfaceKind", env -> cls(env, "f.Shape").kind(), DeclKind.INTERFACE),
-                fact(
-                        "recordWithShorterConstructorFirst",
-                        env -> components(env, "f.Shorter"),
-                        List.of("a:int", "b:java.lang.String")),
-                fact(
-                        "recordWithPermutedConstructor",
-                        env -> components(env, "f.Reordered"),
-                        List.of("a:int", "b:java.lang.String")),
-                fact(
-                        "recordWithExplicitAccessorsAndWiderConstructor",
-                        env -> components(env, "f.Explicit"),
-                        List.of("a:int", "b:java.lang.String")),
-                fact(
-                        "recordWithDeclaredCanonicalAndShorterConstructor",
-                        env -> components(env, "f.Declared"),
-                        List.of("a:int", "b:java.lang.String")),
-                fact(
-                        "recordWithDeclaredCanonicalBesidePermutationFailsClearly",
-                        env -> components(env, "f.Full"),
-                        new Threw(IllegalStateException.class)),
-                fact(
-                        "recordWithCompactCanonicalBesidePermutationFailsClearly",
-                        env -> components(env, "f.Compact"),
-                        new Threw(IllegalStateException.class)),
                 fact("javaRecordKind", env -> cls(env, "f.Point").kind(), DeclKind.RECORD),
                 fact(
                         "javaRecordComponents",
@@ -435,6 +425,11 @@ class KspDeclarationFactsTest {
                         "kotlinClassHasNoRecordComponents",
                         env -> cls(env, "f.Circle").recordComponents(),
                         List.of()),
+                fact(
+                        "kotlinClassRecordComponentsAreKnown",
+                        env -> cls(env, "f.Circle").recordComponentsKnown(),
+                        true),
+                fact("jvmRecordComponentsAreKnown", env -> cls(env, "f.Span").recordComponentsKnown(), true),
                 fact("abstractClassIsAbstract", env -> cls(env, "f.Base").isAbstract(), true),
                 fact("interfaceIsAbstract", env -> cls(env, "f.Shape").isAbstract(), true),
                 fact("kotlinClassIsFinalByDefault", env -> cls(env, "f.Circle").isFinal(), true),

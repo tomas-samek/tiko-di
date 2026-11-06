@@ -13,6 +13,7 @@ import com.palantir.javapoet.JavaFile;
 import com.palantir.javapoet.TypeSpec;
 import com.palantir.javapoet.TypeVariableName;
 import io.tiko.processor.core.ProcessingEnv;
+import io.tiko.processor.core.RecordShapes;
 import io.tiko.processor.core.model.AnnotationRef;
 import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.DeclKind;
@@ -267,6 +268,22 @@ class JavacModelTest {
                             assertThat(find(env, "p.Mode").recordComponents()).isEmpty();
                             assertThat(pair.enumConstants()).isEmpty();
                         })),
+                Arguments.of(
+                        // The KSP model reports the components of some of these records as unknown,
+                        // and javac reads every header directly, whatever the constructors are.
+                        "recordComponentsAreTheHeaderWhateverTheConstructors",
+                        JavaFileObjects.forSourceString("r.Records", RecordShapes.SOURCE),
+                        Check.model(env -> RecordShapes.HEADERS.forEach((recordName, header) -> {
+                            var decl = find(env, recordName);
+                            assertThat(decl.recordComponentsKnown())
+                                    .as(recordName)
+                                    .isTrue();
+                            assertThat(decl.recordComponents())
+                                    .as(recordName)
+                                    .extracting(component -> component.name() + ":"
+                                            + component.type().displayName())
+                                    .containsExactlyElementsOf(header);
+                        }))),
                 Arguments.of(
                         "allMethodsIncludeInheritedOnceEach",
                         source(
