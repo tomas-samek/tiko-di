@@ -7,6 +7,7 @@ import com.google.devtools.ksp.symbol.KSDeclaration;
 import com.google.devtools.ksp.symbol.KSFunctionDeclaration;
 import com.google.devtools.ksp.symbol.KSPropertyDeclaration;
 import com.google.devtools.ksp.symbol.KSType;
+import com.google.devtools.ksp.symbol.KSTypeReference;
 import com.google.devtools.ksp.symbol.Modifier;
 import com.palantir.javapoet.ClassName;
 import io.tiko.processor.core.model.AnnotationRef;
@@ -254,13 +255,34 @@ final class KspClassDecl implements ClassDecl {
         return new KspFieldDecl(fieldRef, key() + "." + name, qualifiedName(), this, model);
     }
 
-    /** A Java record's components are its instance fields, in declaration order. */
+    /**
+     * A Java record's components, in declaration order. KSP shows a Java record as its accessor
+     * functions and constructors, without fields, so the components are read off the canonical
+     * constructor: the one whose every parameter has a same-named accessor.
+     */
     @Override
     public List<FieldDecl> recordComponents() {
         if (kind() != DeclKind.RECORD) {
             return List.of();
         }
-        return fields().stream().filter(field -> !field.isStatic()).toList();
+        var functions = KspModel.functionsOf(declaration());
+        var accessors = functions.stream()
+                .filter(function -> !UtilsKt.isConstructor(function)
+                        && function.getParameters().isEmpty())
+                .map(function -> function.getSimpleName().asString())
+                .collect(Collectors.toSet());
+        return functions.stream()
+                .filter(UtilsKt::isConstructor)
+                .filter(constructor -> !constructor.getParameters().isEmpty()
+                        && constructor.getParameters().stream()
+                                .allMatch(parameter -> parameter.getName() != null
+                                        && accessors.contains(
+                                                parameter.getName().asString())))
+                .findFirst()
+                .map(constructor -> model.methodDecl(constructor).parameters().stream()
+                        .<FieldDecl>map(parameter -> new KspRecordComponent(parameter, key() + "." + parameter.name()))
+                        .toList())
+                .orElse(List.of());
     }
 
     @Override
@@ -316,7 +338,7 @@ final class KspClassDecl implements ClassDecl {
 
     private static List<KSType> superTypes(KSClassDeclaration declaration) {
         return SequencesKt.toList(declaration.getSuperTypes()).stream()
-                .map(reference -> reference.resolve())
+                .map(KSTypeReference::resolve)
                 .toList();
     }
 

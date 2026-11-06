@@ -402,7 +402,7 @@ public final class TikoPipeline {
     /**
      * Generates all code.
      */
-    private void generate() throws Exception {
+    private void generate() throws IOException {
         // Compute container class name first (needed by all generators)
         String containerClassName = computeContainerClassName();
         context.setContainerClassName(containerClassName);

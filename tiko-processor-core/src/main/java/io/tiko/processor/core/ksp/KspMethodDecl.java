@@ -7,6 +7,7 @@ import com.google.devtools.ksp.symbol.KSClassDeclaration;
 import com.google.devtools.ksp.symbol.KSFunctionDeclaration;
 import com.google.devtools.ksp.symbol.KSType;
 import com.google.devtools.ksp.symbol.KSTypeParameter;
+import com.google.devtools.ksp.symbol.KSTypeReference;
 import com.google.devtools.ksp.symbol.Modifier;
 import com.palantir.javapoet.ClassName;
 import com.palantir.javapoet.TypeName;
@@ -159,7 +160,7 @@ final class KspMethodDecl implements MethodDecl {
     /** A type parameter with its bounds, leaving out Kotlin's implicit {@code Any?}. */
     private TypeVariableName typeVariable(KSTypeParameter parameter) {
         var bounds = SequencesKt.toList(parameter.getBounds()).stream()
-                .map(bound -> bound.resolve())
+                .map(KSTypeReference::resolve)
                 .map(bound -> KspTypeNames.of(bound, true, false, model))
                 .filter(bound -> !bound.equals(ClassName.OBJECT))
                 .toArray(TypeName[]::new);

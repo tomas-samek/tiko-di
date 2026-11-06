@@ -2,6 +2,7 @@ package io.tiko.processor.core.ksp;
 
 import com.google.devtools.ksp.processing.CodeGenerator;
 import com.google.devtools.ksp.processing.Dependencies;
+import com.google.devtools.ksp.symbol.KSClassDeclaration;
 import com.google.devtools.ksp.symbol.KSFile;
 import com.palantir.javapoet.JavaFile;
 import io.tiko.processor.core.CodeOutput;
@@ -50,7 +51,7 @@ final class KspCodeOutput implements CodeOutput {
         var files = originating.stream()
                 .map(KspModel::declaration)
                 .flatMap(Optional::stream)
-                .map(declaration -> declaration.getContainingFile())
+                .map(KSClassDeclaration::getContainingFile)
                 .filter(Objects::nonNull)
                 .distinct()
                 .toArray(KSFile[]::new);

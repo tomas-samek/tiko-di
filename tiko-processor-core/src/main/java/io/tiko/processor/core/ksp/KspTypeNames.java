@@ -137,12 +137,14 @@ final class KspTypeNames {
         return erase(of(type, boxed, true, model)).toString();
     }
 
+    /**
+     * Erases a raw rendering ({@link #of} with {@code raw}), which has no type arguments left: only
+     * a type variable, possibly as an array component ({@code Array<T>}), remains to erase.
+     */
     private static TypeName erase(TypeName name) {
         return switch (name) {
-            case ParameterizedTypeName parameterized -> parameterized.rawType();
             case ArrayTypeName array -> ArrayTypeName.of(erase(array.componentType()));
             case TypeVariableName ignored -> ClassName.OBJECT;
-            case WildcardTypeName wildcard -> erase(wildcard.upperBounds().get(0));
             default -> name;
         };
     }
@@ -152,19 +154,17 @@ final class KspTypeNames {
      * compare as text: type arguments joined by {@code ","} without a space, {@code ?},
      * {@code ? extends X} and {@code ? super X} for wildcards, {@code X[]} for arrays, and nested
      * classes by their canonical name ({@code a.Outer.Inner}). JavaPoet's own {@code toString()}
-     * differs (it joins arguments with {@code ", "}), so it is never used for this text.
+     * differs (it joins arguments with {@code ", "}), so it is never used for this text. The
+     * adapter never builds a parameterized enclosing type, so an inner class of a generic class
+     * reads {@code a.Outer.Inner} where javac writes {@code a.Outer<T>.Inner}.
      */
     static String javacText(TypeName name) {
         return switch (name) {
             case ParameterizedTypeName parameterized -> {
-                var raw = parameterized.enclosingType() == null
-                        ? parameterized.rawType().canonicalName()
-                        : javacText(parameterized.enclosingType()) + "."
-                                + parameterized.rawType().simpleName();
                 var arguments = parameterized.typeArguments().stream()
                         .map(KspTypeNames::javacText)
                         .toList();
-                yield raw + "<" + String.join(",", arguments) + ">";
+                yield parameterized.rawType().canonicalName() + "<" + String.join(",", arguments) + ">";
             }
             case ClassName className -> className.canonicalName();
             case ArrayTypeName array -> javacText(array.componentType()) + "[]";

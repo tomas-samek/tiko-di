@@ -32,6 +32,7 @@ import kotlin.sequences.SequencesKt;
 final class KspAnnotationRef implements AnnotationRef {
 
     private static final String REPEATABLE = "java.lang.annotation.Repeatable";
+    private static final String VALUE = "value";
 
     private final KspRef<KSAnnotation> node;
     private final String annotationName;
@@ -84,7 +85,7 @@ final class KspAnnotationRef implements AnnotationRef {
             KspModel model) {
         var container = model.findJavaClass(annotationFqn)
                 .flatMap(type -> type.annotation(REPEATABLE))
-                .flatMap(repeatable -> repeatable.type("value"))
+                .flatMap(repeatable -> repeatable.type(VALUE))
                 .map(TypeRef::erasedName);
         var found = new ArrayList<AnnotationRef>();
         for (var annotation : all(annotated, ownerKey, enclosingClass, model)) {
@@ -99,7 +100,7 @@ final class KspAnnotationRef implements AnnotationRef {
 
     /** The annotations of the type a container holds in its {@code value} member. */
     private static List<AnnotationRef> contained(AnnotationRef container, String annotationFqn) {
-        var items = container.value("value").orElse(List.of());
+        var items = container.value(VALUE).orElse(List.of());
         var found = new ArrayList<AnnotationRef>();
         if (items instanceof List<?> list) {
             for (var item : list) {
@@ -162,13 +163,15 @@ final class KspAnnotationRef implements AnnotationRef {
     @Override
     public Optional<Object> value(String member) {
         var current = values();
-        return current.values.containsKey(member) ? Optional.ofNullable(current.values.get(member)) : Optional.empty();
+        return current.members.containsKey(member)
+                ? Optional.ofNullable(current.members.get(member))
+                : Optional.empty();
     }
 
     @Override
     public boolean isUnresolved(String member) {
         var current = values();
-        if (!current.values.containsKey(member)) {
+        if (!current.members.containsKey(member)) {
             throw new NoSuchElementException("@" + annotationName + " has no member '" + member + "'");
         }
         return current.unresolved.contains(member);
@@ -190,10 +193,9 @@ final class KspAnnotationRef implements AnnotationRef {
     private Values read(KSAnnotation annotation) {
         var read = new Values(model.session().round());
         for (var argument : annotation.getArguments()) {
-            var member =
-                    argument.getName() == null ? "value" : argument.getName().asString();
+            var member = argument.getName() == null ? VALUE : argument.getName().asString();
             var converted = convert(argument.getValue(), member, read);
-            read.values.put(member, converted == UNRESOLVED ? List.of() : converted);
+            read.members.put(member, converted == UNRESOLVED ? List.of() : converted);
         }
         return read;
     }
@@ -257,7 +259,7 @@ final class KspAnnotationRef implements AnnotationRef {
 
     private static KSAnnotation nestedAt(KSAnnotation owner, String member, int index) {
         for (var argument : owner.getArguments()) {
-            var name = argument.getName() == null ? "value" : argument.getName().asString();
+            var name = argument.getName() == null ? VALUE : argument.getName().asString();
             if (name.equals(member)) {
                 var value = argument.getValue();
                 return (KSAnnotation) (index < 0 ? value : ((List<?>) value).get(index));
@@ -286,7 +288,7 @@ final class KspAnnotationRef implements AnnotationRef {
     /** One round's reading of the member values. */
     private static final class Values {
         final int round;
-        final Map<String, Object> values = new LinkedHashMap<>();
+        final Map<String, Object> members = new LinkedHashMap<>();
         final Set<String> unresolved = new HashSet<>();
 
         Values(int round) {
