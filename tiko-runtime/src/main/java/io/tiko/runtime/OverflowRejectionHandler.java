@@ -39,8 +39,11 @@ final class OverflowRejectionHandler implements RejectedExecutionHandler {
         }
         switch (policy) {
             case BLOCK -> {
-                if (!(r instanceof BlockingTask retry && retry.rejectResubmission())) {
-                    enqueueBlocking(r, executor);
+                switch (r) {
+                    case BlockingTask retry when retry.rejectResubmission() -> {
+                        // The original submission loop will retry when there is capacity.
+                    }
+                    case null, default -> enqueueBlocking(r, executor);
                 }
             }
             case DROP ->

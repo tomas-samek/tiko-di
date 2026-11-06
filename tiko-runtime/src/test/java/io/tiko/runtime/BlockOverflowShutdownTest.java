@@ -216,7 +216,8 @@ class BlockOverflowShutdownTest {
     }
 
     private static void assertShutdownDropLogged() {
-        assertThat(CapturingLoggerFinder.RECORDS)
+        var records = CapturingLoggerFinder.RECORDS;
+        assertThat(records)
                 .anyMatch(entry -> entry.level() == System.Logger.Level.WARNING
                         && entry.loggerName().equals("io.tiko.events")
                         && entry.message().contains("executor is shutting down"));
