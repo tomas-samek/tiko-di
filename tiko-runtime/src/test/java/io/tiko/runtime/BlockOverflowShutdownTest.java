@@ -96,11 +96,32 @@ class BlockOverflowShutdownTest {
         }
     }
 
-    @Test
-    void livePoolWithNoCoreWorkersStartsAWorkerForTheLateSubmission() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void livePoolWithNoCoreWorkersRunsLateSubmission(boolean saturateBeforeResubmission) throws Exception {
         var queue = new PausingQueue(false);
-        var pool = new ThreadPoolExecutor(
-                0, 1, 0, TimeUnit.SECONDS, queue, new OverflowRejectionHandler(OverflowPolicy.BLOCK));
+        var removedForResubmission = new CountDownLatch(1);
+        var allowResubmission = new CountDownLatch(1);
+        var retryRejectionReturned = new CountDownLatch(1);
+        var releaseCompetingWorker = new CountDownLatch(1);
+        var handler = new OverflowRejectionHandler(OverflowPolicy.BLOCK);
+        var pool =
+                new ThreadPoolExecutor(0, 1, 0, TimeUnit.SECONDS, queue, (task, executor) -> {
+                    handler.rejectedExecution(task, executor);
+                    if (removedForResubmission.getCount() == 0) {
+                        retryRejectionReturned.countDown();
+                    }
+                }) {
+                    @Override
+                    public boolean remove(Runnable task) {
+                        boolean removed = super.remove(task);
+                        if (removed && saturateBeforeResubmission) {
+                            removedForResubmission.countDown();
+                            awaitQuietly(allowResubmission);
+                        }
+                        return removed;
+                    }
+                };
         var firstRunning = new CountDownLatch(1);
         var releaseWorker = new CountDownLatch(1);
         var overflowRan = new CountDownLatch(1);
@@ -121,12 +142,33 @@ class BlockOverflowShutdownTest {
             await().atMost(TIMEOUT).until(() -> pool.getPoolSize() == 0);
             queue.resume.countDown();
 
+            if (saturateBeforeResubmission) {
+                assertThat(removedForResubmission.await(TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                        .isTrue();
+                var competingWorkerStarted = new CountDownLatch(1);
+                pool.execute(() -> {
+                    competingWorkerStarted.countDown();
+                    awaitQuietly(releaseCompetingWorker);
+                });
+                assertThat(competingWorkerStarted.await(TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                        .isTrue();
+                pool.execute(() -> {});
+
+                allowResubmission.countDown();
+                assertThat(retryRejectionReturned.await(TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                        .as("the retry rejection returns even while the queue remains full")
+                        .isTrue();
+                releaseCompetingWorker.countDown();
+            }
+
             assertThat(publisher.join(TIMEOUT)).isTrue();
             assertThat(overflowRan.await(TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
                     .isTrue();
         } finally {
             releaseWorker.countDown();
             queue.resume.countDown();
+            allowResubmission.countDown();
+            releaseCompetingWorker.countDown();
             publisher.interrupt();
             pool.shutdownNow();
             publisher.join(TIMEOUT);
