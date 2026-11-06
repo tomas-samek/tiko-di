@@ -11,7 +11,7 @@ import java.time.Duration;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.kafka.ConfluentKafkaContainer;
+import org.testcontainers.kafka.KafkaContainer;
 import org.testcontainers.utility.DockerImageName;
 
 /**
@@ -42,9 +42,14 @@ import org.testcontainers.utility.DockerImageName;
 @Testcontainers(disabledWithoutDocker = true)
 class KafkaRealBrokerRoundTripIT {
 
+    /**
+     * The Apache native broker image, at the kafka-clients version, starts in about two seconds on a
+     * CI runner. A start that stalls is retried on a fresh container instead of failing the build
+     * (#581).
+     */
     @org.testcontainers.junit.jupiter.Container
-    static final ConfluentKafkaContainer KAFKA =
-            new ConfluentKafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.7.1"));
+    static final KafkaContainer KAFKA =
+            new KafkaContainer(DockerImageName.parse("apache/kafka-native:3.9.2")).withStartupAttempts(3);
 
     @Test
     void produced_then_consumed_via_real_broker() {
