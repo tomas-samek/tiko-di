@@ -88,6 +88,7 @@ ship commented out; enable first).
 | [`reference/kafka.md`](./.ai-skills/tiko-build/reference/kafka.md) | consuming or producing Kafka, or writing the Kafka integration test |
 | [`reference/config.md`](./.ai-skills/tiko-build/reference/config.md) | declaring `@Configuration` records or writing override YAML |
 | [`reference/events.md`](./.ai-skills/tiko-build/reference/events.md) | publishing/subscribing events, lifecycle hooks, or a headless/daemon main |
+| [`reference/kotlin.md`](./.ai-skills/tiko-build/reference/kotlin.md) | the service is written in Kotlin, or built with Gradle + KSP |
 
 ## Rules
 

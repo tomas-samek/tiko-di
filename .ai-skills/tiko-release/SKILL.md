@@ -259,7 +259,11 @@ The release workflow sets every **POM** to the new version, plus the
 archetype's `archetype-resources/pom.xml` `<tiko.version>` and its
 `.mcp.json` `tiko-mcp:X.Y.Z` coordinate, plus `tikoVersion` in
 `tiko-examples-gradle/kotlin-quickstart/gradle.properties` (`release.yml`, "Set release
-version in all poms" step) — those need no manual bump. It does **not** touch the
+version in all poms" step) — those need no manual bump. `tikoVersion` is set at the
+release **and again** at the next-snapshot step, so it follows the reactor SNAPSHOT for
+the `kotlin-gradle` CI job.
+Unlike `.mcp.json`, it never stays pinned to the last release.
+The workflow does **not** touch the
 prose docs. These advertise the install coordinate as
 literal text and go stale silently — exactly what left the README saying
 `Status: 0.1.0` while Central was already at `0.2.2` across three releases
