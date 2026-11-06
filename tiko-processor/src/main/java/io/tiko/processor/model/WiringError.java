@@ -7,7 +7,8 @@ package io.tiko.processor.model;
  * scraping the build log.
  *
  * <p>Valid {@code kind} values: {@code MISSING_DEPENDENCY}, {@code CIRCULAR_DEPENDENCY},
- * {@code SCOPE_VIOLATION}, {@code AMBIGUOUS_QUALIFIER}, {@code BAD_PRODUCES}, {@code OTHER}.
+ * {@code SCOPE_VIOLATION}, {@code AMBIGUOUS_QUALIFIER}, {@code BAD_PRODUCES}, {@code KOTLIN_UNSUPPORTED},
+ * {@code NULLABILITY_MISMATCH} (both Kotlin sources only), {@code OTHER}.
  * The {@code sourceFile} and {@code line} fields are best-effort: when the processor
  * cannot derive a source position cheaply, {@code sourceFile} is {@code null} and
  * {@code line} is {@code 0}.

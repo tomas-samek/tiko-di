@@ -5,12 +5,14 @@ import io.tiko.processor.core.Diagnostics;
 import io.tiko.processor.core.ProcessingEnv;
 import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.Location;
+import io.tiko.processor.core.model.MethodDecl;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.EventHandlerModel;
 import io.tiko.processor.model.FactoryMethodModel;
 import io.tiko.processor.model.WiringError;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -59,6 +61,11 @@ public final class ProcessorContext {
     // call sites for non-ErrorReporter diagnostics). Reads/writes are unsynchronised:
     // annotation processing runs single-threaded, so the simple ArrayList is fine.
     private final List<WiringError> wiringErrors = new ArrayList<>();
+
+    // Declarations KotlinConstructValidator rejected before collection; the collectors skip them,
+    // so no model is built for a construct DI cannot represent (a top-level @Produces has no owner).
+    private final Set<ClassDecl> rejectedClasses = new HashSet<>();
+    private final Set<MethodDecl> rejectedMethods = new HashSet<>();
 
     // Active profiles (for filtering components during generation)
     private final List<String> activeProfiles;
@@ -109,6 +116,24 @@ public final class ProcessorContext {
 
     public List<String> getActiveProfiles() {
         return List.copyOf(activeProfiles);
+    }
+
+    /** Marks a class as rejected (already reported): the collectors build no model for it. */
+    public void reject(ClassDecl decl) {
+        rejectedClasses.add(decl);
+    }
+
+    /** Marks a method as rejected (already reported): the collectors build no model for it. */
+    public void reject(MethodDecl method) {
+        rejectedMethods.add(method);
+    }
+
+    public boolean isRejected(ClassDecl decl) {
+        return rejectedClasses.contains(decl);
+    }
+
+    public boolean isRejected(MethodDecl method) {
+        return rejectedMethods.contains(method);
     }
 
     // Component registration and lookup

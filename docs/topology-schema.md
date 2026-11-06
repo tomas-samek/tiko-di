@@ -144,7 +144,7 @@ the file always being present.
 
 | Field          | Type           | Notes |
 | -------------- | -------------- | ----- |
-| `kind`         | string enum    | `MISSING_DEPENDENCY` / `CIRCULAR_DEPENDENCY` / `SCOPE_VIOLATION` / `AMBIGUOUS_QUALIFIER` / `BAD_PRODUCES` / `OTHER` |
+| `kind`         | string enum    | `MISSING_DEPENDENCY` / `CIRCULAR_DEPENDENCY` / `SCOPE_VIOLATION` / `AMBIGUOUS_QUALIFIER` / `BAD_PRODUCES` / `KOTLIN_UNSUPPORTED` / `NULLABILITY_MISMATCH` / `OTHER` (the two Kotlin kinds occur only for Kotlin sources) |
 | `sourceFile`   | string \| null | Project-relative path, best-effort |
 | `line`         | integer        | 1-based, 0 when not derivable |
 | `componentFqn` | string \| null | Owning component when known |

@@ -4,6 +4,7 @@ import io.tiko.processor.core.TypeOracle;
 import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.DeclKind;
 import io.tiko.processor.core.model.TypeRef;
+import io.tiko.processor.core.model.Visibility;
 import java.util.List;
 import java.util.Optional;
 
@@ -31,6 +32,15 @@ public final class TypeUtil {
      */
     public String getQualifiedName(TypeRef type) {
         return TypeRefs.qualifiedName(type);
+    }
+
+    /**
+     * Whether generated code (in {@code io.tiko.generated}) can call a member with this visibility:
+     * public, or Kotlin {@code internal}, which is public on the JVM and visible to the module the
+     * generated code is compiled into. Java members are never internal.
+     */
+    public static boolean isCallableFromGeneratedCode(Visibility visibility) {
+        return visibility == Visibility.PUBLIC || visibility == Visibility.KOTLIN_INTERNAL;
     }
 
     /**

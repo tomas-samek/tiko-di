@@ -1,10 +1,13 @@
 package io.tiko.processor.core.ksp;
 
+import com.google.devtools.ksp.processing.Resolver;
 import com.google.devtools.ksp.symbol.KSClassDeclaration;
 import com.google.devtools.ksp.symbol.KSType;
 import com.google.devtools.ksp.symbol.KSTypeAlias;
 import com.google.devtools.ksp.symbol.KSTypeArgument;
 import com.google.devtools.ksp.symbol.KSTypeParameter;
+import com.google.devtools.ksp.symbol.KSValueParameter;
+import com.google.devtools.ksp.symbol.Modifier;
 import com.google.devtools.ksp.symbol.Nullability;
 import com.google.devtools.ksp.symbol.Variance;
 import com.palantir.javapoet.ArrayTypeName;
@@ -13,6 +16,7 @@ import com.palantir.javapoet.ParameterizedTypeName;
 import com.palantir.javapoet.TypeName;
 import com.palantir.javapoet.TypeVariableName;
 import com.palantir.javapoet.WildcardTypeName;
+import java.util.List;
 import java.util.Map;
 import kotlin.sequences.SequencesKt;
 
@@ -31,7 +35,11 @@ import kotlin.sequences.SequencesKt;
  *   <li>{@code Array<T>} is {@code T[]}, {@code IntArray} and its siblings are primitive arrays.
  *   <li>Use-site variance becomes a wildcard ({@code out T} is {@code ? extends T}, {@code *} is
  *       {@code ?}). Declaration-site variance is not turned into wildcards, which javac would add
- *       for some Kotlin parameter types.
+ *       for some Kotlin parameter types. JavaPoet has one form for {@code ? extends Object} and
+ *       {@code ?}, so {@code out Any} renders as {@code ?}.
+ *   <li>An {@code inner} class of a generic class is its outer type, then the class with its own
+ *       arguments ({@code Outer<B>.Inner<A>}), as Java writes it.
+ *   <li>A vararg parameter is the array of its JVM signature (see {@link #varargArray}).
  *   <li>An unresolved type is named as written; a type alias by what it expands to.
  * </ul>
  */
@@ -103,8 +111,46 @@ final class KspTypeNames {
         }
         var arguments = type.getArguments().stream()
                 .map(argument -> argument(argument, model))
-                .toArray(TypeName[]::new);
-        return ParameterizedTypeName.get(className, arguments);
+                .toList();
+        return parameterized(classDeclaration, className, arguments);
+    }
+
+    /**
+     * The class with its type arguments. KSP lists an {@code inner} class's own arguments first and
+     * its outer classes' after them; Java writes the outer type first ({@code Outer<B>.Inner<A>}).
+     */
+    private static TypeName parameterized(
+            KSClassDeclaration declaration, ClassName className, List<TypeName> arguments) {
+        var own = declaration.getTypeParameters().size();
+        if (own < arguments.size()
+                && declaration.getModifiers().contains(Modifier.INNER)
+                && declaration.getParentDeclaration() instanceof KSClassDeclaration outer
+                && className.enclosingClassName() != null
+                && parameterized(outer, className.enclosingClassName(), arguments.subList(own, arguments.size()))
+                        instanceof ParameterizedTypeName enclosing) {
+            return enclosing.nestedClass(className.simpleName(), arguments.subList(0, own));
+        }
+        return ParameterizedTypeName.get(className, arguments.toArray(TypeName[]::new));
+    }
+
+    /**
+     * The type a vararg parameter has in its JVM signature, which is what javac reports for it: a
+     * primitive array for a non-null primitive element ({@code vararg n: Int} is {@code int[]}),
+     * {@code Array<out T>} otherwise ({@code T[]}). KSP gives the parameter its element type.
+     */
+    static KSType varargArray(KSValueParameter parameter, Resolver resolver) {
+        var element = parameter.getType();
+        var resolved = element.resolve();
+        if (!resolved.isError()
+                && !resolved.isMarkedNullable()
+                && resolved.getDeclaration() instanceof KSClassDeclaration declaration
+                && PRIMITIVES.containsKey(declaration.getQualifiedName().asString())) {
+            var arrayName = declaration.getQualifiedName().asString() + "Array";
+            return KspModel.findClass(resolver, arrayName).asStarProjectedType();
+        }
+        return resolver.getBuiltIns()
+                .getArrayType()
+                .replace(List.of(resolver.getTypeArgument(element, Variance.COVARIANT)));
     }
 
     /** {@code T} of {@code Array<T>}, boxed as Java arrays of generics hold references. */
@@ -154,9 +200,9 @@ final class KspTypeNames {
      * compare as text: type arguments joined by {@code ","} without a space, {@code ?},
      * {@code ? extends X} and {@code ? super X} for wildcards, {@code X[]} for arrays, and nested
      * classes by their canonical name ({@code a.Outer.Inner}). JavaPoet's own {@code toString()}
-     * differs (it joins arguments with {@code ", "}), so it is never used for this text. The
-     * adapter never builds a parameterized enclosing type, so an inner class of a generic class
-     * reads {@code a.Outer.Inner} where javac writes {@code a.Outer<T>.Inner}.
+     * differs (it joins arguments with {@code ", "}), so it is never used for this text. An inner
+     * class of a generic class follows its parameterized outer type, as javac writes it:
+     * {@code a.Outer<T>.Inner<A>}.
      */
     static String javacText(TypeName name) {
         return switch (name) {
@@ -164,7 +210,11 @@ final class KspTypeNames {
                 var arguments = parameterized.typeArguments().stream()
                         .map(KspTypeNames::javacText)
                         .toList();
-                yield parameterized.rawType().canonicalName() + "<" + String.join(",", arguments) + ">";
+                var raw = parameterized.enclosingType() == null
+                        ? parameterized.rawType().canonicalName()
+                        : javacText(parameterized.enclosingType()) + "."
+                                + parameterized.rawType().simpleName();
+                yield arguments.isEmpty() ? raw : raw + "<" + String.join(",", arguments) + ">";
             }
             case ClassName className -> className.canonicalName();
             case ArrayTypeName array -> javacText(array.componentType()) + "[]";

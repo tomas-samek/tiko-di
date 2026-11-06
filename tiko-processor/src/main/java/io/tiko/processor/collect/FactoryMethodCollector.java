@@ -29,6 +29,9 @@ public final class FactoryMethodCollector {
     public static void collect(ProcessingEnv env, ProcessorContext ctx) {
         var typeUtil = new TypeUtil(env.types());
         for (var method : env.methodsAnnotatedWith(PRODUCES)) {
+            if (ctx.isRejected(method)) {
+                continue; // a Kotlin construct DI does not support, already reported
+            }
             // Skip a self-@Produces method already absorbed by its @Component model
             // (static method on the component class returning that class with matching qualifier).
             if (isSelfStaticFactory(method, typeUtil)) {

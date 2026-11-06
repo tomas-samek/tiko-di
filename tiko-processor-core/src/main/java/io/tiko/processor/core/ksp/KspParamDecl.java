@@ -34,10 +34,14 @@ final class KspParamDecl implements ParamDecl {
         return name == null ? "arg" + key.substring(key.lastIndexOf('(') + 1) : name.asString();
     }
 
+    /** The declared type; for a vararg parameter the array type of its JVM signature, as javac reports it. */
     @Override
     public TypeRef type() {
         var parameter = ref.get();
         var javaDeclared = parameter.getParent() instanceof KSDeclaration owner && KspModel.isJava(owner);
+        if (parameter.isVararg()) {
+            return model.typeRef(ref.derive(p -> KspTypeNames.varargArray(p, model.resolver())), javaDeclared);
+        }
         return model.typeRef(ref.derive(p -> p.getType().resolve()), javaDeclared);
     }
 

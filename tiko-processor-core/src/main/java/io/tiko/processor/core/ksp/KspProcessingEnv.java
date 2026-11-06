@@ -4,8 +4,12 @@ import com.google.devtools.ksp.UtilsKt;
 import com.google.devtools.ksp.processing.CodeGenerator;
 import com.google.devtools.ksp.processing.KSPLogger;
 import com.google.devtools.ksp.processing.Resolver;
+import com.google.devtools.ksp.symbol.FileLocation;
 import com.google.devtools.ksp.symbol.KSClassDeclaration;
 import com.google.devtools.ksp.symbol.KSFunctionDeclaration;
+import com.google.devtools.ksp.symbol.KSNode;
+import com.google.devtools.ksp.symbol.KSPropertyAccessor;
+import com.google.devtools.ksp.symbol.KSPropertySetter;
 import io.tiko.processor.core.ClasspathProbe;
 import io.tiko.processor.core.CodeOutput;
 import io.tiko.processor.core.Diagnostics;
@@ -14,6 +18,7 @@ import io.tiko.processor.core.SourceVersionInfo;
 import io.tiko.processor.core.TypeOracle;
 import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.MethodDecl;
+import io.tiko.processor.core.model.PropertyAccessorDecl;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -124,5 +129,32 @@ public final class KspProcessingEnv implements ProcessingEnv {
                 .filter(function -> !UtilsKt.isConstructor(function))
                 .map(model::methodDecl)
                 .toList();
+    }
+
+    /** Getters and setters carrying the annotation through {@code @get:} / {@code @set:}, in source order. */
+    @Override
+    public List<PropertyAccessorDecl> propertyAccessorsAnnotatedWith(String annotationFqn) {
+        return SequencesKt.toList(resolver.getSymbolsWithAnnotation(annotationFqn, false)).stream()
+                .filter(KSPropertyAccessor.class::isInstance)
+                .map(KSPropertyAccessor.class::cast)
+                .map(this::accessorDecl)
+                .toList();
+    }
+
+    /**
+     * The accessor at its own position, or at its property's when it is not written out (a default
+     * setter has no source position). DI reports on it in the round that finds it, so its location
+     * is not found again in later rounds.
+     */
+    private PropertyAccessorDecl accessorDecl(KSPropertyAccessor accessor) {
+        var property = accessor.getReceiver();
+        KSNode node = accessor.getLocation() instanceof FileLocation ? accessor : property;
+        var enclosingClass = property.getParentDeclaration() instanceof KSClassDeclaration owner
+                ? model.classDecl(owner).qualifiedName()
+                : null;
+        return new PropertyAccessorDecl(
+                property.getSimpleName().asString(),
+                accessor instanceof KSPropertySetter,
+                new KspLocation(model.ref(node, later -> null), enclosingClass));
     }
 }

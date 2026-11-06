@@ -700,6 +700,9 @@ class JavacModelTest {
                             .containsExactly("p.Tags");
                     assertThat(env.classesAnnotatedWith("no.such.Annotation")).isEmpty();
                     assertThat(env.methodsAnnotatedWith("no.such.Annotation")).isEmpty();
+                    assertThat(env.propertyAccessorsAnnotatedWith("p.Tags"))
+                            .as("Java has no property accessors")
+                            .isEmpty();
                     assertThat(env.types().findClass("no.such.Type")).isEmpty();
                     assertThat(env.options()).containsEntry(OPTION, "on");
                 })),

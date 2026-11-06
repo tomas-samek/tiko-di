@@ -18,6 +18,7 @@ import io.tiko.processor.core.model.DeclKind;
 import io.tiko.processor.core.model.MethodDecl;
 import io.tiko.processor.core.model.Nullability;
 import io.tiko.processor.core.model.ParamDecl;
+import io.tiko.processor.core.model.PropertyAccessorDecl;
 import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.core.model.Visibility;
 import java.io.IOException;
@@ -25,6 +26,7 @@ import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
@@ -185,6 +187,24 @@ class KspModelTest {
                                         method -> method.owner().isPresent())
                                 .containsExactly(tuple("topLevel", true, false), tuple("member", false, true)))),
                 Arguments.of(
+                        "propertyAccessorsAnnotatedWithFindsUseSiteTargets",
+                        accessors(),
+                        check(env -> assertThat(env.propertyAccessorsAnnotatedWith("p.Mark"))
+                                .extracting(PropertyAccessorDecl::propertyName, PropertyAccessorDecl::setter)
+                                .containsExactly(tuple("a", false), tuple("b", true)))),
+                Arguments.of(
+                        "propertyAccessorLocationsNameTheirClass",
+                        accessors(),
+                        check(env -> assertThat(env.propertyAccessorsAnnotatedWith("p.Mark"))
+                                .extracting(accessor -> accessor.location().enclosingClassName())
+                                .containsOnly(Optional.of("p.Holder")))),
+                Arguments.of(
+                        "methodsAnnotatedWithLeavesOutPropertyAccessors",
+                        accessors(),
+                        check(env -> assertThat(env.methodsAnnotatedWith("p.Mark"))
+                                .extracting(MethodDecl::name)
+                                .containsExactly("c"))),
+                Arguments.of(
                         "displayNameRendersTheMappedJavaType",
                         KspCompiler.kotlin(
                                 "Mapped.kt",
@@ -225,6 +245,47 @@ class KspModelTest {
                                 "class Outer { class Inner }",
                                 "class Holds(a: List<Outer.Inner>, b: Outer.Inner)"),
                         displayNames("p.Holds", "java.util.List<p.Outer.Inner>", "p.Outer.Inner")),
+                Arguments.of(
+                        "innerClassOfGenericOuterRendersAsJavacDoes",
+                        innerOfGenericOuter(),
+                        displayNames("p.Holds", "p.Outer<java.lang.String>.Inner<java.lang.Integer>")),
+                Arguments.of(
+                        "innerClassOfGenericOuterIsValidJava",
+                        innerOfGenericOuter(),
+                        check(env -> assertThat(find(env, "p.Holds")
+                                        .constructors()
+                                        .get(0)
+                                        .parameters()
+                                        .get(0)
+                                        .type()
+                                        .javaPoet())
+                                .hasToString("p.Outer<java.lang.String>.Inner<java.lang.Integer>"))),
+                // Text only: JavaPoet has one form for `? extends Object` and `?`, and DI keys are
+                // erased, so `out Any` never reaches a key; javac would print `? extends java.lang.Object`.
+                Arguments.of(
+                        "outAnyRendersAsUnboundedWildcard",
+                        KspCompiler.kotlin("OutAny.kt", "package p", "class Holds(a: List<out Any>)"),
+                        displayNames("p.Holds", "java.util.List<?>")),
+                Arguments.of(
+                        "varargParameterIsItsArrayType",
+                        KspCompiler.kotlin(
+                                "Varargs.kt",
+                                "package p",
+                                "class Names(vararg a: String)",
+                                "class Numbers(vararg b: Int)",
+                                "class Maybes(vararg c: String?)"),
+                        check(env -> assertThat(Stream.of("p.Names", "p.Numbers", "p.Maybes")
+                                        .map(name -> find(env, name)
+                                                .constructors()
+                                                .get(0)
+                                                .parameters()
+                                                .get(0)
+                                                .type()))
+                                .extracting(TypeRef::displayName, TypeRef::erasedName, TypeRef::nullability)
+                                .containsExactly(
+                                        tuple("java.lang.String[]", "java.lang.String[]", Nullability.NON_NULL),
+                                        tuple("int[]", "int[]", Nullability.NON_NULL),
+                                        tuple("java.lang.String[]", "java.lang.String[]", Nullability.NON_NULL)))),
                 Arguments.of(
                         "genericClassAsTypeCarriesItsTypeParameters",
                         KspCompiler.kotlin("Box.kt", "package p", "class Box<T, out U : Number>"),
@@ -296,6 +357,28 @@ class KspModelTest {
                                             new Request("p/Isolated.java", false, List.of("Origin.kt")),
                                             new Request("p/Aggregated.java", true, List.of("Origin.kt")));
                         }));
+    }
+
+    /** Getter, setter and function use-site targets of one annotation. */
+    private static SourceFile accessors() {
+        return KspCompiler.kotlin(
+                "Accessors.kt",
+                "package p",
+                "@Target(AnnotationTarget.PROPERTY_GETTER, AnnotationTarget.PROPERTY_SETTER, AnnotationTarget.FUNCTION)",
+                "annotation class Mark",
+                "class Holder {",
+                "  @get:Mark val a: Int get() = 1",
+                "  @set:Mark var b: Int = 0",
+                "  @Mark fun c() {}",
+                "}");
+    }
+
+    private static SourceFile innerOfGenericOuter() {
+        return KspCompiler.kotlin(
+                "Inner.kt",
+                "package p",
+                "class Outer<B> { inner class Inner<A> }",
+                "class Holds(a: Outer<String>.Inner<Int>)");
     }
 
     private static BiConsumer<ProcessingEnv, List<Request>> check(Consumer<ProcessingEnv> check) {
