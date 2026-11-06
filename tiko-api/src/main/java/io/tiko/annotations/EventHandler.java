@@ -58,7 +58,6 @@ import java.lang.annotation.Target;
  * <pre>{@code
  * @EventHandler(async = true)
  * public void onOrderCreated(OrderCreatedEvent event) {
- *     // Processed asynchronously, doesn't block publisher
  *     performExpensiveOperation(event);
  * }
  * }</pre>
@@ -85,16 +84,20 @@ public @interface EventHandler {
     /**
      * Whether this handler should be invoked asynchronously.
      *
-     * <p>When {@code true}, the handler runs on the container's event executor —
+     * <p>When {@code true}, Tiko submits the handler to the container's event executor —
      * a bounded {@link java.util.concurrent.ThreadPoolExecutor} by default
      * (see the framework defaults documented on
      * {@code io.tiko.runtime.DefaultEventExecutorFactory}), or the user-supplied
      * {@link java.util.concurrent.ExecutorService} passed via
      * {@code TikoOptions.eventExecutor(...)}.
      *
-     * <p>The publisher does not wait for an async handler to complete. Async handler
-     * exceptions are routed to the configured {@link io.tiko.ErrorHandler}, identical
-     * to sync handler errors.
+     * <p>When the default executor is saturated, its default {@code CALLER_RUNS}
+     * policy invokes the handler inline, so the publishing call waits for that invocation
+     * to finish. The {@code BLOCK} policy waits for queue space. A custom executor uses
+     * its own rejection policy.
+     *
+     * <p>Async handler exceptions are routed to the configured {@link io.tiko.ErrorHandler},
+     * identical to sync handler errors.
      *
      * <p>Default: {@code false} (synchronous).
      *
@@ -127,9 +130,8 @@ public @interface EventHandler {
      * keep flowing.
      *
      * <p><strong>Requires {@code async = true}.</strong> A timeout on a synchronous handler
-     * is a compile-time error: a sync handler runs on the publisher's thread and within the
-     * publisher's unit-of-work (EVENT) scope, which cannot be preempted. Time-boxing requires
-     * off-thread execution — exactly what {@code async = true} provides (its own fresh scope).
+     * is a compile-time error. When the executor runs an async handler inline under
+     * {@code CALLER_RUNS}, the invocation completes before the timeout can take effect.
      *
      * <p>Default: {@code ""} (no timeout — opt-in).
      *

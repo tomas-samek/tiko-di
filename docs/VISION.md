@@ -212,12 +212,11 @@ credibility comes from naming them.
   no synthesized global ordering. Documented explicitly so consumers don't
   assume otherwise.
 
-- **Backpressure — publishers never block on handler work.** Handlers run
-  on a bounded executor by default; `bus.publish(...)` returns once the
-  event is enqueued. Synchronous in-process delivery is opt-in per handler
-  (e.g. `@EventHandler(sync = true)`) and is the exception, not the rule.
-  The API surface is uniform across transports because the publisher-side
-  semantics are uniform.
+- **Backpressure — async dispatch follows the executor's policy.** Handlers
+  run synchronously by default. With `@EventHandler(async = true)`, Tiko
+  submits the invocation to the event executor. On saturation, the default
+  `CALLER_RUNS` policy runs the invocation inline, while `BLOCK` waits for
+  queue space. Custom executors apply their own rejection policy.
 
 - **Transactional semantics — event-scope buffering built in, outbox
   recommended, no implicit phase coupling between transactions and event
