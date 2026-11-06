@@ -1,4 +1,4 @@
-package io.tiko.processor.util;
+package io.tiko.processor.core;
 
 /**
  * Escaping for values spliced into generated call-expression strings. Most generated

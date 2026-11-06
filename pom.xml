@@ -40,6 +40,7 @@
     <modules>
         <module>tiko-bom</module>
         <module>tiko-api</module>
+        <module>tiko-processor-core</module>
         <module>tiko-processor</module>
         <module>tiko-runtime</module>
         <module>tiko-config</module>
@@ -130,6 +131,11 @@
             <dependency>
                 <groupId>io.github.tomas-samek</groupId>
                 <artifactId>tiko-config</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.tomas-samek</groupId>
+                <artifactId>tiko-processor-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

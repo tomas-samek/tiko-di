@@ -8,7 +8,7 @@ import io.tiko.config.internal.coercers.Coercers;
 import io.tiko.config.internal.coercers.CompositeCoercers;
 import io.tiko.config.internal.coercers.NestedRecordSupport;
 import io.tiko.config.internal.coercers.TypeCoercer;
-import io.tiko.processor.util.GeneratorAnnotations;
+import io.tiko.processor.core.GeneratorAnnotations;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.LinkedHashSet;

@@ -1,4 +1,4 @@
-package io.tiko.processor.topology;
+package io.tiko.processor.core;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -188,7 +188,7 @@ public final class JsonWriter implements AutoCloseable {
     }
 
     /** {@code s} escaped for use inside a JSON string literal (without the surrounding quotes). */
-    static String escape(String s) {
+    public static String escape(String s) {
         var sb = new StringBuilder(s.length() + 8);
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);

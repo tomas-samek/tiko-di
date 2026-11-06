@@ -23,7 +23,7 @@
         declarative event chaining (@EventHandler, @EventTrigger).
         Import this BOM with scope "import" in dependencyManagement to align the versions of every
         Tiko module: tiko-api (annotations and interfaces), tiko-processor (compile-time annotation
-        processor), tiko-runtime (container and event bus), tiko-config (YAML-backed typed
+        processor) with its shared tiko-processor-core, tiko-runtime (container and event bus), tiko-config (YAML-backed typed
         configuration), tiko-test (JUnit 5 extension and test overrides), tiko-kafka and
         tiko-kafka-processor (Kafka transport with compile-time-validated @KafkaSource / @KafkaSink
         bridges), and tiko-mcp (MCP server exposing the compiled topology to AI coding agents).
@@ -79,6 +79,11 @@
             <dependency>
                 <groupId>io.github.tomas-samek</groupId>
                 <artifactId>tiko-api</artifactId>
+                <version>${tiko.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.tomas-samek</groupId>
+                <artifactId>tiko-processor-core</artifactId>
                 <version>${tiko.version}</version>
             </dependency>
             <dependency>

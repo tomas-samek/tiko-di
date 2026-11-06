@@ -4,6 +4,7 @@ import com.google.auto.service.AutoService;
 import io.tiko.EventTriggerGuard;
 import io.tiko.Scope;
 import io.tiko.annotations.*;
+import io.tiko.processor.core.StackTraces;
 import io.tiko.processor.generator.*;
 import io.tiko.processor.model.*;
 import io.tiko.processor.util.ProcessorContext;
@@ -212,7 +213,7 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         } catch (Exception e) {
             processingEnv
                     .getMessager()
-                    .printMessage(Diagnostic.Kind.ERROR, "Tiko DI processing failed:\n" + formatStackTrace(e));
+                    .printMessage(Diagnostic.Kind.ERROR, "Tiko DI processing failed:\n" + StackTraces.format(e));
             return false;
         } finally {
             // Always emit the wiring-errors sibling artifact, even when validation or
@@ -1359,21 +1360,5 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         } catch (java.io.IOException e) {
             return Optional.empty();
         }
-    }
-
-    private static String formatStackTrace(Throwable t) {
-        var sb = new StringBuilder();
-        sb.append(t.getClass().getName());
-        if (t.getMessage() != null) {
-            sb.append(": ").append(t.getMessage());
-        }
-        for (var frame : t.getStackTrace()) {
-            sb.append("\n  at ").append(frame);
-        }
-        var cause = t.getCause();
-        if (cause != null && cause != t) {
-            sb.append("\nCaused by: ").append(formatStackTrace(cause));
-        }
-        return sb.toString();
     }
 }

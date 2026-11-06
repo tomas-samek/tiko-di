@@ -1,6 +1,5 @@
 package io.tiko.kafka.processor.generator;
 
-import com.palantir.javapoet.AnnotationSpec;
 import com.palantir.javapoet.ClassName;
 import com.palantir.javapoet.JavaFile;
 import com.palantir.javapoet.MethodSpec;
@@ -9,6 +8,7 @@ import com.palantir.javapoet.TypeName;
 import com.palantir.javapoet.TypeSpec;
 import io.tiko.kafka.processor.model.KafkaSinkDescriptor;
 import io.tiko.kafka.processor.model.KafkaSourceDescriptor;
+import io.tiko.processor.core.GeneratorAnnotations;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
@@ -35,7 +35,6 @@ public final class KafkaTransportBootstrapGenerator {
     private static final String GENERATED_PACKAGE = "io.tiko.generated";
     private static final String CLASS_NAME = "KafkaTransportBootstrap";
 
-    private static final ClassName GENERATED = ClassName.get("javax.annotation.processing", "Generated");
     private static final ClassName KAFKA_TRANSPORT = ClassName.get("io.tiko.kafka", "KafkaTransport");
     private static final ClassName CONTAINER = ClassName.get("io.tiko", "Container");
     private static final ClassName KAFKA_BOOTSTRAP_SUPPORT =
@@ -54,13 +53,8 @@ public final class KafkaTransportBootstrapGenerator {
     public void generate(List<KafkaSourceDescriptor> sources, List<KafkaSinkDescriptor> sinks) throws IOException {
         if (sources.isEmpty() && sinks.isEmpty()) return;
 
-        // Inline @Generated rather than tiko-processor's GeneratorAnnotations helper:
-        // this module deliberately has no compile dependency on tiko-processor (the two
-        // processors run side-by-side on the user's annotation-processor path).
         TypeSpec.Builder cls = TypeSpec.classBuilder(CLASS_NAME)
-                .addAnnotation(AnnotationSpec.builder(GENERATED)
-                        .addMember("value", "$S", KafkaTransportBootstrapGenerator.class.getName())
-                        .build())
+                .addAnnotation(GeneratorAnnotations.generatedBy(KafkaTransportBootstrapGenerator.class))
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                 .addSuperinterface(KAFKA_TRANSPORT)
                 .addField(KAFKA_BOOTSTRAP_SUPPORT, "support", Modifier.PRIVATE)

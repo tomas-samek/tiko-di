@@ -208,8 +208,8 @@ Tell the user, explicitly:
 On the Portal Deployments page, the user should verify:
 
 - **Artifact count matches the `docs/releasing.md` Published column.**
-  At the time of writing: 11 artifacts (`tiko-parent`, `tiko-bom`,
-  `tiko-api`, `tiko-runtime`, `tiko-processor`, `tiko-config`,
+  At the time of writing: 12 artifacts (`tiko-parent`, `tiko-bom`,
+  `tiko-api`, `tiko-runtime`, `tiko-processor-core`, `tiko-processor`, `tiko-config`,
   `tiko-mcp`, `tiko-test`, `tiko-archetype`, `tiko-kafka`,
   `tiko-kafka-processor`). Sonatype's component summary shows duplicate
   entries for `?type=pom` and `?type=maven-archetype` variants — that's
