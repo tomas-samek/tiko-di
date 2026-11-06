@@ -106,7 +106,9 @@ jobs:
         # that are not Maven modules (tiko-bom has no <parent>; the archetype's
         # resource template isn't a reactor module) — sed those surgically so
         # everything is in lockstep before we deploy. The Gradle example's
-        # `tikoVersion` (tiko-examples-gradle/, also not a reactor module) follows suit.
+        # `tikoVersion` (tiko-examples-gradle/, also not a reactor module) follows suit, and
+        # is bumped again in the next-snapshot step so the kotlin-gradle CI job tracks the
+        # reactor SNAPSHOT (unlike .mcp.json below).
         #
         # The archetype's .mcp.json template also carries a tiko-mcp coordinate that
         # must match the released version (it's the version users of the scaffolded

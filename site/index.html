@@ -306,6 +306,7 @@
     &lt;/plugins&gt;
 &lt;/build&gt;<!-- /sync:install --></code></pre>
     <p class="note">On JDK 23+, <code>javac</code> runs annotation processing only when asked — the snippet above already does (it needs <code>maven-compiler-plugin</code> ≥ 3.13.0). Gradle and plain <code>javac</code>: <a href="https://github.com/tomas-samek/tiko-di/blob/main/docs/jdk-23-setup.md">jdk-23-setup.md</a>. Starting fresh? The <a href="https://github.com/tomas-samek/tiko-di#scaffold-a-new-project-archetype">Maven archetype</a> scaffolds a runnable project.</p>
+    <p class="note">Kotlin works through Gradle and KSP2: put <code>tiko-processor</code> on the <code>ksp(...)</code> configuration. Wiring is still checked at compile time, and the generated code is still Java. Setup and rules: <a href="https://github.com/tomas-samek/tiko-di/blob/main/.ai-skills/tiko-build/reference/kotlin.md">kotlin.md</a>.</p>
   </div>
 </section>
 </main>

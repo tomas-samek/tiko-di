@@ -38,9 +38,39 @@ not read them all upfront.
 | [`reference/kafka.md`](reference/kafka.md) | consuming or producing Kafka, or writing the Kafka integration test |
 | [`reference/config.md`](reference/config.md) | declaring `@Configuration` records or writing override YAML |
 | [`reference/events.md`](reference/events.md) | publishing/subscribing events, lifecycle hooks, or a headless/daemon main |
+| [`reference/kotlin.md`](reference/kotlin.md) | the service is written in Kotlin, or built with Gradle + KSP |
 
 A `cannot find symbol` on an import means a wrong package, not a missing
 feature — `reference/api-signatures.md` first, then `javap`.
+
+## Kotlin (Gradle + KSP)
+
+Tiko runs on Kotlin through KSP2, from the same processor jars Java uses. Gradle is the
+supported build. Setup:
+
+```kotlin
+plugins {
+    kotlin("jvm") version "2.4.21"
+    id("com.google.devtools.ksp") version "2.3.13"   // KSP2 floor
+}
+dependencies {
+    implementation("io.github.tomas-samek:tiko-api:<version>")
+    implementation("io.github.tomas-samek:tiko-runtime:<version>")
+    ksp("io.github.tomas-samek:tiko-processor:<version>")
+}
+```
+
+- A construct that maps 1:1 onto Java is supported: final classes, `internal`, `@param:`
+  use-site targets, default parameter values (never "optional" — all primary-constructor
+  parameters are injected).
+- New DI semantics are rejected with `KOTLIN_UNSUPPORTED`: top-level, `object` or
+  `companion object` hosts for `@Produces` / `@EventHandler`, `object` components,
+  extension functions, `@get:` / `@set:` DI annotations, `suspend` handlers.
+- Nullability must match exactly. `T?` is legal only where the provider is a `@Produces`
+  returning `T?`; it never means "optional" (`NULLABILITY_MISMATCH` otherwise).
+- `@TikoTest` / `@TestComponent` don't work on KSP yet.
+
+The full table is in [`reference/kotlin.md`](reference/kotlin.md).
 
 ## When in doubt, ask
 
