@@ -44,8 +44,8 @@ public final class TikoDaemon {
      * immediately. An app that already runs a non-daemon foreground server (e.g. an HTTP server)
      * does not need it — that thread keeps the JVM up.
      *
-     * <p>Returns (rather than looping) if the waiting thread is interrupted, restoring the
-     * interrupt flag so callers can observe it.
+     * <p>Waiters are released when a shutdown attempt finishes, including when it throws.
+     * If the waiting thread is interrupted, this method returns with its interrupt flag restored.
      */
     public void awaitShutdown() {
         try {
@@ -55,7 +55,7 @@ public final class TikoDaemon {
         }
     }
 
-    /** Shutdown-hook target: shut the container down, then release any {@link #awaitShutdown()} waiter. */
+    /** Shut the container down and release any {@link #awaitShutdown()} waiter. */
     private void onShutdown() {
         try {
             container.shutdown();
@@ -81,7 +81,6 @@ public final class TikoDaemon {
         } catch (IllegalStateException jvmAlreadyShuttingDown) {
             // Reached during JVM shutdown (e.g. via the hook itself) — nothing to remove.
         }
-        container.shutdown();
-        terminated.countDown();
+        onShutdown();
     }
 }
