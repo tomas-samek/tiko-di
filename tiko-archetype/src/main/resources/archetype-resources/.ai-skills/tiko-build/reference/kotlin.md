@@ -79,7 +79,7 @@ One that would add new DI semantics is rejected at compile time with error kind
 | `@get:` / `@set:` DI annotation on a property (`@get:Produces`, `@set:PostConstruct`, ...) | Rejected: Tiko reads DI annotations on functions. | Declare a `fun` instead. |
 | `suspend` `@EventHandler` | Rejected until coroutine support. | Make it a regular `fun`. |
 | `suspend` `@Produces` / `@PostConstruct` / `@PreDestroy` | Rejected: the container calls them outside a coroutine. | Drop `suspend`. |
-| Value class (`@JvmInline value class`) as a component, injected type, `@Produces` return or parameter, or handler event | Rejected: on the JVM it is passed as its underlying value under a mangled function name, so generated Java can't use it. | Use a regular class (a `data class` keeps value semantics). |
+| Value class (`@JvmInline value class`) as a component, injected type, `@Produces` return or parameter, handler event, or a member of an interface Tiko proxies (EVENT impl injected into a SINGLETON) | Rejected: on the JVM it is passed as its underlying value under a mangled function name, so generated Java can't use it. | Use a regular class (a `data class` keeps value semantics). |
 | DI function whose JVM name Java can't call (e.g. `fun new()`) | Rejected. | Rename it, or set a callable name with `@JvmName`. |
 | `@KafkaSource` / `@KafkaSink` on a top-level function, or inside an `object` / `companion object` | Rejected: no component instance to call it on. | Move it into (or, from a companion, to the enclosing) `@Component` class. |
 | `@KafkaSource` / `@KafkaSink` on an extension function | Rejected: the bootstrap passes only the payload (and `KafkaContext`). | Declare a regular `fun` taking the receiver as a parameter. |
