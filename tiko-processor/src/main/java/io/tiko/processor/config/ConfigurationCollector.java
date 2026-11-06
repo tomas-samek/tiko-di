@@ -3,30 +3,30 @@ package io.tiko.processor.config;
 import io.tiko.annotations.Configuration;
 import io.tiko.annotations.Default;
 import io.tiko.annotations.Key;
-import io.tiko.processor.util.JavacBridge;
+import io.tiko.processor.core.ProcessingEnv;
+import io.tiko.processor.core.TypeOracle;
+import io.tiko.processor.core.model.AnnotationRef;
+import io.tiko.processor.core.model.ClassDecl;
+import io.tiko.processor.core.model.DeclKind;
+import io.tiko.processor.core.model.FieldDecl;
+import io.tiko.processor.core.model.ParamDecl;
 import io.tiko.processor.util.ProcessorContext;
+import io.tiko.processor.util.TypeRefs;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import javax.annotation.processing.RoundEnvironment;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.PackageElement;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
-import javax.lang.model.util.Types;
+import java.util.Optional;
 
 /**
- * Walks {@code @Configuration}-annotated elements and builds {@link ConfigurationModel}s.
- * Non-record annotated elements are flagged here (the simplest fail-fast point);
+ * Walks {@code @Configuration}-annotated types and builds {@link ConfigurationModel}s.
+ * Non-record annotated types are flagged here (the simplest fail-fast point);
  * deeper validation is in {@link ConfigurationValidator}.
  */
 public final class ConfigurationCollector {
+
+    private static final String CONFIGURATION = Configuration.class.getCanonicalName();
+    private static final String KEY = Key.class.getCanonicalName();
+    private static final String DEFAULT = Default.class.getCanonicalName();
 
     private final ProcessorContext ctx;
 
@@ -34,59 +34,46 @@ public final class ConfigurationCollector {
         this.ctx = ctx;
     }
 
-    public void collect(RoundEnvironment roundEnv) {
-        for (Element el : roundEnv.getElementsAnnotatedWith(Configuration.class)) {
-            if (!(el instanceof TypeElement type)) {
+    public void collect(ProcessingEnv env) {
+        // @Configuration targets TYPE, so every annotated element is a type declaration.
+        for (var type : env.classesAnnotatedWith(CONFIGURATION)) {
+            if (type.kind() != DeclKind.RECORD) {
                 ctx.getErrorReporter()
                         .error(
-                                JavacBridge.location(el),
-                                "@Configuration can only be applied to types",
-                                "Move @Configuration to a record type");
-                continue;
-            }
-            if (type.getKind() != ElementKind.RECORD) {
-                ctx.getErrorReporter()
-                        .error(
-                                JavacBridge.location(type),
+                                type.location(),
                                 "@Configuration must be applied to a record",
                                 "Change `class` to `record`");
                 continue;
             }
 
-            Configuration ann = type.getAnnotation(Configuration.class);
-            String prefix = ann.prefix();
+            var prefix = type.annotation(CONFIGURATION).orElseThrow().string("prefix");
+            var simple = type.className().simpleName();
 
             // @Configuration records must be top-level: the binder is keyed by package + simple
-            // name, and nested records would collide. Guard the cast so a nested record yields a
-            // clear diagnostic instead of a ClassCastException from inside the processor (#105).
-            Element enclosing = type.getEnclosingElement();
-            if (!(enclosing instanceof PackageElement pkgElement)) {
-                String enclosingName = enclosing instanceof TypeElement enclosingType
-                        ? enclosingType.getQualifiedName().toString()
-                        : enclosing.getSimpleName().toString();
+            // name, and nested records would collide. Guard against nesting so a nested record
+            // yields a clear diagnostic instead of a ClassCastException from inside the processor (#105).
+            var enclosing = type.enclosingClass();
+            if (enclosing.isPresent()) {
                 ctx.getErrorReporter()
                         .error(
-                                JavacBridge.location(type),
-                                "@Configuration record '" + type.getSimpleName()
-                                        + "' must be top-level (declared inside '" + enclosingName
+                                type.location(),
+                                "@Configuration record '" + simple
+                                        + "' must be top-level (declared inside '"
+                                        + enclosing.get().qualifiedName()
                                         + "'). Move it to its own .java file.",
-                                "Move " + type.getSimpleName() + " to its own top-level .java file");
+                                "Move " + simple + " to its own top-level .java file");
                 continue;
             }
-            String pkg = pkgElement.getQualifiedName().toString();
-            String simple = type.getSimpleName().toString();
-            String qualified = type.getQualifiedName().toString();
+            var pkg = type.className().packageName();
+            var qualified = type.qualifiedName();
 
             // Build a map from component name → canonical constructor parameter
             // so we can read @Default / @Key (which target PARAMETER, not RECORD_COMPONENT).
-            Map<String, VariableElement> ctorParams = buildCanonicalCtorParamMap(type);
+            var ctorParams = buildCanonicalCtorParamMap(type, env.types());
 
-            List<ConfigFieldModel> fields = new ArrayList<>();
-            for (Element member : type.getEnclosedElements()) {
-                if (member.getKind() != ElementKind.RECORD_COMPONENT) continue;
-                VariableElement comp = (VariableElement) member;
-                VariableElement ctorParam = ctorParams.get(comp.getSimpleName().toString());
-                fields.add(buildField(comp, ctorParam));
+            var fields = new ArrayList<ConfigFieldModel>();
+            for (var component : type.recordComponents()) {
+                fields.add(buildField(component, ctorParams.get(component.name())));
             }
 
             ctx.registerConfiguration(new ConfigurationModel(type, pkg, simple, qualified, prefix, fields));
@@ -101,18 +88,11 @@ public final class ConfigurationCollector {
      * <p>Matches by both arity and per-parameter type to avoid picking a non-canonical
      * constructor that coincidentally has the same number of parameters but different types.
      */
-    private Map<String, VariableElement> buildCanonicalCtorParamMap(TypeElement type) {
-        Types types = JavacBridge.types(ctx.env());
+    private static Map<String, ParamDecl> buildCanonicalCtorParamMap(ClassDecl type, TypeOracle types) {
+        var components = type.recordComponents();
 
-        List<VariableElement> components = type.getEnclosedElements().stream()
-                .filter(e -> e.getKind() == ElementKind.RECORD_COMPONENT)
-                .map(e -> (VariableElement) e)
-                .toList();
-
-        for (Element member : type.getEnclosedElements()) {
-            if (member.getKind() != ElementKind.CONSTRUCTOR) continue;
-            ExecutableElement ctor = (ExecutableElement) member;
-            List<? extends VariableElement> params = ctor.getParameters();
+        for (var ctor : type.constructors()) {
+            var params = ctor.parameters();
 
             // Must have the same arity as the record component list.
             if (params.size() != components.size()) continue;
@@ -120,7 +100,7 @@ public final class ConfigurationCollector {
             // Every (component, parameter) pair must have the same type.
             boolean allMatch = true;
             for (int i = 0; i < components.size(); i++) {
-                if (!types.isSameType(components.get(i).asType(), params.get(i).asType())) {
+                if (!types.isSameType(components.get(i).type(), params.get(i).type())) {
                     allMatch = false;
                     break;
                 }
@@ -128,9 +108,9 @@ public final class ConfigurationCollector {
             if (!allMatch) continue;
 
             // This is the canonical constructor.
-            Map<String, VariableElement> map = new HashMap<>();
-            for (VariableElement param : params) {
-                map.put(param.getSimpleName().toString(), param);
+            var map = new HashMap<String, ParamDecl>();
+            for (var param : params) {
+                map.put(param.name(), param);
             }
             return map;
         }
@@ -139,34 +119,38 @@ public final class ConfigurationCollector {
         return new HashMap<>();
     }
 
-    private ConfigFieldModel buildField(VariableElement comp, VariableElement ctorParam) {
-        String name = comp.getSimpleName().toString();
+    private static ConfigFieldModel buildField(FieldDecl comp, ParamDecl ctorParam) {
+        var name = comp.name();
         // Read @Key and @Default from the canonical constructor parameter (PARAMETER target),
         // but fall back to the record component element in case they are propagated there too.
-        Key keyAnn = ctorParam != null ? ctorParam.getAnnotation(Key.class) : comp.getAnnotation(Key.class);
-        String yamlKey = keyAnn != null ? keyAnn.value() : name;
+        var keyAnn = annotationOf(comp, ctorParam, KEY);
+        var yamlKey = keyAnn.map(key -> key.string("value")).orElse(name);
 
-        Default defAnn = ctorParam != null ? ctorParam.getAnnotation(Default.class) : comp.getAnnotation(Default.class);
-        boolean isOptional = isOptional(comp.asType());
+        var defAnn = annotationOf(comp, ctorParam, DEFAULT);
+        boolean isOptional = TypeRefs.isDeclared(comp.type(), "java.util.Optional");
 
         // Retain defaultValue even for Optional fields so the validator can detect the conflict.
-        String defaultValue = defAnn != null ? defAnn.value() : null;
+        var defaultValue = defAnn.map(def -> def.string("value")).orElse(null);
 
         ConfigFieldModel.Cardinality cardinality;
         if (isOptional) {
             cardinality = ConfigFieldModel.Cardinality.OPTIONAL;
-        } else if (defAnn != null) {
+        } else if (defAnn.isPresent()) {
             cardinality = ConfigFieldModel.Cardinality.DEFAULTED;
         } else {
             cardinality = ConfigFieldModel.Cardinality.REQUIRED;
         }
 
-        return new ConfigFieldModel(comp, name, yamlKey, comp.asType(), cardinality, defaultValue);
+        return new ConfigFieldModel(comp, name, yamlKey, comp.type(), cardinality, defaultValue);
     }
 
-    private boolean isOptional(TypeMirror type) {
-        if (type.getKind() != TypeKind.DECLARED) return false;
-        DeclaredType dt = (DeclaredType) type;
-        return ((TypeElement) dt.asElement()).getQualifiedName().toString().equals("java.util.Optional");
+    /** The annotation on the constructor parameter when there is one, else on the component. */
+    private static Optional<AnnotationRef> annotationOf(FieldDecl comp, ParamDecl ctorParam, String annotationFqn) {
+        if (ctorParam != null) {
+            return ctorParam.annotation(annotationFqn);
+        }
+        return comp.annotations().stream()
+                .filter(annotation -> annotation.annotationName().equals(annotationFqn))
+                .findFirst();
     }
 }

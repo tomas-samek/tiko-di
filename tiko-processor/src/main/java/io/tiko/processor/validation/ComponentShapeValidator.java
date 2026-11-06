@@ -1,6 +1,9 @@
 package io.tiko.processor.validation;
 
 import io.tiko.annotations.Inject;
+import io.tiko.processor.core.model.Location;
+import io.tiko.processor.core.model.MethodDecl;
+import io.tiko.processor.core.model.Visibility;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.EventHandlerModel;
@@ -74,17 +77,17 @@ public final class ComponentShapeValidator {
         }
 
         for (EventHandlerModel handler : context.getEventHandlers()) {
-            String declaringFqn = handler.getDeclaringClass().getQualifiedName().toString();
+            String declaringFqn = handler.getOwner().qualifiedName();
             boolean onComponent = context.getComponents().values().stream()
                     .anyMatch(c -> c.getQualifiedName().equals(declaringFqn));
             if (!onComponent) {
                 context.getErrorReporter()
                         .eventHandlerOutsideComponent(
-                                JavacBridge.location(handler.getMethodElement()),
-                                handler.getDeclaringClass().getSimpleName().toString());
+                                handler.getMethod().location(),
+                                handler.getOwner().className().simpleName());
                 valid = false;
             } else {
-                valid &= requirePublic(handler.getMethodElement(), "@EventHandler");
+                valid &= requirePublic(handler.getMethod(), "@EventHandler");
             }
         }
 
@@ -120,14 +123,27 @@ public final class ComponentShapeValidator {
                 ((TypeElement) member.getEnclosingElement()).getSimpleName().toString();
         boolean constructor = member.getKind() == ElementKind.CONSTRUCTOR;
         String name = constructor ? owner : member.getSimpleName().toString();
+        reportNotPublic(JavacBridge.location(member), annotation, owner, name, constructor);
+        return false;
+    }
+
+    private boolean requirePublic(MethodDecl member, String annotation) {
+        if (member.visibility() == Visibility.PUBLIC) return true;
+        String owner = member.owner().orElseThrow().className().simpleName();
+        boolean constructor = member.isConstructor();
+        String name = constructor ? owner : member.name();
+        reportNotPublic(member.location(), annotation, owner, name, constructor);
+        return false;
+    }
+
+    private void reportNotPublic(Location at, String annotation, String owner, String name, boolean constructor) {
         String kind = constructor ? "constructor" : "method";
         context.getErrorReporter()
                 .error(
-                        JavacBridge.location(member),
+                        at,
                         annotation + " " + kind + " '" + owner + (constructor ? "" : "." + name) + "' must be public;"
                                 + " the generated code calls it from the io.tiko.generated package.",
                         "Add the public modifier to " + (constructor ? "the constructor" : "'" + name + "'"));
-        return false;
     }
 
     private boolean validateInstantiable(ComponentModel component) {

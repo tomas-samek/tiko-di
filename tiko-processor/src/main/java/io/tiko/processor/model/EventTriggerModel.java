@@ -1,8 +1,8 @@
 package io.tiko.processor.model;
 
+import io.tiko.processor.core.model.TypeRef;
 import java.util.ArrayList;
 import java.util.List;
-import javax.lang.model.type.TypeMirror;
 
 /**
  * Represents an @EventTrigger annotation on an event handler.
@@ -13,7 +13,7 @@ public final class EventTriggerModel {
     private final String eventName;
     private final boolean async;
     private final boolean spread;
-    private final List<TypeMirror> guardClasses;
+    private final List<TypeRef> guardClasses;
 
     private EventTriggerModel(Builder builder) {
         this.eventName = builder.eventName;
@@ -43,7 +43,7 @@ public final class EventTriggerModel {
      * default {@code AlwaysAllow} is declared (callers don't need to instantiate that
      * — codegen treats an empty list as "no guard").
      */
-    public List<TypeMirror> getGuardClasses() {
+    public List<TypeRef> getGuardClasses() {
         return guardClasses;
     }
 
@@ -57,7 +57,7 @@ public final class EventTriggerModel {
         private String eventName = "";
         private boolean async = false;
         private boolean spread = false;
-        private List<TypeMirror> guardClasses = new ArrayList<>();
+        private List<TypeRef> guardClasses = new ArrayList<>();
 
         private Builder() {}
 
@@ -76,12 +76,12 @@ public final class EventTriggerModel {
             return this;
         }
 
-        public Builder guardClasses(List<TypeMirror> guardClasses) {
+        public Builder guardClasses(List<TypeRef> guardClasses) {
             this.guardClasses = new ArrayList<>(guardClasses);
             return this;
         }
 
-        public Builder addGuardClass(TypeMirror guardClass) {
+        public Builder addGuardClass(TypeRef guardClass) {
             this.guardClasses.add(guardClass);
             return this;
         }

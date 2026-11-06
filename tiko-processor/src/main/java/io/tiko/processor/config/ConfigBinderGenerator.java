@@ -8,21 +8,23 @@ import io.tiko.config.internal.coercers.Coercers;
 import io.tiko.config.internal.coercers.CompositeCoercers;
 import io.tiko.config.internal.coercers.NestedRecordSupport;
 import io.tiko.config.internal.coercers.TypeCoercer;
+import io.tiko.processor.core.CodeOutput;
 import io.tiko.processor.core.GeneratorAnnotations;
+import io.tiko.processor.core.model.ClassDecl;
+import io.tiko.processor.core.model.DeclKind;
+import io.tiko.processor.core.model.FieldDecl;
+import io.tiko.processor.core.model.ParamDecl;
+import io.tiko.processor.core.model.TypeRef;
+import io.tiko.processor.util.TypeRefs;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import javax.annotation.processing.Filer;
-import javax.annotation.processing.Messager;
-import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.Modifier;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeMirror;
 
 /**
  * Generates {@code <Record>ConfigBinder.java} for each {@code @Configuration} record and
@@ -38,15 +40,16 @@ public final class ConfigBinderGenerator {
 
     private static final String GENERATED_PACKAGE = "io.tiko.generated.config";
 
-    private final Filer filer;
-    private final Messager messager;
+    private static final String KEY = io.tiko.annotations.Key.class.getCanonicalName();
+    private static final String DEFAULT = io.tiko.annotations.Default.class.getCanonicalName();
+
+    private final CodeOutput output;
 
     /** Tracks emitted nested-coercer simple names so we don't emit the same class twice. */
     private final Set<String> emittedNestedCoercers = new HashSet<>();
 
-    public ConfigBinderGenerator(Filer filer, Messager messager) {
-        this.filer = filer;
-        this.messager = messager;
+    public ConfigBinderGenerator(CodeOutput output) {
+        this.output = output;
     }
 
     /**
@@ -104,10 +107,10 @@ public final class ConfigBinderGenerator {
 
             String varName = f.fieldName();
             String fullPath = cfg.prefix() + "." + f.yamlKey();
-            TypeMirror inner = unwrapOptional(f.type());
+            TypeRef inner = unwrapOptional(f.type());
 
             CodeBlock coercer = coercerExpr(inner, fullPath);
-            TypeName javaType = TypeName.get(f.type());
+            TypeName javaType = f.type().javaPoet();
 
             switch (f.cardinality()) {
                 case OPTIONAL ->
@@ -170,7 +173,7 @@ public final class ConfigBinderGenerator {
                 .addMethod(bind.build())
                 .build();
 
-        JavaFile.builder(GENERATED_PACKAGE, binderClass).build().writeTo(filer);
+        output.writeJava(JavaFile.builder(GENERATED_PACKAGE, binderClass).build(), List.of(), false);
     }
 
     // ---- Nested-record coercer generation ----------------------------------
@@ -185,43 +188,43 @@ public final class ConfigBinderGenerator {
      * so the same nested record appearing in multiple {@code @Configuration} records produces
      * exactly one generated coercer class.
      */
-    private void emitNestedCoercersFor(TypeMirror type) throws IOException {
-        if (type.getKind() != javax.lang.model.type.TypeKind.DECLARED) return;
-        DeclaredType dt = (DeclaredType) type;
-        TypeElement el = (TypeElement) dt.asElement();
-        String fqn = el.getQualifiedName().toString();
+    private void emitNestedCoercersFor(TypeRef type) throws IOException {
+        var declared = TypeRefs.declared(type);
+        if (declared.isEmpty()) return;
+        ClassDecl el = declared.get();
+        String fqn = el.qualifiedName();
+        var typeArguments = type.typeArguments();
 
         // Walk through container types into their value-type parameters.
         if (fqn.equals("java.util.Optional") || fqn.equals("java.util.List") || fqn.equals("java.util.Set")) {
-            if (!dt.getTypeArguments().isEmpty()) {
-                emitNestedCoercersFor(dt.getTypeArguments().get(0));
+            if (!typeArguments.isEmpty()) {
+                emitNestedCoercersFor(typeArguments.get(0));
             }
             return;
         }
         if (fqn.equals("java.util.Map")) {
-            if (dt.getTypeArguments().size() >= 2) {
-                emitNestedCoercersFor(dt.getTypeArguments().get(1));
+            if (typeArguments.size() >= 2) {
+                emitNestedCoercersFor(typeArguments.get(1));
             }
             return;
         }
 
-        if (el.getKind() == ElementKind.RECORD) {
+        if (el.kind() == DeclKind.RECORD) {
             String coercerName = nestedCoercerSimpleName(el);
             if (emittedNestedCoercers.add(coercerName)) {
                 emitNestedCoercerClass(el, coercerName);
                 // Recurse into this nested record's own fields — deeply-nested structures
                 // need cascaded coercers.
-                for (var member : el.getEnclosedElements()) {
-                    if (member.getKind() != ElementKind.RECORD_COMPONENT) continue;
-                    emitNestedCoercersFor(member.asType());
+                for (var member : el.recordComponents()) {
+                    emitNestedCoercersFor(member.type());
                 }
             }
         }
     }
 
-    private void emitNestedCoercerClass(TypeElement record, String coercerName) throws IOException {
-        ClassName recordType = ClassName.get(record);
-        String recordSimpleName = record.getSimpleName().toString();
+    private void emitNestedCoercerClass(ClassDecl record, String coercerName) throws IOException {
+        ClassName recordType = record.className();
+        String recordSimpleName = record.className().simpleName();
         ClassName coercerType = ClassName.get(GENERATED_PACKAGE, coercerName);
 
         TypeName coercerOfRecord = ParameterizedTypeName.get(ClassName.get(TypeCoercer.class), recordType);
@@ -245,20 +248,20 @@ public final class ConfigBinderGenerator {
         StringBuilder ctorArgs = new StringBuilder();
         Set<String> knownKeys = new LinkedHashSet<>();
 
-        java.util.List<VariableElement> components = enclosedRecordComponents(record);
+        List<FieldDecl> components = record.recordComponents();
         for (int i = 0; i < components.size(); i++) {
-            VariableElement comp = components.get(i);
-            String fieldName = comp.getSimpleName().toString();
+            FieldDecl comp = components.get(i);
+            String fieldName = comp.name();
             String yamlKey = readKeyAnnotation(record, comp).orElse(fieldName);
             knownKeys.add(yamlKey);
 
-            TypeMirror raw = comp.asType();
-            TypeMirror inner = unwrapOptional(raw);
+            TypeRef raw = comp.type();
+            TypeRef inner = unwrapOptional(raw);
             boolean isOptional = isOptional(raw);
             String defaultValue = readDefaultAnnotation(record, comp).orElse(null);
 
             CodeBlock coercer = coercerExpr(inner, recordSimpleName + "." + yamlKey);
-            TypeName javaType = TypeName.get(raw);
+            TypeName javaType = raw.javaPoet();
             String varName = "f_" + i;
 
             if (isOptional) {
@@ -320,7 +323,7 @@ public final class ConfigBinderGenerator {
                 .addMethod(doCoerce.build())
                 .build();
 
-        JavaFile.builder(GENERATED_PACKAGE, coercerClass).build().writeTo(filer);
+        output.writeJava(JavaFile.builder(GENERATED_PACKAGE, coercerClass).build(), List.of(), false);
     }
 
     /**
@@ -328,21 +331,14 @@ public final class ConfigBinderGenerator {
      * hex of the record's fully qualified name. Hash suffix avoids collisions when two
      * nested records share a simple name across packages.
      */
-    static String nestedCoercerSimpleName(TypeElement record) {
-        String fqn = record.getQualifiedName().toString();
+    static String nestedCoercerSimpleName(ClassDecl record) {
+        String fqn = record.qualifiedName();
         String hash = String.format("%08x", fqn.hashCode());
-        return record.getSimpleName() + "NestedCoercer_" + hash;
+        return record.className().simpleName() + "NestedCoercer_" + hash;
     }
 
-    static String nestedCoercerQualifiedName(TypeElement record) {
+    static String nestedCoercerQualifiedName(ClassDecl record) {
         return GENERATED_PACKAGE + "." + nestedCoercerSimpleName(record);
-    }
-
-    private static java.util.List<VariableElement> enclosedRecordComponents(TypeElement record) {
-        return record.getEnclosedElements().stream()
-                .filter(e -> e.getKind() == ElementKind.RECORD_COMPONENT)
-                .map(e -> (VariableElement) e)
-                .toList();
     }
 
     /**
@@ -350,26 +346,24 @@ public final class ConfigBinderGenerator {
      * given component. Mirrors {@link ConfigurationCollector#buildCanonicalCtorParamMap}
      * because {@code @Key} targets PARAMETER, not RECORD_COMPONENT.
      */
-    private Optional<String> readKeyAnnotation(TypeElement record, VariableElement component) {
-        VariableElement param = canonicalCtorParam(record, component);
-        if (param == null) return Optional.empty();
-        io.tiko.annotations.Key keyAnn = param.getAnnotation(io.tiko.annotations.Key.class);
-        return keyAnn != null ? Optional.of(keyAnn.value()) : Optional.empty();
+    private Optional<String> readKeyAnnotation(ClassDecl record, FieldDecl component) {
+        return readParamAnnotationValue(record, component, KEY);
     }
 
-    private Optional<String> readDefaultAnnotation(TypeElement record, VariableElement component) {
-        VariableElement param = canonicalCtorParam(record, component);
-        if (param == null) return Optional.empty();
-        io.tiko.annotations.Default defAnn = param.getAnnotation(io.tiko.annotations.Default.class);
-        return defAnn != null ? Optional.of(defAnn.value()) : Optional.empty();
+    private Optional<String> readDefaultAnnotation(ClassDecl record, FieldDecl component) {
+        return readParamAnnotationValue(record, component, DEFAULT);
     }
 
-    private VariableElement canonicalCtorParam(TypeElement record, VariableElement component) {
-        for (var member : record.getEnclosedElements()) {
-            if (member.getKind() != ElementKind.CONSTRUCTOR) continue;
-            javax.lang.model.element.ExecutableElement ctor = (javax.lang.model.element.ExecutableElement) member;
-            for (var p : ctor.getParameters()) {
-                if (p.getSimpleName().contentEquals(component.getSimpleName())) {
+    private Optional<String> readParamAnnotationValue(ClassDecl record, FieldDecl component, String annotationFqn) {
+        ParamDecl param = canonicalCtorParam(record, component);
+        if (param == null) return Optional.empty();
+        return param.annotation(annotationFqn).map(annotation -> annotation.string("value"));
+    }
+
+    private ParamDecl canonicalCtorParam(ClassDecl record, FieldDecl component) {
+        for (var ctor : record.constructors()) {
+            for (var p : ctor.parameters()) {
+                if (p.name().equals(component.name())) {
                     return p;
                 }
             }
@@ -383,17 +377,17 @@ public final class ConfigBinderGenerator {
      * @param field how the field is named in coercer diagnostics: the dot-path for a top-level
      *     {@code @Configuration} field, {@code Record.key} inside a nested record (#485)
      */
-    private CodeBlock coercerExpr(TypeMirror type, String field) {
-        if (type.getKind().isPrimitive()) {
-            return primitiveCoercer(type.getKind().name());
+    private CodeBlock coercerExpr(TypeRef type, String field) {
+        if (type.isPrimitive()) {
+            return primitiveCoercer(type.erasedName().toUpperCase(Locale.ROOT));
         }
-        if (type.getKind() == javax.lang.model.type.TypeKind.DECLARED) {
-            TypeElement el = (TypeElement) ((DeclaredType) type).asElement();
-            String fqn = el.getQualifiedName().toString();
+        var declared = TypeRefs.declared(type);
+        if (declared.isPresent()) {
+            ClassDecl el = declared.get();
+            String fqn = el.qualifiedName();
             if (fqn.equals("java.util.List") || fqn.equals("java.util.Set") || fqn.equals("java.util.Map")) {
-                DeclaredType dt = (DeclaredType) type;
                 int valueArgIdx = fqn.equals("java.util.Map") ? 1 : 0;
-                CodeBlock elemCoercer = coercerExpr(dt.getTypeArguments().get(valueArgIdx), field);
+                CodeBlock elemCoercer = coercerExpr(type.typeArguments().get(valueArgIdx), field);
                 ClassName helper = ClassName.get(CompositeCoercers.class);
                 return switch (fqn) {
                     case "java.util.List" -> CodeBlock.of("$T.list($L)", helper, elemCoercer);
@@ -401,18 +395,18 @@ public final class ConfigBinderGenerator {
                     default -> CodeBlock.of("$T.map($L)", helper, elemCoercer);
                 };
             }
-            if (el.getKind() == ElementKind.ENUM) {
-                ClassName enumType = ClassName.get(el);
+            if (el.kind() == DeclKind.ENUM) {
+                ClassName enumType = el.className();
                 return CodeBlock.of("$T.enumCoercer($T.class)", Coercers.class, enumType);
             }
-            if (el.getKind() == ElementKind.RECORD) {
+            if (el.kind() == DeclKind.RECORD) {
                 // Nested record (#17): reference the generated nested coercer.
                 ClassName nestedCoercerType = ClassName.get(GENERATED_PACKAGE, nestedCoercerSimpleName(el));
                 return CodeBlock.of("$T.coercer()", nestedCoercerType);
             }
             return scalarCoercer(fqn);
         }
-        throw new IllegalArgumentException("Unsupported field type: " + type);
+        throw new IllegalArgumentException("Unsupported field type: " + type.displayName());
     }
 
     private CodeBlock primitiveCoercer(String kind) {
@@ -455,36 +449,30 @@ public final class ConfigBinderGenerator {
         };
     }
 
-    private CodeBlock fallbackExpr(TypeMirror type) {
-        if (type.getKind().isPrimitive()) {
-            return switch (type.getKind()) {
-                case INT -> CodeBlock.of("0");
-                case LONG -> CodeBlock.of("0L");
-                case SHORT -> CodeBlock.of("(short) 0");
-                case BYTE -> CodeBlock.of("(byte) 0");
-                case CHAR -> CodeBlock.of("'\\u0000'");
-                case DOUBLE -> CodeBlock.of("0.0");
-                case FLOAT -> CodeBlock.of("0.0f");
-                case BOOLEAN -> CodeBlock.of("false");
+    private CodeBlock fallbackExpr(TypeRef type) {
+        if (type.isPrimitive()) {
+            return switch (type.erasedName()) {
+                case "int" -> CodeBlock.of("0");
+                case "long" -> CodeBlock.of("0L");
+                case "short" -> CodeBlock.of("(short) 0");
+                case "byte" -> CodeBlock.of("(byte) 0");
+                case "char" -> CodeBlock.of("'\\u0000'");
+                case "double" -> CodeBlock.of("0.0");
+                case "float" -> CodeBlock.of("0.0f");
+                case "boolean" -> CodeBlock.of("false");
                 default -> CodeBlock.of("null");
             };
         }
         return CodeBlock.of("null");
     }
 
-    private TypeMirror unwrapOptional(TypeMirror type) {
-        if (type.getKind() != javax.lang.model.type.TypeKind.DECLARED) return type;
-        DeclaredType dt = (DeclaredType) type;
-        TypeElement el = (TypeElement) dt.asElement();
-        if (!el.getQualifiedName().toString().equals("java.util.Optional")) return type;
-        return dt.getTypeArguments().isEmpty() ? type : dt.getTypeArguments().get(0);
+    private TypeRef unwrapOptional(TypeRef type) {
+        if (!isOptional(type)) return type;
+        return type.typeArguments().isEmpty() ? type : type.typeArguments().get(0);
     }
 
-    private boolean isOptional(TypeMirror type) {
-        if (type.getKind() != javax.lang.model.type.TypeKind.DECLARED) return false;
-        DeclaredType dt = (DeclaredType) type;
-        TypeElement el = (TypeElement) dt.asElement();
-        return el.getQualifiedName().toString().equals("java.util.Optional");
+    private boolean isOptional(TypeRef type) {
+        return TypeRefs.isDeclared(type, "java.util.Optional");
     }
 
     /** The keys as comma-separated string literals, each escaped by JavaPoet's {@code $S} (#479). */

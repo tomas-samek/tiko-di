@@ -1,9 +1,9 @@
 package io.tiko.processor;
 
 import com.google.auto.service.AutoService;
-import io.tiko.EventTriggerGuard;
 import io.tiko.Scope;
 import io.tiko.annotations.*;
+import io.tiko.processor.collect.EventHandlerCollector;
 import io.tiko.processor.core.StackTraces;
 import io.tiko.processor.core.javac.JavacProcessingEnv;
 import io.tiko.processor.generator.*;
@@ -135,8 +135,8 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
         context.env().diagnostics().note(null, "Tiko DI: Processing round, collecting annotations...");
         collectComponents(roundEnv);
         collectFactoryMethods(roundEnv);
-        collectEventHandlers(roundEnv);
-        collectConfigurations(roundEnv);
+        EventHandlerCollector.collect(context.env(), context);
+        collectConfigurations();
 
         context.env()
                 .diagnostics()
@@ -886,230 +886,10 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
     }
 
     /**
-     * Collects all @EventHandler methods.
-     */
-    private void collectEventHandlers(RoundEnvironment roundEnv) {
-        for (Element element : roundEnv.getElementsAnnotatedWith(EventHandler.class)) {
-            if (!(element instanceof ExecutableElement methodElement)) {
-                context.getErrorReporter()
-                        .error(
-                                JavacBridge.location(element),
-                                "@EventHandler can only be applied to methods",
-                                "Move @EventHandler to a method that takes the event as its first parameter");
-                continue;
-            }
-
-            EventHandlerModel handler = buildEventHandlerModel(methodElement);
-            if (handler != null) {
-                context.registerEventHandler(handler);
-            }
-        }
-    }
-
-    /**
      * Collects all @Configuration records.
      */
-    private void collectConfigurations(RoundEnvironment roundEnv) {
-        new io.tiko.processor.config.ConfigurationCollector(context).collect(roundEnv);
-    }
-
-    /**
-     * Builds an EventHandlerModel from an @EventHandler method.
-     */
-    private EventHandlerModel buildEventHandlerModel(ExecutableElement methodElement) {
-        EventHandler annotation = methodElement.getAnnotation(EventHandler.class);
-        TypeElement declaringClass = (TypeElement) methodElement.getEnclosingElement();
-
-        List<? extends VariableElement> parameters = methodElement.getParameters();
-        if (parameters.isEmpty()) {
-            context.getErrorReporter()
-                    .error(
-                            JavacBridge.location(methodElement),
-                            "@EventHandler method must have at least one parameter (the event)",
-                            "Add the event type as the method's first parameter");
-            return null;
-        }
-
-        // First parameter is the event type
-        TypeMirror eventType = parameters.get(0).asType();
-        String eventTypeName = typeUtil.getQualifiedName(eventType);
-
-        // Check if second parameter is Event<?> wrapper
-        boolean hasEventWrapper = parameters.size() > 1
-                && typeUtil.getQualifiedName(parameters.get(1).asType()).equals("io.tiko.Event");
-
-        List<EventTriggerModel> eventTriggers = collectEventTriggers(methodElement);
-
-        long timeoutNanos = resolveHandlerTimeoutNanos(methodElement, annotation);
-        if (timeoutNanos < 0) {
-            return null; // a timeout validation error was reported; skip this handler
-        }
-
-        long backoffNanos = resolveHandlerBackoffNanos(methodElement, annotation);
-        if (backoffNanos < 0 || !validateRetries(methodElement, annotation)) {
-            return null; // a retry validation error was reported; skip this handler
-        }
-
-        return EventHandlerModel.builder()
-                .methodElement(methodElement)
-                .declaringClass(declaringClass)
-                .methodName(methodElement.getSimpleName().toString())
-                .eventType(eventType)
-                .eventTypeName(eventTypeName)
-                .async(annotation.async())
-                .hasEventWrapper(hasEventWrapper)
-                .timeoutNanos(timeoutNanos)
-                .retries(annotation.retries())
-                .backoffNanos(backoffNanos)
-                .backoffStrategy(annotation.backoffStrategy())
-                .eventTriggers(eventTriggers)
-                .build();
-    }
-
-    /**
-     * Validates {@code @EventHandler(retries = ...)} (#108): retries are async-only (they wait for
-     * the backoff between attempts, which would block the publisher's thread) and the count cannot
-     * be negative. Returns {@code false} (and reports a compile error) when invalid.
-     */
-    private boolean validateRetries(ExecutableElement methodElement, EventHandler annotation) {
-        int retries = annotation.retries();
-        if (retries == 0) {
-            return true;
-        }
-        if (retries < 0) {
-            context.getErrorReporter()
-                    .error(
-                            JavacBridge.location(methodElement),
-                            "@EventHandler retries '" + retries + "' must not be negative",
-                            "Use a non-negative retry count, e.g. retries = 3");
-            return false;
-        }
-        if (!annotation.async()) {
-            context.getErrorReporter()
-                    .error(
-                            JavacBridge.location(methodElement),
-                            "@EventHandler retries requires async = true: retrying with backoff on the"
-                                    + " publisher's thread would block it",
-                            "Add async = true to retry off-thread",
-                            "Or remove retries");
-            return false;
-        }
-        return true;
-    }
-
-    /**
-     * Resolves {@code @EventHandler(backoff = ...)} (#108) to a non-negative nanosecond base delay,
-     * or {@code 0} when no backoff is declared. Returns {@code -1} (and reports a compile error)
-     * when the value is not an ISO-8601 {@link java.time.Duration} or is negative.
-     */
-    private long resolveHandlerBackoffNanos(ExecutableElement methodElement, EventHandler annotation) {
-        String backoff = annotation.backoff();
-        if (backoff == null || backoff.isBlank()) {
-            return 0L;
-        }
-        java.time.Duration duration;
-        try {
-            duration = java.time.Duration.parse(backoff.trim());
-        } catch (java.time.format.DateTimeParseException badFormat) {
-            context.getErrorReporter()
-                    .error(
-                            JavacBridge.location(methodElement),
-                            "@EventHandler backoff '" + backoff + "' is not a valid ISO-8601 Duration",
-                            "Use an ISO-8601 duration such as \"PT0.1S\" (100 ms) or \"PT2S\" (2 seconds)");
-            return -1L;
-        }
-        if (duration.isNegative()) {
-            context.getErrorReporter()
-                    .error(
-                            JavacBridge.location(methodElement),
-                            "@EventHandler backoff '" + backoff + "' must not be negative",
-                            "Use a non-negative duration such as \"PT0.1S\"");
-            return -1L;
-        }
-        return duration.toNanos();
-    }
-
-    /**
-     * Resolves {@code @EventHandler(timeout = ...)} (#107) to a positive nanosecond budget, or
-     * {@code 0} when no timeout is declared. Returns {@code -1} (and reports a compile error) when
-     * the declaration is invalid: timeouts are async-only (a sync handler runs on the publisher's
-     * thread and cannot be interrupted), the value must be an ISO-8601 {@link java.time.Duration},
-     * and it must be positive.
-     */
-    private long resolveHandlerTimeoutNanos(ExecutableElement methodElement, EventHandler annotation) {
-        String timeout = annotation.timeout();
-        if (timeout == null || timeout.isBlank()) {
-            return 0L;
-        }
-        if (!annotation.async()) {
-            context.getErrorReporter()
-                    .error(
-                            JavacBridge.location(methodElement),
-                            "@EventHandler timeout requires async = true: a sync handler runs on the publisher's"
-                                    + " thread (and its unit-of-work scope) and cannot be interrupted",
-                            "Add async = true to time-box this handler (it then runs off-thread in its own scope)",
-                            "Or remove the timeout");
-            return -1L;
-        }
-        java.time.Duration duration;
-        try {
-            duration = java.time.Duration.parse(timeout.trim());
-        } catch (java.time.format.DateTimeParseException badFormat) {
-            context.getErrorReporter()
-                    .error(
-                            JavacBridge.location(methodElement),
-                            "@EventHandler timeout '" + timeout + "' is not a valid ISO-8601 Duration",
-                            "Use an ISO-8601 duration such as \"PT5S\" (5 seconds) or \"PT0.5S\" (500 ms)");
-            return -1L;
-        }
-        if (duration.isZero() || duration.isNegative()) {
-            context.getErrorReporter()
-                    .error(
-                            JavacBridge.location(methodElement),
-                            "@EventHandler timeout '" + timeout + "' must be positive",
-                            "Use a positive duration such as \"PT5S\"");
-            return -1L;
-        }
-        return duration.toNanos();
-    }
-
-    /**
-     * Pulls every {@code @EventTrigger} annotation off a method (handles the implicit
-     * {@code @EventTriggers} container that the compiler synthesises when the user
-     * declares multiple). Default {@code AlwaysAllow} guards are dropped — codegen
-     * treats an empty guard list as "always allow".
-     */
-    private List<EventTriggerModel> collectEventTriggers(ExecutableElement methodElement) {
-        List<EventTrigger> raw = new ArrayList<>();
-        EventTriggers container = methodElement.getAnnotation(EventTriggers.class);
-        if (container != null) {
-            raw.addAll(Arrays.asList(container.value()));
-        } else {
-            EventTrigger single = methodElement.getAnnotation(EventTrigger.class);
-            if (single != null) raw.add(single);
-        }
-
-        String alwaysAllowName = EventTriggerGuard.AlwaysAllow.class.getCanonicalName();
-        List<EventTriggerModel> models = new ArrayList<>(raw.size());
-        for (EventTrigger trigger : raw) {
-            List<TypeMirror> guardMirrors;
-            try {
-                trigger.guard();
-                guardMirrors = List.of();
-            } catch (MirroredTypesException e) {
-                guardMirrors = new ArrayList<>(e.getTypeMirrors());
-            }
-            // Strip the default AlwaysAllow so codegen can skip the guard call entirely.
-            guardMirrors.removeIf(m -> typeUtil.getQualifiedName(m).equals(alwaysAllowName));
-
-            models.add(EventTriggerModel.builder()
-                    .eventName(trigger.eventName())
-                    .async(trigger.async())
-                    .spread(trigger.spread())
-                    .guardClasses(guardMirrors)
-                    .build());
-        }
-        return models;
+    private void collectConfigurations() {
+        new io.tiko.processor.config.ConfigurationCollector(context).collect(context.env());
     }
 
     /**
@@ -1181,7 +961,7 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
 
         // Validate @Configuration records
         io.tiko.processor.config.ConfigurationValidator configValidator =
-                new io.tiko.processor.config.ConfigurationValidator(context, processingEnv.getTypeUtils());
+                new io.tiko.processor.config.ConfigurationValidator(context);
         if (!configValidator.validate()) {
             valid = false;
         }
@@ -1234,8 +1014,7 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
 
         // Generate per-record ConfigBinder classes
         io.tiko.processor.config.ConfigBinderGenerator configBinderGen =
-                new io.tiko.processor.config.ConfigBinderGenerator(
-                        processingEnv.getFiler(), processingEnv.getMessager());
+                new io.tiko.processor.config.ConfigBinderGenerator(context.env().output());
         for (io.tiko.processor.config.ConfigurationModel cfg : context.getConfigurations()) {
             if (configBinderGen.canGenerate(cfg)) {
                 configBinderGen.generate(cfg);

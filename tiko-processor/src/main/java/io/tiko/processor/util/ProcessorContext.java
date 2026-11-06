@@ -205,8 +205,8 @@ public final class ProcessorContext {
         // subscription order all follow this list — element visitation order tracks source
         // order, which must not leak into generated output.
         return eventHandlers.stream()
-                .sorted(java.util.Comparator.comparing((EventHandlerModel h) ->
-                                h.getDeclaringClass().getQualifiedName().toString())
+                .sorted(java.util.Comparator.comparing(
+                                (EventHandlerModel h) -> h.getOwner().qualifiedName())
                         .thenComparing(EventHandlerModel::getMethodName)
                         .thenComparing(EventHandlerModel::getEventTypeName))
                 .toList();
