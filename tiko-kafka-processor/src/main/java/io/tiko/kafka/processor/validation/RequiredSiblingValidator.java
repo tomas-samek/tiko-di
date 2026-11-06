@@ -50,15 +50,15 @@ public final class RequiredSiblingValidator {
                                 + "so the deserialized event has a name to publish under.");
                 ok = false;
             } else if (triggers > 1) {
-                diagnostics.error(
-                        m.location(),
-                        "more than one @EventTrigger on a @KafkaSource is not supported: the bridge publishes "
-                                + "its return value to the local bus once, and the name is only a label, "
-                                + "so repeating it would not create distinct events.\n\n"
-                                + "Suggested fixes:\n"
-                                + "1. Keep a single @EventTrigger on this method.\n"
-                                + "2. For genuinely distinct downstream events, return distinct types "
-                                + "(chain from an @EventHandler on the bridge's event).");
+                diagnostics.error(m.location(), """
+                        more than one @EventTrigger on a @KafkaSource is not supported: the bridge publishes \
+                        its return value to the local bus once, and the name is only a label, \
+                        so repeating it would not create distinct events.
+
+                        Suggested fixes:
+                        1. Keep a single @EventTrigger on this method.
+                        2. For genuinely distinct downstream events, return distinct types \
+                        (chain from an @EventHandler on the bridge's event).""");
                 ok = false;
             }
         }
