@@ -6,6 +6,7 @@ import io.tiko.processor.core.model.Location;
 import io.tiko.processor.core.model.TypeRef;
 import java.util.List;
 import javax.lang.model.element.Element;
+import javax.lang.model.element.Modifier;
 
 /**
  * A javac field ({@link javax.lang.model.element.VariableElement}) or record component
@@ -21,6 +22,11 @@ record JavacFieldDecl(Element element, JavacModel model) implements FieldDecl {
     @Override
     public TypeRef type() {
         return model.typeRef(element.asType());
+    }
+
+    @Override
+    public boolean isStatic() {
+        return element.getModifiers().contains(Modifier.STATIC);
     }
 
     @Override

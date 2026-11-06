@@ -136,6 +136,17 @@ record JavacModel(Elements elements, Types types) {
         }
     }
 
+    /** The URI path of the element's file object; empty when javac reports none. */
+    Optional<String> sourcePath(TypeElement element) {
+        try {
+            return Optional.ofNullable(elements.getFileObjectOf(element))
+                    .map(file -> file.toUri().getPath());
+        } catch (UnsupportedOperationException e) {
+            // An Elements implementation without file lookup (not javac).
+            return Optional.empty();
+        }
+    }
+
     /** The javac mirror behind a model type. */
     static TypeMirror mirror(TypeRef type) {
         if (type instanceof JavacTypeRef javac) {

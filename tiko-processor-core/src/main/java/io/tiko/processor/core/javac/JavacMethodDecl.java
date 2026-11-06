@@ -1,5 +1,6 @@
 package io.tiko.processor.core.javac;
 
+import com.palantir.javapoet.TypeVariableName;
 import io.tiko.processor.core.model.AnnotationRef;
 import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.Location;
@@ -44,6 +45,11 @@ record JavacMethodDecl(ExecutableElement element, JavacModel model) implements M
     }
 
     @Override
+    public boolean isDefault() {
+        return element.getModifiers().contains(Modifier.DEFAULT);
+    }
+
+    @Override
     public boolean isSuspend() {
         return false;
     }
@@ -73,6 +79,11 @@ record JavacMethodDecl(ExecutableElement element, JavacModel model) implements M
     @Override
     public List<TypeRef> thrownTypes() {
         return element.getThrownTypes().stream().map(model::typeRef).toList();
+    }
+
+    @Override
+    public List<TypeVariableName> typeVariables() {
+        return element.getTypeParameters().stream().map(TypeVariableName::get).toList();
     }
 
     @Override
