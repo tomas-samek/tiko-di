@@ -3,6 +3,7 @@ package io.tiko.processor.validation;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
+import io.tiko.processor.util.JavacBridge;
 import io.tiko.processor.util.ProcessorContext;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -114,7 +115,7 @@ public final class AmbiguityValidator {
                     if (main.componentModel.getScope() != testModel.getScope()) {
                         context.getErrorReporter()
                                 .testComponentScopeMismatch(
-                                        testModel.getTypeElement(),
+                                        JavacBridge.location(testModel.getTypeElement()),
                                         testModel.getQualifiedName(),
                                         testModel.getScope(),
                                         main.componentModel.getQualifiedName(),
@@ -149,7 +150,10 @@ public final class AmbiguityValidator {
             ProviderInfo first = providers.get(0);
             for (int i = 1; i < providers.size(); i++) {
                 context.getErrorReporter()
-                        .duplicateQualifier(providers.get(i).element, qualifier, first.label + " (" + first.kind + ")");
+                        .duplicateQualifier(
+                                JavacBridge.location(providers.get(i).element),
+                                qualifier,
+                                first.label + " (" + first.kind + ")");
             }
             valid = false;
         }
@@ -209,7 +213,8 @@ public final class AmbiguityValidator {
         String simpleName = simpleName(typeKey);
         // Emit once per ambiguous type (attached to the first provider) rather than once per
         // provider — the message already lists every contributing provider.
-        context.getErrorReporter().ambiguousProviders(providers.get(0).element, typeKey, providerList, simpleName);
+        context.getErrorReporter()
+                .ambiguousProviders(JavacBridge.location(providers.get(0).element), typeKey, providerList, simpleName);
     }
 
     private static String simpleName(String qualifiedName) {

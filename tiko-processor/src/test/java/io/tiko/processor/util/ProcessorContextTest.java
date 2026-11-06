@@ -8,11 +8,11 @@ import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
 import io.tiko.Scope;
 import io.tiko.processor.TikoAnnotationProcessor;
+import io.tiko.processor.core.javac.JavacProcessingEnv;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.FactoryMethodModel;
 import java.util.List;
 import javax.annotation.processing.AbstractProcessor;
-import javax.annotation.processing.Messager;
 import javax.annotation.processing.RoundEnvironment;
 import javax.annotation.processing.SupportedAnnotationTypes;
 import javax.annotation.processing.SupportedSourceVersion;
@@ -54,7 +54,7 @@ class ProcessorContextTest {
 
         // Trivial accessors covered while we have a context handy.
         assertThat(ShadowProbe.activeProfilesEmpty).isTrue();
-        assertThat(ShadowProbe.messagerNonNull).isTrue();
+        assertThat(ShadowProbe.diagnosticsNonNull).isTrue();
         assertThat(ShadowProbe.shadowedFlagForB).isTrue();
         assertThat(ShadowProbe.shadowedFlagForA).isFalse();
     }
@@ -199,7 +199,7 @@ class ProcessorContextTest {
         static String error;
         static List<String> resultKeys;
         static boolean activeProfilesEmpty;
-        static boolean messagerNonNull;
+        static boolean diagnosticsNonNull;
         static boolean shadowedFlagForB;
         static boolean shadowedFlagForA;
 
@@ -207,7 +207,7 @@ class ProcessorContextTest {
             error = null;
             resultKeys = null;
             activeProfilesEmpty = false;
-            messagerNonNull = false;
+            diagnosticsNonNull = false;
             shadowedFlagForB = false;
             shadowedFlagForA = false;
         }
@@ -216,7 +216,7 @@ class ProcessorContextTest {
         public boolean process(java.util.Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
             if (roundEnv.processingOver()) return false;
             try {
-                ProcessorContext ctx = new ProcessorContext(processingEnv, List.of());
+                ProcessorContext ctx = new ProcessorContext(JavacProcessingEnv.of(processingEnv, roundEnv), List.of());
                 TypeElement main = processingEnv.getElementUtils().getTypeElement("demo.Main");
 
                 ctx.registerComponent(component(main, "demo.A", false));
@@ -235,8 +235,7 @@ class ProcessorContextTest {
                         .toList();
 
                 activeProfilesEmpty = ctx.getActiveProfiles().isEmpty();
-                Messager m = ctx.getMessager();
-                messagerNonNull = (m != null);
+                diagnosticsNonNull = (ctx.env().diagnostics() != null);
                 shadowedFlagForB = ctx.isShadowedByTestOverride("demo.B");
                 shadowedFlagForA = ctx.isShadowedByTestOverride("demo.A");
             } catch (RuntimeException e) {
@@ -262,7 +261,8 @@ class ProcessorContextTest {
         public boolean process(java.util.Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
             if (roundEnv.processingOver()) return false;
             try {
-                ProcessorContext ctx = new ProcessorContext(processingEnv, List.of("prod"));
+                ProcessorContext ctx =
+                        new ProcessorContext(JavacProcessingEnv.of(processingEnv, roundEnv), List.of("prod"));
                 TypeElement main = processingEnv.getElementUtils().getTypeElement("demo.Main");
 
                 ctx.registerComponent(component(main, "demo.A", false));
@@ -310,12 +310,14 @@ class ProcessorContextTest {
             if (roundEnv.processingOver()) return false;
             try {
                 // Branches 1 + 2 share one context with no active profiles.
-                ProcessorContext noActive = new ProcessorContext(processingEnv, List.of());
+                ProcessorContext noActive =
+                        new ProcessorContext(JavacProcessingEnv.of(processingEnv, roundEnv), List.of());
                 emptyProfilesAlwaysActive = noActive.isProfileActive(List.of());
                 silentFallbackWhenNoActiveSet = noActive.isProfileActive(List.of("dev"));
 
                 // Branches 3 + 4: prod active, two component-profile sets to compare against.
-                ProcessorContext prodActive = new ProcessorContext(processingEnv, List.of("prod"));
+                ProcessorContext prodActive =
+                        new ProcessorContext(JavacProcessingEnv.of(processingEnv, roundEnv), List.of("prod"));
                 intersectionMatches = prodActive.isProfileActive(List.of("prod", "staging"));
                 disjointInactive = prodActive.isProfileActive(List.of("dev"));
             } catch (RuntimeException e) {
@@ -356,7 +358,8 @@ class ProcessorContextTest {
                 TypeElement main = processingEnv.getElementUtils().getTypeElement("demo.Main");
 
                 // === findByImplClass factory branch ===
-                ProcessorContext ctxFactoryActive = new ProcessorContext(processingEnv, List.of("prod"));
+                ProcessorContext ctxFactoryActive =
+                        new ProcessorContext(JavacProcessingEnv.of(processingEnv, roundEnv), List.of("prod"));
                 ctxFactoryActive.registerFactoryMethod(factory(main, "demo.Conn", "buildConn", List.of("prod")));
                 findByImplClassFactoryMatch =
                         ctxFactoryActive.findByImplClass("demo.Conn").isPresent();
@@ -372,14 +375,16 @@ class ProcessorContextTest {
                 // iterates the map without dedup-by-class, so registering two distinct keys whose
                 // qualified-name matches the queried FQN exercises the filter loop. Use named
                 // components to avoid the registration-collision check.)
-                ProcessorContext ctxAll = new ProcessorContext(processingEnv, List.of("prod"));
+                ProcessorContext ctxAll =
+                        new ProcessorContext(JavacProcessingEnv.of(processingEnv, roundEnv), List.of("prod"));
                 ctxAll.registerComponent(namedComponent(main, "demo.Same", "prodVariant", List.of("prod")));
                 ctxAll.registerComponent(namedComponent(main, "demo.Same", "devVariant", List.of("dev")));
                 findAllByImplClassFiltersByProfile =
                         ctxAll.findAllByImplClass("demo.Same").size();
 
                 // === findComponentOrFactory configuration branch ===
-                ProcessorContext ctxCfg = new ProcessorContext(processingEnv, List.of());
+                ProcessorContext ctxCfg =
+                        new ProcessorContext(JavacProcessingEnv.of(processingEnv, roundEnv), List.of());
                 ctxCfg.registerConfiguration(new io.tiko.processor.config.ConfigurationModel(
                         main, "demo", "DbConfig", "demo.DbConfig", "db", List.of()));
                 findComponentOrFactoryResolvesConfiguration =
@@ -388,7 +393,8 @@ class ProcessorContextTest {
                 // === findComponentOrFactory testFallback branch ===
                 // Interface impl provided by a @TestComponent only — main lookup should fall back
                 // to the test bean (the only available impl), exercising the `testFallback` path.
-                ProcessorContext ctxFallback = new ProcessorContext(processingEnv, List.of());
+                ProcessorContext ctxFallback =
+                        new ProcessorContext(JavacProcessingEnv.of(processingEnv, roundEnv), List.of());
                 TypeElement objectTe = processingEnv.getElementUtils().getTypeElement("java.lang.Runnable");
                 ComponentModel testImpl = ComponentModel.builder()
                         .typeElement(main)
@@ -426,7 +432,7 @@ class ProcessorContextTest {
         public boolean process(java.util.Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
             if (roundEnv.processingOver()) return false;
             try {
-                ProcessorContext ctx = new ProcessorContext(processingEnv, List.of());
+                ProcessorContext ctx = new ProcessorContext(JavacProcessingEnv.of(processingEnv, roundEnv), List.of());
                 TypeElement main = processingEnv.getElementUtils().getTypeElement("demo.Main");
                 ctx.registerComponent(component(main, "demo.A", false));
                 // Second registration with the same key triggers the duplicate-error path.

@@ -3,6 +3,7 @@ package io.tiko.processor.validation;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
+import io.tiko.processor.util.JavacBridge;
 import io.tiko.processor.util.ProcessorContext;
 import io.tiko.processor.util.TypeUtil;
 import javax.lang.model.element.Element;
@@ -97,7 +98,7 @@ public final class DependencyGraphValidator {
             if (!context.getComponents().containsKey(declaringClassKey)) {
                 context.getErrorReporter()
                         .error(
-                                factory.getMethodElement(),
+                                JavacBridge.location(factory.getMethodElement()),
                                 "Factory method " + factory.getMethodName() + " is an instance method, "
                                         + "but declaring class "
                                         + factory.getDeclaringClass().getSimpleName()
@@ -140,10 +141,11 @@ public final class DependencyGraphValidator {
         ComponentModel hider = findComponentHidingType(depKey);
         if (hider != null) {
             context.getErrorReporter()
-                    .missingDependencyHiddenByExpose(location, depKey, injectingIdentifier, hider.getQualifiedName());
+                    .missingDependencyHiddenByExpose(
+                            JavacBridge.location(location), depKey, injectingIdentifier, hider.getQualifiedName());
             return;
         }
-        context.getErrorReporter().missingDependency(location, depKey, injectingIdentifier);
+        context.getErrorReporter().missingDependency(JavacBridge.location(location), depKey, injectingIdentifier);
     }
 
     /**

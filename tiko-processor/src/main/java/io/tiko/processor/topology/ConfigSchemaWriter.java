@@ -2,13 +2,13 @@ package io.tiko.processor.topology;
 
 import io.tiko.processor.config.ConfigFieldModel;
 import io.tiko.processor.config.ConfigurationModel;
+import io.tiko.processor.core.CodeOutput;
 import io.tiko.processor.core.JsonWriter;
 import io.tiko.processor.util.ProcessorContext;
 import java.io.IOException;
+import java.io.StringWriter;
 import java.io.Writer;
-import javax.annotation.processing.Filer;
-import javax.tools.FileObject;
-import javax.tools.StandardLocation;
+import java.util.List;
 
 /**
  * Emits {@code META-INF/tiko/config-schema.json} — a JSON Schema draft 2020-12
@@ -27,11 +27,10 @@ public final class ConfigSchemaWriter {
         this.typeMapper = new JsonSchemaTypeMapper();
     }
 
-    public void write(Filer filer) throws IOException {
-        FileObject f = filer.createResource(StandardLocation.CLASS_OUTPUT, "", PATH);
-        try (Writer w = f.openWriter()) {
-            renderTo(w);
-        }
+    public void write(CodeOutput output) throws IOException {
+        var json = new StringWriter();
+        renderTo(json);
+        output.writeResource(PATH, json.toString(), List.of());
     }
 
     private void renderTo(Writer w) {

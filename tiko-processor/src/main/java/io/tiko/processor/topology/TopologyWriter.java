@@ -1,23 +1,21 @@
 package io.tiko.processor.topology;
 
 import io.tiko.processor.config.ConfigurationModel;
+import io.tiko.processor.core.CodeOutput;
 import io.tiko.processor.core.JsonWriter;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.EventHandlerModel;
 import io.tiko.processor.model.EventTriggerModel;
 import io.tiko.processor.model.FactoryMethodModel;
+import io.tiko.processor.util.JavacBridge;
 import io.tiko.processor.util.ProcessorContext;
 import java.io.IOException;
 import java.io.StringWriter;
-import java.io.UncheckedIOException;
 import java.io.Writer;
 import java.util.List;
-import javax.annotation.processing.Filer;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.type.TypeMirror;
-import javax.tools.FileObject;
-import javax.tools.StandardLocation;
 
 /**
  * Emits {@code META-INF/tiko/topology.json} — a versioned, machine-readable description of every
@@ -38,17 +36,12 @@ public final class TopologyWriter {
         this.context = context;
     }
 
-    /** Writes the JSON resource via the supplied Filer. */
-    public void write(Filer filer) throws IOException {
-        FileObject f = filer.createResource(StandardLocation.CLASS_OUTPUT, "", PATH);
-        try (Writer w = f.openWriter()) {
-            renderTo(w);
-        } catch (UncheckedIOException uncheckedIo) {
-            throw uncheckedIo.getCause();
-        }
+    /** Writes the JSON resource through the supplied output. */
+    public void write(CodeOutput output) throws IOException {
+        output.writeResource(PATH, render(), List.of());
     }
 
-    /** Serializes to a String — used by unit tests so they don't need a Filer. */
+    /** Serializes to a String — also used by unit tests so they don't need an output. */
     public String render() {
         var sw = new StringWriter();
         renderTo(sw);
@@ -295,11 +288,12 @@ public final class TopologyWriter {
         }
         var ifaceMirror = c.getImplementedInterface().orElseThrow();
         var ifaceFqn = ifaceMirror.toString();
-        var ifaceElement = context.getElementUtils().getTypeElement(ifaceFqn);
+        var ifaceElement = JavacBridge.elements(context.env()).getTypeElement(ifaceFqn);
         jw.field("proxy").object();
         jw.field("interface").value(ifaceFqn);
         if (ifaceElement != null) {
-            var methods = io.tiko.processor.util.AbstractInterfaceMethods.collect(ifaceElement, context.getTypeUtils());
+            var methods = io.tiko.processor.util.AbstractInterfaceMethods.collect(
+                    ifaceElement, JavacBridge.types(context.env()));
             writeMethodNameArray(jw, "proxiedMethods", methods);
         } else {
             jw.field("proxiedMethods").array().endArray();

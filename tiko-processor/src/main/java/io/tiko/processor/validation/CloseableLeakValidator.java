@@ -2,6 +2,7 @@ package io.tiko.processor.validation;
 
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
+import io.tiko.processor.util.JavacBridge;
 import io.tiko.processor.util.ProcessorContext;
 import java.util.HashSet;
 import java.util.Set;
@@ -11,7 +12,6 @@ import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.TypeMirror;
-import javax.tools.Diagnostic;
 
 /**
  * Compile-time leak check: warns when a {@code @Component} holds an instance field
@@ -69,14 +69,12 @@ public final class CloseableLeakValidator {
             if (!implementsAutoCloseable(fieldType)) continue;
 
             // Probably injected, not owned: skip.
-            String fieldTypeName = context.getElementUtils().getTypeElement(erasureName(fieldType)) != null
+            String fieldTypeName = JavacBridge.elements(context.env()).getTypeElement(erasureName(fieldType)) != null
                     ? erasureName(fieldType)
                     : fieldType.toString();
             if (dependencyTypeNames.contains(fieldTypeName)) continue;
 
-            context.getProcessingEnv()
-                    .getMessager()
-                    .printMessage(Diagnostic.Kind.WARNING, buildMessage(component, field), field);
+            context.env().diagnostics().warning(JavacBridge.location(field), buildMessage(component, field));
         }
     }
 
@@ -90,8 +88,8 @@ public final class CloseableLeakValidator {
     }
 
     private String erasureName(TypeMirror type) {
-        TypeMirror erased = context.getProcessingEnv().getTypeUtils().erasure(type);
-        Element el = context.getProcessingEnv().getTypeUtils().asElement(erased);
+        TypeMirror erased = JavacBridge.types(context.env()).erasure(type);
+        Element el = JavacBridge.types(context.env()).asElement(erased);
         if (el instanceof TypeElement te) {
             return te.getQualifiedName().toString();
         }
@@ -99,9 +97,9 @@ public final class CloseableLeakValidator {
     }
 
     private boolean implementsAutoCloseable(TypeMirror type) {
-        TypeElement closeable = context.getElementUtils().getTypeElement(AUTO_CLOSEABLE);
+        TypeElement closeable = JavacBridge.elements(context.env()).getTypeElement(AUTO_CLOSEABLE);
         if (closeable == null) return false;
-        return context.getProcessingEnv().getTypeUtils().isAssignable(type, closeable.asType());
+        return JavacBridge.types(context.env()).isAssignable(type, closeable.asType());
     }
 
     private boolean hasResourceSuppression(Element element) {
