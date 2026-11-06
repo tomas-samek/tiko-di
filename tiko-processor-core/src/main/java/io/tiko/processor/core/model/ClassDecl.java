@@ -50,9 +50,11 @@ public interface ClassDecl {
 
     /**
      * Methods declared on this type plus those it inherits from its superclasses and
-     * superinterfaces, {@code java.lang.Object}'s included, as javac's
-     * {@code Elements.getAllMembers} sees them: an overridden method appears once, as the most
-     * specific override. The order is unspecified.
+     * superinterfaces (JLS 8.4.8): an overridden method appears once, as the most specific
+     * override; private methods of supertypes and static interface methods are not inherited and
+     * do not appear; constructors never do. The root class's methods are included
+     * ({@code java.lang.Object}'s on javac; on KSP Kotlin's {@code Any}, which declares only
+     * {@code equals}, {@code hashCode} and {@code toString}). The order is unspecified.
      */
     List<MethodDecl> allMethods();
 
@@ -85,7 +87,8 @@ public interface ClassDecl {
     /**
      * The {@code /}-separated path of the file the declaration was read from (on javac the path
      * of the file object's URI): a source file of this compilation, or a class file for a
-     * classpath declaration. Empty when the frontend does not report one.
+     * classpath declaration. Empty when the frontend does not report one, or when the file has no
+     * hierarchical path (a class inside a jar, for example).
      */
     Optional<String> sourcePath();
 

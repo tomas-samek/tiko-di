@@ -21,6 +21,19 @@
             <artifactId>javapoet</artifactId>
         </dependency>
 
+        <!-- The KSP2 frontend (io.tiko.processor.core.ksp). Provided: KSP brings both at build time,
+             and javac never loads the KSP classes, so the processor jars work without them. -->
+        <dependency>
+            <groupId>com.google.devtools.ksp</groupId>
+            <artifactId>symbol-processing-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.jetbrains.kotlin</groupId>
+            <artifactId>kotlin-stdlib</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
         <!-- Testing -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -43,6 +56,34 @@
             <artifactId>tiko-api</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Runs KSP2 over Kotlin sources in tests (KspCompiler). -->
+        <dependency>
+            <groupId>dev.zacsweers.kctfork</groupId>
+            <artifactId>core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>dev.zacsweers.kctfork</groupId>
+            <artifactId>ksp</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Shares the KspCompiler test helper with the processor modules' tests. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>test-jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 
 </project>

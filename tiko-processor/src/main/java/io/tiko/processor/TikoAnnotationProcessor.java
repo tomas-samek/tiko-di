@@ -61,9 +61,8 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
         var env = JavacProcessingEnv.of(processingEnv, roundEnv);
-        var tikoAnnotated = annotations.stream()
-                .anyMatch(a -> TikoPipeline.ENTRY_POINT_ANNOTATIONS.contains(
-                        a.getQualifiedName().toString()));
+        var tikoAnnotated = TikoPipeline.isEntryPointRound(
+                name -> annotations.stream().anyMatch(a -> a.getQualifiedName().contentEquals(name)));
 
         if (roundEnv.processingOver()) {
             // Generation happens in the round that carries the annotations (#334): creating files

@@ -82,7 +82,8 @@ public final class ComponentFactoryGenerator {
 
         JavaFile javaFile = JavaFile.builder(GENERATED_PACKAGE, factoryClass).build();
 
-        context.env().output().writeJava(javaFile, List.of(), false);
+        // Originating: the component, so incremental KSP ties the factory to its source file.
+        context.env().output().writeJava(javaFile, List.of(component.getDecl()), false);
     }
 
     /**

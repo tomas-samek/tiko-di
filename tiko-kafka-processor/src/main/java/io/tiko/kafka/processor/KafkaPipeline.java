@@ -42,8 +42,9 @@ import java.util.Optional;
  * <p>Timing per frontend: javac calls {@code finish} in the same round as {@code process}, the
  * first round that carries bridges, and again (as a no-op) when processing is over. Files written
  * in javac's final round are not processed further and draw a "created in the last round"
- * warning, which fails {@code -Xlint:processing -Werror} builds. KSP calls {@code finish} from
- * {@code SymbolProcessor.finish()}.
+ * warning, which fails {@code -Xlint:processing -Werror} builds. KSP calls {@code finish} in the
+ * first round whose new files carry no bridge after a round that did, else from
+ * {@code SymbolProcessor.finish()}, whose output KSP still compiles.
  */
 public final class KafkaPipeline {
 
@@ -103,7 +104,11 @@ public final class KafkaPipeline {
         return failed;
     }
 
-    /** Whether {@link #finish} has run (and written the output, if there was any to write). */
+    /**
+     * Whether {@link #finish} has run and written the output (if there was any to write). Stays
+     * {@code false} after a validation failure, as {@code finish} then writes nothing and leaves
+     * the pipeline unfinished.
+     */
     public boolean finished() {
         return finished;
     }

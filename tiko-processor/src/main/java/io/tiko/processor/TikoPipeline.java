@@ -46,6 +46,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * The DI processor's logic, independent of the compiler frontend: it collects the
@@ -60,7 +61,8 @@ import java.util.Set;
  * {@link ProcessingEnv} for every round; the context then reports into the current one.
  *
  * <p>Lifecycle: {@link #process} for each round that carries at least one of the
- * {@link #ENTRY_POINT_ANNOTATIONS}, {@link #finish} at least once at the end. {@code finish} is
+ * {@link #ENTRY_POINT_ANNOTATIONS} (both frontends decide that with {@link #isEntryPointRound}),
+ * {@link #finish} at least once at the end. {@code finish} is
  * the only place output is written, and it is idempotent: the first call validates and generates
  * whatever was collected (or warns when Tiko annotations were seen but nothing was collected),
  * every later call does nothing, and so does every call before any round carried Tiko
@@ -71,7 +73,10 @@ import java.util.Set;
  * first round in which anything was collected (#334), and again (as a no-op) when processing is
  * over. Files written in javac's final round are not processed further and draw a "created in
  * the last round" warning, which fails {@code -Xlint:processing -Werror} builds. KSP calls
- * {@code finish} from {@code SymbolProcessor.finish()}.
+ * {@code finish} in the first round whose new files carry no entry point after a round that did,
+ * so components another processor generates in a later round are still wired; when no such round
+ * comes, it calls {@code finish} from {@code SymbolProcessor.finish()}, whose output KSP still
+ * compiles.
  */
 public final class TikoPipeline {
 
@@ -91,6 +96,18 @@ public final class TikoPipeline {
             EventHandler.class.getCanonicalName(),
             Configuration.class.getCanonicalName(),
             ComponentCollector.TEST_COMPONENT_FQN);
+
+    /**
+     * Whether a round is Tiko-relevant: it carries one of the {@link #ENTRY_POINT_ANNOTATIONS}.
+     * The one rule both frontends use to decide which rounds go to {@link #process}; a round it
+     * rejects is never collected, so annotations outside the set (such as {@code @Inject} or
+     * {@code @Named}) on their own never start Tiko processing.
+     *
+     * @param roundCarries whether the round carries the annotation with this qualified name
+     */
+    public static boolean isEntryPointRound(Predicate<String> roundCarries) {
+        return ENTRY_POINT_ANNOTATIONS.stream().anyMatch(roundCarries);
+    }
 
     private final List<String> activeProfiles;
     private ProcessorContext context;
@@ -178,7 +195,11 @@ public final class TikoPipeline {
         failed = !validateAndGenerate();
     }
 
-    /** Whether {@link #finish} has run on collected Tiko sources (and written the output, unless it failed). */
+    /**
+     * Whether {@link #finish} has run after a round carried Tiko annotations: it then wrote the
+     * output, failed validation or generation (see {@link #failed}), or found nothing to generate
+     * from and warned.
+     */
     public boolean finished() {
         return finished;
     }
