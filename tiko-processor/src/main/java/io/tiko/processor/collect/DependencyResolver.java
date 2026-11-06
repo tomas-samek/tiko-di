@@ -22,6 +22,8 @@ public final class DependencyResolver {
 
     private static final String NAMED = Named.class.getCanonicalName();
     private static final String PICK = Pick.class.getCanonicalName();
+    /** The member {@code @Named} and {@code @Pick} carry their qualifier and picked class in. */
+    private static final String VALUE = "value";
 
     private DependencyResolver() {}
 
@@ -35,7 +37,7 @@ public final class DependencyResolver {
         boolean resolved = true;
         for (var parameter : executable.parameters()) {
             var pick = parameter.annotation(PICK);
-            if (pick.isPresent() && pick.get().isUnresolved("value")) {
+            if (pick.isPresent() && pick.get().isUnresolved(VALUE)) {
                 reportUnresolvedPick(executable, parameter, errors);
                 resolved = false;
                 continue;
@@ -66,11 +68,11 @@ public final class DependencyResolver {
         }
 
         var qualifier =
-                parameter.annotation(NAMED).map(named -> named.string("value")).orElse("");
+                parameter.annotation(NAMED).map(named -> named.string(VALUE)).orElse("");
 
         // @Pick's class literal names the implementation to inject; resolve() has already
         // rejected one that does not resolve.
-        var pickedType = pick.flatMap(annotation -> annotation.type("value")).orElse(null);
+        var pickedType = pick.flatMap(annotation -> annotation.type(VALUE)).orElse(null);
         var pickedTypeName = pickedType == null ? null : typeUtil.getQualifiedName(pickedType);
 
         return DependencyModel.builder()
