@@ -29,7 +29,8 @@ public interface ClassDecl {
     /**
      * A Kotlin value class ({@code @JvmInline value class}). Always false on javac: javac sees a
      * Kotlin-compiled value class on the classpath as the plain final class its values box to,
-     * which Java code constructs, passes and injects like any other class.
+     * which Java code can pass and inject like any other class but not construct: its JVM
+     * constructor is private, so Java has no {@code new} for it.
      */
     boolean isValueClass();
 
