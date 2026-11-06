@@ -202,6 +202,57 @@ class KspKafkaBridgeTest {
                                 "Use a regular class")));
     }
 
+    /**
+     * Kotlin compiles a {@code @JvmRecord} component to the record accessor {@code orderId()}, so
+     * that is the partition key, as on javac over the compiled record; the bootstrap calls it.
+     */
+    @Test
+    void jvmRecordPartitionKeyIsTheRecordAccessor() {
+        var result = KspCompiler.compile(
+                List.of(new TikoSymbolProcessorProvider(), new KafkaSymbolProcessorProvider()),
+                Map.of(),
+                jvmRecordSink("orderId"));
+
+        assertThat(result.exitCode()).as(result.messages()).isEqualTo(KotlinCompilation.ExitCode.OK);
+        assertThat(result.generatedJava("io.tiko.generated.KafkaTransportBootstrap"))
+                .hasValueSatisfying(bootstrap -> assertThat(bootstrap).contains("p).orderId()"));
+    }
+
+    /** {@code getOrderId} does not exist on the compiled record: a located Tiko error, not a javac one. */
+    @Test
+    void jvmRecordGetterNameIsNoPartitionKey() {
+        var result = KspCompiler.compile(
+                List.of(new TikoSymbolProcessorProvider(), new KafkaSymbolProcessorProvider()),
+                Map.of(),
+                jvmRecordSink("getOrderId"));
+
+        assertThat(result.exitCode()).as(result.messages()).isEqualTo(KotlinCompilation.ExitCode.COMPILATION_ERROR);
+        assertThat(result.messages())
+                .as("located Tiko error")
+                .contains("Sinks.kt:")
+                .contains(
+                        "@KafkaSink partitionKey 'getOrderId' does not resolve to a zero-arg method on demo.OrderPlaced")
+                .doesNotContain("KafkaTransportBootstrap.java");
+    }
+
+    private static com.tschuchort.compiletesting.SourceFile jvmRecordSink(String partitionKey) {
+        return KspCompiler.kotlin(
+                "Sinks.kt",
+                "package demo",
+                "",
+                "import io.tiko.Scope",
+                "import io.tiko.annotations.Component",
+                "import io.tiko.kafka.annotations.KafkaSink",
+                "",
+                "@JvmRecord data class OrderPlaced(val orderId: String)",
+                "",
+                "@Component(scope = Scope.SINGLETON)",
+                "class OrderPublisher {",
+                "    @KafkaSink(topic = \"orders\", partitionKey = \"" + partitionKey + "\")",
+                "    fun toKafka(placed: OrderPlaced): OrderPlaced = placed",
+                "}");
+    }
+
     private static com.tschuchort.compiletesting.SourceFile bridge() {
         return KspCompiler.kotlin(
                 "Orders.kt",

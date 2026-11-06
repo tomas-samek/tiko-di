@@ -36,7 +36,7 @@ public final class PartitionKeyValidator {
             var returnElement = returnDecl.get();
             MethodDecl accessor = null;
             for (MethodDecl m : returnElement.allMethods()) {
-                if (m.parameters().isEmpty() && m.name().equals(s.partitionKey())) {
+                if (m.parameters().isEmpty() && m.jvmName().equals(s.partitionKey())) {
                     accessor = m;
                     break;
                 }

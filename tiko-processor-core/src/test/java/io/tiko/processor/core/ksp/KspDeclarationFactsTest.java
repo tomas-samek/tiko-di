@@ -596,6 +596,22 @@ class KspDeclarationFactsTest {
                                 .toList(),
                         List.of()),
                 fact(
+                        "jvmRecordComponentAccessorsAreRecordAccessors",
+                        env -> cls(env, "f.Span").methods().stream()
+                                .filter(method -> List.of("start", "label", "getStart", "getLabel")
+                                        .contains(method.name()))
+                                .map(method -> method.name() + "/" + method.jvmName())
+                                .sorted()
+                                .toList(),
+                        List.of("label/label", "start/start")),
+                fact(
+                        "plainDataClassPropertyKeepsItsGetter",
+                        env -> {
+                            var getter = method(env, "f.PlainData", "getStart");
+                            return getter.name() + "/" + getter.jvmName();
+                        },
+                        "getStart/getStart"),
+                fact(
                         "accessorEqualityAcrossLookups",
                         env -> method(env, "f.Accessors", "getPlain").equals(method(env, "f.Accessors", "getPlain")),
                         true),

@@ -12,6 +12,7 @@ import com.google.devtools.ksp.symbol.Modifier;
 import com.palantir.javapoet.TypeVariableName;
 import io.tiko.processor.core.model.AnnotationRef;
 import io.tiko.processor.core.model.ClassDecl;
+import io.tiko.processor.core.model.DeclKind;
 import io.tiko.processor.core.model.Location;
 import io.tiko.processor.core.model.MethodDecl;
 import io.tiko.processor.core.model.ParamDecl;
@@ -25,7 +26,8 @@ import kotlin.sequences.SequencesKt;
 
 /**
  * The getter or setter of a Kotlin property as a {@link MethodDecl}: the method javac sees on the
- * Kotlin-compiled class ({@code getX} / {@code isX} / {@code setX}). It returns the property's
+ * Kotlin-compiled class ({@code getX} / {@code isX} / {@code setX}, or the record accessor
+ * {@code x()} for a component of a {@code @JvmRecord} class). It returns the property's
  * type (the getter) or {@code void} (the setter, which takes the value), and an extension
  * property's accessors take the receiver first, as on the JVM.
  *
@@ -104,10 +106,17 @@ final class KspAccessorDecl implements MethodDecl {
         return setter ? property.getSetter() : property.getGetter();
     }
 
-    /** The JVM accessor name without {@code @JvmName} or mangling: {@code getX}, {@code isX}, {@code setX}. */
+    /**
+     * The JVM accessor name without {@code @JvmName} or mangling: {@code getX}, {@code isX},
+     * {@code setX}, or {@code x} for a {@code @JvmRecord} component, which Kotlin compiles to the
+     * record accessor.
+     */
     @Override
     public String name() {
         var name = property().getSimpleName().asString();
+        if (isRecordComponentGetter()) {
+            return name;
+        }
         var isPrefixed = name.length() > 2 && name.startsWith("is") && !Character.isLowerCase(name.charAt(2));
         if (setter) {
             return "set" + (isPrefixed ? name.substring(2) : capitalize(name));
@@ -115,11 +124,31 @@ final class KspAccessorDecl implements MethodDecl {
         return isPrefixed ? name : "get" + capitalize(name);
     }
 
+    /** The getter of a primary-constructor {@code val} of a Kotlin {@code @JvmRecord} class: a record component. */
+    private boolean isRecordComponentGetter() {
+        var property = property();
+        if (setter
+                || !(property.getParentDeclaration() instanceof KSClassDeclaration owner)
+                || model.classDecl(owner).kind() != DeclKind.RECORD) {
+            return false;
+        }
+        var primary = owner.getPrimaryConstructor();
+        var name = property.getSimpleName().asString();
+        return primary != null
+                && primary.getParameters().stream()
+                        .anyMatch(parameter -> parameter.isVal()
+                                && parameter.getName() != null
+                                && parameter.getName().asString().equals(name));
+    }
+
     private static String capitalize(String name) {
         return name.isEmpty() ? name : Character.toUpperCase(name.charAt(0)) + name.substring(1);
     }
 
-    /** {@code Resolver.getJvmName}: renamed by {@code @get:JvmName} / {@code @set:JvmName}, mangled for {@code internal}. */
+    /**
+     * {@code Resolver.getJvmName}: renamed by {@code @get:JvmName} / {@code @set:JvmName}, mangled
+     * for {@code internal}; the record accessor name for a {@code @JvmRecord} component.
+     */
     @Override
     public String jvmName() {
         var accessor = accessor();
