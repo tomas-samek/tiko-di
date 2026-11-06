@@ -3,6 +3,8 @@ package io.tiko.processor.core.javac;
 import io.tiko.processor.core.model.AnnotationRef;
 import io.tiko.processor.core.model.Location;
 import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 import javax.lang.model.element.AnnotationMirror;
@@ -26,10 +28,30 @@ record JavacAnnotationRef(AnnotationMirror mirror, Element annotated, JavacModel
 
     @Override
     public Optional<Object> value(String member) {
+        return entry(member).map(entry -> convert(entry.getValue(), isClassValued(entry.getKey())));
+    }
+
+    /** Detects the same unresolved values {@link #convert} leaves out. */
+    @Override
+    public boolean isUnresolved(String member) {
+        var entry = entry(member)
+                .orElseThrow(
+                        () -> new NoSuchElementException("@" + annotationName() + " has no member '" + member + "'"));
+        if (!isClassValued(entry.getKey())) {
+            return false;
+        }
+        var raw = entry.getValue().getValue();
+        if (raw instanceof List<?> values) {
+            return values.stream().map(AnnotationValue.class::cast).anyMatch(item -> !resolvedClass(item.getValue()));
+        }
+        return !resolvedClass(raw);
+    }
+
+    private Optional<Map.Entry<? extends ExecutableElement, ? extends AnnotationValue>> entry(String member) {
         return model.elements().getElementValuesWithDefaults(mirror).entrySet().stream()
                 .filter(entry -> entry.getKey().getSimpleName().contentEquals(member))
                 .findFirst()
-                .map(entry -> convert(entry.getValue(), isClassValued(entry.getKey())));
+                .map(entry -> entry);
     }
 
     /**

@@ -14,10 +14,12 @@ import java.util.Optional;
  * {@link NoSuchElementException} when the annotation has no such member.
  *
  * <p>A {@code Class} value whose type does not resolve (on javac an erroneous class literal, read
- * as {@code "<error>"} or as a type of kind {@code ERROR}; for example a class another processor
- * has yet to generate) is left out: a single such value reads as
- * an empty list, and an array omits it. {@link #types(String)} and {@link #type(String)} therefore
- * never see it; the compiler reports the unresolved symbol itself.
+ * as {@code "<error>"} or as a type of kind {@code ERROR}) reads as absent: a single such value
+ * reads as an empty list, and an array omits it, so {@link #types(String)} and
+ * {@link #type(String)} never see it. The compiler does not always report the symbol itself: a
+ * class another processor generates in a later round is unresolved while this round runs and
+ * compiles cleanly afterwards. A caller for which a missing value changes the meaning (a dropped
+ * guard, for example) must check {@link #isUnresolved(String)}.
  *
  * <p>Two instances are equal when they denote the same annotation on the same declaration, even
  * when different {@code ProcessingEnv} instances (rounds) produced them; {@code hashCode} follows.
@@ -41,6 +43,15 @@ public interface AnnotationRef {
     default int integer(String member) {
         return (Integer) required(member);
     }
+
+    /**
+     * Whether any {@code Class} value of the member (the single value, or any array element) did
+     * not resolve, and so reads as absent from {@link #types(String)} and {@link #type(String)};
+     * {@code false} for a member that is not {@code Class}-valued.
+     *
+     * @throws NoSuchElementException when the annotation has no such member
+     */
+    boolean isUnresolved(String member);
 
     /** {@code Class} values; a single (non-array) value comes back as a one-element list. */
     default List<TypeRef> types(String member) {

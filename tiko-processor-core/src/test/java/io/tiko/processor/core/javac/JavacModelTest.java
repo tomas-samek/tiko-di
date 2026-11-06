@@ -137,6 +137,40 @@ class JavacModelTest {
                                 compilation -> CompilationSubject.assertThat(compilation)
                                         .hadErrorContaining("cannot find symbol"))),
                 Arguments.of(
+                        "isUnresolvedFlagsClassValuesThatDidNotResolve",
+                        source(
+                                "p.Flags",
+                                "package p;",
+                                "@interface Refs { Class<?>[] value(); String label() default \"\"; }",
+                                "@interface One { Class<?> value(); }",
+                                "public class Flags {",
+                                "    @Refs({String.class, Integer.class}) void resolvedArray() {}",
+                                "    @One(String.class) void resolvedSingle() {}",
+                                "    @One(Missing.class) void unresolvedSingle() {}",
+                                "    @Refs({String.class, Missing.class}) void oneUnresolvedElement() {}",
+                                "}"),
+                        Check.compiled(
+                                env -> {
+                                    var flags = find(env, "p.Flags");
+                                    Function<String, AnnotationRef> on = name ->
+                                            method(flags, name).annotations().get(0);
+                                    assertThat(Stream.of(
+                                                            "resolvedArray",
+                                                            "resolvedSingle",
+                                                            "unresolvedSingle",
+                                                            "oneUnresolvedElement")
+                                                    .map(name -> on.apply(name).isUnresolved("value")))
+                                            .containsExactly(false, false, true, true);
+                                    assertThat(on.apply("oneUnresolvedElement").isUnresolved("label"))
+                                            .isFalse();
+                                    assertThatThrownBy(() ->
+                                                    on.apply("resolvedSingle").isUnresolved("absent"))
+                                            .isInstanceOf(NoSuchElementException.class)
+                                            .hasMessage("@p.One has no member 'absent'");
+                                },
+                                compilation -> CompilationSubject.assertThat(compilation)
+                                        .hadErrorContaining("cannot find symbol"))),
+                Arguments.of(
                         "unresolvedTypeKeepsPlaceholderDeclaration",
                         source("p.Holds", "package p;", "public class Holds {", "    Missing missing;", "}"),
                         Check.compiled(
