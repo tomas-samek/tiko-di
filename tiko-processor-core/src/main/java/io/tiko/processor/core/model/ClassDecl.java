@@ -40,6 +40,14 @@ public interface ClassDecl {
     /** Methods declared directly on this type (not inherited ones). */
     List<MethodDecl> methods();
 
+    /**
+     * Methods declared on this type plus those it inherits from its superclasses and
+     * superinterfaces, {@code java.lang.Object}'s included, as javac's
+     * {@code Elements.getAllMembers} sees them: an overridden method appears once, as the most
+     * specific override. The order is unspecified.
+     */
+    List<MethodDecl> allMethods();
+
     /** Fields declared directly on this type. */
     List<FieldDecl> fields();
 

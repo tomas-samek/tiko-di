@@ -13,6 +13,11 @@ import java.util.Optional;
  * annotation as {@code AnnotationRef}. The typed accessors cast that value and throw
  * {@link NoSuchElementException} when the annotation has no such member.
  *
+ * <p>A {@code Class} value whose type does not resolve (on javac an erroneous class literal, for
+ * example a class another processor has yet to generate) is left out: a single such value reads as
+ * an empty list, and an array omits it. {@link #types(String)} and {@link #type(String)} therefore
+ * never see it; the compiler reports the unresolved symbol itself.
+ *
  * <p>Two instances are equal when they denote the same annotation on the same declaration, even
  * when different {@code ProcessingEnv} instances (rounds) produced them; {@code hashCode} follows.
  */
@@ -39,6 +44,11 @@ public interface AnnotationRef {
     /** {@code Class} values; a single (non-array) value comes back as a one-element list. */
     default List<TypeRef> types(String member) {
         return listOf(member, TypeRef.class);
+    }
+
+    /** A single {@code Class} value; empty when its type does not resolve. */
+    default Optional<TypeRef> type(String member) {
+        return types(member).stream().findFirst();
     }
 
     /** {@code String} values; a single (non-array) value comes back as a one-element list. */

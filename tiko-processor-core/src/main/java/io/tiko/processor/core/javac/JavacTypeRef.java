@@ -42,6 +42,11 @@ record JavacTypeRef(TypeMirror mirror, JavacModel model) implements TypeRef {
     }
 
     @Override
+    public String displayName() {
+        return mirror.toString();
+    }
+
+    @Override
     public List<TypeRef> typeArguments() {
         if (mirror instanceof DeclaredType declared) {
             return declared.getTypeArguments().stream().map(model::typeRef).toList();
@@ -60,8 +65,14 @@ record JavacTypeRef(TypeMirror mirror, JavacModel model) implements TypeRef {
     }
 
     @Override
+    public boolean isVoid() {
+        return mirror.getKind() == TypeKind.VOID;
+    }
+
+    /** An unresolved type ({@link TypeKind#ERROR}, a {@code DeclaredType} on javac) keeps its erroneous class. */
+    @Override
     public Optional<ClassDecl> declaration() {
-        if (mirror.getKind() == TypeKind.DECLARED
+        if ((mirror.getKind() == TypeKind.DECLARED || mirror.getKind() == TypeKind.ERROR)
                 && mirror instanceof DeclaredType declared
                 && declared.asElement() instanceof TypeElement element) {
             return Optional.of(model.classDecl(element));
