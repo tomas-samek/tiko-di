@@ -12,21 +12,23 @@ import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 
 /**
  * {@code writeResource} goes through {@code createNewFileByPath} with the path as given (no
  * extension appended), aggregating over its originating declarations' files, and writes UTF-8.
  */
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class KspCodeOutputTest {
 
     private static final String PATH = "META-INF/facts/hello.txt";
     private static final String CONTENT = "héllo, ünïcode\n";
 
-    private static final List<Request> requests = new ArrayList<>();
-    private static KspResult result;
+    private final List<Request> requests = new ArrayList<>();
+    private KspResult result;
 
     @BeforeAll
-    static void compile() {
+    void compile() {
         SymbolProcessorProvider writer = environment -> {
             var written = new boolean[1];
             return resolver -> {
