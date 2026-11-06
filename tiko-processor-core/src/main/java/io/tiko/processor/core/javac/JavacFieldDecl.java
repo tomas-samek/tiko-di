@@ -39,15 +39,19 @@ record JavacFieldDecl(Element element, JavacModel model) implements FieldDecl {
         return JavacLocation.of(element);
     }
 
-    /** Equal when wrapping the same element, whichever round's env made it. */
+    /**
+     * Equal when it is the same field, record component or enum constant, whichever round's env
+     * made it: matched by class, kind and name (see {@link JavacIdentity}), so a record component
+     * and its private field stay apart.
+     */
     @Override
     public boolean equals(Object other) {
-        return other instanceof JavacFieldDecl that && element.equals(that.element);
+        return other instanceof JavacFieldDecl that && JavacIdentity.same(element, that.element, model.types());
     }
 
     @Override
     public int hashCode() {
-        return element.hashCode();
+        return JavacIdentity.hash(element);
     }
 
     @Override

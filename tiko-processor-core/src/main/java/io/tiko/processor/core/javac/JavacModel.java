@@ -24,7 +24,7 @@ import javax.tools.JavaFileObject;
 /**
  * The {@code Element} / {@code TypeMirror} to neutral-model mapping, plus the helpers the javac
  * model records share. One instance per {@link JavacProcessingEnv}; model equality never depends
- * on it.
+ * on which one made a model object (see {@link JavacIdentity}).
  */
 record JavacModel(Elements elements, Types types) {
 
@@ -42,21 +42,28 @@ record JavacModel(Elements elements, Types types) {
         return new JavacTypeRef(mirror, this);
     }
 
-    AnnotationRef annotationRef(AnnotationMirror mirror, Element annotated) {
-        return new JavacAnnotationRef(mirror, annotated, this);
+    /** The annotation at {@code path} on {@code annotated} (see {@link JavacAnnotationRef}). */
+    AnnotationRef annotationRef(AnnotationMirror mirror, Element annotated, String path) {
+        return new JavacAnnotationRef(mirror, annotated, path, this);
     }
 
     List<AnnotationRef> annotations(Element element) {
-        return element.getAnnotationMirrors().stream()
-                .map(mirror -> annotationRef(mirror, element))
-                .toList();
+        var mirrors = element.getAnnotationMirrors();
+        var refs = new ArrayList<AnnotationRef>();
+        for (var i = 0; i < mirrors.size(); i++) {
+            refs.add(annotationRef(mirrors.get(i), element, String.valueOf(i)));
+        }
+        return List.copyOf(refs);
     }
 
     Optional<AnnotationRef> annotation(Element element, String annotationFqn) {
-        return element.getAnnotationMirrors().stream()
-                .filter(mirror -> annotationName(mirror).equals(annotationFqn))
-                .findFirst()
-                .map(mirror -> annotationRef(mirror, element));
+        var mirrors = element.getAnnotationMirrors();
+        for (var i = 0; i < mirrors.size(); i++) {
+            if (annotationName(mirrors.get(i)).equals(annotationFqn)) {
+                return Optional.of(annotationRef(mirrors.get(i), element, String.valueOf(i)));
+            }
+        }
+        return Optional.empty();
     }
 
     /**
@@ -66,14 +73,20 @@ record JavacModel(Elements elements, Types types) {
     List<AnnotationRef> annotationsByType(Element element, String annotationFqn) {
         var container = repeatableContainer(annotationFqn);
         var found = new ArrayList<AnnotationRef>();
-        for (var mirror : element.getAnnotationMirrors()) {
+        var mirrors = element.getAnnotationMirrors();
+        for (var i = 0; i < mirrors.size(); i++) {
+            var mirror = mirrors.get(i);
             var name = annotationName(mirror);
             if (name.equals(annotationFqn)) {
-                found.add(annotationRef(mirror, element));
+                found.add(annotationRef(mirror, element, String.valueOf(i)));
             } else if (container.isPresent() && name.equals(container.get())) {
-                contained(mirror).stream()
-                        .filter(item -> annotationName(item).equals(annotationFqn))
-                        .forEach(item -> found.add(annotationRef(item, element)));
+                var items = contained(mirror);
+                for (var j = 0; j < items.size(); j++) {
+                    if (items.get(j) instanceof AnnotationMirror item
+                            && annotationName(item).equals(annotationFqn)) {
+                        found.add(annotationRef(item, element, i + "/value[" + j + "]"));
+                    }
+                }
             }
         }
         return List.copyOf(found);
@@ -90,16 +103,12 @@ record JavacModel(Elements elements, Types types) {
                 .map(TypeRef::erasedName);
     }
 
-    /** The annotations a container holds in its {@code value} member. */
-    private List<AnnotationMirror> contained(AnnotationMirror container) {
-        var items = new ArrayList<AnnotationMirror>();
+    /** The values a container holds in its {@code value} member, by position in the array. */
+    private List<Object> contained(AnnotationMirror container) {
+        var items = new ArrayList<>();
         elements.getElementValuesWithDefaults(container).forEach((member, value) -> {
             if (member.getSimpleName().contentEquals("value") && value.getValue() instanceof List<?> values) {
-                values.stream()
-                        .map(item -> ((AnnotationValue) item).getValue())
-                        .filter(AnnotationMirror.class::isInstance)
-                        .map(AnnotationMirror.class::cast)
-                        .forEach(items::add);
+                values.stream().map(item -> ((AnnotationValue) item).getValue()).forEach(items::add);
             }
         });
         return items;

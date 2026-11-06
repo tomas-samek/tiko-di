@@ -119,15 +119,19 @@ record JavacMethodDecl(ExecutableElement element, JavacModel model) implements M
         return JavacLocation.of(element);
     }
 
-    /** Equal when wrapping the same element, whichever round's env made it. */
+    /**
+     * Equal when it is the same method or constructor, whichever round's env made it: javac makes
+     * a class's members afresh every round, so the same declaration is matched by class, name and
+     * erased parameter types (see {@link JavacIdentity}).
+     */
     @Override
     public boolean equals(Object other) {
-        return other instanceof JavacMethodDecl that && element.equals(that.element);
+        return other instanceof JavacMethodDecl that && JavacIdentity.same(element, that.element, model.types());
     }
 
     @Override
     public int hashCode() {
-        return element.hashCode();
+        return JavacIdentity.hash(element);
     }
 
     @Override

@@ -21,8 +21,12 @@ import java.util.Optional;
  * compiles cleanly afterwards. A caller for which a missing value changes the meaning (a dropped
  * guard, for example) must check {@link #isUnresolved(String)}.
  *
- * <p>Two instances are equal when they denote the same annotation on the same declaration, even
- * when different {@code ProcessingEnv} instances (rounds) produced them; {@code hashCode} follows.
+ * <p>Equality is occurrence identity, across rounds: two instances are equal exactly when they
+ * denote the same occurrence of an annotation on the same declaration, whichever
+ * {@code ProcessingEnv} produced them, of the same round or of different rounds; {@code hashCode}
+ * follows. An occurrence is its position among the declaration's annotations and, for an
+ * annotation nested in another's member (a {@code @Repeatable} container's included), that
+ * member and its position in the array: two identical repeated annotations are two occurrences.
  */
 public interface AnnotationRef {
 

@@ -32,7 +32,7 @@ public final class JavacProcessingEnv implements ProcessingEnv {
         this.env = env;
         this.round = round;
         this.model = new JavacModel(env.getElementUtils(), env.getTypeUtils());
-        this.diagnostics = new JavacDiagnostics(env.getMessager());
+        this.diagnostics = new JavacDiagnostics(env.getMessager(), model);
         this.output = new JavacCodeOutput(env.getFiler());
         this.types = new JavacTypeOracle(model);
         this.classpath = new JavacClasspathProbe(env.getFiler());

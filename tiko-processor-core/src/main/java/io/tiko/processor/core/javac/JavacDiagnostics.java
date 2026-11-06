@@ -5,14 +5,19 @@ import io.tiko.processor.core.model.Location;
 import javax.annotation.processing.Messager;
 import javax.tools.Diagnostic;
 
-/** {@link Diagnostics} over javac's {@link Messager}, reported on the location's element. */
+/**
+ * {@link Diagnostics} over javac's {@link Messager}, reported on the location's element as found
+ * in this round ({@link JavacLocation#current}).
+ */
 final class JavacDiagnostics implements Diagnostics {
 
     private final Messager messager;
+    private final JavacModel model;
     private boolean errors;
 
-    JavacDiagnostics(Messager messager) {
+    JavacDiagnostics(Messager messager, JavacModel model) {
         this.messager = messager;
+        this.model = model;
     }
 
     @Override
@@ -39,7 +44,7 @@ final class JavacDiagnostics implements Diagnostics {
     private void print(Diagnostic.Kind kind, Location at, String message) {
         switch (at) {
             case null -> messager.printMessage(kind, message);
-            case JavacLocation javac -> printOn(kind, javac, message);
+            case JavacLocation javac -> printOn(kind, javac.current(model), message);
             default -> throw new IllegalArgumentException("Not a javac location: " + at);
         }
     }

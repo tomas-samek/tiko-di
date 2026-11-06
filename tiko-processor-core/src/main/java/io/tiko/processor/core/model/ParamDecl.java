@@ -6,8 +6,9 @@ import java.util.Optional;
 /**
  * A method or constructor parameter.
  *
- * <p>Two instances are equal when they denote the same declaration, even when different
- * {@code ProcessingEnv} instances (rounds) produced them; {@code hashCode} follows.
+ * <p>Equality is declaration identity, across rounds: two instances are equal exactly when they
+ * denote the same parameter of the same method or constructor, whichever {@code ProcessingEnv}
+ * produced them, of the same round or of different rounds; {@code hashCode} follows.
  */
 public interface ParamDecl {
 

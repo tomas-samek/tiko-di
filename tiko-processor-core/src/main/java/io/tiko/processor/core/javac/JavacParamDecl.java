@@ -46,15 +46,18 @@ record JavacParamDecl(VariableElement element, JavacModel model) implements Para
         return JavacLocation.of(element);
     }
 
-    /** Equal when wrapping the same element, whichever round's env made it. */
+    /**
+     * Equal when it is the same parameter of the same method, whichever round's env made it (see
+     * {@link JavacIdentity}).
+     */
     @Override
     public boolean equals(Object other) {
-        return other instanceof JavacParamDecl that && element.equals(that.element);
+        return other instanceof JavacParamDecl that && JavacIdentity.same(element, that.element, model.types());
     }
 
     @Override
     public int hashCode() {
-        return element.hashCode();
+        return JavacIdentity.hash(element);
     }
 
     @Override

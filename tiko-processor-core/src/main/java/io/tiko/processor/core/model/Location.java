@@ -6,6 +6,9 @@ import java.util.Optional;
  * An opaque source position. {@link io.tiko.processor.core.Diagnostics} reads it to place a
  * message, and error bookkeeping reads {@link #enclosingClassName()}; nothing else inspects it.
  * Each frontend adapter wraps its own element type behind it.
+ *
+ * <p>A location stays valid in later rounds: reported on a later round's
+ * {@link io.tiko.processor.core.Diagnostics}, a message lands on the same declaration.
  */
 public interface Location {
 

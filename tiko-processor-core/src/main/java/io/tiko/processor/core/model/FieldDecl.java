@@ -6,8 +6,10 @@ import java.util.List;
  * A field: a Java field, a record component (see {@link ClassDecl#recordComponents()}), a Kotlin
  * property with a backing field, or an enum constant.
  *
- * <p>Two instances are equal when they denote the same declaration, even when different
- * {@code ProcessingEnv} instances (rounds) produced them; {@code hashCode} follows.
+ * <p>Equality is declaration identity, across rounds: two instances are equal exactly when they
+ * denote the same field, record component or enum constant of the same class, whichever
+ * {@code ProcessingEnv} produced them, of the same round or of different rounds; {@code hashCode}
+ * follows. A record component and the field that stores it are distinct declarations.
  */
 public interface FieldDecl {
 

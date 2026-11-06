@@ -7,8 +7,11 @@ import java.util.Optional;
 /**
  * A method or constructor.
  *
- * <p>Two instances are equal when they denote the same declaration, even when different
- * {@code ProcessingEnv} instances (rounds) produced them; {@code hashCode} follows.
+ * <p>Equality is declaration identity, across rounds: two instances are equal exactly when they
+ * denote the same method or constructor, whichever {@code ProcessingEnv} produced them, of the
+ * same round or of different rounds; {@code hashCode} follows. A method a subclass inherits (see
+ * {@link ClassDecl#allMethods()}) is the declaration it inherits, and overloads are distinct
+ * declarations.
  */
 public interface MethodDecl {
 

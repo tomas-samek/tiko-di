@@ -7,8 +7,9 @@ import java.util.Optional;
 /**
  * A type declaration: class, interface, record, enum, annotation, or Kotlin object / companion.
  *
- * <p>Two instances are equal when they denote the same declaration, even when different
- * {@code ProcessingEnv} instances (rounds) produced them; {@code hashCode} follows.
+ * <p>Equality is declaration identity, across rounds: two instances are equal exactly when they
+ * denote the same class, whichever {@code ProcessingEnv} produced them, of the same round or of
+ * different rounds; {@code hashCode} follows.
  */
 public interface ClassDecl {
 

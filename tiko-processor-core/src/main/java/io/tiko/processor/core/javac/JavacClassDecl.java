@@ -187,7 +187,10 @@ record JavacClassDecl(TypeElement element, JavacModel model) implements ClassDec
                 : Optional.empty();
     }
 
-    /** Equal when wrapping the same element, whichever round's env made it. */
+    /**
+     * Equal when wrapping the same element, whichever round's env made it: unlike its members,
+     * javac keeps one symbol per class for the whole compilation.
+     */
     @Override
     public boolean equals(Object other) {
         return other instanceof JavacClassDecl that && element.equals(that.element);
