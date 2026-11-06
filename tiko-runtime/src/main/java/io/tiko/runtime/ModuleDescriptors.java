@@ -56,7 +56,7 @@ final class ModuleDescriptors {
     /** The descriptor's container class, or the URL itself when unreadable (the caller then reports it). */
     private static String implOf(URL descriptor) throws IOException {
         Properties props = new Properties();
-        try (var in = descriptor.openStream()) {
+        try (var in = new java.io.InputStreamReader(descriptor.openStream(), java.nio.charset.StandardCharsets.UTF_8)) {
             props.load(in);
         }
         String impl = props.getProperty("impl");

@@ -14,6 +14,7 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.lang.reflect.Constructor;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -208,7 +209,7 @@ public final class AggregatingContainer implements Container {
         while (shadowResources.hasMoreElements()) {
             URL url = shadowResources.nextElement();
             Properties shadowProps = new Properties();
-            try (var in = url.openStream()) {
+            try (var in = new InputStreamReader(url.openStream(), StandardCharsets.UTF_8)) {
                 shadowProps.load(in);
             }
             for (var entry : shadowProps.entrySet()) {
@@ -305,7 +306,7 @@ public final class AggregatingContainer implements Container {
             URL resourceUrl, ClassLoader classLoader, Map<String, Container> containersByImplName) throws Exception {
         // Read container.properties to get impl class name
         Properties props = new Properties();
-        try (var input = resourceUrl.openStream()) {
+        try (var input = new InputStreamReader(resourceUrl.openStream(), StandardCharsets.UTF_8)) {
             props.load(input);
         }
 
@@ -350,7 +351,8 @@ public final class AggregatingContainer implements Container {
     private void loadComponentsMapping(URL resourceUrl, ClassLoader classLoader, Container moduleContainer)
             throws Exception {
         var componentsUrl = siblingResource(resourceUrl, "components.txt");
-        try (var reader = new BufferedReader(new InputStreamReader(componentsUrl.openStream()))) {
+        try (var reader =
+                new BufferedReader(new InputStreamReader(componentsUrl.openStream(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 line = line.trim();
@@ -369,7 +371,7 @@ public final class AggregatingContainer implements Container {
      */
     private void loadConfigsMapping(URL resourceUrl, ClassLoader classLoader, Container moduleContainer) {
         var configsUrl = siblingResource(resourceUrl, "configs.txt");
-        try (var reader = new BufferedReader(new InputStreamReader(configsUrl.openStream()))) {
+        try (var reader = new BufferedReader(new InputStreamReader(configsUrl.openStream(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 line = line.trim();

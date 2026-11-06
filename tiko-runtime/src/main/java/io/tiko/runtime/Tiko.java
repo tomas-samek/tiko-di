@@ -284,7 +284,8 @@ public final class Tiko {
         Class<?> implClass;
         if (!resources.isEmpty()) {
             Properties props = new Properties();
-            try (var input = resources.get(0).openStream()) {
+            try (var input = new java.io.InputStreamReader(
+                    resources.get(0).openStream(), java.nio.charset.StandardCharsets.UTF_8)) {
                 props.load(input);
             }
             String implClassName = props.getProperty("impl");
