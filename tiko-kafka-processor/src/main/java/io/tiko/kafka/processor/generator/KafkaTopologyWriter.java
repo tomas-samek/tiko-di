@@ -2,16 +2,12 @@ package io.tiko.kafka.processor.generator;
 
 import io.tiko.kafka.processor.model.KafkaSinkDescriptor;
 import io.tiko.kafka.processor.model.KafkaSourceDescriptor;
+import io.tiko.processor.core.CodeOutput;
 import io.tiko.processor.core.JsonWriter;
+import io.tiko.processor.core.model.TypeRef;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
 import java.io.StringWriter;
-import java.io.Writer;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
-import javax.annotation.processing.Filer;
-import javax.lang.model.type.TypeMirror;
-import javax.tools.StandardLocation;
 
 /**
  * Emits {@code META-INF/tiko/topology-kafka.json} — the Kafka companion to the core
@@ -38,23 +34,20 @@ public final class KafkaTopologyWriter {
     private static final int SCHEMA_VERSION = 1;
     private static final String PATH = "META-INF/tiko/topology-kafka.json";
 
-    private final Filer filer;
+    private final CodeOutput output;
 
-    public KafkaTopologyWriter(Filer filer) {
-        this.filer = filer;
+    public KafkaTopologyWriter(CodeOutput output) {
+        this.output = output;
     }
 
     /** Writes the fragment when there is at least one source or sink; a no-op otherwise. */
     public void write(List<KafkaSourceDescriptor> sources, List<KafkaSinkDescriptor> sinks) throws IOException {
         if (sources.isEmpty() && sinks.isEmpty()) return;
 
-        var resource = filer.createResource(StandardLocation.CLASS_OUTPUT, "", PATH);
-        try (Writer w = new OutputStreamWriter(resource.openOutputStream(), StandardCharsets.UTF_8)) {
-            w.write(render(sources, sinks));
-        }
+        output.writeResource(PATH, render(sources, sinks), List.of());
     }
 
-    /** Serializes to a String — also used by unit tests so they don't need a Filer. */
+    /** Serializes to a String — also used by unit tests so they don't need a {@link CodeOutput}. */
     public static String render(List<KafkaSourceDescriptor> sources, List<KafkaSinkDescriptor> sinks) {
         var out = new StringWriter();
         try (var jw = new JsonWriter(out, true)) {
@@ -76,9 +69,9 @@ public final class KafkaTopologyWriter {
     private static void writeSource(JsonWriter jw, KafkaSourceDescriptor s) {
         jw.object()
                 .field("declaringClass")
-                .value(s.enclosingClass().getQualifiedName().toString())
+                .value(s.enclosingClass().qualifiedName())
                 .field("methodName")
-                .value(s.method().getSimpleName().toString())
+                .value(s.method().name())
                 .field("topic")
                 .value(s.topic())
                 .field("consumerGroup")
@@ -97,9 +90,9 @@ public final class KafkaTopologyWriter {
     private static void writeSink(JsonWriter jw, KafkaSinkDescriptor s) {
         jw.object()
                 .field("declaringClass")
-                .value(s.enclosingClass().getQualifiedName().toString())
+                .value(s.enclosingClass().qualifiedName())
                 .field("methodName")
-                .value(s.method().getSimpleName().toString())
+                .value(s.method().name())
                 .field("topic")
                 .value(s.topic())
                 .field("partitionKey")
@@ -113,7 +106,7 @@ public final class KafkaTopologyWriter {
                 .endObject();
     }
 
-    private static String typeName(TypeMirror t) {
-        return t == null ? null : t.toString();
+    private static String typeName(TypeRef t) {
+        return t == null ? null : t.displayName();
     }
 }

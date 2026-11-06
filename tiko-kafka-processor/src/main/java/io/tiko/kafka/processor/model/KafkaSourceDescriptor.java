@@ -1,16 +1,16 @@
 package io.tiko.kafka.processor.model;
 
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.TypeMirror;
+import io.tiko.processor.core.model.ClassDecl;
+import io.tiko.processor.core.model.MethodDecl;
+import io.tiko.processor.core.model.TypeRef;
 
 /**
  * Compile-time descriptor for one {@code @KafkaSource}-annotated bridge method.
- * Populated by the processor during round 1; consumed by the generator in round 1
- * write phase.
+ * Built by {@code KafkaPipeline.process}; consumed by the generators in
+ * {@code KafkaPipeline.finish}.
  *
  * @param enclosingClass         declaring {@code @Component} class
- * @param method                 the bridge method element
+ * @param method                 the bridge method
  * @param topic                  {@code @KafkaSource(topic)}
  * @param consumerGroup          {@code @KafkaSource(consumerGroup)}; empty means use YAML default
  * @param serializerClass        {@code @KafkaSource(serializer)} or {@code KafkaSerializer.Default.class}
@@ -20,12 +20,12 @@ import javax.lang.model.type.TypeMirror;
  * @param wantsKafkaContext      true if the method has a second parameter typed {@code KafkaContext}
  */
 public record KafkaSourceDescriptor(
-        TypeElement enclosingClass,
-        ExecutableElement method,
+        ClassDecl enclosingClass,
+        MethodDecl method,
         String topic,
         String consumerGroup,
-        TypeMirror serializerClass,
+        TypeRef serializerClass,
         String eventName,
-        TypeMirror payloadType,
-        TypeMirror producedEventType,
+        TypeRef payloadType,
+        TypeRef producedEventType,
         boolean wantsKafkaContext) {}
