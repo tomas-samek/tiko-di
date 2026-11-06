@@ -541,10 +541,8 @@ class JavacModelTest {
                                     Optional.of("p.Shapes"),
                                     Optional.of("p.Shapes"),
                                     Optional.of("p.Shapes.Nested"));
-                    var javac = ((JavacProcessingEnv) env).processingEnvironment();
-                    var pkg = javac.getElementUtils().getPackageElement("p");
-                    assertThat(JavacProcessingEnv.location(pkg).enclosingClassName())
-                            .isEmpty();
+                    var pkg = ((JavacClassDecl) shapes).element().getEnclosingElement();
+                    assertThat(JavacLocation.of(pkg).enclosingClassName()).isEmpty();
                 })),
                 Arguments.of("directSupertypesAreSuperclassThenInterfaces", shapes(), Check.model(env -> {
                     assertThat(find(env, "p.Shapes").directSupertypes())
