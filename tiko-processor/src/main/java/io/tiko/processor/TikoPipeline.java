@@ -32,6 +32,8 @@ import io.tiko.processor.validation.CloseableLeakValidator;
 import io.tiko.processor.validation.ComponentShapeValidator;
 import io.tiko.processor.validation.DependencyGraphValidator;
 import io.tiko.processor.validation.ExposureValidator;
+import io.tiko.processor.validation.KotlinConstructValidator;
+import io.tiko.processor.validation.NullabilityValidator;
 import io.tiko.processor.validation.PickValidator;
 import io.tiko.processor.validation.PickerValidator;
 import io.tiko.processor.validation.ProducesSignatureValidator;
@@ -153,6 +155,9 @@ public final class TikoPipeline {
         sawTikoAnnotations = true;
 
         context.env().diagnostics().note(null, "Tiko DI: Processing round, collecting annotations...");
+        // Before collection: the collectors skip what it rejects, and assume it was ruled out
+        // (a top-level @Produces has no declaring class to build a model from).
+        new KotlinConstructValidator(context).validate(context.env());
         ComponentCollector.collect(context.env(), context);
         FactoryMethodCollector.collect(context.env(), context);
         EventHandlerCollector.collect(context.env(), context);
@@ -363,6 +368,11 @@ public final class TikoPipeline {
         // Validate dependencies exist
         DependencyGraphValidator graphValidator = new DependencyGraphValidator(context, typeUtil);
         if (!graphValidator.validate()) {
+            valid = false;
+        }
+
+        // Provider and injection point must agree on nullability (Kotlin T?; Java is non-null)
+        if (!new NullabilityValidator(context).validate()) {
             valid = false;
         }
 

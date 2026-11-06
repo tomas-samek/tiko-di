@@ -1,0 +1,422 @@
+package io.tiko.generated;
+
+import demo.Clock;
+import demo.Producers;
+import demo.RequestId;
+import demo.Service;
+import io.tiko.Container;
+import io.tiko.ContainerShutDownException;
+import io.tiko.ErrorHandler;
+import io.tiko.EventBus;
+import io.tiko.ExecutorMetrics;
+import io.tiko.NoActiveEventScopeException;
+import io.tiko.NoSuchComponentException;
+import io.tiko.ProduceFailure;
+import io.tiko.Provider;
+import io.tiko.events.ApplicationEndingEvent;
+import io.tiko.events.ApplicationStartedEvent;
+import io.tiko.events.EventEndingEvent;
+import io.tiko.events.EventStartedEvent;
+import io.tiko.runtime.TikoOptions;
+import io.tiko.runtime.Unchecked;
+import java.lang.Boolean;
+import java.lang.Class;
+import java.lang.Exception;
+import java.lang.IllegalStateException;
+import java.lang.InterruptedException;
+import java.lang.Object;
+import java.lang.Override;
+import java.lang.Runnable;
+import java.lang.RuntimeException;
+import java.lang.String;
+import java.lang.SuppressWarnings;
+import java.lang.System;
+import java.lang.Thread;
+import java.lang.ThreadLocal;
+import java.lang.Throwable;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.LockSupport;
+import java.util.function.Supplier;
+import javax.annotation.processing.Generated;
+
+@Generated("io.tiko.processor.generator.ContainerGenerator")
+public final class TikoContainerImpl_4ae99f55 implements Container {
+  private final Map<String, Object> singletons = new ConcurrentHashMap<>();
+
+  private final Object singletonLock = new Object();
+
+  private final ThreadLocal<Map<String, Object>> eventScoped = ThreadLocal.withInitial(LinkedHashMap::new);
+
+  private final ThreadLocal<Boolean> __unitFrameOpen = ThreadLocal.withInitial(() -> Boolean.FALSE);
+
+  private final EventBus eventBus;
+
+  private final ErrorHandler errorHandler;
+
+  private final ExecutorService eventExecutor;
+
+  private final boolean ownsEventExecutor;
+
+  private final Duration shutdownTimeout;
+
+  private volatile Instant startedAt;
+
+  private final Map<Class<?>, Object> configSingletons = new ConcurrentHashMap<>();
+
+  private final AtomicBoolean shutdownInvoked = new AtomicBoolean(false);
+
+  private final AtomicBoolean stopped = new AtomicBoolean(false);
+
+  private final AtomicInteger inFlightGets = new AtomicInteger(0);
+
+  private final ThreadLocal<Boolean> inShutdownThread = ThreadLocal.withInitial(() -> Boolean.FALSE);
+
+  private final AtomicBoolean startInvoked = new AtomicBoolean(false);
+
+  private final boolean publishLifecycleEvents;
+
+  private final TikoOptions options;
+
+  private final ProducersFactory producersFactory;
+
+  private final ServiceFactory serviceFactory;
+
+  public TikoContainerImpl_4ae99f55(EventBus eventBus, ErrorHandler errorHandler,
+      ExecutorService userEventExecutor, boolean publishLifecycleEvents, Duration shutdownTimeout,
+      TikoOptions options) {
+    this.eventBus = eventBus;
+    this.errorHandler = errorHandler;
+    this.eventExecutor = userEventExecutor != null ? userEventExecutor : io.tiko.runtime.DefaultEventExecutorFactory.create(options.queueCapacity(), options.onOverflow(), options.eventExecutorCoreSize(), options.eventExecutorMaxSize(), options.eventExecutorKeepAlive());
+    this.ownsEventExecutor = (userEventExecutor == null);
+    this.publishLifecycleEvents = publishLifecycleEvents;
+    this.shutdownTimeout = shutdownTimeout;
+    this.options = options;
+    this.producersFactory = new ProducersFactory(this);
+    this.serviceFactory = new ServiceFactory(this);
+  }
+
+  public Producers getProducers() {
+    return (Producers) __getOrCreateSingleton("demo.Producers", () -> producersFactory.create());
+  }
+
+  public Service getService() {
+    return (Service) __getOrCreateSingleton("demo.Service", () -> serviceFactory.create());
+  }
+
+  private Clock invokeFactory_Producers_clock() {
+    try {
+      return getProducers().clock();
+    } catch (Exception __t) {
+      getErrorHandler().onError(new ProduceFailure(Producers.class, "clock", __t));
+      throw Unchecked.<RuntimeException>sneakyThrow(__t);
+    }
+  }
+
+  public Clock produce_Producers_clock() {
+    return (Clock) __getOrCreateSingleton("demo.Clock", () -> invokeFactory_Producers_clock());
+  }
+
+  private RequestId invokeFactory_Producers_requestId() {
+    try {
+      return getProducers().requestId();
+    } catch (Exception __t) {
+      getErrorHandler().onError(new ProduceFailure(Producers.class, "requestId", __t));
+      throw Unchecked.<RuntimeException>sneakyThrow(__t);
+    }
+  }
+
+  public RequestId produce_Producers_requestId() {
+    if (!Boolean.TRUE.equals(__unitFrameOpen.get())) {
+      throw new NoActiveEventScopeException("demo.RequestId");
+    }
+    RequestId __existing = (RequestId) eventScoped.get().get("demo.RequestId");
+    if (__existing == null) {
+      __existing = invokeFactory_Producers_requestId();
+      eventScoped.get().put("demo.RequestId", __existing);
+    }
+    return __existing;
+  }
+
+  @Override
+  public void runInEventScope(Runnable task) {
+    __runInEventScope(task, publishLifecycleEvents);
+  }
+
+  private void __runInEventScope(Runnable task, boolean __publishLifecycle) {
+    if (Boolean.TRUE.equals(__unitFrameOpen.get())) {
+      throw new IllegalStateException("runInEventScope called while a unit of work is already open. EVENT is single-frame in 0.x.0; nesting is not supported.");
+    }
+    __unitFrameOpen.set(Boolean.TRUE);
+    String __eventId = UUID.randomUUID().toString();
+    Instant __eventStart = Instant.now();
+    if (__publishLifecycle) {
+      __publishUnitLifecycle(new EventStartedEvent(__eventId, __eventStart));
+    }
+    try {
+      task.run();
+    } finally {
+      Instant __eventEnd = Instant.now();
+      if (__publishLifecycle) {
+        __publishUnitLifecycle(new EventEndingEvent(__eventId, __eventEnd, Duration.between(__eventStart, __eventEnd)));
+      }
+      __closeEventScope();
+    }
+  }
+
+  void runInDetachedEventScope(Runnable task) {
+    Map<String, Object> __savedScope = eventScoped.get();
+    Boolean __savedFrameOpen = __unitFrameOpen.get();
+    eventScoped.set(new LinkedHashMap<>());
+    __unitFrameOpen.set(Boolean.FALSE);
+    try {
+      __runInEventScope(task, true);
+    } finally {
+      eventScoped.set(__savedScope);
+      __unitFrameOpen.set(__savedFrameOpen);
+    }
+  }
+
+  @Override
+  public <T> T supplyInEventScope(Supplier<T> supplier) {
+    if (Boolean.TRUE.equals(__unitFrameOpen.get())) {
+      throw new IllegalStateException("supplyInEventScope called while a unit of work is already open. EVENT is single-frame in 0.x.0; nesting is not supported.");
+    }
+    __unitFrameOpen.set(Boolean.TRUE);
+    String __eventId = UUID.randomUUID().toString();
+    Instant __eventStart = Instant.now();
+    if (publishLifecycleEvents) {
+      __publishUnitLifecycle(new EventStartedEvent(__eventId, __eventStart));
+    }
+    try {
+      return supplier.get();
+    } finally {
+      Instant __eventEnd = Instant.now();
+      if (publishLifecycleEvents) {
+        __publishUnitLifecycle(new EventEndingEvent(__eventId, __eventEnd, Duration.between(__eventStart, __eventEnd)));
+      }
+      __closeEventScope();
+    }
+  }
+
+  private void __publishUnitLifecycle(Object event) {
+    try {
+      eventBus.publish(event);
+    } catch (Throwable __t) {
+      // Bus/handler defect; the unit-of-work bracket must stay intact (#336)
+      System.getLogger("io.tiko.events").log(System.Logger.Level.WARNING, "Unit-of-work lifecycle publish threw", __t);
+    }
+  }
+
+  private void __closeEventScope() {
+    try {
+    } finally {
+      eventScoped.get().clear();
+      __unitFrameOpen.set(Boolean.FALSE);
+    }
+  }
+
+  private Object __getOrCreateSingleton(String key, Supplier<Object> factory) {
+    Object __existing = singletons.get(key);
+    if (__existing != null) {
+      return __existing;
+    }
+    synchronized (singletonLock) {
+      __existing = singletons.get(key);
+      if (__existing == null) {
+        __existing = factory.get();
+        singletons.put(key, __existing);
+      }
+      return __existing;
+    }
+  }
+
+  @Override
+  public void start() {
+    // Idempotency CAS (#45)
+    if (!startInvoked.compareAndSet(false, true)) {
+      return;
+    }
+    // Initialize all SINGLETON components
+    getProducers();
+    getService();
+    this.startedAt = Instant.now();
+    if (publishLifecycleEvents) {
+      eventBus.publish(new ApplicationStartedEvent(this.startedAt));
+    }
+  }
+
+  @Override
+  public void shutdown() {
+    // Phase 1: idempotency CAS (#47)
+    if (!shutdownInvoked.compareAndSet(false, true)) {
+      return;
+    }
+    // Phase 2: publish ApplicationEndingEvent. get() still works here so handlers can read state.
+    // Gated on publishLifecycleEvents (#45): per-module containers under an AggregatingContainer skip this; aggregator publishes once.
+    Instant __endTimestamp = Instant.now();
+    Duration __uptime = (this.startedAt != null) ? Duration.between(this.startedAt, __endTimestamp) : Duration.ZERO;
+    if (publishLifecycleEvents) {
+      try {
+        eventBus.publish(new ApplicationEndingEvent(__endTimestamp, __uptime));
+      } catch (Throwable __t) {
+        // Bus-impl defect; @PreDestroy must still run (handler exceptions are isolated by #44)
+        System.getLogger("io.tiko.events").log(System.Logger.Level.WARNING, "ApplicationEndingEvent publish threw", __t);
+      }
+    }
+    // Phase 3: gate new get() calls and drain in-flight ones. Lookups register in
+    // inFlightGets BEFORE reading the stopped gate (#305), so once this thread observes
+    // inFlightGets == 0 after stopped.set(true), every later lookup is rejected — none
+    // can run against the singletons Phase 4 tears down. The wait is bounded by the
+    // configured shutdownTimeout and parks 1ms between polls instead of busy-spinning.
+    stopped.set(true);
+    long __deadlineNanos = System.nanoTime() + this.shutdownTimeout.toNanos();
+    while (inFlightGets.get() > 0 && System.nanoTime() < __deadlineNanos) {
+      LockSupport.parkNanos(1_000_000L);
+    }
+    if (inFlightGets.get() > 0) {
+      System.getLogger("io.tiko.events").log(System.Logger.Level.WARNING, "Container shutdown drain timed out with in-flight get() calls: " + inFlightGets.get());
+    }
+    // Phase 5: shut down framework-owned event executor (#43); user-supplied executors are not touched
+    if (this.ownsEventExecutor) {
+      this.eventExecutor.shutdown();
+      try {
+        if (!this.eventExecutor.awaitTermination(this.shutdownTimeout.toNanos(), TimeUnit.NANOSECONDS)) {
+          this.eventExecutor.shutdownNow();
+        }
+      } catch (InterruptedException __ie) {
+        Thread.currentThread().interrupt();
+        this.eventExecutor.shutdownNow();
+      }
+    }
+  }
+
+  boolean __isStopped() {
+    return stopped.get();
+  }
+
+  @Override
+  public <T> Provider<T> getProvider(Class<T> type) {
+    return () -> get(type);
+  }
+
+  @Override
+  public <T> Provider<T> getProvider(Class<T> type, String name) {
+    return () -> get(type, name);
+  }
+
+  @Override
+  @SuppressWarnings("unchecked")
+  public <T> T get(Class<T> type) {
+    inFlightGets.incrementAndGet();
+    try {
+      if (stopped.get() && !inShutdownThread.get()) {
+        throw new ContainerShutDownException();
+      }
+      Supplier<?> __override = options.getOverride(type);
+      if (__override != null) {
+        return type.cast(__override.get());
+      }
+      if (configSingletons.containsKey(type)) {
+        return type.cast(configSingletons.get(type));
+      }
+      if (type == Producers.class) {
+        return (T) getProducers();
+      } else if (type == Service.class) {
+        return (T) getService();
+      } else if (type == Clock.class) {
+        return (T) produce_Producers_clock();
+      } else if (type == RequestId.class) {
+        return (T) produce_Producers_requestId();
+      }
+      throw new NoSuchComponentException(type);
+    } finally {
+      inFlightGets.decrementAndGet();
+    }
+  }
+
+  @Override
+  @SuppressWarnings("unchecked")
+  public <T> T get(Class<T> type, String name) {
+    inFlightGets.incrementAndGet();
+    try {
+      if (stopped.get() && !inShutdownThread.get()) {
+        throw new ContainerShutDownException();
+      }
+      Supplier<?> __override = options.getOverride(type, name);
+      if (__override != null) {
+        return type.cast(__override.get());
+      }
+      throw new NoSuchComponentException(type, name);
+    } finally {
+      inFlightGets.decrementAndGet();
+    }
+  }
+
+  @Override
+  public <T> List<T> getAll(Class<T> type) {
+    inFlightGets.incrementAndGet();
+    try {
+      if (stopped.get() && !inShutdownThread.get()) {
+        throw new ContainerShutDownException();
+      }
+      List<T> __result = new ArrayList<>();
+      if (type == Producers.class) {
+        __result.add(type.cast(getProducers()));
+      }
+      if (type == Service.class) {
+        __result.add(type.cast(getService()));
+      }
+      if (type == Clock.class) {
+        __result.add(type.cast(produce_Producers_clock()));
+      }
+      if (type == RequestId.class) {
+        __result.add(type.cast(produce_Producers_requestId()));
+      }
+      return Collections.unmodifiableList(__result);
+    } finally {
+      inFlightGets.decrementAndGet();
+    }
+  }
+
+  public void injectConfigs(Map<Class<?>, Object> configs) {
+    this.configSingletons.putAll(configs);
+  }
+
+  @Override
+  public EventBus getEventBus() {
+    return eventBus;
+  }
+
+  @Override
+  public ErrorHandler getErrorHandler() {
+    return this.errorHandler;
+  }
+
+  @Override
+  public ExecutorService getEventExecutor() {
+    return this.eventExecutor;
+  }
+
+  @Override
+  public Optional<ExecutorMetrics> eventExecutorMetrics() {
+    return ownsEventExecutor && eventExecutor instanceof ThreadPoolExecutor tpe ? Optional.of(ExecutorMetrics.from(tpe)) : Optional.empty();
+  }
+
+  TikoOptions options() {
+    return this.options;
+  }
+}

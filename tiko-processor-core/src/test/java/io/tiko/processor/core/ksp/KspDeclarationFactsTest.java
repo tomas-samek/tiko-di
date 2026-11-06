@@ -101,6 +101,7 @@ class KspDeclarationFactsTest {
                 fun never(): Nothing = throw IllegalStateException()
                 private fun secret() {}
                 protected fun guarded() {}
+                fun Double.scaled(): Double = this * 2
                 companion object {
                     @JvmStatic fun create(): Circle = Circle(1.0, "c")
                     const val UNIT = "cm"
@@ -176,6 +177,12 @@ class KspDeclarationFactsTest {
 
             @Roles({@Role("a"), @Role("b")})
             class Staff {}
+
+            class Varargs {
+                void ports(Port... ports) {}
+                void boxed(Integer... values) {}
+                void primitives(int... values) {}
+            }
             """;
 
     private static Map<String, Object> results;
@@ -523,6 +530,21 @@ class KspDeclarationFactsTest {
                         env -> method(env, "f.Legacy", "of").isStatic(),
                         true),
                 fact("topLevelFunctionIsStatic", env -> topLevel(env).isStatic(), true),
+                fact(
+                        "extensionFunctionIsExtension",
+                        env -> method(env, "f.Circle", "scaled").isExtension(),
+                        true),
+                fact(
+                        "memberFunctionIsNotExtension",
+                        env -> method(env, "f.Circle", "area").isExtension(),
+                        false),
+                fact(
+                        "javaMethodIsNotExtension",
+                        env -> method(env, "f.Legacy", "touch").isExtension(),
+                        false),
+                fact("javaVarargIsItsArray", env -> varargType(env, "ports"), "f.Port[]"),
+                fact("javaBoxedVarargIsBoxedArray", env -> varargType(env, "boxed"), "java.lang.Integer[]"),
+                fact("javaPrimitiveVarargIsPrimitiveArray", env -> varargType(env, "primitives"), "int[]"),
                 fact("topLevelFunctionHasNoOwner", env -> topLevel(env).owner().isPresent(), false),
                 fact(
                         "abstractMemberIsAbstract",
@@ -767,6 +789,11 @@ class KspDeclarationFactsTest {
                                 .toList(),
                         List.of("f.Circle")),
                 fact("classesAnnotatedWithUnknownAnnotation", env -> env.classesAnnotatedWith("f.Nope"), List.of()));
+    }
+
+    /** The display name of the vararg parameter of a {@code f.Varargs} method. */
+    private static String varargType(ProcessingEnv env, String methodName) {
+        return method(env, "f.Varargs", methodName).parameters().get(0).type().displayName();
     }
 
     private static MethodDecl constructor(ProcessingEnv env) {

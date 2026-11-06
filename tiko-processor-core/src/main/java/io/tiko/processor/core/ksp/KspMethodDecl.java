@@ -111,6 +111,11 @@ final class KspMethodDecl implements MethodDecl {
     }
 
     @Override
+    public boolean isExtension() {
+        return function().getExtensionReceiver() != null;
+    }
+
+    @Override
     public Visibility visibility() {
         return KspModel.visibility(function());
     }

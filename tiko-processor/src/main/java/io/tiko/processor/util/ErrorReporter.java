@@ -28,6 +28,10 @@ public final class ErrorReporter {
     public static final String KIND_SCOPE_VIOLATION = "SCOPE_VIOLATION";
     public static final String KIND_AMBIGUOUS_QUALIFIER = "AMBIGUOUS_QUALIFIER";
     public static final String KIND_BAD_PRODUCES = "BAD_PRODUCES";
+    /** A Kotlin construct Tiko rejects because it would add DI semantics Java has no counterpart for. */
+    public static final String KOTLIN_UNSUPPORTED = "KOTLIN_UNSUPPORTED";
+    /** A provider's nullability differs from its injection point's (they must match exactly). */
+    public static final String NULLABILITY_MISMATCH = "NULLABILITY_MISMATCH";
 
     private final Diagnostics diagnostics;
     private final Consumer<WiringError> wiringErrorSink;

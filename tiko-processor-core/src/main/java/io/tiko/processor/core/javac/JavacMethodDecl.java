@@ -59,6 +59,12 @@ record JavacMethodDecl(ExecutableElement element, JavacModel model) implements M
         return false;
     }
 
+    /** Java has no extension functions. */
+    @Override
+    public boolean isExtension() {
+        return false;
+    }
+
     @Override
     public Visibility visibility() {
         return JavacModel.visibility(element.getModifiers());

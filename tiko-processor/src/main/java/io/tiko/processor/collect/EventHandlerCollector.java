@@ -34,6 +34,9 @@ public final class EventHandlerCollector {
     /** Collects the round's {@code @EventHandler} methods into {@code ctx}. */
     public static void collect(ProcessingEnv env, ProcessorContext ctx) {
         for (var method : env.methodsAnnotatedWith(EVENT_HANDLER)) {
+            if (ctx.isRejected(method)) {
+                continue; // a Kotlin construct DI does not support, already reported
+            }
             var handler = buildEventHandlerModel(method, ctx.getErrorReporter());
             if (handler != null) {
                 ctx.registerEventHandler(handler);

@@ -8,6 +8,7 @@ import io.tiko.processor.core.SourceVersionInfo;
 import io.tiko.processor.core.TypeOracle;
 import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.MethodDecl;
+import io.tiko.processor.core.model.PropertyAccessorDecl;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -85,6 +86,12 @@ public final class JavacProcessingEnv implements ProcessingEnv {
         return ElementFilter.methodsIn(annotatedWith(annotationFqn)).stream()
                 .map(model::methodDecl)
                 .toList();
+    }
+
+    /** Always empty: Java has no property accessors. */
+    @Override
+    public List<PropertyAccessorDecl> propertyAccessorsAnnotatedWith(String annotationFqn) {
+        return List.of();
     }
 
     private Set<? extends Element> annotatedWith(String annotationFqn) {

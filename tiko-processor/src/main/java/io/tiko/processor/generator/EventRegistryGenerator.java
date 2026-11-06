@@ -270,7 +270,7 @@ public final class EventRegistryGenerator {
                 emitTriggerInto(runBody, trigger, index);
             }
         } else {
-            runBody.addStatement(plan.invocation());
+            runBody.addStatement("$L", plan.invocation());
         }
         runBody.nextControlFlow("finally");
         runBody.addStatement("$T.exit(__asyncPrev)", CHAIN_CONTEXT);
@@ -348,7 +348,7 @@ public final class EventRegistryGenerator {
                 emitTrigger(method, trigger, index);
             }
         } else {
-            method.addStatement(plan.invocation());
+            method.addStatement("$L", plan.invocation());
         }
         method.nextControlFlow("catch ($T __t)", Exception.class);
         method.addStatement("$T __err = container.getErrorHandler()", errorHandler);

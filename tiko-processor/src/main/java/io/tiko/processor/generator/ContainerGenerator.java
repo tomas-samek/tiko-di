@@ -6,6 +6,7 @@ import io.tiko.EventBus;
 import io.tiko.Scope;
 import io.tiko.processor.core.CodeLiterals;
 import io.tiko.processor.core.GeneratorAnnotations;
+import io.tiko.processor.core.model.Nullability;
 import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
@@ -225,6 +226,9 @@ public final class ContainerGenerator {
         // Add fields
         containerBuilder.addField(createSingletonStorageField());
         containerBuilder.addField(createSingletonLockField());
+        if (hasNullableProvider()) {
+            containerBuilder.addField(createNullInstanceField());
+        }
         containerBuilder.addField(createEventScopeField());
         containerBuilder.addField(createUnitFrameOpenField());
         containerBuilder.addField(createEventBusField());
@@ -457,6 +461,31 @@ public final class ContainerGenerator {
                         Modifier.PRIVATE,
                         Modifier.FINAL)
                 .initializer("new $T(false)", ClassName.get("java.util.concurrent.atomic", "AtomicBoolean"))
+                .build();
+    }
+
+    /**
+     * Whether some active {@code @Produces} may return {@code null} (a Kotlin {@code T?} return).
+     * Only then does the container carry the {@link #NULL_INSTANCE} sentinel and null-safe
+     * caching; Java providers are never nullable, so Java builds generate exactly what they did.
+     */
+    private boolean hasNullableProvider() {
+        return context.getActiveFactoryMethods().stream().anyMatch(ContainerGenerator::isNullable);
+    }
+
+    private static boolean isNullable(FactoryMethodModel factory) {
+        return factory.getReturnType().nullability() == Nullability.NULLABLE;
+    }
+
+    /**
+     * The sentinel a nullable producer's {@code null} is cached as. The scope maps can't hold
+     * {@code null} as "created": {@code singletons} is a {@code ConcurrentHashMap}, which rejects
+     * null values, and a {@code null} from the EVENT map means "not created yet". Teardown walks
+     * skip it, since it is a plain {@code Object}.
+     */
+    private FieldSpec createNullInstanceField() {
+        return FieldSpec.builder(Object.class, NULL_INSTANCE, Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
+                .initializer("new $T()", Object.class)
                 .build();
     }
 
@@ -696,6 +725,10 @@ public final class ContainerGenerator {
         // ProducesSignatureValidator (#327), so the produced type is always a concrete,
         // non-generic type and no unchecked suppression is needed here. (The get/getAll
         // dispatchers still suppress — their casts are to the type variable T.)
+        if (isNullable(factory) && factory.getScope() != Scope.PROTOTYPE) {
+            emitNullSafeScopedGet(method, factory.getScope(), returnType, storageKey, callExpr);
+            return method.build();
+        }
         switch (factory.getScope()) {
             case SINGLETON ->
                 method.addStatement(
@@ -706,6 +739,30 @@ public final class ContainerGenerator {
         }
 
         return method.build();
+    }
+
+    /**
+     * The SINGLETON / EVENT getter of a producer that may return {@code null}: the produced value
+     * is cached as {@link #NULL_INSTANCE} when it is null and turned back into {@code null} on the
+     * way out, so a null is created once per slot like any other instance instead of re-invoking
+     * the producer on every injection. Same creation paths as the non-null getters otherwise
+     * ({@code __getOrCreateSingleton}; the unit-frame guard and plain get/put for EVENT).
+     */
+    private static void emitNullSafeScopedGet(
+            MethodSpec.Builder method, Scope scope, TypeName returnType, String storageKey, String callExpr) {
+        var masked = CodeBlock.of("$T.requireNonNullElse($L, $L)", Objects.class, callExpr, NULL_INSTANCE);
+        if (scope == Scope.SINGLETON) {
+            method.addStatement(
+                    "$T __existing = __getOrCreateSingleton($S, () -> $L)", Object.class, storageKey, masked);
+        } else {
+            emitUnitFrameGuard(method, storageKey);
+            method.addStatement("$T __existing = eventScoped.get().get($S)", Object.class, storageKey);
+            method.beginControlFlow(IF_EXISTING_NULL);
+            method.addStatement(ASSIGN_EXISTING, masked);
+            method.addStatement("eventScoped.get().put($S, __existing)", storageKey);
+            method.endControlFlow();
+        }
+        method.addStatement("return __existing == $L ? null : ($T) __existing", NULL_INSTANCE, returnType);
     }
 
     /**
@@ -979,7 +1036,7 @@ public final class ContainerGenerator {
         emitUnitFrameGuard(method, storageKey);
         method.addStatement("$T __existing = ($T) $L.get($S)", returnType, returnType, mapExpr, storageKey);
         method.beginControlFlow(IF_EXISTING_NULL);
-        method.addStatement("__existing = $L", createExpr);
+        method.addStatement(ASSIGN_EXISTING, createExpr);
         method.addStatement("$L.put($S, __existing)", mapExpr, storageKey);
         method.endControlFlow();
         method.addStatement(RETURN_EXISTING);
@@ -996,7 +1053,7 @@ public final class ContainerGenerator {
         emitUnitFrameGuard(method, storageKey);
         method.addStatement("$T __existing = ($T) $L.get($S)", returnType, returnType, mapExpr, storageKey);
         method.beginControlFlow(IF_EXISTING_NULL);
-        method.addStatement("__existing = $L", createExpr);
+        method.addStatement(ASSIGN_EXISTING, createExpr);
         method.addStatement("$L.put($S, __existing)", mapExpr, storageKey);
         method.endControlFlow();
         method.addStatement(RETURN_EXISTING);
@@ -1027,6 +1084,8 @@ public final class ContainerGenerator {
     /** Shared get-or-create statement fragments (S1192) — used by scoped and singleton emission. */
     private static final String IF_EXISTING_NULL = "if (__existing == null)";
 
+    private static final String ASSIGN_EXISTING = "__existing = $L";
+
     /** Lifecycle-publish gate shared by start/shutdown and both scope brackets (#45, #339). */
     private static final String IF_PUBLISH_LIFECYCLE = "if (publishLifecycleEvents)";
 
@@ -1037,6 +1096,8 @@ public final class ContainerGenerator {
     private static final String PUBLISH_LIFECYCLE_PARAM = "__publishLifecycle";
 
     private static final String RETURN_EXISTING = "return __existing";
+    /** The container field holding the sentinel a nullable producer's {@code null} is cached as. */
+    private static final String NULL_INSTANCE = "NULL_INSTANCE";
 
     private static final ClassName NO_SUCH_COMPONENT = ClassName.get(TIKO_PACKAGE, "NoSuchComponentException");
     private static final ClassName NO_ACTIVE_EVENT_SCOPE = ClassName.get(TIKO_PACKAGE, "NoActiveEventScopeException");
@@ -2187,13 +2248,22 @@ public final class ContainerGenerator {
         String factoryKey = factory.getComponentKey();
         String variableName = "__factory_" + factory.getFactoryIdentifier();
 
-        method.addStatement(
-                "$T $L = ($T) singletons.get($S)",
-                ClassName.get(AutoCloseable.class),
-                variableName,
-                ClassName.get(AutoCloseable.class),
-                factoryKey);
-        method.beginControlFlow("if ($L != null)", variableName);
+        if (isNullable(factory)) {
+            // Its slot may hold the NULL_INSTANCE sentinel, which a cast would reject.
+            method.beginControlFlow(
+                    "if (singletons.get($S) instanceof $T $L)",
+                    factoryKey,
+                    ClassName.get(AutoCloseable.class),
+                    variableName);
+        } else {
+            method.addStatement(
+                    "$T $L = ($T) singletons.get($S)",
+                    ClassName.get(AutoCloseable.class),
+                    variableName,
+                    ClassName.get(AutoCloseable.class),
+                    factoryKey);
+            method.beginControlFlow("if ($L != null)", variableName);
+        }
         // Bounded by options.teardownTimeout() (#106), same as component @PreDestroy; failures route
         // solely through ErrorHandler (#116).
         method.addStatement(

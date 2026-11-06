@@ -11,7 +11,6 @@ import io.tiko.processor.core.model.AnnotationRef;
 import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.MethodDecl;
 import io.tiko.processor.core.model.TypeRef;
-import io.tiko.processor.core.model.Visibility;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.util.ErrorReporter;
@@ -65,11 +64,15 @@ public final class ComponentCollector {
     public static void collect(ProcessingEnv env, ProcessorContext ctx) {
         var collector = new ComponentCollector(env, ctx);
         for (var decl : env.classesAnnotatedWith(COMPONENT)) {
-            collector.register(collector.buildComponentModel(decl));
+            if (!ctx.isRejected(decl)) {
+                collector.register(collector.buildComponentModel(decl));
+            }
         }
         // Empty when the test-support annotation is not on the classpath.
         for (var decl : env.classesAnnotatedWith(TEST_COMPONENT_FQN)) {
-            collector.registerTestComponent(decl);
+            if (!ctx.isRejected(decl)) {
+                collector.registerTestComponent(decl);
+            }
         }
     }
 
@@ -297,8 +300,8 @@ public final class ComponentCollector {
             return null; // an unresolved @Pick was reported
         }
 
-        var postConstructMethods = annotatedMethods(decl, POST_CONSTRUCT);
-        var preDestroyMethods = annotatedMethods(decl, PRE_DESTROY);
+        var postConstructMethods = annotatedMethods(decl, POST_CONSTRUCT, context);
+        var preDestroyMethods = annotatedMethods(decl, PRE_DESTROY, context);
 
         // Implicit AutoCloseable cleanup: when the component implements AutoCloseable and
         // the user did not declare an explicit @PreDestroy, the container codegen calls
@@ -345,9 +348,12 @@ public final class ComponentCollector {
     /**
      * Finds the constructor to use for injection. Selection rule:
      *   1. an @Inject-annotated constructor (any visibility) wins; or
-     *   2. the sole public constructor when no @Inject is present.
+     *   2. a Kotlin class's primary constructor when generated code can call it (public or
+     *      internal), with all its parameters: a default value never makes a dependency optional; or
+     *   3. the sole public constructor when no @Inject is present.
      * Constructors that are not public and not @Inject-annotated are ignored — their
-     * parameters are not injection points (issue #7).
+     * parameters are not injection points (issue #7). Java classes have no primary constructor,
+     * so rule 2 never applies to them.
      */
     private MethodDecl findInjectConstructor(ClassDecl decl) {
         var publicConstructors = new ArrayList<MethodDecl>();
@@ -366,7 +372,7 @@ public final class ComponentCollector {
                 injectConstructor = constructor;
             }
 
-            if (constructor.visibility() == Visibility.PUBLIC) {
+            if (TypeUtil.isCallableFromGeneratedCode(constructor.visibility())) {
                 publicConstructors.add(constructor);
             }
         }
@@ -374,13 +380,19 @@ public final class ComponentCollector {
         if (injectConstructor != null) {
             return injectConstructor;
         }
+        var primary = decl.primaryConstructor()
+                .filter(constructor -> TypeUtil.isCallableFromGeneratedCode(constructor.visibility()));
+        if (primary.isPresent()) {
+            return primary.get();
+        }
         return publicConstructors.size() == 1 ? publicConstructors.get(0) : null;
     }
 
-    /** The methods declared on {@code decl} that carry the annotation, in declaration order. */
-    private static List<MethodDecl> annotatedMethods(ClassDecl decl, String annotationFqn) {
+    /** The methods declared on {@code decl} that carry the annotation and were not rejected, in declaration order. */
+    private static List<MethodDecl> annotatedMethods(ClassDecl decl, String annotationFqn, ProcessorContext context) {
         return decl.methods().stream()
                 .filter(method -> method.annotation(annotationFqn).isPresent())
+                .filter(method -> !context.isRejected(method))
                 .toList();
     }
 

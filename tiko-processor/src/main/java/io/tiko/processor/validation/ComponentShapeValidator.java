@@ -4,7 +4,6 @@ import io.tiko.annotations.Inject;
 import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.Location;
 import io.tiko.processor.core.model.MethodDecl;
-import io.tiko.processor.core.model.Visibility;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.EventHandlerModel;
@@ -115,7 +114,7 @@ public final class ComponentShapeValidator {
     }
 
     private boolean requirePublic(MethodDecl member, String annotation) {
-        if (member.visibility() == Visibility.PUBLIC) return true;
+        if (TypeUtil.isCallableFromGeneratedCode(member.visibility())) return true;
         String owner = member.owner().orElseThrow().className().simpleName();
         boolean constructor = member.isConstructor();
         String name = constructor ? owner : member.name();

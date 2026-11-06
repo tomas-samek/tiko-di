@@ -64,7 +64,8 @@ public final class KspCompiler {
                 result.getExitCode(),
                 result.getMessages(),
                 readTree(generated.resolve("java"), ".java"),
-                readTree(generated.resolve("resources"), ""));
+                readTree(generated.resolve("resources"), ""),
+                List.of(result.getOutputDirectory().toPath(), generated.resolve("resources")));
     }
 
     /** Every file under {@code root} with the suffix, keyed by its path relative to the root. */
@@ -95,13 +96,16 @@ public final class KspCompiler {
 
     /**
      * The outcome of a {@link KspCompiler} run: the exit code of the whole run (processing and
-     * compilation), every compiler message, and the generated sources and resources.
+     * compilation), every compiler message, the generated sources and resources, and the output
+     * roots (the compiled classes, then the generated resources) a class loader needs to run the
+     * compiled program.
      */
     public record KspResult(
             KotlinCompilation.ExitCode exitCode,
             String messages,
             Map<String, String> javaSources,
-            Map<String, String> resources) {
+            Map<String, String> resources,
+            List<Path> outputRoots) {
 
         /** The generated Java source of the type, by fully qualified name. */
         public Optional<String> generatedJava(String fqn) {

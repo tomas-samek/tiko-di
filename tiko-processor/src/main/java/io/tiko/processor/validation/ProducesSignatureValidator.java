@@ -2,10 +2,10 @@ package io.tiko.processor.validation;
 
 import io.tiko.processor.core.model.MethodDecl;
 import io.tiko.processor.core.model.TypeRef;
-import io.tiko.processor.core.model.Visibility;
 import io.tiko.processor.model.FactoryMethodModel;
 import io.tiko.processor.util.ErrorReporter;
 import io.tiko.processor.util.ProcessorContext;
+import io.tiko.processor.util.TypeUtil;
 
 /**
  * Validates that {@code @Produces} method signatures are ones the code generator can
@@ -89,7 +89,7 @@ public final class ProducesSignatureValidator {
                     "Remove @Produces from the abstract method");
             return false;
         }
-        if (method.visibility() != Visibility.PUBLIC) {
+        if (!TypeUtil.isCallableFromGeneratedCode(method.visibility())) {
             report(
                     method,
                     "@Produces method '" + fqn

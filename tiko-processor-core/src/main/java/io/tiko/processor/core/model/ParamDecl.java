@@ -13,6 +13,7 @@ public interface ParamDecl {
 
     String name();
 
+    /** The declared type; for a vararg parameter the array type, as the JVM signature (and javac) has it. */
     TypeRef type();
 
     /** A Kotlin default argument; always false for Java. */
