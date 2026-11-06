@@ -72,6 +72,10 @@ public final class ConfigurationCollector {
                             "Move " + simple + " to its own top-level .java file");
             return;
         }
+        // Before any component is read: unknown components are reported, never guessed (#583).
+        if (!new ConfigurationValidator(ctx).checkComponentsKnown(type)) {
+            return;
+        }
         var pkg = type.className().packageName();
         var qualified = type.qualifiedName();
 

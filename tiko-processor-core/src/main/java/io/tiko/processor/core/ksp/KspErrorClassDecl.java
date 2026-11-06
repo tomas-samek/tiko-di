@@ -114,6 +114,11 @@ record KspErrorClassDecl(String name, TypeRef type) implements ClassDecl {
     }
 
     @Override
+    public boolean recordComponentsKnown() {
+        return true;
+    }
+
+    @Override
     public List<String> enumConstants() {
         return List.of();
     }

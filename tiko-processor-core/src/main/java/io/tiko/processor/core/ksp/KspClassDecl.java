@@ -295,12 +295,12 @@ final class KspClassDecl implements ClassDecl {
 
     /**
      * A record's components, in header order. KSP shows a Java record as its accessor functions
-     * and constructors, without fields, so the components are read off the canonical constructor
-     * (see {@link #canonicalConstructor}); a Kotlin {@code @JvmRecord} class's are its primary
-     * constructor's parameters, which Kotlin makes the canonical constructor.
+     * and constructors, without fields or header, so the components are read off the canonical
+     * constructor (see {@link #canonicalConstructor}); a Kotlin {@code @JvmRecord} class's are its
+     * primary constructor's parameters, which Kotlin makes the canonical constructor.
      *
-     * @throws IllegalStateException when the canonical constructor cannot be told apart (see
-     *     {@link #canonicalConstructor}): guessing would silently bind the wrong components
+     * @throws IllegalStateException when they are unknown (see {@link #recordComponentsKnown()}):
+     *     guessing could bind the wrong components
      */
     @Override
     public List<FieldDecl> recordComponents() {
@@ -308,11 +308,28 @@ final class KspClassDecl implements ClassDecl {
             return List.of();
         }
         var declaration = declaration();
-        var canonical =
-                KspModel.isJava(declaration) ? canonicalConstructor(declaration) : declaration.getPrimaryConstructor();
-        if (canonical == null) {
-            return List.of();
+        if (!KspModel.isJava(declaration)) {
+            var primary = declaration.getPrimaryConstructor();
+            return primary == null ? List.of() : components(primary);
         }
+        return canonicalConstructor(declaration)
+                .map(this::components)
+                .orElseThrow(() -> new IllegalStateException("The components of record " + qualifiedName()
+                        + " are unknown on KSP: check recordComponentsKnown() first"));
+    }
+
+    /** A Java record's components are unknown when its canonical constructor can't be told apart. */
+    @Override
+    public boolean recordComponentsKnown() {
+        if (kind() != DeclKind.RECORD) {
+            return true;
+        }
+        var declaration = declaration();
+        return !KspModel.isJava(declaration)
+                || canonicalConstructor(declaration).isPresent();
+    }
+
+    private List<FieldDecl> components(KSFunctionDeclaration canonical) {
         return model.methodDecl(canonical).parameters().stream()
                 .<FieldDecl>map(parameter -> new KspRecordComponent(parameter, key() + "." + parameter.name()))
                 .toList();
@@ -325,50 +342,44 @@ final class KspClassDecl implements ClassDecl {
      *   <li>When the record does not declare it, KSP synthesizes it, and it is the one
      *       constructor of {@code SYNTHETIC} origin.
      *   <li>When the record declares it (compact or full), it has origin {@code JAVA} like every
-     *       other constructor. It is then the widest constructor whose every parameter matches an
-     *       accessor by name and type; a shorter one (a subset of the components) never is.
+     *       other constructor. Every component has an accessor, so the canonical constructor is
+     *       among the constructors whose every parameter matches an accessor-shaped method (an
+     *       instance method without parameters or type parameters) by name and type. It is known
+     *       only when it is the one such constructor.
      * </ul>
      *
-     * KSP does not expose the header order itself, so a declared canonical constructor next to
-     * another constructor taking the same components in a different order (legal when their types
-     * differ) cannot be told apart. That case, and a record with no matching constructor, fail with
-     * {@link IllegalStateException} rather than guess.
+     * KSP exposes neither the header nor the component fields, and any method of that shape may
+     * or may not be an accessor. So with two such constructors, whether they take the same
+     * parameters in another order, a subset, or a superset matching a method like {@code int
+     * sum()}, either could be the canonical one: the result is empty rather than a guess.
      */
-    private KSFunctionDeclaration canonicalConstructor(KSClassDeclaration recordDecl) {
+    private Optional<KSFunctionDeclaration> canonicalConstructor(KSClassDeclaration recordDecl) {
         var functions = KspModel.functionsOf(recordDecl);
         var constructors = functions.stream().filter(UtilsKt::isConstructor).toList();
         var synthesized = constructors.stream()
                 .filter(constructor -> constructor.getOrigin() == Origin.SYNTHETIC)
                 .toList();
         if (synthesized.size() == 1) {
-            return synthesized.get(0);
+            return Optional.of(synthesized.get(0));
         }
         var accessors = new HashMap<String, TypeName>();
         for (var function : functions) {
-            if (!UtilsKt.isConstructor(function) && function.getParameters().isEmpty()) {
+            if (isAccessorShaped(function)) {
                 accessors.put(function.getSimpleName().asString(), typeName(function.getReturnType()));
             }
         }
-        var matching = constructors.stream()
+        var candidates = constructors.stream()
                 .filter(constructor -> takesOnlyComponents(constructor, accessors))
                 .toList();
-        var widest = matching.stream()
-                .mapToInt(constructor -> constructor.getParameters().size())
-                .max()
-                .orElse(-1);
-        var candidates = matching.stream()
-                .filter(constructor -> constructor.getParameters().size() == widest)
-                .toList();
-        if (candidates.size() == 1) {
-            return candidates.get(0);
-        }
-        throw new IllegalStateException("Cannot tell the canonical constructor of record " + qualifiedName()
-                + " on KSP: "
-                + (candidates.isEmpty()
-                        ? "no constructor takes only its components"
-                        : candidates.size() + " constructors take its components, in different orders")
-                + ". Let the compiler supply the canonical constructor, or give the other constructors"
-                + " parameters that are not all components.");
+        return candidates.size() == 1 ? Optional.of(candidates.get(0)) : Optional.empty();
+    }
+
+    /** Could be a record accessor (JLS 8.10.3): an instance method without parameters or type parameters. */
+    private static boolean isAccessorShaped(KSFunctionDeclaration function) {
+        return !UtilsKt.isConstructor(function)
+                && function.getParameters().isEmpty()
+                && function.getTypeParameters().isEmpty()
+                && !function.getModifiers().contains(Modifier.JAVA_STATIC);
     }
 
     /** Whether every parameter matches an accessor (a zero-argument function) by name and type. */

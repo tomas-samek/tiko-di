@@ -1,5 +1,6 @@
 package io.tiko.processor.config;
 
+import io.tiko.processor.core.RecordComponentRules;
 import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.DeclKind;
 import io.tiko.processor.core.model.TypeRef;
@@ -7,11 +8,14 @@ import io.tiko.processor.util.ProcessorContext;
 import io.tiko.processor.util.TypeRefs;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /** All compile-time checks against the collected {@link ConfigurationModel}s. */
 public final class ConfigurationValidator {
+
+    private static final Set<String> CONTAINERS = Set.of("java.util.Optional", "java.util.List", "java.util.Set");
 
     private final ProcessorContext ctx;
 
@@ -28,6 +32,57 @@ public final class ConfigurationValidator {
             ok &= checkNoRecursion(cfg);
         }
         return ok;
+    }
+
+    /**
+     * Reports {@code root} and every record reachable through its components (also inside
+     * {@code Optional}, {@code List}, {@code Set} and {@code Map} values) whose components are
+     * unknown ({@link RecordComponentRules}). It runs before collection reads any components, so
+     * a rejected record is never bound by a guess.
+     *
+     * @return {@code false} when one was reported
+     */
+    public boolean checkComponentsKnown(ClassDecl root) {
+        return componentsKnown(root, new HashSet<>());
+    }
+
+    private boolean componentsKnown(ClassDecl recordDecl, Set<String> seen) {
+        if (!seen.add(recordDecl.qualifiedName())) {
+            return true;
+        }
+        var violation = RecordComponentRules.unknownComponents(recordDecl);
+        if (violation.isPresent()) {
+            ctx.getErrorReporter()
+                    .error(
+                            violation.get().location(),
+                            violation.get().problem(),
+                            violation.get().fixes().toArray(String[]::new));
+            return false;
+        }
+        var ok = true;
+        for (var component : recordDecl.recordComponents()) {
+            for (var nested : nestedRecords(component.type())) {
+                ok &= componentsKnown(nested, seen);
+            }
+        }
+        return ok;
+    }
+
+    /** The records a component of this type binds: itself, or the value type of a supported container. */
+    private static List<ClassDecl> nestedRecords(TypeRef type) {
+        var declared = TypeRefs.declared(type);
+        if (declared.isEmpty()) {
+            return List.of();
+        }
+        var arguments = type.typeArguments();
+        var fqn = declared.get().qualifiedName();
+        if (CONTAINERS.contains(fqn)) {
+            return arguments.isEmpty() ? List.of() : nestedRecords(arguments.get(0));
+        }
+        if (fqn.equals("java.util.Map")) {
+            return arguments.size() < 2 ? List.of() : nestedRecords(arguments.get(1));
+        }
+        return declared.get().kind() == DeclKind.RECORD ? List.of(declared.get()) : List.of();
     }
 
     private boolean checkPrefixUniqueness() {
