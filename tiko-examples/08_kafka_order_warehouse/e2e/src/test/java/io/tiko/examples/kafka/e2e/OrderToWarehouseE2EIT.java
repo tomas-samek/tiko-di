@@ -24,9 +24,9 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.kafka.KafkaContainer;
 import org.testcontainers.utility.DockerImageName;
 
 /**
@@ -54,8 +54,14 @@ class OrderToWarehouseE2EIT {
     /** The topic both services bridge through ({@code @KafkaSink}/{@code @KafkaSource(topic = "orders")}). */
     private static final String TOPIC = "orders";
 
+    /**
+     * The Apache native broker image, at the kafka-clients version, starts in about two seconds on a
+     * CI runner. A start that stalls is retried on a fresh container instead of failing the build
+     * (#581).
+     */
     @Container
-    static final KafkaContainer KAFKA = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.7.1"));
+    static final KafkaContainer KAFKA =
+            new KafkaContainer(DockerImageName.parse("apache/kafka-native:3.9.2")).withStartupAttempts(3);
 
     private Path probeFile;
     private Process orderProc;
