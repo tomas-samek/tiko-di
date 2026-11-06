@@ -1,9 +1,8 @@
 package io.tiko.processor.validation;
 
-import io.tiko.processor.util.JavacBridge;
+import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.util.ProcessorContext;
 import io.tiko.processor.util.TypeUtil;
-import javax.lang.model.type.TypeMirror;
 
 /**
  * Verifies that every type listed in {@code @Component(expose = {...})} is actually
@@ -27,17 +26,17 @@ public final class ExposureValidator {
         boolean ok = true;
         for (var component : context.getActiveComponents()) {
             if (!component.isExposeRestricted()) continue;
-            var componentType = component.getTypeElement().asType();
-            for (TypeMirror exposed : component.getExposeTypes()) {
+            var componentType = component.getDecl().asType();
+            for (TypeRef exposed : component.getExposeTypes()) {
                 if (!typeUtil.isAssignable(componentType, exposed)) {
                     context.getErrorReporter()
                             .error(
-                                    JavacBridge.location(component.getTypeElement()),
-                                    "@Component(expose = {...}) lists " + exposed + ", but "
+                                    component.getDecl().location(),
+                                    "@Component(expose = {...}) lists " + exposed.displayName() + ", but "
                                             + component.getQualifiedName()
                                             + " does not implement or extend it",
-                                    "Make " + component.getClassName() + " implement " + exposed,
-                                    "Remove " + exposed + " from the expose list",
+                                    "Make " + component.getClassName() + " implement " + exposed.displayName(),
+                                    "Remove " + exposed.displayName() + " from the expose list",
                                     "Drop the expose attribute entirely to fall back to the permissive default "
                                             + "(expose every implemented interface)");
                     ok = false;

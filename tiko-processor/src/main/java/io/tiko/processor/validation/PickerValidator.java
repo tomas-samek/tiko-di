@@ -1,11 +1,10 @@
 package io.tiko.processor.validation;
 
+import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
-import io.tiko.processor.util.JavacBridge;
 import io.tiko.processor.util.ProcessorContext;
-import javax.lang.model.type.TypeMirror;
 
 /**
  * Validates {@code Picker<T>} injection points.
@@ -52,7 +51,7 @@ public final class PickerValidator {
         if (!dep.isPicker()) {
             return;
         }
-        TypeMirror baseType = dep.getUnwrappedType().orElseThrow();
+        TypeRef baseType = dep.getUnwrappedType().orElseThrow();
         String baseFqn = dep.getDependencyKey();
 
         // Local impls — anything assignable to the picker's base type. Counts both
@@ -70,24 +69,23 @@ public final class PickerValidator {
         // For now: warn so the user notices, don't fail.
         context.getErrorReporter()
                 .warning(
-                        JavacBridge.location(dep.getParameter()),
+                        dep.getParameter().location(),
                         "Picker<" + simpleName(baseFqn)
                                 + "> has no impls registered in this module. If the impls live in another module this is fine; otherwise the picker will always be empty.");
     }
 
-    private boolean anyComponentAssignableTo(TypeMirror baseType) {
+    private boolean anyComponentAssignableTo(TypeRef baseType) {
         for (ComponentModel component : context.getActiveComponents()) {
-            if (JavacBridge.types(context.env())
-                    .isAssignable(component.getTypeElement().asType(), baseType)) {
+            if (context.env().types().isAssignable(component.getDecl().asType(), baseType)) {
                 return true;
             }
         }
         return false;
     }
 
-    private boolean anyFactoryAssignableTo(TypeMirror baseType) {
+    private boolean anyFactoryAssignableTo(TypeRef baseType) {
         for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
-            if (JavacBridge.types(context.env()).isAssignable(factory.getReturnType(), baseType)) {
+            if (context.env().types().isAssignable(factory.getReturnType(), baseType)) {
                 return true;
             }
         }

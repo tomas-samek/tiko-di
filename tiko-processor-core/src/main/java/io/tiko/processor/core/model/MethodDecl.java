@@ -1,5 +1,6 @@
 package io.tiko.processor.core.model;
 
+import com.palantir.javapoet.TypeVariableName;
 import java.util.List;
 import java.util.Optional;
 
@@ -22,6 +23,9 @@ public interface MethodDecl {
 
     boolean isAbstract();
 
+    /** An interface method with a body: Java {@code default}, a Kotlin interface member with a body. */
+    boolean isDefault();
+
     boolean isSuspend();
 
     /** A Kotlin top-level function; always false for Java. */
@@ -34,6 +38,9 @@ public interface MethodDecl {
     List<ParamDecl> parameters();
 
     List<TypeRef> thrownTypes();
+
+    /** The method's own type parameters, in declaration order, as generated Java declares them. */
+    List<TypeVariableName> typeVariables();
 
     List<AnnotationRef> annotations();
 

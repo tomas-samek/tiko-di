@@ -2,6 +2,7 @@ package io.tiko.processor.generator;
 
 import com.palantir.javapoet.*;
 import io.tiko.processor.core.GeneratorAnnotations;
+import io.tiko.processor.core.model.MethodDecl;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.util.ProcessorContext;
@@ -9,9 +10,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
-import javax.lang.model.element.TypeElement;
 
 /**
  * Generates factory classes for @Component annotated classes.
@@ -113,8 +112,7 @@ public final class ComponentFactoryGenerator {
      * Creates the factory method that instantiates the component.
      */
     private MethodSpec createFactoryMethod(ComponentModel component) {
-        TypeElement typeElement = component.getTypeElement();
-        ClassName componentClass = ClassName.get(typeElement);
+        ClassName componentClass = component.getDecl().className();
 
         MethodSpec.Builder methodBuilder =
                 MethodSpec.methodBuilder("create").addModifiers(Modifier.PUBLIC).returns(componentClass);
@@ -130,8 +128,8 @@ public final class ComponentFactoryGenerator {
                 // registered after Provider construction still take effect, and so the
                 // resolution key is the inner type T (not Provider<T>). resolveOverride
                 // does one map lookup and routes the cast through the class token (#309).
-                TypeName providerType = TypeName.get(dependency.getType());
-                TypeName innerType = TypeName.get(dependency.getUnwrappedType().orElseThrow());
+                TypeName providerType = dependency.getType().javaPoet();
+                TypeName innerType = dependency.getUnwrappedType().orElseThrow().javaPoet();
                 String existing = generateContainerGetCall(dependency, component);
                 if (dependency.getQualifier().isPresent() && !dependency.isPicked()) {
                     String qualifier = dependency.getQualifier().orElseThrow();
@@ -153,10 +151,10 @@ public final class ComponentFactoryGenerator {
             } else if (dependency.isPicker()) {
                 // Picker<T> is constructed inline via the generic ContainerPicker<T> impl —
                 // one runtime class services every Picker injection point regardless of T.
-                TypeName baseType = TypeName.get(dependency.getUnwrappedType().orElseThrow());
+                TypeName baseType = dependency.getUnwrappedType().orElseThrow().javaPoet();
                 methodBuilder.addStatement(
                         "$T $L = new $T<>(container, $T.class)",
-                        TypeName.get(dependency.getType()),
+                        dependency.getType().javaPoet(),
                         paramName,
                         ClassName.get("io.tiko.runtime", "ContainerPicker"),
                         baseType);
@@ -168,7 +166,7 @@ public final class ComponentFactoryGenerator {
                 // when the consumer injects by interface, concrete class otherwise (#128).
                 // resolveOverride does one map lookup and routes the cast through the
                 // class token (#309); the production getter only runs on the fallback path.
-                TypeName declaredType = TypeName.get(dependency.getType());
+                TypeName declaredType = dependency.getType().javaPoet();
                 String existing = generateContainerGetCall(dependency, component);
                 if (dependency.getQualifier().isPresent() && !dependency.isPicked()) {
                     String qualifier = dependency.getQualifier().orElseThrow();
@@ -189,10 +187,10 @@ public final class ComponentFactoryGenerator {
         }
 
         // Create instance — via static @Produces factory method if present, else constructor.
-        Optional<ExecutableElement> staticFactory = component.getStaticFactoryMethod();
+        Optional<MethodDecl> staticFactory = component.getStaticFactoryMethod();
         String params = String.join(", ", parameterNames);
         if (staticFactory.isPresent()) {
-            String factoryMethodName = staticFactory.get().getSimpleName().toString();
+            String factoryMethodName = staticFactory.get().jvmName();
             methodBuilder.addStatement(
                     "$T instance = $T.$L($L)", componentClass, componentClass, factoryMethodName, params);
         } else if (parameterNames.isEmpty()) {
@@ -204,9 +202,9 @@ public final class ComponentFactoryGenerator {
         // Call @PostConstruct methods. Failures route through ErrorHandler before re-throwing
         // so observability sees the lifecycle hook failure; container start / get() still halts
         // as before (PostConstructFailure is emitted, then the original throwable propagates).
-        for (ExecutableElement postConstruct : component.getPostConstructMethods()) {
+        for (MethodDecl postConstruct : component.getPostConstructMethods()) {
             methodBuilder.beginControlFlow("try");
-            methodBuilder.addStatement("instance.$L()", postConstruct.getSimpleName());
+            methodBuilder.addStatement("instance.$L()", postConstruct.jvmName());
             methodBuilder.nextControlFlow("catch ($T __t)", Exception.class);
             methodBuilder.addStatement(
                     "container.getErrorHandler().onError(new $T($T.class, __t))",
@@ -243,7 +241,7 @@ public final class ComponentFactoryGenerator {
         }
 
         String typeName = dependency.isProvider()
-                ? dependency.getUnwrappedType().orElseThrow().toString()
+                ? dependency.getUnwrappedType().orElseThrow().displayName()
                 : dependency.getTypeName();
 
         // @Pick: identity is the picked impl class. When @Named is also present, the

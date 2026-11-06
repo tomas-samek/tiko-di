@@ -1,6 +1,7 @@
 package io.tiko.processor.validation;
 
 import io.tiko.annotations.Inject;
+import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.Location;
 import io.tiko.processor.core.model.MethodDecl;
 import io.tiko.processor.core.model.Visibility;
@@ -8,18 +9,12 @@ import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.EventHandlerModel;
 import io.tiko.processor.model.FactoryMethodModel;
-import io.tiko.processor.util.JavacBridge;
 import io.tiko.processor.util.ProcessorContext;
 import io.tiko.processor.util.TypeUtil;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.TypeElement;
 
 /**
  * Structural checks that must pass before any other validator or generator touches the
@@ -43,6 +38,8 @@ import javax.lang.model.element.TypeElement;
  */
 public final class ComponentShapeValidator {
 
+    private static final String INJECT = Inject.class.getCanonicalName();
+
     private final ProcessorContext context;
     private final TypeUtil typeUtil;
 
@@ -58,13 +55,13 @@ public final class ComponentShapeValidator {
         for (ComponentModel component : context.getComponents().values()) {
             valid &= validateInstantiable(component);
             valid &= validatePublicMembers(component);
-            valid &= validateDependencies(component.getTypeElement(), component.getDependencies());
+            valid &= validateDependencies(component.getDecl().location(), component.getDependencies());
             bySimpleName
                     .computeIfAbsent(component.getClassName(), k -> new java.util.ArrayList<>())
                     .add(component);
         }
         for (FactoryMethodModel factory : context.getFactoryMethods()) {
-            valid &= validateDependencies(factory.getMethodElement(), factory.getDependencies());
+            valid &= validateDependencies(factory.getMethod().location(), factory.getDependencies());
         }
 
         for (Map.Entry<String, List<ComponentModel>> entry : bySimpleName.entrySet()) {
@@ -72,7 +69,7 @@ public final class ComponentShapeValidator {
             if (sharing.size() <= 1) continue;
             String fqns = sharing.stream().map(ComponentModel::getQualifiedName).collect(Collectors.joining(", "));
             context.getErrorReporter()
-                    .duplicateSimpleNames(JavacBridge.location(sharing.get(0).getTypeElement()), entry.getKey(), fqns);
+                    .duplicateSimpleNames(sharing.get(0).getDecl().location(), entry.getKey(), fqns);
             valid = false;
         }
 
@@ -102,29 +99,19 @@ public final class ComponentShapeValidator {
      */
     private boolean validatePublicMembers(ComponentModel component) {
         boolean valid = true;
-        ExecutableElement constructor = component.getConstructor();
+        MethodDecl constructor = component.getConstructor();
         if (constructor != null
                 && component.getStaticFactoryMethod().isEmpty()
-                && constructor.getAnnotation(Inject.class) != null) {
+                && constructor.annotation(INJECT).isPresent()) {
             valid &= requirePublic(constructor, "@Inject");
         }
-        for (ExecutableElement hook : component.getPostConstructMethods()) {
+        for (MethodDecl hook : component.getPostConstructMethods()) {
             valid &= requirePublic(hook, "@PostConstruct");
         }
-        for (ExecutableElement hook : component.getPreDestroyMethods()) {
+        for (MethodDecl hook : component.getPreDestroyMethods()) {
             valid &= requirePublic(hook, "@PreDestroy");
         }
         return valid;
-    }
-
-    private boolean requirePublic(ExecutableElement member, String annotation) {
-        if (member.getModifiers().contains(Modifier.PUBLIC)) return true;
-        String owner =
-                ((TypeElement) member.getEnclosingElement()).getSimpleName().toString();
-        boolean constructor = member.getKind() == ElementKind.CONSTRUCTOR;
-        String name = constructor ? owner : member.getSimpleName().toString();
-        reportNotPublic(JavacBridge.location(member), annotation, owner, name, constructor);
-        return false;
     }
 
     private boolean requirePublic(MethodDecl member, String annotation) {
@@ -147,21 +134,23 @@ public final class ComponentShapeValidator {
     }
 
     private boolean validateInstantiable(ComponentModel component) {
-        TypeElement el = component.getTypeElement();
+        ClassDecl el = component.getDecl();
         if (!typeUtil.isConcreteClass(el)) {
             context.getErrorReporter()
                     .nonInstantiableComponent(
-                            JavacBridge.location(el),
+                            el.location(),
                             component.getClassName(),
                             "it is not a concrete class",
                             "Make " + component.getClassName() + " a concrete (non-abstract) class",
                             "Remove the @Component annotation");
             return false;
         }
-        if (el.getNestingKind().isNested() && !el.getModifiers().contains(Modifier.STATIC)) {
+        // Collected components are top-level or member classes (never local), so "nested" is
+        // "has an enclosing class".
+        if (el.enclosingClass().isPresent() && !el.isStatic()) {
             context.getErrorReporter()
                     .nonInstantiableComponent(
-                            JavacBridge.location(el),
+                            el.location(),
                             component.getClassName(),
                             "non-static nested classes need an enclosing instance the container cannot provide",
                             "Declare " + component.getClassName() + " as a static nested class",
@@ -171,7 +160,7 @@ public final class ComponentShapeValidator {
         return true;
     }
 
-    private boolean validateDependencies(Element owner, List<DependencyModel> dependencies) {
+    private boolean validateDependencies(Location owner, List<DependencyModel> dependencies) {
         boolean valid = true;
         for (DependencyModel dep : dependencies) {
             boolean rawWrapper = (dep.isProvider() || dep.isPicker())
@@ -179,8 +168,7 @@ public final class ComponentShapeValidator {
             if (rawWrapper) {
                 String wrapper = dep.isProvider() ? "Provider" : "Picker";
                 context.getErrorReporter()
-                        .rawWrapperInjection(
-                                JavacBridge.location(dep.getParameter()), JavacBridge.location(owner), wrapper);
+                        .rawWrapperInjection(dep.getParameter().location(), owner, wrapper);
                 valid = false;
             }
         }

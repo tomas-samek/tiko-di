@@ -10,14 +10,12 @@ import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.EventHandlerModel;
 import io.tiko.processor.model.EventTriggerModel;
 import io.tiko.processor.model.FactoryMethodModel;
-import io.tiko.processor.util.JavacBridge;
+import io.tiko.processor.util.AbstractInterfaceMethods;
 import io.tiko.processor.util.ProcessorContext;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.Writer;
 import java.util.List;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.type.TypeMirror;
 
 /**
  * Emits {@code META-INF/tiko/topology.json} — a versioned, machine-readable description of every
@@ -75,8 +73,8 @@ public final class TopologyWriter {
             jw.field("qualifier").value(c.getName().orElse(null));
             writeStringArray(jw, "profiles", c.getProfiles());
             jw.field("interfaces").array();
-            for (TypeMirror iface : c.getTypeElement().getInterfaces()) {
-                jw.value(iface.toString());
+            for (TypeRef iface : c.getDecl().interfaces()) {
+                jw.value(iface.displayName());
             }
             jw.endArray();
             jw.field("isTestComponent").value(c.isTestComponent());
@@ -84,8 +82,8 @@ public final class TopologyWriter {
             writeProxyDetail(jw, c);
             jw.field("exposeSelf").value(c.isExposeSelf());
             jw.field("exposeTypes").array();
-            for (TypeMirror t : c.getExposeTypes()) {
-                jw.value(t.toString());
+            for (TypeRef t : c.getExposeTypes()) {
+                jw.value(t.displayName());
             }
             jw.endArray();
             writeDependencies(jw, c.getDependencies());
@@ -99,8 +97,7 @@ public final class TopologyWriter {
         jw.field("factoryMethods").array();
         for (FactoryMethodModel f : context.getActiveFactoryMethods()) {
             jw.object();
-            jw.field("declaringClass")
-                    .value(f.getDeclaringClass().getQualifiedName().toString());
+            jw.field("declaringClass").value(f.getDeclaringClass().qualifiedName());
             jw.field("methodName").value(f.getMethodName());
             jw.field("returnType").value(f.getReturnTypeName());
             jw.field("scope").value(f.getScope().name());
@@ -261,10 +258,7 @@ public final class TopologyWriter {
     }
 
     private void writeLifecycle(
-            JsonWriter jw,
-            List<ExecutableElement> postConstruct,
-            List<ExecutableElement> preDestroy,
-            boolean autoCloseable) {
+            JsonWriter jw, List<MethodDecl> postConstruct, List<MethodDecl> preDestroy, boolean autoCloseable) {
         jw.field("lifecycle").object();
         writeMethodNameArray(jw, "postConstruct", postConstruct);
         writeMethodNameArray(jw, "preDestroy", preDestroy);
@@ -286,15 +280,12 @@ public final class TopologyWriter {
         if (!c.requiresProxy() || c.getImplementedInterface().isEmpty()) {
             return;
         }
-        var ifaceMirror = c.getImplementedInterface().orElseThrow();
-        var ifaceFqn = ifaceMirror.toString();
-        var ifaceElement = JavacBridge.elements(context.env()).getTypeElement(ifaceFqn);
+        var ifaceFqn = c.getImplementedInterface().orElseThrow().displayName();
+        var ifaceDecl = context.env().types().findClass(ifaceFqn);
         jw.field("proxy").object();
         jw.field("interface").value(ifaceFqn);
-        if (ifaceElement != null) {
-            var methods = io.tiko.processor.util.AbstractInterfaceMethods.collect(
-                    ifaceElement, JavacBridge.types(context.env()));
-            writeMethodNameArray(jw, "proxiedMethods", methods);
+        if (ifaceDecl.isPresent()) {
+            writeMethodNameArray(jw, "proxiedMethods", AbstractInterfaceMethods.collect(ifaceDecl.get()));
         } else {
             jw.field("proxiedMethods").array().endArray();
         }
@@ -302,10 +293,10 @@ public final class TopologyWriter {
         jw.endObject();
     }
 
-    private void writeMethodNameArray(JsonWriter jw, String fieldName, List<ExecutableElement> methods) {
+    private void writeMethodNameArray(JsonWriter jw, String fieldName, List<MethodDecl> methods) {
         jw.field(fieldName).array();
-        for (ExecutableElement m : methods) {
-            jw.value(m.getSimpleName().toString());
+        for (MethodDecl m : methods) {
+            jw.value(m.name());
         }
         jw.endArray();
     }

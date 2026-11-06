@@ -5,6 +5,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.google.testing.compile.Compilation;
 import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
+import io.tiko.processor.core.javac.JavacProcessingEnv;
+import io.tiko.processor.core.model.ClassDecl;
+import io.tiko.processor.core.model.TypeRef;
 import java.util.Optional;
 import java.util.Set;
 import javax.annotation.processing.AbstractProcessor;
@@ -13,15 +16,13 @@ import javax.annotation.processing.SupportedAnnotationTypes;
 import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.TypeMirror;
 import javax.tools.JavaFileObject;
 import org.junit.jupiter.api.Test;
 
 /**
  * Exercises {@link TypeUtil} against a real {@code javax.lang.model} via Google's
  * compile-testing harness. The probe processor runs in a compile round, captures the
- * Elements/Types it sees, builds a {@link TypeUtil}, and stashes results into static
+ * round's type oracle, builds a {@link TypeUtil}, and stashes results into static
  * fields that the test inspects post-compile.
  */
 class TypeUtilTest {
@@ -105,7 +106,7 @@ class TypeUtilTest {
         static boolean pickerDetected;
         static String pickerArgQualifiedName;
         static boolean nonProviderDetected;
-        static Optional<TypeMirror> nonProviderUnwrap;
+        static Optional<TypeRef> nonProviderUnwrap;
         static String firstInterfaceQualifiedName;
         static boolean assignable;
         static boolean sameType;
@@ -148,27 +149,23 @@ class TypeUtilTest {
         public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
             if (roundEnv.processingOver()) return false;
 
-            TypeUtil util = new TypeUtil(processingEnv.getElementUtils(), processingEnv.getTypeUtils());
+            var env = JavacProcessingEnv.of(processingEnv, roundEnv);
+            TypeUtil util = new TypeUtil(env.types());
 
-            TypeElement sample = processingEnv.getElementUtils().getTypeElement("demo.Sample");
+            ClassDecl sample = env.types().findClass("demo.Sample").orElse(null);
             if (sample == null) return false;
 
-            TypeMirror sampleMirror = sample.asType();
+            TypeRef sampleMirror = sample.asType();
             simpleName = util.getSimpleName(sampleMirror);
             qualifiedName = util.getQualifiedName(sampleMirror);
             packageName = util.getPackageName(sample);
             binaryName = util.getBinaryName(sample);
 
             // Constructor parameters: Provider<String>, Picker<String>, List<String>
-            var ctorParams = sample.getEnclosedElements().stream()
-                    .filter(e -> e.getKind() == javax.lang.model.element.ElementKind.CONSTRUCTOR)
-                    .map(e -> (javax.lang.model.element.ExecutableElement) e)
-                    .findFirst()
-                    .orElseThrow()
-                    .getParameters();
-            TypeMirror provider = ((VariableElement) ctorParams.get(0)).asType();
-            TypeMirror picker = ((VariableElement) ctorParams.get(1)).asType();
-            TypeMirror list = ((VariableElement) ctorParams.get(2)).asType();
+            var ctorParams = sample.constructors().get(0).parameters();
+            TypeRef provider = ctorParams.get(0).type();
+            TypeRef picker = ctorParams.get(1).type();
+            TypeRef list = ctorParams.get(2).type();
 
             providerDetected = util.isProvider(provider);
             providerArgQualifiedName =
@@ -185,8 +182,8 @@ class TypeUtilTest {
             assignable = util.isAssignable(sampleMirror, sampleMirror);
             sameType = util.isSameType(sampleMirror, sampleMirror);
 
-            knownTypeFound = util.getTypeElement("java.lang.String").isPresent();
-            unknownTypeFound = util.getTypeElement("does.not.Exist").isPresent();
+            knownTypeFound = util.findClass("java.lang.String").isPresent();
+            unknownTypeFound = util.findClass("does.not.Exist").isPresent();
 
             implementsRunnable = util.implementsInterface(sample, "java.lang.Runnable");
             implementsUnknown = util.implementsInterface(sample, "does.not.Exist");
@@ -198,9 +195,13 @@ class TypeUtilTest {
 
             erasureNonNull = util.erasure(sampleMirror) != null;
 
-            // Primitive types are not declared types — asTypeElement returns empty.
-            TypeMirror primitiveInt = processingEnv.getTypeUtils().getPrimitiveType(javax.lang.model.type.TypeKind.INT);
-            primitiveAsTypeElementEmpty = util.asTypeElement(primitiveInt).isEmpty();
+            // Primitive types are not declared types — asClassDecl returns empty.
+            TypeRef primitiveInt = util.findClass("java.lang.String").orElseThrow().methods().stream()
+                    .filter(method -> method.name().equals("length"))
+                    .findFirst()
+                    .orElseThrow()
+                    .returnType();
+            primitiveAsTypeElementEmpty = util.asClassDecl(primitiveInt).isEmpty();
 
             return false;
         }

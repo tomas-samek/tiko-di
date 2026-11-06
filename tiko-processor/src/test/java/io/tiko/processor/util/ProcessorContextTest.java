@@ -9,10 +9,13 @@ import com.google.testing.compile.JavaFileObjects;
 import io.tiko.Scope;
 import io.tiko.processor.TikoAnnotationProcessor;
 import io.tiko.processor.core.javac.JavacProcessingEnv;
+import io.tiko.processor.core.model.ClassDecl;
+import io.tiko.processor.core.model.MethodDecl;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.FactoryMethodModel;
 import java.util.List;
 import javax.annotation.processing.AbstractProcessor;
+import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
 import javax.annotation.processing.SupportedAnnotationTypes;
 import javax.annotation.processing.SupportedSourceVersion;
@@ -217,7 +220,7 @@ class ProcessorContextTest {
             if (roundEnv.processingOver()) return false;
             try {
                 ProcessorContext ctx = new ProcessorContext(JavacProcessingEnv.of(processingEnv, roundEnv), List.of());
-                TypeElement main = processingEnv.getElementUtils().getTypeElement("demo.Main");
+                ClassDecl main = mainOf(processingEnv, roundEnv);
 
                 ctx.registerComponent(component(main, "demo.A", false));
                 ComponentModel b = component(main, "demo.B", false);
@@ -263,11 +266,11 @@ class ProcessorContextTest {
             try {
                 ProcessorContext ctx =
                         new ProcessorContext(JavacProcessingEnv.of(processingEnv, roundEnv), List.of("prod"));
-                TypeElement main = processingEnv.getElementUtils().getTypeElement("demo.Main");
+                ClassDecl main = mainOf(processingEnv, roundEnv);
 
                 ctx.registerComponent(component(main, "demo.A", false));
                 ctx.registerComponent(ComponentModel.builder()
-                        .typeElement(main)
+                        .decl(main)
                         .qualifiedName("demo.DevOnlyFixture")
                         .className("DevOnlyFixture")
                         .packageName("demo")
@@ -355,7 +358,7 @@ class ProcessorContextTest {
         public boolean process(java.util.Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
             if (roundEnv.processingOver()) return false;
             try {
-                TypeElement main = processingEnv.getElementUtils().getTypeElement("demo.Main");
+                ClassDecl main = mainOf(processingEnv, roundEnv);
 
                 // === findByImplClass factory branch ===
                 ProcessorContext ctxFactoryActive =
@@ -386,15 +389,7 @@ class ProcessorContextTest {
                 ProcessorContext ctxCfg =
                         new ProcessorContext(JavacProcessingEnv.of(processingEnv, roundEnv), List.of());
                 ctxCfg.registerConfiguration(new io.tiko.processor.config.ConfigurationModel(
-                        ctxCfg.env()
-                                .types()
-                                .findClass(main.getQualifiedName().toString())
-                                .orElseThrow(),
-                        "demo",
-                        "DbConfig",
-                        "demo.DbConfig",
-                        "db",
-                        List.of()));
+                        main, "demo", "DbConfig", "demo.DbConfig", "db", List.of()));
                 findComponentOrFactoryResolvesConfiguration =
                         ctxCfg.findComponentOrFactory("demo.DbConfig").isPresent();
 
@@ -403,9 +398,13 @@ class ProcessorContextTest {
                 // to the test bean (the only available impl), exercising the `testFallback` path.
                 ProcessorContext ctxFallback =
                         new ProcessorContext(JavacProcessingEnv.of(processingEnv, roundEnv), List.of());
-                TypeElement objectTe = processingEnv.getElementUtils().getTypeElement("java.lang.Runnable");
+                ClassDecl objectTe = ctxFallback
+                        .env()
+                        .types()
+                        .findClass("java.lang.Runnable")
+                        .orElseThrow();
                 ComponentModel testImpl = ComponentModel.builder()
-                        .typeElement(main)
+                        .decl(main)
                         .qualifiedName("demo.TestRunnableImpl")
                         .className("TestRunnableImpl")
                         .packageName("demo")
@@ -441,7 +440,7 @@ class ProcessorContextTest {
             if (roundEnv.processingOver()) return false;
             try {
                 ProcessorContext ctx = new ProcessorContext(JavacProcessingEnv.of(processingEnv, roundEnv), List.of());
-                TypeElement main = processingEnv.getElementUtils().getTypeElement("demo.Main");
+                ClassDecl main = mainOf(processingEnv, roundEnv);
                 ctx.registerComponent(component(main, "demo.A", false));
                 // Second registration with the same key triggers the duplicate-error path.
                 ctx.registerComponent(component(main, "demo.A", false));
@@ -452,10 +451,10 @@ class ProcessorContextTest {
         }
     }
 
-    private static ComponentModel component(TypeElement teForErrorReports, String fqn, boolean isTest) {
+    private static ComponentModel component(ClassDecl teForErrorReports, String fqn, boolean isTest) {
         int dot = fqn.lastIndexOf('.');
         return ComponentModel.builder()
-                .typeElement(teForErrorReports)
+                .decl(teForErrorReports)
                 .qualifiedName(fqn)
                 .className(fqn.substring(dot + 1))
                 .packageName(fqn.substring(0, dot))
@@ -466,10 +465,10 @@ class ProcessorContextTest {
     }
 
     private static ComponentModel namedComponent(
-            TypeElement teForErrorReports, String fqn, String qualifier, List<String> profiles) {
+            ClassDecl teForErrorReports, String fqn, String qualifier, List<String> profiles) {
         int dot = fqn.lastIndexOf('.');
         return ComponentModel.builder()
-                .typeElement(teForErrorReports)
+                .decl(teForErrorReports)
                 .qualifiedName(fqn)
                 .className(fqn.substring(dot + 1))
                 .packageName(fqn.substring(0, dot))
@@ -481,15 +480,12 @@ class ProcessorContextTest {
     }
 
     private static FactoryMethodModel factory(
-            TypeElement declaring, String returnTypeFqn, String methodName, List<String> profiles) {
-        // Pick an arbitrary ExecutableElement off the declaring class to satisfy the builder's
-        // not-null contract. We never invoke the method element through here — it's a marker.
-        var methodEl = (javax.lang.model.element.ExecutableElement) declaring.getEnclosedElements().stream()
-                .filter(e -> e.getKind() == javax.lang.model.element.ElementKind.CONSTRUCTOR)
-                .findFirst()
-                .orElseThrow();
+            ClassDecl declaring, String returnTypeFqn, String methodName, List<String> profiles) {
+        // Pick an arbitrary method off the declaring class to satisfy the builder's
+        // not-null contract. We never invoke the method through here — it's a marker.
+        var methodEl = declaring.constructors().stream().findFirst().orElseThrow();
         return FactoryMethodModel.builder()
-                .methodElement(methodEl)
+                .method(methodEl)
                 .declaringClass(declaring)
                 .methodName(methodName)
                 .returnType(declaring.asType())
@@ -499,12 +495,16 @@ class ProcessorContextTest {
                 .build();
     }
 
-    private static javax.lang.model.element.ExecutableElement constructorOf(TypeElement te) {
-        for (var enclosed : te.getEnclosedElements()) {
-            if (enclosed.getKind() == javax.lang.model.element.ElementKind.CONSTRUCTOR) {
-                return (javax.lang.model.element.ExecutableElement) enclosed;
-            }
-        }
-        throw new IllegalStateException("no constructor on " + te);
+    private static MethodDecl constructorOf(ClassDecl te) {
+        return te.constructors().stream()
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("no constructor on " + te));
+    }
+
+    private static ClassDecl mainOf(ProcessingEnvironment processingEnv, RoundEnvironment roundEnv) {
+        return JavacProcessingEnv.of(processingEnv, roundEnv)
+                .types()
+                .findClass("demo.Main")
+                .orElseThrow();
     }
 }

@@ -1,8 +1,8 @@
 package io.tiko.processor.model;
 
+import io.tiko.processor.core.model.ParamDecl;
+import io.tiko.processor.core.model.TypeRef;
 import java.util.Optional;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.TypeMirror;
 
 /**
  * Represents a dependency to be injected.
@@ -19,14 +19,14 @@ public final class DependencyModel {
      */
     public static final String EVENT_BUS_TYPE = "io.tiko.EventBus";
 
-    private final VariableElement parameter;
-    private final TypeMirror type;
+    private final ParamDecl parameter;
+    private final TypeRef type;
     private final String typeName;
     private final String qualifier; // From @Named annotation
     private final boolean isProvider; // Provider<T> wrapper
     private final boolean isPicker; // Picker<T> wrapper
-    private final TypeMirror unwrappedType; // T in Provider<T> or Picker<T>
-    private final TypeMirror pickedType; // From @Pick annotation (nullable)
+    private final TypeRef unwrappedType; // T in Provider<T> or Picker<T>
+    private final TypeRef pickedType; // From @Pick annotation (nullable)
     private final String pickedTypeName; // Qualified name of @Pick value (nullable)
 
     private DependencyModel(Builder builder) {
@@ -45,11 +45,11 @@ public final class DependencyModel {
         return new Builder();
     }
 
-    public VariableElement getParameter() {
+    public ParamDecl getParameter() {
         return parameter;
     }
 
-    public TypeMirror getType() {
+    public TypeRef getType() {
         return type;
     }
 
@@ -69,11 +69,11 @@ public final class DependencyModel {
         return isPicker;
     }
 
-    public Optional<TypeMirror> getUnwrappedType() {
+    public Optional<TypeRef> getUnwrappedType() {
         return Optional.ofNullable(unwrappedType);
     }
 
-    public Optional<TypeMirror> getPickedType() {
+    public Optional<TypeRef> getPickedType() {
         return Optional.ofNullable(pickedType);
     }
 
@@ -116,9 +116,9 @@ public final class DependencyModel {
             return getQualifier().map(q -> pickedTypeName + "#" + q).orElse(pickedTypeName);
         }
         if (isPicker) {
-            return unwrappedType.toString();
+            return unwrappedType.displayName();
         }
-        String baseType = isProvider ? unwrappedType.toString() : typeName;
+        String baseType = isProvider ? unwrappedType.displayName() : typeName;
         return getQualifier().map(q -> baseType + "#" + q).orElse(baseType);
     }
 
@@ -126,28 +126,28 @@ public final class DependencyModel {
      * Returns the parameter name for use in generated code.
      */
     public String getParameterName() {
-        return parameter.getSimpleName().toString();
+        return parameter.name();
     }
 
     public static final class Builder {
-        private VariableElement parameter;
-        private TypeMirror type;
+        private ParamDecl parameter;
+        private TypeRef type;
         private String typeName;
         private String qualifier = "";
         private boolean isProvider = false;
         private boolean isPicker = false;
-        private TypeMirror unwrappedType;
-        private TypeMirror pickedType;
+        private TypeRef unwrappedType;
+        private TypeRef pickedType;
         private String pickedTypeName;
 
         private Builder() {}
 
-        public Builder parameter(VariableElement parameter) {
+        public Builder parameter(ParamDecl parameter) {
             this.parameter = parameter;
             return this;
         }
 
-        public Builder type(TypeMirror type) {
+        public Builder type(TypeRef type) {
             this.type = type;
             return this;
         }
@@ -172,12 +172,12 @@ public final class DependencyModel {
             return this;
         }
 
-        public Builder unwrappedType(TypeMirror unwrappedType) {
+        public Builder unwrappedType(TypeRef unwrappedType) {
             this.unwrappedType = unwrappedType;
             return this;
         }
 
-        public Builder pickedType(TypeMirror pickedType) {
+        public Builder pickedType(TypeRef pickedType) {
             this.pickedType = pickedType;
             return this;
         }

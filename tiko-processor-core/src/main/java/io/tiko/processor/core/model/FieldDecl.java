@@ -14,6 +14,9 @@ public interface FieldDecl {
 
     TypeRef type();
 
+    /** A {@code static} field (enum constants included); always false for a record component. */
+    boolean isStatic();
+
     List<AnnotationRef> annotations();
 
     Location location();

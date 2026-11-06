@@ -115,7 +115,7 @@ public final class ProcessorContext {
         String key = component.getComponentKey();
         if (components.containsKey(key)) {
             errorReporter.error(
-                    JavacBridge.location(component.getTypeElement()),
+                    component.getDecl().location(),
                     "Duplicate component: " + key + " is already registered",
                     "Give one of the components a unique @Component(name = \"...\")",
                     "Remove the duplicate @Component declaration");
@@ -133,7 +133,7 @@ public final class ProcessorContext {
             if (profilesOverlap(factory.getProfiles(), other.getProfiles())) {
                 errorReporter.error(
                         ErrorReporter.KIND_BAD_PRODUCES,
-                        JavacBridge.location(factory.getMethodElement()),
+                        factory.getMethod().location(),
                         "Duplicate factory method: " + key + " is already registered with overlapping profiles",
                         "Give one of the @Produces methods a unique @Produces(name = \"...\")",
                         "Restrict the @Produces(profiles = {...}) so the methods don't both apply at build time",
@@ -146,7 +146,7 @@ public final class ProcessorContext {
             if (profilesOverlap(factory.getProfiles(), colliding.getProfiles())) {
                 errorReporter.error(
                         ErrorReporter.KIND_BAD_PRODUCES,
-                        JavacBridge.location(factory.getMethodElement()),
+                        factory.getMethod().location(),
                         "Factory method produces type " + key + " which is already provided by a @Component",
                         "Give the @Produces method or the @Component a distinct name qualifier",
                         "Restrict the profiles so the @Produces and @Component don't both apply at build time",
@@ -334,7 +334,7 @@ public final class ProcessorContext {
             // Check if component implements the requested interface
             if (component.getImplementedInterface().isPresent()) {
                 String interfaceName =
-                        component.getImplementedInterface().orElseThrow().toString();
+                        component.getImplementedInterface().orElseThrow().displayName();
                 if (interfaceName.equals(typeName)) {
                     // Check qualifier matches if present
                     if (qualifier.isEmpty()

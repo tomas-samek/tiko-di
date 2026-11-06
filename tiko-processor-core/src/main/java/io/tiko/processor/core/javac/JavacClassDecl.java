@@ -143,6 +143,23 @@ record JavacClassDecl(TypeElement element, JavacModel model) implements ClassDec
     }
 
     @Override
+    public Optional<TypeRef> superclass() {
+        return element.getSuperclass().getKind() == TypeKind.NONE
+                ? Optional.empty()
+                : Optional.of(model.typeRef(element.getSuperclass()));
+    }
+
+    @Override
+    public List<TypeRef> interfaces() {
+        return element.getInterfaces().stream().map(model::typeRef).toList();
+    }
+
+    @Override
+    public Optional<String> sourcePath() {
+        return model.sourcePath(element);
+    }
+
+    @Override
     public TypeRef asType() {
         return model.typeRef(element.asType());
     }

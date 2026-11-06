@@ -135,6 +135,15 @@ Three scopes (via `Scope` enum) - from longest to shortest lifetime:
 `TikoContainerImpl` and the event-handler registration, and reports compile errors with
 suggested fixes. Generated sources land in `target/generated-sources/annotations`.
 
+Each processor is a frontend-neutral pipeline behind thin frontend entries: `TikoPipeline`
+(tiko-processor) and `KafkaPipeline` (tiko-kafka-processor) collect, validate and generate on
+`tiko-processor-core`'s model (`ProcessingEnv`, `ClassDecl`, `TypeRef`, …), while the javac entries
+`TikoAnnotationProcessor` / `KafkaAnnotationProcessor` only wrap each round in a
+`JavacProcessingEnv`, claim annotations, and decide when to call `process` / `finish`. Logic lives
+only in core-model code: no `javax.lang.model` / `javax.annotation.processing` import outside
+`io.tiko.processor.core.javac` and the entry classes (JavaPoet's `Modifier` in generators excepted),
+pinned by each module's `FrontendBoundaryTest`.
+
 ### Event System
 
 The local in-memory bus is the default. The Kafka transport is opt-in via the

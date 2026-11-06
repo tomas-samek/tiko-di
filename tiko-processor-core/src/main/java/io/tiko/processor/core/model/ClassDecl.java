@@ -68,6 +68,27 @@ public interface ClassDecl {
     /** The declared superclass (if any) followed by the declared interfaces. */
     List<TypeRef> directSupertypes();
 
+    /**
+     * The superclass: the declared one, or the implicit one ({@code java.lang.Object} for a
+     * plain class, {@code java.lang.Record} for a record, {@code java.lang.Enum<E>} for an enum).
+     * Empty for interfaces, annotations and {@code java.lang.Object} itself. A superclass that does
+     * not resolve is still present (see {@link TypeRef#isError()}).
+     */
+    Optional<TypeRef> superclass();
+
+    /**
+     * The interfaces the declaration names in its {@code implements} clause (for an interface,
+     * its {@code extends} clause), in declaration order.
+     */
+    List<TypeRef> interfaces();
+
+    /**
+     * The {@code /}-separated path of the file the declaration was read from (on javac the path
+     * of the file object's URI): a source file of this compilation, or a class file for a
+     * classpath declaration. Empty when the frontend does not report one.
+     */
+    Optional<String> sourcePath();
+
     TypeRef asType();
 
     Location location();

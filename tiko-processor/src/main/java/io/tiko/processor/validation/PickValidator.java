@@ -1,15 +1,14 @@
 package io.tiko.processor.validation;
 
+import io.tiko.processor.core.model.ClassDecl;
+import io.tiko.processor.core.model.Location;
+import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
-import io.tiko.processor.util.JavacBridge;
 import io.tiko.processor.util.ProcessorContext;
+import io.tiko.processor.util.TypeRefs;
 import java.util.List;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
 
 /**
  * Validates {@code @Pick} usage on injection-point parameters.
@@ -67,15 +66,15 @@ public final class PickValidator {
         if (!dep.isPicked()) {
             return true;
         }
-        VariableElement param = dep.getParameter();
-        TypeMirror pickedType = dep.getPickedType().orElseThrow();
+        Location param = dep.getParameter().location();
+        TypeRef pickedType = dep.getPickedType().orElseThrow();
         String pickedFqn = dep.getPickedTypeName().orElseThrow();
 
         // Rule: collection/iterable injection isn't a pick site.
         if (isCollectionType(dep.getType())) {
             context.getErrorReporter()
                     .error(
-                            JavacBridge.location(param),
+                            param,
                             "@Pick cannot be applied to collection or iterable parameters",
                             "Use @Pick on a single-bean parameter (T or Provider<T>)",
                             "For multi-impl iteration, inject Set<T> or List<T> without @Pick");
@@ -83,13 +82,13 @@ public final class PickValidator {
         }
 
         // The type the picked class must be assignable to: T for plain T, T for Provider<T>.
-        TypeMirror targetType = dep.getUnwrappedType().orElse(dep.getType());
+        TypeRef targetType = dep.getUnwrappedType().orElse(dep.getType());
 
         // Rule: redundant @Pick — picked class equals the parameter type.
-        if (JavacBridge.types(context.env()).isSameType(pickedType, targetType)) {
+        if (context.env().types().isSameType(pickedType, targetType)) {
             context.getErrorReporter()
                     .error(
-                            JavacBridge.location(param),
+                            param,
                             "@Pick references the parameter type itself — no disambiguation possible",
                             "Remove @Pick when there is no specific implementation to choose",
                             "Reference a concrete @Component class implementing " + simpleName(toFqn(targetType)));
@@ -97,10 +96,10 @@ public final class PickValidator {
         }
 
         // Rule: assignability.
-        if (!JavacBridge.types(context.env()).isAssignable(pickedType, targetType)) {
+        if (!context.env().types().isAssignable(pickedType, targetType)) {
             context.getErrorReporter()
                     .error(
-                            JavacBridge.location(param),
+                            param,
                             "@Pick(" + simpleName(pickedFqn) + ".class) is not assignable to parameter type "
                                     + simpleName(toFqn(targetType)),
                             "Reference a class implementing or extending " + simpleName(toFqn(targetType)),
@@ -115,7 +114,7 @@ public final class PickValidator {
             if (matches.size() > 1) {
                 context.getErrorReporter()
                         .error(
-                                JavacBridge.location(param),
+                                param,
                                 "@Pick(" + simpleName(pickedFqn) + ".class) is ambiguous: " + matches.size()
                                         + " providers return this type",
                                 "Add @Named(\"...\") to select one of the @Produces methods",
@@ -127,8 +126,8 @@ public final class PickValidator {
         return true;
     }
 
-    private boolean isCollectionType(TypeMirror type) {
-        if (type.getKind() != TypeKind.DECLARED) {
+    private boolean isCollectionType(TypeRef type) {
+        if (TypeRefs.declared(type).isEmpty()) {
             return false;
         }
         String fqn = toFqn(type);
@@ -139,12 +138,9 @@ public final class PickValidator {
                 || "java.util.Map".equals(fqn);
     }
 
-    private String toFqn(TypeMirror type) {
-        if (type instanceof DeclaredType declared
-                && declared.asElement() instanceof javax.lang.model.element.TypeElement te) {
-            return te.getQualifiedName().toString();
-        }
-        return type.toString();
+    /** The declaring class's name, an unresolved type's as written; otherwise the rendering. */
+    private String toFqn(TypeRef type) {
+        return type.declaration().map(ClassDecl::qualifiedName).orElseGet(type::displayName);
     }
 
     private static String simpleName(String fqn) {

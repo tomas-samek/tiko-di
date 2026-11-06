@@ -11,6 +11,7 @@ import com.google.testing.compile.JavaFileObjects;
 import com.palantir.javapoet.ClassName;
 import com.palantir.javapoet.JavaFile;
 import com.palantir.javapoet.TypeSpec;
+import com.palantir.javapoet.TypeVariableName;
 import io.tiko.processor.core.ProcessingEnv;
 import io.tiko.processor.core.model.AnnotationRef;
 import io.tiko.processor.core.model.ClassDecl;
@@ -540,10 +541,8 @@ class JavacModelTest {
                                     Optional.of("p.Shapes"),
                                     Optional.of("p.Shapes"),
                                     Optional.of("p.Shapes.Nested"));
-                    var javac = ((JavacProcessingEnv) env).processingEnvironment();
-                    var pkg = javac.getElementUtils().getPackageElement("p");
-                    assertThat(JavacProcessingEnv.location(pkg).enclosingClassName())
-                            .isEmpty();
+                    var pkg = ((JavacClassDecl) shapes).element().getEnclosingElement();
+                    assertThat(JavacLocation.of(pkg).enclosingClassName()).isEmpty();
                 })),
                 Arguments.of("directSupertypesAreSuperclassThenInterfaces", shapes(), Check.model(env -> {
                     assertThat(find(env, "p.Shapes").directSupertypes())
@@ -551,6 +550,62 @@ class JavacModelTest {
                             .containsExactly("java.lang.Object", "p.Shape", "java.lang.Comparable");
                     assertThat(find(env, "p.Shape").directSupertypes()).isEmpty();
                 })),
+                Arguments.of("superclassInterfacesAndSourcePath", shapes(), Check.model(env -> {
+                    var shapes = find(env, "p.Shapes");
+                    assertThat(shapes.superclass().map(TypeRef::erasedName)).contains("java.lang.Object");
+                    assertThat(shapes.interfaces())
+                            .extracting(TypeRef::erasedName)
+                            .containsExactly("p.Shape", "java.lang.Comparable");
+                    assertThat(find(env, "p.Point").superclass().map(TypeRef::erasedName))
+                            .contains("java.lang.Record");
+                    assertThat(find(env, "p.Shape").superclass()).isEmpty();
+                    assertThat(find(env, "java.lang.Object").superclass()).isEmpty();
+                    assertThat(shapes.sourcePath())
+                            .hasValueSatisfying(path -> assertThat(path).endsWith("p/Shapes.java"));
+                    assertThat(find(env, "java.lang.String").sourcePath())
+                            .hasValueSatisfying(path -> assertThat(path).endsWith("String.class"));
+                })),
+                Arguments.of(
+                        "defaultMethodsTypeVariablesAndStaticFields",
+                        source(
+                                "p.Ops",
+                                "package p;",
+                                "public interface Ops extends Runnable {",
+                                "    void run();",
+                                "    default void twice() {}",
+                                "    static void util() {}",
+                                "    <T extends Number, U> T pick(U u);",
+                                "    int LIMIT = 1;",
+                                "}",
+                                "record Pair(int left) { static int count; }",
+                                "enum Mode { ON }"),
+                        Check.model(env -> {
+                            var ops = find(env, "p.Ops");
+                            assertThat(ops.superclass()).isEmpty();
+                            assertThat(ops.interfaces())
+                                    .extracting(TypeRef::erasedName)
+                                    .containsExactly("java.lang.Runnable");
+                            assertThat(Stream.of("run", "twice", "util", "pick").map(name -> method(ops, name)))
+                                    .extracting(MethodDecl::isDefault)
+                                    .containsExactly(false, true, false, false);
+                            var pick = method(ops, "pick");
+                            assertThat(pick.typeVariables())
+                                    .extracting(TypeVariableName::name)
+                                    .containsExactly("T", "U");
+                            assertThat(pick.typeVariables().get(0).bounds())
+                                    .extracting(Object::toString)
+                                    .containsExactly("java.lang.Number");
+                            assertThat(method(ops, "run").typeVariables()).isEmpty();
+                            var pair = find(env, "p.Pair");
+                            assertThat(Stream.of(
+                                            field(ops, "LIMIT"),
+                                            field(pair, "count"),
+                                            field(pair, "left"),
+                                            pair.recordComponents().get(0),
+                                            field(find(env, "p.Mode"), "ON")))
+                                    .extracting(FieldDecl::isStatic)
+                                    .containsExactly(true, true, false, false, true);
+                        })),
                 Arguments.of("constructorsAndTheirParameters", shapes(), Check.model(env -> {
                     var constructors = find(env, "p.Shapes").constructors();
                     assertThat(constructors)
