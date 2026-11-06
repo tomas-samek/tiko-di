@@ -36,4 +36,15 @@ class KspBootTest {
         assertThat(result.generatedJava("io.tiko.generated.ServiceFactory"))
                 .hasValueSatisfying(factory -> assertThat(factory).contains("new Service("));
     }
+
+    /** KSP logs a notice for every processor that has not opted in to its upcoming features. */
+    @Test
+    void processorHasOptedInToUpcomingFeatures() {
+        var source = KspCompiler.kotlin("Plain.kt", "package app", "", "@io.tiko.annotations.Component", "class Plain");
+
+        var result = KspCompiler.compile(new TikoSymbolProcessorProvider(), source);
+
+        assertThat(result.exitCode()).as(result.messages()).isEqualTo(KotlinCompilation.ExitCode.OK);
+        assertThat(result.messages()).doesNotContain("has not opted in for upcoming features");
+    }
 }
