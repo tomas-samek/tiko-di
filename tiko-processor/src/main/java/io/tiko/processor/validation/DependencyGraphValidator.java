@@ -1,13 +1,12 @@
 package io.tiko.processor.validation;
 
+import io.tiko.processor.core.model.Location;
+import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
-import io.tiko.processor.util.JavacBridge;
 import io.tiko.processor.util.ProcessorContext;
 import io.tiko.processor.util.TypeUtil;
-import javax.lang.model.element.Element;
-import javax.lang.model.type.TypeMirror;
 
 /**
  * Validates the complete dependency graph.
@@ -76,7 +75,7 @@ public final class DependencyGraphValidator {
                             : context.findByImplClass(depKey).isPresent())
                     : context.findComponentOrFactory(depKey).isPresent();
             if (!resolved) {
-                reportUnresolved(component.getTypeElement(), depKey, component.getClassName());
+                reportUnresolved(component.getDecl().location(), depKey, component.getClassName());
                 valid = false;
             }
         }
@@ -92,19 +91,22 @@ public final class DependencyGraphValidator {
 
         // For instance methods, validate that the declaring class is available as a component
         if (!factory.isStatic()) {
-            String declaringClassKey =
-                    factory.getDeclaringClass().getQualifiedName().toString();
+            String declaringClassKey = factory.getDeclaringClass().qualifiedName();
 
             if (!context.getComponents().containsKey(declaringClassKey)) {
                 context.getErrorReporter()
                         .error(
-                                JavacBridge.location(factory.getMethodElement()),
+                                factory.getMethod().location(),
                                 "Factory method " + factory.getMethodName() + " is an instance method, "
                                         + "but declaring class "
-                                        + factory.getDeclaringClass().getSimpleName()
+                                        + factory.getDeclaringClass()
+                                                .className()
+                                                .simpleName()
                                         + " is not registered as a @Component",
                                 "Add @Component annotation to "
-                                        + factory.getDeclaringClass().getSimpleName(),
+                                        + factory.getDeclaringClass()
+                                                .className()
+                                                .simpleName(),
                                 "Make the factory method static if it doesn't need component dependencies");
                 valid = false;
             }
@@ -124,7 +126,7 @@ public final class DependencyGraphValidator {
                             : context.findByImplClass(depKey).isPresent())
                     : context.findComponentOrFactory(depKey).isPresent();
             if (!resolved) {
-                reportUnresolved(factory.getMethodElement(), depKey, factory.getFactoryIdentifier());
+                reportUnresolved(factory.getMethod().location(), depKey, factory.getFactoryIdentifier());
                 valid = false;
             }
         }
@@ -137,15 +139,14 @@ public final class DependencyGraphValidator {
      * type but doesn't expose it via {@code @Component(expose = {...})}, emit the targeted
      * diagnostic instead of the generic "cannot resolve" message.
      */
-    private void reportUnresolved(Element location, String depKey, String injectingIdentifier) {
+    private void reportUnresolved(Location location, String depKey, String injectingIdentifier) {
         ComponentModel hider = findComponentHidingType(depKey);
         if (hider != null) {
             context.getErrorReporter()
-                    .missingDependencyHiddenByExpose(
-                            JavacBridge.location(location), depKey, injectingIdentifier, hider.getQualifiedName());
+                    .missingDependencyHiddenByExpose(location, depKey, injectingIdentifier, hider.getQualifiedName());
             return;
         }
-        context.getErrorReporter().missingDependency(JavacBridge.location(location), depKey, injectingIdentifier);
+        context.getErrorReporter().missingDependency(location, depKey);
     }
 
     /**
@@ -154,13 +155,13 @@ public final class DependencyGraphValidator {
      * type from injection routing. Returns {@code null} if no such component exists.
      */
     private ComponentModel findComponentHidingType(String depKey) {
-        var depTypeElement = typeUtil.getTypeElement(depKey).orElse(null);
-        if (depTypeElement == null) return null;
-        TypeMirror depType = depTypeElement.asType();
+        var depTypeDecl = typeUtil.findClass(depKey).orElse(null);
+        if (depTypeDecl == null) return null;
+        TypeRef depType = depTypeDecl.asType();
 
         for (ComponentModel component : context.getActiveComponents()) {
             if (!component.isExposeRestricted() && component.isExposeSelf()) continue;
-            TypeMirror componentType = component.getTypeElement().asType();
+            TypeRef componentType = component.getDecl().asType();
             if (!typeUtil.isAssignable(componentType, depType)) continue;
             if (exposes(component, depType, componentType)) continue;
             return component;
@@ -174,14 +175,14 @@ public final class DependencyGraphValidator {
      * of directly-implemented interfaces, plus the impl class itself when
      * {@code exposeSelf} is true.
      */
-    private boolean exposes(ComponentModel component, TypeMirror requested, TypeMirror componentType) {
+    private boolean exposes(ComponentModel component, TypeRef requested, TypeRef componentType) {
         if (component.isExposeSelf() && typeUtil.isSameType(requested, componentType)) {
             return true;
         }
         var declared = component.isExposeRestricted()
                 ? component.getExposeTypes()
-                : component.getTypeElement().getInterfaces();
-        for (TypeMirror exposed : declared) {
+                : component.getDecl().interfaces();
+        for (TypeRef exposed : declared) {
             if (typeUtil.isSameType(requested, exposed)) {
                 return true;
             }

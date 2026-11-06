@@ -1,12 +1,11 @@
 package io.tiko.processor.model;
 
 import io.tiko.Scope;
+import io.tiko.processor.core.model.ClassDecl;
+import io.tiko.processor.core.model.MethodDecl;
+import io.tiko.processor.core.model.TypeRef;
 import java.util.ArrayList;
 import java.util.List;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.TypeMirror;
 
 /**
  * Represents a @Produces factory method.
@@ -14,10 +13,10 @@ import javax.lang.model.type.TypeMirror;
  */
 public final class FactoryMethodModel {
 
-    private final ExecutableElement methodElement;
-    private final TypeElement declaringClass;
+    private final MethodDecl method;
+    private final ClassDecl declaringClass;
     private final String methodName;
-    private final TypeMirror returnType;
+    private final TypeRef returnType;
     private final String returnTypeName;
     private final Scope scope;
     private final String name; // Optional qualifier
@@ -28,7 +27,7 @@ public final class FactoryMethodModel {
     private final boolean requiresProxy;
 
     private FactoryMethodModel(Builder builder) {
-        this.methodElement = builder.methodElement;
+        this.method = builder.method;
         this.declaringClass = builder.declaringClass;
         this.methodName = builder.methodName;
         this.returnType = builder.returnType;
@@ -46,11 +45,12 @@ public final class FactoryMethodModel {
         return new Builder();
     }
 
-    public ExecutableElement getMethodElement() {
-        return methodElement;
+    /** The {@code @Produces} method; generated code calls it by {@link MethodDecl#jvmName()}. */
+    public MethodDecl getMethod() {
+        return method;
     }
 
-    public TypeElement getDeclaringClass() {
+    public ClassDecl getDeclaringClass() {
         return declaringClass;
     }
 
@@ -58,7 +58,7 @@ public final class FactoryMethodModel {
         return methodName;
     }
 
-    public TypeMirror getReturnType() {
+    public TypeRef getReturnType() {
         return returnType;
     }
 
@@ -113,7 +113,7 @@ public final class FactoryMethodModel {
      * Format: DeclaringClass_methodName
      */
     public String getFactoryIdentifier() {
-        return declaringClass.getSimpleName() + "_" + methodName;
+        return declaringClass.className().simpleName() + "_" + methodName;
     }
 
     /**
@@ -132,10 +132,10 @@ public final class FactoryMethodModel {
     }
 
     public static final class Builder {
-        private ExecutableElement methodElement;
-        private TypeElement declaringClass;
+        private MethodDecl method;
+        private ClassDecl declaringClass;
         private String methodName;
-        private TypeMirror returnType;
+        private TypeRef returnType;
         private String returnTypeName;
         private Scope scope = Scope.PROTOTYPE;
         private String name = "";
@@ -147,13 +147,13 @@ public final class FactoryMethodModel {
 
         private Builder() {}
 
-        public Builder methodElement(ExecutableElement methodElement) {
-            this.methodElement = methodElement;
-            this.isStatic = methodElement.getModifiers().contains(Modifier.STATIC);
+        public Builder method(MethodDecl method) {
+            this.method = method;
+            this.isStatic = method.isStatic();
             return this;
         }
 
-        public Builder declaringClass(TypeElement declaringClass) {
+        public Builder declaringClass(ClassDecl declaringClass) {
             this.declaringClass = declaringClass;
             return this;
         }
@@ -163,7 +163,7 @@ public final class FactoryMethodModel {
             return this;
         }
 
-        public Builder returnType(TypeMirror returnType) {
+        public Builder returnType(TypeRef returnType) {
             this.returnType = returnType;
             return this;
         }
@@ -214,8 +214,8 @@ public final class FactoryMethodModel {
         }
 
         public FactoryMethodModel build() {
-            if (methodElement == null || declaringClass == null || returnType == null) {
-                throw new IllegalStateException("MethodElement, declaringClass, and returnType are required");
+            if (method == null || declaringClass == null || returnType == null) {
+                throw new IllegalStateException("Method, declaringClass, and returnType are required");
             }
             return new FactoryMethodModel(this);
         }

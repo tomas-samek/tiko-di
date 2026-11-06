@@ -1,12 +1,12 @@
 package io.tiko.processor.model;
 
 import io.tiko.Scope;
+import io.tiko.processor.core.model.ClassDecl;
+import io.tiko.processor.core.model.MethodDecl;
+import io.tiko.processor.core.model.TypeRef;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.TypeMirror;
 
 /**
  * Internal model representing a @Component annotated class.
@@ -14,7 +14,7 @@ import javax.lang.model.type.TypeMirror;
  */
 public final class ComponentModel {
 
-    private final TypeElement typeElement;
+    private final ClassDecl decl;
     private final String packageName;
     private final String className;
     private final String qualifiedName;
@@ -22,21 +22,21 @@ public final class ComponentModel {
     private final String name; // Optional qualifier
     private final List<String> profiles;
     private final List<DependencyModel> dependencies;
-    private final ExecutableElement constructor;
-    private final List<ExecutableElement> postConstructMethods;
-    private final List<ExecutableElement> preDestroyMethods;
-    private final TypeMirror implementedInterface; // For proxy generation (nullable)
+    private final MethodDecl constructor;
+    private final List<MethodDecl> postConstructMethods;
+    private final List<MethodDecl> preDestroyMethods;
+    private final TypeRef implementedInterface; // For proxy generation (nullable)
     private final boolean requiresProxy;
-    private final ExecutableElement staticFactoryMethod; // Optional self-@Produces (nullable)
+    private final MethodDecl staticFactoryMethod; // Optional self-@Produces (nullable)
     private final boolean autoCloseable;
-    private final List<TypeMirror> exposeTypes; // @Component(expose = {...}); empty = permissive default
+    private final List<TypeRef> exposeTypes; // @Component(expose = {...}); empty = permissive default
     private final boolean exposeSelf; // @Component(exposeSelf = ...); defaults to true
     private final boolean testComponent; // True when source annotation was @TestComponent (test-classpath only)
     private final java.util.Set<String>
             testExtraKeys; // Extra routable type keys for shadow detection (test-component only)
 
     private ComponentModel(Builder builder) {
-        this.typeElement = builder.typeElement;
+        this.decl = builder.decl;
         this.packageName = builder.packageName;
         this.className = builder.className;
         this.qualifiedName = builder.qualifiedName;
@@ -62,8 +62,9 @@ public final class ComponentModel {
     }
 
     // Getters
-    public TypeElement getTypeElement() {
-        return typeElement;
+    /** The component class. */
+    public ClassDecl getDecl() {
+        return decl;
     }
 
     public String getPackageName() {
@@ -94,19 +95,19 @@ public final class ComponentModel {
         return dependencies;
     }
 
-    public ExecutableElement getConstructor() {
+    public MethodDecl getConstructor() {
         return constructor;
     }
 
-    public List<ExecutableElement> getPostConstructMethods() {
+    public List<MethodDecl> getPostConstructMethods() {
         return postConstructMethods;
     }
 
-    public List<ExecutableElement> getPreDestroyMethods() {
+    public List<MethodDecl> getPreDestroyMethods() {
         return preDestroyMethods;
     }
 
-    public Optional<TypeMirror> getImplementedInterface() {
+    public Optional<TypeRef> getImplementedInterface() {
         return Optional.ofNullable(implementedInterface);
     }
 
@@ -114,7 +115,7 @@ public final class ComponentModel {
         return requiresProxy;
     }
 
-    public Optional<ExecutableElement> getStaticFactoryMethod() {
+    public Optional<MethodDecl> getStaticFactoryMethod() {
         return Optional.ofNullable(staticFactoryMethod);
     }
 
@@ -151,7 +152,7 @@ public final class ComponentModel {
      * under itself if {@link #isExposeSelf()} is true). Non-empty list means
      * "explicit restriction" — only the listed types route to this bean.
      */
-    public List<TypeMirror> getExposeTypes() {
+    public List<TypeRef> getExposeTypes() {
         return exposeTypes;
     }
 
@@ -189,7 +190,7 @@ public final class ComponentModel {
     }
 
     public static final class Builder {
-        private TypeElement typeElement;
+        private ClassDecl decl;
         private String packageName;
         private String className;
         private String qualifiedName;
@@ -197,22 +198,22 @@ public final class ComponentModel {
         private String name = "";
         private List<String> profiles = new ArrayList<>();
         private List<DependencyModel> dependencies = new ArrayList<>();
-        private ExecutableElement constructor;
-        private List<ExecutableElement> postConstructMethods = new ArrayList<>();
-        private List<ExecutableElement> preDestroyMethods = new ArrayList<>();
-        private TypeMirror implementedInterface;
+        private MethodDecl constructor;
+        private List<MethodDecl> postConstructMethods = new ArrayList<>();
+        private List<MethodDecl> preDestroyMethods = new ArrayList<>();
+        private TypeRef implementedInterface;
         private boolean requiresProxy = false;
-        private ExecutableElement staticFactoryMethod;
+        private MethodDecl staticFactoryMethod;
         private boolean autoCloseable = false;
-        private List<TypeMirror> exposeTypes = new ArrayList<>();
+        private List<TypeRef> exposeTypes = new ArrayList<>();
         private boolean exposeSelf = true;
         private boolean testComponent = false;
         private java.util.Set<String> testExtraKeys = java.util.Set.of();
 
         private Builder() {}
 
-        public Builder typeElement(TypeElement typeElement) {
-            this.typeElement = typeElement;
+        public Builder decl(ClassDecl decl) {
+            this.decl = decl;
             return this;
         }
 
@@ -256,32 +257,32 @@ public final class ComponentModel {
             return this;
         }
 
-        public Builder constructor(ExecutableElement constructor) {
+        public Builder constructor(MethodDecl constructor) {
             this.constructor = constructor;
             return this;
         }
 
-        public Builder postConstructMethods(List<ExecutableElement> methods) {
+        public Builder postConstructMethods(List<MethodDecl> methods) {
             this.postConstructMethods = new ArrayList<>(methods);
             return this;
         }
 
-        public Builder addPostConstructMethod(ExecutableElement method) {
+        public Builder addPostConstructMethod(MethodDecl method) {
             this.postConstructMethods.add(method);
             return this;
         }
 
-        public Builder preDestroyMethods(List<ExecutableElement> methods) {
+        public Builder preDestroyMethods(List<MethodDecl> methods) {
             this.preDestroyMethods = new ArrayList<>(methods);
             return this;
         }
 
-        public Builder addPreDestroyMethod(ExecutableElement method) {
+        public Builder addPreDestroyMethod(MethodDecl method) {
             this.preDestroyMethods.add(method);
             return this;
         }
 
-        public Builder implementedInterface(TypeMirror implementedInterface) {
+        public Builder implementedInterface(TypeRef implementedInterface) {
             this.implementedInterface = implementedInterface;
             return this;
         }
@@ -291,7 +292,7 @@ public final class ComponentModel {
             return this;
         }
 
-        public Builder staticFactoryMethod(ExecutableElement staticFactoryMethod) {
+        public Builder staticFactoryMethod(MethodDecl staticFactoryMethod) {
             this.staticFactoryMethod = staticFactoryMethod;
             return this;
         }
@@ -301,7 +302,7 @@ public final class ComponentModel {
             return this;
         }
 
-        public Builder exposeTypes(List<TypeMirror> exposeTypes) {
+        public Builder exposeTypes(List<TypeRef> exposeTypes) {
             this.exposeTypes = new ArrayList<>(exposeTypes);
             return this;
         }
@@ -322,8 +323,8 @@ public final class ComponentModel {
         }
 
         public ComponentModel build() {
-            if (typeElement == null || qualifiedName == null) {
-                throw new IllegalStateException("TypeElement and qualifiedName are required");
+            if (decl == null || qualifiedName == null) {
+                throw new IllegalStateException("Decl and qualifiedName are required");
             }
             if (constructor == null && staticFactoryMethod == null) {
                 throw new IllegalStateException("Either constructor or staticFactoryMethod is required");

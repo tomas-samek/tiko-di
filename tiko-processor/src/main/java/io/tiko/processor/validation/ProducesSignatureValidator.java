@@ -1,15 +1,11 @@
 package io.tiko.processor.validation;
 
+import io.tiko.processor.core.model.MethodDecl;
+import io.tiko.processor.core.model.TypeRef;
+import io.tiko.processor.core.model.Visibility;
 import io.tiko.processor.model.FactoryMethodModel;
 import io.tiko.processor.util.ErrorReporter;
-import io.tiko.processor.util.JavacBridge;
 import io.tiko.processor.util.ProcessorContext;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
 
 /**
  * Validates that {@code @Produces} method signatures are ones the code generator can
@@ -52,11 +48,11 @@ public final class ProducesSignatureValidator {
     }
 
     private boolean validateFactory(FactoryMethodModel factory) {
-        ExecutableElement method = factory.getMethodElement();
-        String fqn = factory.getDeclaringClass().getQualifiedName() + "." + factory.getMethodName();
-        TypeKind returnKind = factory.getReturnType().getKind();
+        MethodDecl method = factory.getMethod();
+        String fqn = factory.getDeclaringClass().qualifiedName() + "." + factory.getMethodName();
+        TypeRef returnType = factory.getReturnType();
 
-        if (returnKind == TypeKind.VOID) {
+        if (returnType.isVoid()) {
             report(
                     method,
                     "@Produces method '" + fqn + "' must return a non-void type; factories produce instances.",
@@ -64,7 +60,7 @@ public final class ProducesSignatureValidator {
                     "If the method only has side effects it is not a factory - remove @Produces");
             return false;
         }
-        if (returnKind.isPrimitive()) {
+        if (returnType.isPrimitive()) {
             report(
                     method,
                     "@Produces method '" + fqn + "' must return a reference type, not the primitive '"
@@ -73,10 +69,10 @@ public final class ProducesSignatureValidator {
                     "Wrap the value in a small holder type and produce that");
             return false;
         }
-        if (isGenericType(factory.getReturnType())) {
+        if (isGenericType(returnType)) {
             report(
                     method,
-                    "@Produces method '" + fqn + "' must return a non-generic type, not '" + factory.getReturnType()
+                    "@Produces method '" + fqn + "' must return a non-generic type, not '" + returnType.displayName()
                             + "'. Tiko wires by exact type and a generic type erases to its raw class"
                             + " (List<String> and List<Integer> collapse to the same key), so it cannot be"
                             + " resolved unambiguously.",
@@ -85,7 +81,7 @@ public final class ProducesSignatureValidator {
                     "If you only need a single value, return its element type directly instead of a collection");
             return false;
         }
-        if (method.getModifiers().contains(Modifier.ABSTRACT)) {
+        if (method.isAbstract()) {
             report(
                     method,
                     "@Produces method '" + fqn + "' must have a body; an abstract method cannot produce an instance.",
@@ -93,7 +89,7 @@ public final class ProducesSignatureValidator {
                     "Remove @Produces from the abstract method");
             return false;
         }
-        if (!method.getModifiers().contains(Modifier.PUBLIC)) {
+        if (method.visibility() != Visibility.PUBLIC) {
             report(
                     method,
                     "@Produces method '" + fqn
@@ -113,14 +109,14 @@ public final class ProducesSignatureValidator {
      * parameters of its own, so it is allowed — that is the intended workaround (#327).
      * Arrays and other non-declared types are never generic here.
      */
-    private static boolean isGenericType(TypeMirror type) {
-        return type instanceof DeclaredType declared
-                && declared.asElement() instanceof TypeElement element
-                && !element.getTypeParameters().isEmpty();
+    private static boolean isGenericType(TypeRef type) {
+        // A declaration's own type is parameterized by exactly its type parameters.
+        return type.declaration()
+                .filter(decl -> !decl.asType().typeArguments().isEmpty())
+                .isPresent();
     }
 
-    private void report(ExecutableElement method, String problem, String... suggestedFixes) {
-        context.getErrorReporter()
-                .error(ErrorReporter.KIND_BAD_PRODUCES, JavacBridge.location(method), problem, suggestedFixes);
+    private void report(MethodDecl method, String problem, String... suggestedFixes) {
+        context.getErrorReporter().error(ErrorReporter.KIND_BAD_PRODUCES, method.location(), problem, suggestedFixes);
     }
 }

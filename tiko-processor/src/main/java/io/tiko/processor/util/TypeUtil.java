@@ -1,75 +1,64 @@
 package io.tiko.processor.util;
 
+import io.tiko.processor.core.TypeOracle;
+import io.tiko.processor.core.model.ClassDecl;
+import io.tiko.processor.core.model.DeclKind;
+import io.tiko.processor.core.model.TypeRef;
 import java.util.List;
 import java.util.Optional;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
-import javax.lang.model.util.Elements;
-import javax.lang.model.util.Types;
 
 /**
- * Utility methods for working with types during annotation processing.
+ * Utility methods for working with types during annotation processing. Type relations are
+ * answered by the round's {@link TypeOracle}.
  */
 public final class TypeUtil {
 
-    private final Elements elementUtils;
-    private final Types typeUtils;
+    private final TypeOracle types;
 
-    public TypeUtil(Elements elementUtils, Types typeUtils) {
-        this.elementUtils = elementUtils;
-        this.typeUtils = typeUtils;
+    public TypeUtil(TypeOracle types) {
+        this.types = types;
     }
 
     /**
-     * Returns the TypeElement for the given type mirror, if it's a declared type.
+     * Returns the class declaring the given type, if it's a resolved declared type.
      */
-    public Optional<TypeElement> asTypeElement(TypeMirror type) {
-        if (type.getKind() != TypeKind.DECLARED) {
-            return Optional.empty();
-        }
-        Element element = typeUtils.asElement(type);
-        if (element instanceof TypeElement) {
-            return Optional.of((TypeElement) element);
-        }
-        return Optional.empty();
+    public Optional<ClassDecl> asClassDecl(TypeRef type) {
+        return TypeRefs.declared(type);
     }
 
     /**
      * Returns the qualified name of the given type.
      */
-    public String getQualifiedName(TypeMirror type) {
-        return asTypeElement(type).map(te -> te.getQualifiedName().toString()).orElse(type.toString());
+    public String getQualifiedName(TypeRef type) {
+        return TypeRefs.qualifiedName(type);
     }
 
     /**
      * Returns the simple name of the given type.
      */
-    public String getSimpleName(TypeMirror type) {
-        return asTypeElement(type).map(te -> te.getSimpleName().toString()).orElse(type.toString());
+    public String getSimpleName(TypeRef type) {
+        return asClassDecl(type).map(decl -> decl.className().simpleName()).orElseGet(type::displayName);
     }
 
     /**
-     * Returns the package name of the given type.
+     * Returns the package name of the given class.
      */
-    public String getPackageName(TypeElement typeElement) {
-        return elementUtils.getPackageOf(typeElement).getQualifiedName().toString();
+    public String getPackageName(ClassDecl decl) {
+        return decl.className().packageName();
     }
 
     /**
      * Checks if the given type is Provider<T>.
      */
-    public boolean isProvider(TypeMirror type) {
-        return isParameterized(type, "io.tiko.Provider");
+    public boolean isProvider(TypeRef type) {
+        return TypeRefs.isDeclared(type, "io.tiko.Provider");
     }
 
     /**
      * Extracts the type argument from Provider<T>.
      * Returns empty if not a Provider or no type argument.
      */
-    public Optional<TypeMirror> unwrapProvider(TypeMirror type) {
+    public Optional<TypeRef> unwrapProvider(TypeRef type) {
         if (!isProvider(type)) {
             return Optional.empty();
         }
@@ -79,62 +68,43 @@ public final class TypeUtil {
     /**
      * Checks if the given type is Picker<T>.
      */
-    public boolean isPicker(TypeMirror type) {
-        return isParameterized(type, "io.tiko.Picker");
+    public boolean isPicker(TypeRef type) {
+        return TypeRefs.isDeclared(type, "io.tiko.Picker");
     }
 
     /**
      * Extracts the type argument from Picker<T>.
      * Returns empty if not a Picker or no type argument.
      */
-    public Optional<TypeMirror> unwrapPicker(TypeMirror type) {
+    public Optional<TypeRef> unwrapPicker(TypeRef type) {
         if (!isPicker(type)) {
             return Optional.empty();
         }
         return firstTypeArgument(type);
     }
 
-    private boolean isParameterized(TypeMirror type, String qualifiedName) {
-        if (type.getKind() != TypeKind.DECLARED) {
-            return false;
-        }
-        TypeElement typeElement = asTypeElement(type).orElse(null);
-        if (typeElement == null) {
-            return false;
-        }
-        return typeElement.getQualifiedName().toString().equals(qualifiedName);
-    }
-
-    private Optional<TypeMirror> firstTypeArgument(TypeMirror type) {
-        if (type instanceof DeclaredType declaredType) {
-            List<? extends TypeMirror> typeArguments = declaredType.getTypeArguments();
-            if (!typeArguments.isEmpty()) {
-                return Optional.of(typeArguments.get(0));
-            }
-        }
-        return Optional.empty();
+    private static Optional<TypeRef> firstTypeArgument(TypeRef type) {
+        return type.typeArguments().stream().findFirst();
     }
 
     /**
-     * Returns all interfaces directly implemented by the given type.
+     * Returns all interfaces directly implemented by the given class.
      */
-    public List<? extends TypeMirror> getInterfaces(TypeElement typeElement) {
-        return typeElement.getInterfaces();
+    public List<TypeRef> getInterfaces(ClassDecl decl) {
+        return decl.interfaces();
     }
 
     /**
-     * Returns the first interface implemented by the given type, if any.
+     * Returns the first interface implemented by the given class, if any.
      *
      * <p>Lifecycle marker interfaces ({@link AutoCloseable}, {@link java.io.Closeable})
      * are skipped: they are JDK conventions for cleanup, not service contracts a
      * caller would dispatch against. This avoids treating two unrelated beans that
      * both implement {@code AutoCloseable} as ambiguous providers for the same type.</p>
      */
-    public Optional<TypeMirror> getFirstInterface(TypeElement typeElement) {
-        List<? extends TypeMirror> interfaces = typeElement.getInterfaces();
-        for (TypeMirror iface : interfaces) {
-            String name = getQualifiedName(iface);
-            if (isLifecycleMarkerInterface(name)) continue;
+    public Optional<TypeRef> getFirstInterface(ClassDecl decl) {
+        for (var iface : decl.interfaces()) {
+            if (isLifecycleMarkerInterface(getQualifiedName(iface))) continue;
             return Optional.of(iface);
         }
         return Optional.empty();
@@ -144,7 +114,7 @@ public final class TypeUtil {
      * Whether the given fully-qualified interface name is a JDK lifecycle marker
      * ({@code java.lang.AutoCloseable} / {@code java.io.Closeable}) — a cleanup
      * convention, not a service contract a caller dispatches against. Shared by
-     * {@link #getFirstInterface(TypeElement)} (proxy/interface keying) and the
+     * {@link #getFirstInterface(ClassDecl)} (proxy/interface keying) and the
      * container's routable-type computation so the two never disagree (#301).
      */
     public static boolean isLifecycleMarkerInterface(String qualifiedName) {
@@ -154,68 +124,62 @@ public final class TypeUtil {
     /**
      * Checks if typeA is assignable to typeB.
      */
-    public boolean isAssignable(TypeMirror typeA, TypeMirror typeB) {
-        return typeUtils.isAssignable(typeA, typeB);
+    public boolean isAssignable(TypeRef typeA, TypeRef typeB) {
+        return types.isAssignable(typeA, typeB);
     }
 
     /**
      * Checks if the two types are the same.
      */
-    public boolean isSameType(TypeMirror typeA, TypeMirror typeB) {
-        return typeUtils.isSameType(typeA, typeB);
+    public boolean isSameType(TypeRef typeA, TypeRef typeB) {
+        return types.isSameType(typeA, typeB);
     }
 
     /**
      * Returns the erasure of the given type (removes type parameters).
      */
-    public TypeMirror erasure(TypeMirror type) {
-        return typeUtils.erasure(type);
+    public TypeRef erasure(TypeRef type) {
+        return types.erasure(type);
     }
 
     /**
-     * Gets a TypeElement by its fully qualified name.
+     * Finds a class by its fully qualified name.
      */
-    public Optional<TypeElement> getTypeElement(String qualifiedName) {
-        TypeElement element = elementUtils.getTypeElement(qualifiedName);
-        return Optional.ofNullable(element);
+    public Optional<ClassDecl> findClass(String qualifiedName) {
+        return types.findClass(qualifiedName);
     }
 
     /**
-     * Checks if a type implements a specific interface.
+     * Checks if a class implements a specific interface.
      */
-    public boolean implementsInterface(TypeElement typeElement, String interfaceQualifiedName) {
-        TypeElement interfaceElement = elementUtils.getTypeElement(interfaceQualifiedName);
-        if (interfaceElement == null) {
-            return false;
-        }
-        return typeUtils.isAssignable(typeElement.asType(), interfaceElement.asType());
+    public boolean implementsInterface(ClassDecl decl, String interfaceQualifiedName) {
+        return isAssignableTo(decl.asType(), interfaceQualifiedName);
     }
 
     /**
-     * Checks if a {@link TypeMirror} is assignable to a specific interface (by qualified
+     * Checks if a type is assignable to a specific interface (by qualified
      * name). Useful for {@code @Produces} return types where the produced object's
-     * declaring element may be a third-party type (data sources, HTTP clients).
+     * declaring class may be a third-party type (data sources, HTTP clients).
      */
-    public boolean isAssignableTo(TypeMirror type, String interfaceQualifiedName) {
-        TypeElement interfaceElement = elementUtils.getTypeElement(interfaceQualifiedName);
-        if (interfaceElement == null) {
-            return false;
-        }
-        return typeUtils.isAssignable(type, interfaceElement.asType());
+    public boolean isAssignableTo(TypeRef type, String interfaceQualifiedName) {
+        return findClass(interfaceQualifiedName)
+                .map(iface -> types.isAssignable(type, iface.asType()))
+                .orElse(false);
     }
 
     /**
-     * Checks if the given type is a concrete class (not abstract, not interface).
+     * Checks if the given class is a concrete class (not abstract, not interface).
      */
-    public boolean isConcreteClass(TypeElement typeElement) {
-        return typeElement.getKind().isClass()
-                && !typeElement.getModifiers().contains(javax.lang.model.element.Modifier.ABSTRACT);
+    public boolean isConcreteClass(ClassDecl decl) {
+        var kind = decl.kind();
+        boolean isClass = kind == DeclKind.CLASS || kind == DeclKind.ENUM || kind == DeclKind.RECORD;
+        return isClass && !decl.isAbstract();
     }
 
     /**
      * Returns the binary name for code generation (handles nested classes).
      */
-    public String getBinaryName(TypeElement typeElement) {
-        return elementUtils.getBinaryName(typeElement).toString();
+    public String getBinaryName(ClassDecl decl) {
+        return decl.className().reflectionName();
     }
 }

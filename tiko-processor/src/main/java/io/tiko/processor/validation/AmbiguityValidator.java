@@ -1,16 +1,16 @@
 package io.tiko.processor.validation;
 
+import io.tiko.processor.core.model.Location;
+import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
-import io.tiko.processor.util.JavacBridge;
 import io.tiko.processor.util.ProcessorContext;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import javax.lang.model.element.Element;
 
 /**
  * Detects two or more unnamed providers (components or factory methods) that
@@ -35,7 +35,8 @@ public final class AmbiguityValidator {
         for (ComponentModel component : context.getActiveComponents()) {
             String kindLabel = component.isTestComponent() ? "@TestComponent" : "@Component";
             ProviderInfo info = new ProviderInfo(
-                    component.getTypeElement(),
+                    component.getDecl(),
+                    component.getDecl().location(),
                     component.getClassName(),
                     kindLabel,
                     component.isTestComponent(),
@@ -51,9 +52,9 @@ public final class AmbiguityValidator {
                     String name = component.getName().orElseThrow();
                     var declared = component.isExposeRestricted()
                             ? component.getExposeTypes()
-                            : component.getTypeElement().getInterfaces();
+                            : component.getDecl().interfaces();
                     for (var iface : declared) {
-                        register(namedProvidersByTypeAndName, iface.toString() + "#" + name, info);
+                        register(namedProvidersByTypeAndName, iface.displayName() + "#" + name, info);
                     }
                 }
                 continue;
@@ -67,9 +68,9 @@ public final class AmbiguityValidator {
             }
             var declared = component.isExposeRestricted()
                     ? component.getExposeTypes()
-                    : component.getTypeElement().getInterfaces();
+                    : component.getDecl().interfaces();
             for (var iface : declared) {
-                register(providersByType, iface.toString(), info);
+                register(providersByType, iface.displayName(), info);
             }
 
             // Additional shadow-target keys carried by @TestComponent (explicit value() or implicit walk).
@@ -82,7 +83,13 @@ public final class AmbiguityValidator {
         for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
             String name = factory.getName();
             ProviderInfo info = new ProviderInfo(
-                    factory.getMethodElement(), factory.getFactoryIdentifier(), "@Produces", false, null, null);
+                    factory.getMethod(),
+                    factory.getMethod().location(),
+                    factory.getFactoryIdentifier(),
+                    "@Produces",
+                    false,
+                    null,
+                    null);
 
             if (name != null && !name.isEmpty()) {
                 register(namedProvidersByTypeAndName, factory.getReturnTypeName() + "#" + name, info);
@@ -115,7 +122,7 @@ public final class AmbiguityValidator {
                     if (main.componentModel.getScope() != testModel.getScope()) {
                         context.getErrorReporter()
                                 .testComponentScopeMismatch(
-                                        JavacBridge.location(testModel.getTypeElement()),
+                                        testModel.getDecl().location(),
                                         testModel.getQualifiedName(),
                                         testModel.getScope(),
                                         main.componentModel.getQualifiedName(),
@@ -151,9 +158,7 @@ public final class AmbiguityValidator {
             for (int i = 1; i < providers.size(); i++) {
                 context.getErrorReporter()
                         .duplicateQualifier(
-                                JavacBridge.location(providers.get(i).element),
-                                qualifier,
-                                first.label + " (" + first.kind + ")");
+                                providers.get(i).location(), qualifier, first.label + " (" + first.kind + ")");
             }
             valid = false;
         }
@@ -188,7 +193,7 @@ public final class AmbiguityValidator {
     private boolean matchesType(DependencyModel dep, String typeKey) {
         // Compare against the parameter type (or unwrapped Provider<T>), not the picked
         // class — we are asking "is this dependency for the ambiguous type?".
-        String depType = dep.getUnwrappedType().map(Object::toString).orElse(dep.getTypeName());
+        String depType = dep.getUnwrappedType().map(TypeRef::displayName).orElse(dep.getTypeName());
         return depType.equals(typeKey);
     }
 
@@ -199,10 +204,10 @@ public final class AmbiguityValidator {
     private void register(Map<String, List<ProviderInfo>> map, String key, ProviderInfo provider) {
         // A single provider can reach the same key by more than one route — e.g. a
         // @TestComponent that implements interface X and also declares value = X.class.
-        // Dedupe by element identity so it counts as one provider for ambiguity purposes.
+        // Dedupe by declaration so it counts as one provider for ambiguity purposes.
         List<ProviderInfo> bucket = map.computeIfAbsent(key, k -> new ArrayList<>());
         for (ProviderInfo existing : bucket) {
-            if (existing.element == provider.element) return;
+            if (existing.declaration().equals(provider.declaration())) return;
         }
         bucket.add(provider);
     }
@@ -213,8 +218,7 @@ public final class AmbiguityValidator {
         String simpleName = simpleName(typeKey);
         // Emit once per ambiguous type (attached to the first provider) rather than once per
         // provider — the message already lists every contributing provider.
-        context.getErrorReporter()
-                .ambiguousProviders(JavacBridge.location(providers.get(0).element), typeKey, providerList, simpleName);
+        context.getErrorReporter().ambiguousProviders(providers.get(0).location(), typeKey, providerList, simpleName);
     }
 
     private static String simpleName(String qualifiedName) {
@@ -223,7 +227,8 @@ public final class AmbiguityValidator {
     }
 
     /**
-     * One discovered provider for a given routable type. {@code isTestComponent}
+     * One discovered provider for a given routable type. {@code declaration} is the component's
+     * {@code ClassDecl} or the factory's {@code MethodDecl}, and {@code isTestComponent}
      * distinguishes {@code @TestComponent} (shadow-allowed) from {@code @Component} /
      * {@code @Produces}. {@code componentKey} is the main-component identity used by
      * the test-container generator when applying a shadow override; null for factory
@@ -233,7 +238,8 @@ public final class AmbiguityValidator {
      * {@code @Produces} factory methods.
      */
     private record ProviderInfo(
-            Element element,
+            Object declaration,
+            Location location,
             String label,
             String kind,
             boolean isTestComponent,

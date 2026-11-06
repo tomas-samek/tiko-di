@@ -1,17 +1,15 @@
 package io.tiko.processor.validation;
 
+import io.tiko.processor.core.model.AnnotationRef;
+import io.tiko.processor.core.model.ClassDecl;
+import io.tiko.processor.core.model.FieldDecl;
+import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
-import io.tiko.processor.util.JavacBridge;
 import io.tiko.processor.util.ProcessorContext;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.TypeMirror;
 
 /**
  * Compile-time leak check: warns when a {@code @Component} holds an instance field
@@ -34,6 +32,7 @@ import javax.lang.model.type.TypeMirror;
 public final class CloseableLeakValidator {
 
     private static final String AUTO_CLOSEABLE = "java.lang.AutoCloseable";
+    private static final String SUPPRESS_WARNINGS = SuppressWarnings.class.getCanonicalName();
     private static final String SUPPRESS_TOKEN = "resource";
 
     private final ProcessorContext context;
@@ -50,7 +49,7 @@ public final class CloseableLeakValidator {
             // Beans that already have a destroy hook are off the hook.
             if (component.hasDestroyHook()) continue;
             // Class-level suppression covers all fields.
-            if (hasResourceSuppression(component.getTypeElement())) continue;
+            if (hasResourceSuppression(component.getDecl().annotations())) continue;
             scanFields(component);
         }
         return true;
@@ -59,22 +58,22 @@ public final class CloseableLeakValidator {
     private void scanFields(ComponentModel component) {
         Set<String> dependencyTypeNames = collectDependencyTypeNames(component);
 
-        for (Element enclosed : component.getTypeElement().getEnclosedElements()) {
-            if (enclosed.getKind() != ElementKind.FIELD) continue;
-            VariableElement field = (VariableElement) enclosed;
-            if (field.getModifiers().contains(Modifier.STATIC)) continue;
-            if (hasResourceSuppression(field)) continue;
+        // Enum constants are static, so the static check leaves only instance fields.
+        for (FieldDecl field : component.getDecl().fields()) {
+            if (field.isStatic()) continue;
+            if (hasResourceSuppression(field.annotations())) continue;
 
-            TypeMirror fieldType = field.asType();
+            TypeRef fieldType = field.type();
             if (!implementsAutoCloseable(fieldType)) continue;
 
             // Probably injected, not owned: skip.
-            String fieldTypeName = JavacBridge.elements(context.env()).getTypeElement(erasureName(fieldType)) != null
-                    ? erasureName(fieldType)
-                    : fieldType.toString();
+            String fieldTypeName =
+                    context.env().types().findClass(erasureName(fieldType)).isPresent()
+                            ? erasureName(fieldType)
+                            : fieldType.displayName();
             if (dependencyTypeNames.contains(fieldTypeName)) continue;
 
-            context.env().diagnostics().warning(JavacBridge.location(field), buildMessage(component, field));
+            context.env().diagnostics().warning(field.location(), buildMessage(component, field));
         }
     }
 
@@ -87,39 +86,34 @@ public final class CloseableLeakValidator {
         return names;
     }
 
-    private String erasureName(TypeMirror type) {
-        TypeMirror erased = JavacBridge.types(context.env()).erasure(type);
-        Element el = JavacBridge.types(context.env()).asElement(erased);
-        if (el instanceof TypeElement te) {
-            return te.getQualifiedName().toString();
-        }
-        return erased.toString();
+    private String erasureName(TypeRef type) {
+        var erased = context.env().types().erasure(type);
+        return erased.declaration().map(ClassDecl::qualifiedName).orElseGet(erased::displayName);
     }
 
-    private boolean implementsAutoCloseable(TypeMirror type) {
-        TypeElement closeable = JavacBridge.elements(context.env()).getTypeElement(AUTO_CLOSEABLE);
-        if (closeable == null) return false;
-        return JavacBridge.types(context.env()).isAssignable(type, closeable.asType());
+    private boolean implementsAutoCloseable(TypeRef type) {
+        var closeable = context.env().types().findClass(AUTO_CLOSEABLE);
+        if (closeable.isEmpty()) return false;
+        return context.env().types().isAssignable(type, closeable.get().asType());
     }
 
-    private boolean hasResourceSuppression(Element element) {
-        SuppressWarnings sw = element.getAnnotation(SuppressWarnings.class);
-        if (sw == null) return false;
-        for (String value : sw.value()) {
-            if (SUPPRESS_TOKEN.equals(value)) return true;
-        }
-        return false;
+    private static boolean hasResourceSuppression(List<AnnotationRef> annotations) {
+        return annotations.stream()
+                .filter(annotation -> annotation.annotationName().equals(SUPPRESS_WARNINGS))
+                .findFirst()
+                .map(sw -> sw.strings("value").contains(SUPPRESS_TOKEN))
+                .orElse(false);
     }
 
-    private String buildMessage(ComponentModel component, VariableElement field) {
+    private String buildMessage(ComponentModel component, FieldDecl field) {
         return "Tiko DI: @Component '" + component.getClassName()
-                + "' holds AutoCloseable field '" + field.getSimpleName()
-                + "' (type: " + field.asType()
+                + "' holds AutoCloseable field '" + field.name()
+                + "' (type: " + field.type().displayName()
                 + ") but declares no @PreDestroy and does not implement AutoCloseable. "
                 + "The held resource will leak when the bean is destroyed.\n\n"
                 + "Suggested fixes:\n"
                 + "1. Add a @PreDestroy method on " + component.getClassName()
-                + " that closes " + field.getSimpleName()
+                + " that closes " + field.name()
                 + "\n2. Make " + component.getClassName()
                 + " implement AutoCloseable (the container will call close() automatically)"
                 + "\n3. Suppress with @SuppressWarnings(\"resource\") if the resource is owned elsewhere";

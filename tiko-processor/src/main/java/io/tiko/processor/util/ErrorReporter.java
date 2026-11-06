@@ -93,7 +93,7 @@ public final class ErrorReporter {
 
     // Convenience methods for common error patterns
 
-    public void missingDependency(Location at, String dependencyKey, String injectingClass) {
+    public void missingDependency(Location at, String dependencyKey) {
         reportError(
                 KIND_MISSING_DEPENDENCY,
                 at,

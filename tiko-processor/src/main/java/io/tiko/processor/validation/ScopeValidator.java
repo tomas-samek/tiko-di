@@ -1,14 +1,13 @@
 package io.tiko.processor.validation;
 
 import io.tiko.Scope;
+import io.tiko.processor.core.model.DeclKind;
+import io.tiko.processor.core.model.Location;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
-import io.tiko.processor.util.JavacBridge;
 import io.tiko.processor.util.ProcessorContext;
 import java.util.Optional;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.TypeElement;
 
 /**
  * Validates scope hierarchy rules and cross-scope injection requirements.
@@ -35,7 +34,7 @@ public final class ScopeValidator {
 
         for (DependencyModel dependency : component.getDependencies()) {
             if (!validateDependencyOf(
-                    component.getTypeElement(), component.getScope(), component.getClassName(), dependency)) {
+                    component.getDecl().location(), component.getScope(), component.getClassName(), dependency)) {
                 valid = false;
             }
         }
@@ -49,9 +48,9 @@ public final class ScopeValidator {
     public boolean validate(FactoryMethodModel factory) {
         boolean valid = true;
 
-        String consumerName = factory.getDeclaringClass().getSimpleName() + "." + factory.getMethodName();
+        String consumerName = factory.getDeclaringClass().className().simpleName() + "." + factory.getMethodName();
         for (DependencyModel dependency : factory.getDependencies()) {
-            if (!validateDependencyOf(factory.getMethodElement(), factory.getScope(), consumerName, dependency)) {
+            if (!validateDependencyOf(factory.getMethod().location(), factory.getScope(), consumerName, dependency)) {
                 valid = false;
             }
         }
@@ -64,13 +63,10 @@ public final class ScopeValidator {
      * which differ only in how the consumer element, scope, and display name are derived.
      */
     private boolean validateDependencyOf(
-            javax.lang.model.element.Element consumerElement,
-            Scope consumerScope,
-            String consumerName,
-            DependencyModel dependency) {
+            Location consumerLocation, Scope consumerScope, String consumerName, DependencyModel dependency) {
         // Checked before the Provider escape: Provider<ConcreteProxiedBean> is just as
         // unreceivable as a direct concrete injection (#331).
-        if (!validateProxiedConcreteInjection(consumerElement, dependency)) {
+        if (!validateProxiedConcreteInjection(consumerLocation, dependency)) {
             return false;
         }
 
@@ -95,7 +91,7 @@ public final class ScopeValidator {
         }
 
         return validateScopeHierarchy(
-                consumerElement, consumerScope, consumerName, providerScope, dependency.getTypeName(), provider.get());
+                consumerLocation, consumerScope, consumerName, providerScope, dependency.getTypeName(), provider.get());
     }
 
     /**
@@ -109,7 +105,7 @@ public final class ScopeValidator {
      * - Shorter -> longer (EVENT -> SINGLETON without a proxy)
      */
     private boolean validateScopeHierarchy(
-            javax.lang.model.element.Element consumerElement,
+            Location consumerLocation,
             Scope consumerScope,
             String consumerName,
             Scope providerScope,
@@ -133,18 +129,15 @@ public final class ScopeValidator {
 
         if (providerObj instanceof ComponentModel component) {
             if (component.getImplementedInterface().isEmpty()) {
-                context.getErrorReporter()
-                        .missingInterface(JavacBridge.location(consumerElement), providerTypeName, reason);
+                context.getErrorReporter().missingInterface(consumerLocation, providerTypeName, reason);
                 return false;
             }
         } else if (providerObj instanceof FactoryMethodModel factory) {
             // A @Produces output is proxied against its return type, so the return type must
             // itself be an interface (the proxy does `implements <returnType>`).
-            TypeElement returnTypeElement =
-                    JavacBridge.elements(context.env()).getTypeElement(factory.getReturnTypeName());
-            if (returnTypeElement != null && returnTypeElement.getKind() != ElementKind.INTERFACE) {
-                context.getErrorReporter()
-                        .missingInterface(JavacBridge.location(consumerElement), factory.getReturnTypeName(), reason);
+            var returnTypeDecl = context.env().types().findClass(factory.getReturnTypeName());
+            if (returnTypeDecl.isPresent() && returnTypeDecl.get().kind() != DeclKind.INTERFACE) {
+                context.getErrorReporter().missingInterface(consumerLocation, factory.getReturnTypeName(), reason);
                 return false;
             }
         }
@@ -159,8 +152,7 @@ public final class ScopeValidator {
      * be satisfied; without this check the mismatch surfaced as a raw javac inference
      * error inside generated factories (#331).
      */
-    private boolean validateProxiedConcreteInjection(
-            javax.lang.model.element.Element consumerElement, DependencyModel dependency) {
+    private boolean validateProxiedConcreteInjection(Location consumerLocation, DependencyModel dependency) {
         String depKey = dependency.getDependencyKey();
         String typePart = depKey.contains("#") ? depKey.substring(0, depKey.indexOf('#')) : depKey;
         if (context.findComponentOrFactory(depKey).orElse(null) instanceof ComponentModel component
@@ -168,9 +160,9 @@ public final class ScopeValidator {
                 && component.getQualifiedName().equals(typePart)) {
             context.getErrorReporter()
                     .proxiedConcreteInjection(
-                            JavacBridge.location(consumerElement),
+                            consumerLocation,
                             component.getClassName(),
-                            component.getImplementedInterface().orElseThrow().toString());
+                            component.getImplementedInterface().orElseThrow().displayName());
             return false;
         }
         return true;

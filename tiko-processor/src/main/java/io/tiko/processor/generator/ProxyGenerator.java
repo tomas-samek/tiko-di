@@ -2,17 +2,17 @@ package io.tiko.processor.generator;
 
 import com.palantir.javapoet.*;
 import io.tiko.processor.core.GeneratorAnnotations;
+import io.tiko.processor.core.model.ClassDecl;
+import io.tiko.processor.core.model.MethodDecl;
+import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.FactoryMethodModel;
-import io.tiko.processor.util.JavacBridge;
+import io.tiko.processor.util.AbstractInterfaceMethods;
 import io.tiko.processor.util.ProcessorContext;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.TypeMirror;
 
 /**
  * Generates proxy classes for cross-scope injection.
@@ -60,12 +60,15 @@ public final class ProxyGenerator {
             return false;
         }
 
-        TypeMirror interfaceType = component
+        TypeRef interfaceType = component
                 .getImplementedInterface()
                 .orElseThrow(() -> new IllegalStateException("Proxy required but no interface found"));
 
-        TypeElement interfaceElement = JavacBridge.elements(context.env()).getTypeElement(interfaceType.toString());
-        if (interfaceElement == null) {
+        // Looked up by the rendered type: a parameterized interface (Repo<User>) finds no class,
+        // so no proxy is generated for it.
+        ClassDecl interfaceDecl =
+                context.env().types().findClass(interfaceType.displayName()).orElse(null);
+        if (interfaceDecl == null) {
             return false;
         }
 
@@ -74,10 +77,10 @@ public final class ProxyGenerator {
         TypeSpec proxyClass = TypeSpec.classBuilder(proxyClassName)
                 .addAnnotation(GeneratorAnnotations.generatedBy(ProxyGenerator.class))
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                .addSuperinterface(TypeName.get(interfaceType))
+                .addSuperinterface(interfaceType.javaPoet())
                 .addField(createContainerField())
                 .addMethod(createConstructor())
-                .addMethods(createDelegatingMethods(component, interfaceElement))
+                .addMethods(createDelegatingMethods(component, interfaceDecl))
                 .build();
 
         JavaFile javaFile = JavaFile.builder(GENERATED_PACKAGE, proxyClass).build();
@@ -102,9 +105,10 @@ public final class ProxyGenerator {
             return false;
         }
 
-        TypeMirror returnType = factory.getReturnType();
-        TypeElement interfaceElement = JavacBridge.elements(context.env()).getTypeElement(factory.getReturnTypeName());
-        if (interfaceElement == null) {
+        TypeRef returnType = factory.getReturnType();
+        ClassDecl interfaceDecl =
+                context.env().types().findClass(factory.getReturnTypeName()).orElse(null);
+        if (interfaceDecl == null) {
             return false;
         }
 
@@ -113,10 +117,10 @@ public final class ProxyGenerator {
         TypeSpec proxyClass = TypeSpec.classBuilder(proxyClassName)
                 .addAnnotation(GeneratorAnnotations.generatedBy(ProxyGenerator.class))
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                .addSuperinterface(TypeName.get(returnType))
+                .addSuperinterface(returnType.javaPoet())
                 .addField(createContainerField())
                 .addMethod(createConstructor())
-                .addMethods(createFactoryDelegatingMethods(factory, interfaceElement))
+                .addMethods(createFactoryDelegatingMethods(factory, interfaceDecl))
                 .build();
 
         JavaFile javaFile = JavaFile.builder(GENERATED_PACKAGE, proxyClass).build();
@@ -155,50 +159,47 @@ public final class ProxyGenerator {
      * generated proxy fails to compile against any interface that declares abstract
      * methods on a parent interface.
      */
-    private List<MethodSpec> createDelegatingMethods(ComponentModel component, TypeElement interfaceElement) {
+    private List<MethodSpec> createDelegatingMethods(ComponentModel component, ClassDecl interfaceDecl) {
         List<MethodSpec> methods = new ArrayList<>();
-        for (ExecutableElement method : collectAbstractMethods(interfaceElement)) {
-            methods.add(createDelegatingMethod(component, method));
+        for (MethodDecl method : AbstractInterfaceMethods.collect(interfaceDecl)) {
+            methods.add(createDelegatingMethod(method, generateGetActualInstanceCall(component)));
         }
         return methods;
     }
 
     /**
-     * Creates a single delegating method that forwards to the actual instance.
+     * Creates a single delegating override that forwards the call to {@code delegateCall}'s
+     * result: the current scope's instance for a component proxy, the factory output for a
+     * factory proxy.
      */
-    private MethodSpec createDelegatingMethod(ComponentModel component, ExecutableElement method) {
-        MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder(
-                        method.getSimpleName().toString())
+    private MethodSpec createDelegatingMethod(MethodDecl method, String delegateCall) {
+        MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder(method.jvmName())
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
-                .returns(TypeName.get(method.getReturnType()));
+                .returns(method.returnType().javaPoet());
 
         // Carry over type parameters (e.g. `<T> T unwrap(Class<T>)` from java.sql.Wrapper).
-        for (var typeParam : method.getTypeParameters()) {
-            methodBuilder.addTypeVariable(TypeVariableName.get(typeParam));
+        methodBuilder.addTypeVariables(method.typeVariables());
+
+        // Forward declared exceptions so the proxy preserves the interface's `throws` contract
+        // (e.g. java.sql.Connection's checked SQLException).
+        for (TypeRef thrown : method.thrownTypes()) {
+            methodBuilder.addException(thrown.javaPoet());
         }
 
-        // Forward declared exceptions so the proxy preserves the interface's `throws` contract.
-        for (TypeMirror thrown : method.getThrownTypes()) {
-            methodBuilder.addException(TypeName.get(thrown));
-        }
-
-        // Add parameters
         List<String> paramNames = new ArrayList<>();
-        method.getParameters().forEach(param -> {
-            String paramName = param.getSimpleName().toString();
+        method.parameters().forEach(param -> {
+            String paramName = param.name();
             paramNames.add(paramName);
-            methodBuilder.addParameter(TypeName.get(param.asType()), paramName);
+            methodBuilder.addParameter(param.type().javaPoet(), paramName);
         });
 
-        // Generate delegation call
-        String getActualCall = generateGetActualInstanceCall(component);
         String params = String.join(", ", paramNames);
 
-        if (method.getReturnType().getKind() == javax.lang.model.type.TypeKind.VOID) {
-            methodBuilder.addStatement("$L.$L($L)", getActualCall, method.getSimpleName(), params);
+        if (method.returnType().isVoid()) {
+            methodBuilder.addStatement("$L.$L($L)", delegateCall, method.jvmName(), params);
         } else {
-            methodBuilder.addStatement("return $L.$L($L)", getActualCall, method.getSimpleName(), params);
+            methodBuilder.addStatement("return $L.$L($L)", delegateCall, method.jvmName(), params);
         }
 
         return methodBuilder.build();
@@ -209,54 +210,13 @@ public final class ProxyGenerator {
      * resolves the current scope's value via {@code container.produce_<id>()} and
      * forwards the call.
      */
-    private List<MethodSpec> createFactoryDelegatingMethods(FactoryMethodModel factory, TypeElement interfaceElement) {
+    private List<MethodSpec> createFactoryDelegatingMethods(FactoryMethodModel factory, ClassDecl interfaceDecl) {
         List<MethodSpec> methods = new ArrayList<>();
         String delegateCall = "container.produce_" + factory.getFactoryIdentifier() + "()";
-        for (ExecutableElement method : collectAbstractMethods(interfaceElement)) {
-            methods.add(createFactoryDelegatingMethod(method, delegateCall));
+        for (MethodDecl method : AbstractInterfaceMethods.collect(interfaceDecl)) {
+            methods.add(createDelegatingMethod(method, delegateCall));
         }
         return methods;
-    }
-
-    private List<ExecutableElement> collectAbstractMethods(TypeElement interfaceElement) {
-        return io.tiko.processor.util.AbstractInterfaceMethods.collect(
-                interfaceElement, JavacBridge.types(context.env()));
-    }
-
-    private MethodSpec createFactoryDelegatingMethod(ExecutableElement method, String delegateCall) {
-        MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder(
-                        method.getSimpleName().toString())
-                .addModifiers(Modifier.PUBLIC)
-                .addAnnotation(Override.class)
-                .returns(TypeName.get(method.getReturnType()));
-
-        // Carry over type parameters (e.g. `<T> T unwrap(Class<T>)` from java.sql.Wrapper).
-        for (var typeParam : method.getTypeParameters()) {
-            methodBuilder.addTypeVariable(TypeVariableName.get(typeParam));
-        }
-
-        // Forward declared exceptions so the proxy preserves the interface's `throws` contract
-        // (e.g. java.sql.Connection's checked SQLException).
-        for (TypeMirror thrown : method.getThrownTypes()) {
-            methodBuilder.addException(TypeName.get(thrown));
-        }
-
-        List<String> paramNames = new ArrayList<>();
-        method.getParameters().forEach(param -> {
-            String paramName = param.getSimpleName().toString();
-            paramNames.add(paramName);
-            methodBuilder.addParameter(TypeName.get(param.asType()), paramName);
-        });
-
-        String params = String.join(", ", paramNames);
-
-        if (method.getReturnType().getKind() == javax.lang.model.type.TypeKind.VOID) {
-            methodBuilder.addStatement("$L.$L($L)", delegateCall, method.getSimpleName(), params);
-        } else {
-            methodBuilder.addStatement("return $L.$L($L)", delegateCall, method.getSimpleName(), params);
-        }
-
-        return methodBuilder.build();
     }
 
     /**
