@@ -1036,7 +1036,7 @@ public final class ContainerGenerator {
         emitUnitFrameGuard(method, storageKey);
         method.addStatement("$T __existing = ($T) $L.get($S)", returnType, returnType, mapExpr, storageKey);
         method.beginControlFlow(IF_EXISTING_NULL);
-        method.addStatement("__existing = $L", createExpr);
+        method.addStatement(ASSIGN_EXISTING, createExpr);
         method.addStatement("$L.put($S, __existing)", mapExpr, storageKey);
         method.endControlFlow();
         method.addStatement(RETURN_EXISTING);
@@ -1053,7 +1053,7 @@ public final class ContainerGenerator {
         emitUnitFrameGuard(method, storageKey);
         method.addStatement("$T __existing = ($T) $L.get($S)", returnType, returnType, mapExpr, storageKey);
         method.beginControlFlow(IF_EXISTING_NULL);
-        method.addStatement("__existing = $L", createExpr);
+        method.addStatement(ASSIGN_EXISTING, createExpr);
         method.addStatement("$L.put($S, __existing)", mapExpr, storageKey);
         method.endControlFlow();
         method.addStatement(RETURN_EXISTING);
