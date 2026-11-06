@@ -19,8 +19,9 @@ import org.junit.jupiter.params.provider.MethodSource;
  * Pins that the Kotlin nullability rules leave Java output untouched (Review Focus 3): the
  * null-safe caching the container needs for a nullable {@code @Produces} is emitted only when
  * such a provider exists, and Java providers are never nullable. Each row compiles a Java
- * fixture and compares one generated file against a golden copy taken from the generator as
- * it stood before the nullability change.
+ * fixture and compares one generated file against a golden copy. The copies preserve the Java
+ * caching behavior from before the nullability change and track intentional changes to other
+ * parts of the generated output.
  */
 class JavaOutputUnchangedByNullabilityTest {
 
