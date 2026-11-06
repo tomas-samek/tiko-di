@@ -26,6 +26,7 @@ the bus delivers — the integration test asserts on it to prove the chain.
 
 ```bash
 mvn -pl tiko-examples/15_quickstart verify   # tests on a random port
+mvn -pl tiko-examples/15_quickstart exec:java   # run straight from the classes
 mvn -pl tiko-examples/15_quickstart package
 java -jar tiko-examples/15_quickstart/target/15_quickstart-*.jar
 # → POST http://localhost:8080/notes  '{"text":"hello"}'
