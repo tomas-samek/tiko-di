@@ -154,7 +154,8 @@ public final class KafkaPipeline {
         TypeRef payload = params.isEmpty() ? null : params.get(0).type();
         boolean wantsContext = params.size() >= 2
                 && BridgeMethodShapeValidator.isKafkaContext(params.get(1).type());
-        var eventName = method.annotation(EVENT_TRIGGER)
+        var eventName = method.annotationsByType(EVENT_TRIGGER).stream()
+                .findFirst()
                 .map(trigger -> trigger.string("eventName"))
                 .orElse("");
         return Optional.of(new KafkaSourceDescriptor(

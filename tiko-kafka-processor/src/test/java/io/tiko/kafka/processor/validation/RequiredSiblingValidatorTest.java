@@ -34,6 +34,56 @@ class RequiredSiblingValidatorTest {
     }
 
     @Test
+    void source_with_two_event_triggers_is_rejected_not_reported_as_missing() {
+        Compilation compilation = Compiler.javac()
+                .withProcessors(new TikoAnnotationProcessor(), new KafkaAnnotationProcessor())
+                .compile(
+                        JavaFileObjects.forSourceString(
+                                "demo.OrderPlaced", "package demo; public record OrderPlaced(String id) {}"),
+                        JavaFileObjects.forSourceString("demo.OrderBridge", """
+                                package demo;
+                                import io.tiko.annotations.Component;
+                                import io.tiko.annotations.EventTrigger;
+                                import io.tiko.kafka.annotations.KafkaSource;
+                                import io.tiko.Scope;
+                                @Component(scope = Scope.SINGLETON)
+                                public class OrderBridge {
+                                    @KafkaSource(topic = "orders")
+                                    @EventTrigger(eventName = "a")
+                                    @EventTrigger(eventName = "b")
+                                    public OrderPlaced fromKafka(OrderPlaced p) { return p; }
+                                }
+                                """));
+        assertThat(compilation).failed();
+        assertThat(compilation).hadErrorContaining("more than one @EventTrigger on a @KafkaSource is not supported");
+        assertThat(compilation).hadErrorContaining("Suggested fixes:");
+        assertThat(compilation).hadErrorCount(1);
+    }
+
+    @Test
+    void source_with_one_event_trigger_still_succeeds() {
+        Compilation compilation = Compiler.javac()
+                .withProcessors(new TikoAnnotationProcessor(), new KafkaAnnotationProcessor())
+                .compile(
+                        JavaFileObjects.forSourceString(
+                                "demo.OrderPlaced", "package demo; public record OrderPlaced(String id) {}"),
+                        JavaFileObjects.forSourceString("demo.OrderBridge", """
+                                package demo;
+                                import io.tiko.annotations.Component;
+                                import io.tiko.annotations.EventTrigger;
+                                import io.tiko.kafka.annotations.KafkaSource;
+                                import io.tiko.Scope;
+                                @Component(scope = Scope.SINGLETON)
+                                public class OrderBridge {
+                                    @KafkaSource(topic = "orders")
+                                    @EventTrigger(eventName = "a")
+                                    public OrderPlaced fromKafka(OrderPlaced p) { return p; }
+                                }
+                                """));
+        assertThat(compilation).succeeded();
+    }
+
+    @Test
     void sink_with_event_handler_fails() {
         Compilation compilation = Compiler.javac()
                 .withProcessors(new TikoAnnotationProcessor(), new KafkaAnnotationProcessor())
