@@ -3,6 +3,7 @@ package io.tiko.processor.core.javac;
 import io.tiko.processor.core.model.AnnotationRef;
 import io.tiko.processor.core.model.Location;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.AnnotationValue;
@@ -41,5 +42,23 @@ record JavacAnnotationRef(AnnotationMirror mirror, Element annotated, JavacModel
     @Override
     public Location location() {
         return new JavacLocation(annotated, mirror);
+    }
+
+    /** Equal when it is the same annotation on the same element, whichever round's env made it. */
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof JavacAnnotationRef that
+                && mirror.equals(that.mirror)
+                && annotated.equals(that.annotated);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(mirror, annotated);
+    }
+
+    @Override
+    public String toString() {
+        return mirror + " on " + annotated;
     }
 }

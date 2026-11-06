@@ -16,9 +16,12 @@ import io.tiko.processor.core.model.Nullability;
 import io.tiko.processor.core.model.TypeRef;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.RoundEnvironment;
@@ -170,7 +173,7 @@ class JavacModelTest {
                 Arguments.of(
                         "diagnosticLandsOnElement",
                         diagnosticSource,
-                        new Check(
+                        Check.compiled(
                                 env -> {
                                     var shout = method(find(env, "p.Loud"), "shout");
                                     env.diagnostics().error(shout.location(), "neutral diagnostic");
@@ -195,7 +198,7 @@ class JavacModelTest {
                 Arguments.of(
                         "writtenResourceLandsInClassOutput",
                         source("p.Origin", "package p;", "public class Origin {}"),
-                        new Check(
+                        Check.compiled(
                                 env -> write(() -> env.output()
                                         .writeResource(
                                                 "META-INF/tiko-core-test/out.txt",
@@ -209,7 +212,7 @@ class JavacModelTest {
                 Arguments.of(
                         "writtenJavaFileCompiles",
                         source("p.Origin", "package p;", "public class Origin {}"),
-                        new Check(
+                        Check.compiled(
                                 env -> write(() -> env.output()
                                         .writeJava(
                                                 JavaFile.builder(
@@ -223,6 +226,21 @@ class JavacModelTest {
                                         .generatedSourceFile("gen.Made")
                                         .contentsAsUtf8String()
                                         .contains("class Made"))),
+                Arguments.of(
+                        "declarationsEqualAcrossEnvs",
+                        source(
+                                "p.Twice",
+                                "package p;",
+                                "public class Twice {",
+                                "    @Deprecated String field;",
+                                "    void act(String in) {}",
+                                "}"),
+                        Check.acrossEnvs((first, second) -> {
+                            var fromFirst = declarations(find(first, "p.Twice"));
+                            var fromSecond = declarations(find(second, "p.Twice"));
+                            assertThat(fromSecond).isEqualTo(fromFirst);
+                            assertThat(fromSecond).allMatch(new HashSet<>(fromFirst)::contains);
+                        })),
                 Arguments.of(
                         "sourceVersionIsCompilationRelease",
                         source("p.Lone", "package p;", "public class Lone {}"),
@@ -252,6 +270,14 @@ class JavacModelTest {
                 .orElseThrow();
     }
 
+    /** The class, its method and parameter, its field and the field's annotation. */
+    private static List<Object> declarations(ClassDecl owner) {
+        var act = method(owner, "act");
+        var field = field(owner, "field");
+        return List.of(
+                owner, act, act.parameters().get(0), field, field.annotations().get(0));
+    }
+
     private static void write(IoAction action) {
         try {
             action.run();
@@ -265,12 +291,28 @@ class JavacModelTest {
         void run() throws IOException;
     }
 
-    /** What a row checks: {@code inRound} on the mapped model, {@code afterCompile} on the result. */
-    private record Check(Consumer<ProcessingEnv> inRound, Consumer<Compilation> afterCompile) {
+    /**
+     * What a row checks: {@code inRound} on the mapped model (given the round's env and a supplier
+     * of further, independently created envs), {@code afterCompile} on the result.
+     */
+    private record Check(
+            BiConsumer<ProcessingEnv, Supplier<ProcessingEnv>> inRound, Consumer<Compilation> afterCompile) {
 
         static Check model(Consumer<ProcessingEnv> inRound) {
-            return new Check(
-                    inRound, compilation -> assertThat(compilation.errors()).isEmpty());
+            return compiled(inRound, Check::noErrors);
+        }
+
+        static Check compiled(Consumer<ProcessingEnv> inRound, Consumer<Compilation> afterCompile) {
+            return new Check((env, moreEnvs) -> inRound.accept(env), afterCompile);
+        }
+
+        /** Checks two {@link JavacProcessingEnv} instances created separately over the same round. */
+        static Check acrossEnvs(BiConsumer<ProcessingEnv, ProcessingEnv> inRound) {
+            return new Check((env, moreEnvs) -> inRound.accept(env, moreEnvs.get()), Check::noErrors);
+        }
+
+        private static void noErrors(Compilation compilation) {
+            assertThat(compilation.errors()).isEmpty();
         }
     }
 
@@ -281,11 +323,11 @@ class JavacModelTest {
      */
     private static final class ProbeProcessor extends AbstractProcessor {
 
-        private final Consumer<ProcessingEnv> check;
+        private final BiConsumer<ProcessingEnv, Supplier<ProcessingEnv>> check;
         private boolean ran;
         private Throwable failure;
 
-        ProbeProcessor(Consumer<ProcessingEnv> check) {
+        ProbeProcessor(BiConsumer<ProcessingEnv, Supplier<ProcessingEnv>> check) {
             this.check = check;
         }
 
@@ -306,7 +348,9 @@ class JavacModelTest {
             }
             ran = true;
             try {
-                check.accept(JavacProcessingEnv.of(processingEnv, roundEnv));
+                check.accept(
+                        JavacProcessingEnv.of(processingEnv, roundEnv),
+                        () -> JavacProcessingEnv.of(processingEnv, roundEnv));
             } catch (Throwable t) {
                 failure = t;
             }
@@ -314,6 +358,7 @@ class JavacModelTest {
         }
 
         void rethrowFailure() {
+            assertThat(ran).as("the in-round check ran").isTrue();
             if (failure instanceof Error error) {
                 throw error;
             }

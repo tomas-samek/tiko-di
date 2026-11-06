@@ -4,7 +4,12 @@ import com.palantir.javapoet.ClassName;
 import java.util.List;
 import java.util.Optional;
 
-/** A type declaration: class, interface, record, enum, annotation, or Kotlin object / companion. */
+/**
+ * A type declaration: class, interface, record, enum, annotation, or Kotlin object / companion.
+ *
+ * <p>Two instances are equal when they denote the same declaration, even when different
+ * {@code ProcessingEnv} instances (rounds) produced them; {@code hashCode} follows.
+ */
 public interface ClassDecl {
 
     String qualifiedName();

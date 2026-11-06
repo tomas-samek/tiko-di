@@ -96,4 +96,20 @@ record JavacMethodDecl(ExecutableElement element, JavacModel model) implements M
     public Location location() {
         return JavacLocation.of(element);
     }
+
+    /** Equal when wrapping the same element, whichever round's env made it. */
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof JavacMethodDecl that && element.equals(that.element);
+    }
+
+    @Override
+    public int hashCode() {
+        return element.hashCode();
+    }
+
+    @Override
+    public String toString() {
+        return element.toString();
+    }
 }

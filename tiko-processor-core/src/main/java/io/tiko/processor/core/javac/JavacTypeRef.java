@@ -68,4 +68,20 @@ record JavacTypeRef(TypeMirror mirror, JavacModel model) implements TypeRef {
         }
         return Optional.empty();
     }
+
+    /** Equal when wrapping the same mirror, whichever round's env made it. */
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof JavacTypeRef that && mirror.equals(that.mirror);
+    }
+
+    @Override
+    public int hashCode() {
+        return mirror.hashCode();
+    }
+
+    @Override
+    public String toString() {
+        return mirror.toString();
+    }
 }

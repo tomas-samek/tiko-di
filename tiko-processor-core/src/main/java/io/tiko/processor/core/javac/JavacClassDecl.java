@@ -130,4 +130,20 @@ record JavacClassDecl(TypeElement element, JavacModel model) implements ClassDec
                 ? Optional.of(model.classDecl(enclosing))
                 : Optional.empty();
     }
+
+    /** Equal when wrapping the same element, whichever round's env made it. */
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof JavacClassDecl that && element.equals(that.element);
+    }
+
+    @Override
+    public int hashCode() {
+        return element.hashCode();
+    }
+
+    @Override
+    public String toString() {
+        return element.toString();
+    }
 }

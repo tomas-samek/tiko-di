@@ -12,6 +12,9 @@ import java.util.Optional;
  * {@code Class} value as {@link TypeRef}, an array as {@code List<Object>} and a nested
  * annotation as {@code AnnotationRef}. The typed accessors cast that value and throw
  * {@link NoSuchElementException} when the annotation has no such member.
+ *
+ * <p>Two instances are equal when they denote the same annotation on the same declaration, even
+ * when different {@code ProcessingEnv} instances (rounds) produced them; {@code hashCode} follows.
  */
 public interface AnnotationRef {
 

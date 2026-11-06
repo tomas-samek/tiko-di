@@ -40,4 +40,20 @@ record JavacParamDecl(VariableElement element, JavacModel model) implements Para
     public Location location() {
         return JavacLocation.of(element);
     }
+
+    /** Equal when wrapping the same element, whichever round's env made it. */
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof JavacParamDecl that && element.equals(that.element);
+    }
+
+    @Override
+    public int hashCode() {
+        return element.hashCode();
+    }
+
+    @Override
+    public String toString() {
+        return element.toString();
+    }
 }
