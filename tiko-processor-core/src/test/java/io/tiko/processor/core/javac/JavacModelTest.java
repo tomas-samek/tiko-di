@@ -1,23 +1,32 @@
 package io.tiko.processor.core.javac;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 import com.google.testing.compile.Compilation;
 import com.google.testing.compile.CompilationSubject;
 import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
+import com.palantir.javapoet.ClassName;
 import com.palantir.javapoet.JavaFile;
 import com.palantir.javapoet.TypeSpec;
 import io.tiko.processor.core.ProcessingEnv;
+import io.tiko.processor.core.model.AnnotationRef;
 import io.tiko.processor.core.model.ClassDecl;
+import io.tiko.processor.core.model.DeclKind;
 import io.tiko.processor.core.model.FieldDecl;
+import io.tiko.processor.core.model.Location;
 import io.tiko.processor.core.model.MethodDecl;
 import io.tiko.processor.core.model.Nullability;
+import io.tiko.processor.core.model.SourceLanguage;
 import io.tiko.processor.core.model.TypeRef;
+import io.tiko.processor.core.model.Visibility;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.HashSet;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -42,13 +51,17 @@ class JavacModelTest {
 
     private static final String COMPONENT = "io.tiko.annotations.Component";
     private static final String PICK = "io.tiko.annotations.Pick";
+    private static final String OPTION = "tiko.core.test";
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("rows")
+    @MethodSource({"rows", "declarationRows"})
     void mapsJavacElementsToNeutralModel(String name, JavaFileObject source, Check check) {
         var processor = new ProbeProcessor(check.inRound());
 
-        var compilation = Compiler.javac().withProcessors(processor).compile(source);
+        var compilation = Compiler.javac()
+                .withProcessors(processor)
+                .withOptions("-A" + OPTION + "=on")
+                .compile(source);
 
         processor.rethrowFailure();
         check.afterCompile().accept(compilation);
@@ -248,6 +261,268 @@ class JavacModelTest {
                                 .isEqualTo(SourceVersion.latestSupported().ordinal()))));
     }
 
+    /**
+     * One mapping fact family per row, as the processors read them: over {@link #shapes()}, and
+     * over {@code murmur} where a diagnostic's line matters.
+     */
+    static Stream<Arguments> declarationRows() {
+        var murmur = source(
+                "p.Murmur",
+                "package p;",
+                "public class Murmur {",
+                "    String tone;",
+                "    void hum(",
+                "            String key) {}",
+                "    @Deprecated",
+                "    void flagged() {}",
+                "}");
+        return Stream.of(
+                Arguments.of(
+                        "declKindsMapFromJavac",
+                        shapes(),
+                        Check.model(env -> assertThat(Stream.of("p.Shapes", "p.Shape", "p.Point", "p.Color", "p.Tags")
+                                        .map(fqn -> find(env, fqn).kind()))
+                                .containsExactly(
+                                        DeclKind.CLASS,
+                                        DeclKind.INTERFACE,
+                                        DeclKind.RECORD,
+                                        DeclKind.ENUM,
+                                        DeclKind.ANNOTATION))),
+                Arguments.of(
+                        "classModifiersMapFromJavac",
+                        shapes(),
+                        Check.model(env -> assertThat(Stream.of("p.Shapes", "p.Shapes.Nested", "p.Shapes.Fin")
+                                        .map(fqn -> find(env, fqn)))
+                                .extracting(
+                                        ClassDecl::visibility,
+                                        ClassDecl::isAbstract,
+                                        ClassDecl::isFinal,
+                                        ClassDecl::isStatic)
+                                .containsExactly(
+                                        tuple(Visibility.PUBLIC, true, false, false),
+                                        tuple(Visibility.PUBLIC, false, false, true),
+                                        tuple(Visibility.PACKAGE, false, true, false)))),
+                Arguments.of("memberVisibilityMapsFromJavac", shapes(), Check.model(env -> {
+                    var shapes = find(env, "p.Shapes");
+                    assertThat(Stream.of("make", "get", "pkg", "hidden")
+                                    .map(name -> method(shapes, name).visibility()))
+                            .containsExactly(
+                                    Visibility.PUBLIC, Visibility.PROTECTED, Visibility.PACKAGE, Visibility.PRIVATE);
+                })),
+                Arguments.of(
+                        "sourceClassIsJavaClasspathClassIsClasspath",
+                        shapes(),
+                        Check.model(env -> assertThat(Stream.of("p.Shapes", "java.lang.String")
+                                        .map(fqn -> find(env, fqn).language()))
+                                .containsExactly(SourceLanguage.JAVA, SourceLanguage.CLASSPATH))),
+                Arguments.of("nestedClassKnowsItsEnclosingClass", shapes(), Check.model(env -> {
+                    var shapes = find(env, "p.Shapes");
+                    var nested = find(env, "p.Shapes.Nested");
+                    assertThat(nested.qualifiedName()).isEqualTo("p.Shapes.Nested");
+                    assertThat(nested.className()).isEqualTo(ClassName.get("p", "Shapes", "Nested"));
+                    assertThat(nested.enclosingClass()).contains(shapes);
+                    assertThat(nested.annotations())
+                            .extracting(AnnotationRef::annotationName)
+                            .containsExactly("java.lang.Deprecated");
+                    assertThat(shapes.enclosingClass()).isEmpty();
+                })),
+                Arguments.of("directSupertypesAreSuperclassThenInterfaces", shapes(), Check.model(env -> {
+                    assertThat(find(env, "p.Shapes").directSupertypes())
+                            .extracting(TypeRef::erasedName)
+                            .containsExactly("java.lang.Object", "p.Shape", "java.lang.Comparable");
+                    assertThat(find(env, "p.Shape").directSupertypes()).isEmpty();
+                })),
+                Arguments.of("constructorsAndTheirParameters", shapes(), Check.model(env -> {
+                    var constructors = find(env, "p.Shapes").constructors();
+                    assertThat(constructors)
+                            .extracting(MethodDecl::name, MethodDecl::isConstructor, MethodDecl::visibility)
+                            .containsExactly(
+                                    tuple("<init>", true, Visibility.PROTECTED),
+                                    tuple("<init>", true, Visibility.PACKAGE));
+                    assertThat(constructors.get(0).returnType().erasedName()).isEqualTo("void");
+                    var parameter = constructors.get(0).parameters().get(0);
+                    assertThat(parameter.name()).isEqualTo("name");
+                    assertThat(parameter.type().erasedName()).isEqualTo("java.lang.String");
+                    assertThat(parameter.hasDefaultValue()).isFalse();
+                    assertThat(parameter.annotations())
+                            .extracting(AnnotationRef::annotationName)
+                            .containsExactly("java.lang.Deprecated");
+                })),
+                Arguments.of("methodModifiersThrowsAndOwner", shapes(), Check.model(env -> {
+                    var shapes = find(env, "p.Shapes");
+                    var make = method(shapes, "make");
+                    var get = method(shapes, "get");
+                    assertThat(List.of(make, get))
+                            .extracting(
+                                    MethodDecl::isStatic,
+                                    MethodDecl::isAbstract,
+                                    MethodDecl::isConstructor,
+                                    MethodDecl::isSuspend,
+                                    MethodDecl::isTopLevel)
+                            .containsExactly(
+                                    tuple(true, false, false, false, false), tuple(false, true, false, false, false));
+                    assertThat(make.thrownTypes())
+                            .extracting(TypeRef::erasedName)
+                            .containsExactly("java.io.IOException");
+                    assertThat(get.owner()).contains(shapes);
+                })),
+                Arguments.of("fieldsAreDeclaredFieldsAndEnumConstants", shapes(), Check.model(env -> {
+                    assertThat(find(env, "p.Shapes").fields())
+                            .extracting(FieldDecl::name)
+                            .containsExactly("CONST", "names", "value");
+                    assertThat(find(env, "p.Color").fields())
+                            .extracting(FieldDecl::name)
+                            .containsExactly("RED");
+                })),
+                Arguments.of("arrayAndTypeVariableErasedNames", shapes(), Check.model(env -> {
+                    var shapes = find(env, "p.Shapes");
+                    var names = field(shapes, "names").type();
+                    var value = field(shapes, "value").type();
+                    assertThat(List.of(names, value))
+                            .extracting(
+                                    TypeRef::erasedName,
+                                    type -> type.declaration().isPresent())
+                            .containsExactly(tuple("java.lang.String[]", false), tuple("java.lang.Object", false));
+                    assertThat(names.typeArguments()).isEmpty();
+                })),
+                Arguments.of("arrayAndNestedAnnotationValues", shapes(), Check.model(env -> {
+                    var tags = tags(env);
+                    assertThat(tags.strings("value")).containsExactly("a", "b");
+                    assertThat(tags.types("types"))
+                            .extracting(TypeRef::erasedName)
+                            .containsExactly("java.lang.String", "java.lang.Integer");
+                    assertThat(tags.value("inner"))
+                            .hasValueSatisfying(inner -> assertThat(inner)
+                                    .isInstanceOfSatisfying(AnnotationRef.class, nested -> {
+                                        assertThat(nested.annotationName()).isEqualTo("p.Inner");
+                                        assertThat(nested.string("value")).isEqualTo("dflt");
+                                    }));
+                })),
+                Arguments.of("scalarAnnotationValuesAndMissingMembers", shapes(), Check.model(env -> {
+                    var tags = tags(env);
+                    assertThat(tags.integer("weight")).isEqualTo(3);
+                    assertThat(tags.bool("on")).isTrue();
+                    assertThat(tags.value("absent")).isEmpty();
+                    assertThatThrownBy(() -> tags.string("absent"))
+                            .isInstanceOf(NoSuchElementException.class)
+                            .hasMessage("@p.Tags has no member 'absent'");
+                })),
+                Arguments.of("erasureSameTypeAndJavaPoet", shapes(), Check.model(env -> {
+                    var generic = find(env, "p.Shapes").asType();
+                    var raw = env.types().erasure(generic);
+                    assertThat(generic.javaPoet()).hasToString("p.Shapes<T>");
+                    assertThat(raw.javaPoet()).hasToString("p.Shapes");
+                    assertThat(raw.declaration()).contains(find(env, "p.Shapes"));
+                    assertThat(env.types().isSameType(raw, env.types().erasure(generic)))
+                            .isTrue();
+                    assertThat(env.types().isSameType(generic, raw)).isFalse();
+                })),
+                Arguments.of("annotatedLookupsFindClassAndOptions", shapes(), Check.model(env -> {
+                    assertThat(env.methodsAnnotatedWith("p.Tags"))
+                            .extracting(MethodDecl::name)
+                            .containsExactly("tagged");
+                    assertThat(method(find(env, "p.Shapes"), "tagged").annotations())
+                            .extracting(AnnotationRef::annotationName)
+                            .containsExactly("p.Tags");
+                    assertThat(env.classesAnnotatedWith("no.such.Annotation")).isEmpty();
+                    assertThat(env.methodsAnnotatedWith("no.such.Annotation")).isEmpty();
+                    assertThat(env.types().findClass("no.such.Type")).isEmpty();
+                    assertThat(env.options()).containsEntry(OPTION, "on");
+                })),
+                Arguments.of(
+                        "warningsAndNotesLandOnTheirLocation",
+                        murmur,
+                        Check.compiled(
+                                env -> {
+                                    var type = find(env, "p.Murmur");
+                                    var deprecated = method(type, "flagged")
+                                            .annotation("java.lang.Deprecated")
+                                            .orElseThrow();
+                                    env.diagnostics()
+                                            .warning(method(type, "hum").location(), "neutral warning");
+                                    env.diagnostics().note(type.location(), "class note");
+                                    env.diagnostics().note(deprecated.location(), "annotation note");
+                                    env.diagnostics().note(null, "unplaced note");
+                                    env.diagnostics()
+                                            .warning(field(type, "tone").location(), "field warning");
+                                    env.diagnostics()
+                                            .warning(
+                                                    method(type, "hum")
+                                                            .parameters()
+                                                            .get(0)
+                                                            .location(),
+                                                    "parameter warning");
+                                    assertThat(env.diagnostics().hasErrors()).isFalse();
+                                },
+                                compilation -> {
+                                    var subject = CompilationSubject.assertThat(compilation);
+                                    subject.succeeded();
+                                    subject.hadWarningContaining("neutral warning")
+                                            .inFile(murmur)
+                                            .onLine(4);
+                                    subject.hadWarningContaining("field warning")
+                                            .inFile(murmur)
+                                            .onLine(3);
+                                    subject.hadWarningContaining("parameter warning")
+                                            .inFile(murmur)
+                                            .onLine(5);
+                                    subject.hadNoteContaining("class note")
+                                            .inFile(murmur)
+                                            .onLine(2);
+                                    subject.hadNoteContaining("annotation note")
+                                            .inFile(murmur)
+                                            .onLine(6);
+                                    subject.hadNoteContaining("unplaced note");
+                                })),
+                Arguments.of("foreignLocationIsRejected", shapes(), Check.model(env -> {
+                    assertThatThrownBy(() -> env.diagnostics().error(new Location() {}, "nowhere"))
+                            .isInstanceOf(IllegalArgumentException.class);
+                    assertThat(env.diagnostics().hasErrors()).isFalse();
+                })));
+    }
+
+    /**
+     * One source holding every declaration shape {@link #declarationRows()} reads: all five
+     * kinds, each visibility, static / abstract / final, a nested class, a superclass plus
+     * interfaces, a throwing method, array / type-variable fields and array / nested annotation
+     * values.
+     */
+    private static JavaFileObject shapes() {
+        return source(
+                "p.Shapes",
+                "package p;",
+                "import java.io.IOException;",
+                "@interface Inner { String value(); }",
+                "@interface Tags {",
+                "    String[] value();",
+                "    Class<?>[] types() default {String.class, Integer.class};",
+                "    Inner inner() default @Inner(\"dflt\");",
+                "    int weight() default 3;",
+                "    boolean on() default true;",
+                "}",
+                "interface Shape {}",
+                "record Point(int x) {}",
+                "enum Color { RED }",
+                "public abstract class Shapes<T> implements Shape, Comparable<Shapes<T>> {",
+                "    public static final int CONST = 1;",
+                "    String[] names;",
+                "    T value;",
+                "    protected Shapes(@Deprecated String name) {}",
+                "    Shapes() {}",
+                "    public static void make() throws IOException {}",
+                "    protected abstract T get();",
+                "    void pkg() {}",
+                "    private void hidden() {}",
+                "    @Tags({\"a\", \"b\"}) void tagged() {}",
+                "    @Deprecated public static class Nested {}",
+                "    final class Fin {}",
+                "}");
+    }
+
+    private static AnnotationRef tags(ProcessingEnv env) {
+        return method(find(env, "p.Shapes"), "tagged").annotation("p.Tags").orElseThrow();
+    }
+
     private static JavaFileObject source(String fqn, String... lines) {
         return JavaFileObjects.forSourceLines(fqn, lines);
     }
@@ -329,6 +604,11 @@ class JavacModelTest {
 
         ProbeProcessor(BiConsumer<ProcessingEnv, Supplier<ProcessingEnv>> check) {
             this.check = check;
+        }
+
+        @Override
+        public Set<String> getSupportedOptions() {
+            return Set.of(OPTION);
         }
 
         @Override

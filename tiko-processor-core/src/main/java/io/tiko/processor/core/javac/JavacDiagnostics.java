@@ -17,8 +17,8 @@ final class JavacDiagnostics implements Diagnostics {
 
     @Override
     public void error(Location at, String message) {
-        errors = true;
         print(Diagnostic.Kind.ERROR, at, message);
+        errors = true;
     }
 
     @Override

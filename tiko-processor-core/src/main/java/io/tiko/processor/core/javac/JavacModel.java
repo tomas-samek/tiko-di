@@ -21,25 +21,10 @@ import javax.tools.JavaFileObject;
 
 /**
  * The {@code Element} / {@code TypeMirror} to neutral-model mapping, plus the helpers the javac
- * model records share. One instance per {@link JavacProcessingEnv}.
+ * model records share. One instance per {@link JavacProcessingEnv}; model equality never depends
+ * on it.
  */
-final class JavacModel {
-
-    private final Elements elements;
-    private final Types types;
-
-    JavacModel(Elements elements, Types types) {
-        this.elements = elements;
-        this.types = types;
-    }
-
-    Elements elements() {
-        return elements;
-    }
-
-    Types types() {
-        return types;
-    }
+record JavacModel(Elements elements, Types types) {
 
     ClassDecl classDecl(TypeElement element) {
         return new JavacClassDecl(element, this);
