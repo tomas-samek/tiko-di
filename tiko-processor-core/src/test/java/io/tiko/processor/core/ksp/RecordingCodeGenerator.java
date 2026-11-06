@@ -49,17 +49,17 @@ public final class RecordingCodeGenerator implements CodeGenerator {
     @Override
     public OutputStream createNewFile(
             Dependencies dependencies, String packageName, String fileName, String extensionName) {
-        record(dependencies, packageName.replace('.', '/') + "/" + fileName + "." + extensionName);
+        capture(dependencies, packageName.replace('.', '/') + "/" + fileName + "." + extensionName);
         return delegate.createNewFile(dependencies, packageName, fileName, extensionName);
     }
 
     @Override
     public OutputStream createNewFileByPath(Dependencies dependencies, String path, String extensionName) {
-        record(dependencies, extensionName.isEmpty() ? path : path + "." + extensionName);
+        capture(dependencies, extensionName.isEmpty() ? path : path + "." + extensionName);
         return delegate.createNewFileByPath(dependencies, path, extensionName);
     }
 
-    private void record(Dependencies dependencies, String path) {
+    private void capture(Dependencies dependencies, String path) {
         var files = dependencies.getOriginatingFiles().stream()
                 .map(KSFile::getFileName)
                 .toList();

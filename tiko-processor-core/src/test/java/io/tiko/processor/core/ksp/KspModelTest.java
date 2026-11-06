@@ -3,7 +3,6 @@ package io.tiko.processor.core.ksp;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
 
-import com.google.devtools.ksp.processing.Resolver;
 import com.google.devtools.ksp.processing.SymbolProcessor;
 import com.google.devtools.ksp.processing.SymbolProcessorEnvironment;
 import com.google.devtools.ksp.processing.SymbolProcessorProvider;
@@ -18,6 +17,7 @@ import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.DeclKind;
 import io.tiko.processor.core.model.MethodDecl;
 import io.tiko.processor.core.model.Nullability;
+import io.tiko.processor.core.model.ParamDecl;
 import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.core.model.Visibility;
 import java.io.IOException;
@@ -153,7 +153,7 @@ class KspModelTest {
                                         .constructors()
                                         .get(0)
                                         .parameters())
-                                .extracting(parameter -> parameter.hasDefaultValue())
+                                .extracting(ParamDecl::hasDefaultValue)
                                 .containsExactly(true, false))),
                 Arguments.of(
                         "primaryConstructorComesFromDeclaration",
@@ -342,21 +342,18 @@ class KspModelTest {
         public SymbolProcessor create(SymbolProcessorEnvironment environment) {
             var requests = new ArrayList<Request>();
             var generator = new RecordingCodeGenerator(environment.getCodeGenerator(), requests);
-            return new SymbolProcessor() {
-                @Override
-                public List<KSAnnotated> process(Resolver resolver) {
-                    if (!ran) {
-                        ran = true;
-                        try {
-                            var env = KspProcessingEnv.of(
-                                    resolver, generator, environment.getLogger(), environment.getOptions());
-                            check.accept(env, requests);
-                        } catch (Throwable t) {
-                            failure = t;
-                        }
+            return resolver -> {
+                if (!ran) {
+                    ran = true;
+                    try {
+                        var env = KspProcessingEnv.of(
+                                resolver, generator, environment.getLogger(), environment.getOptions());
+                        check.accept(env, requests);
+                    } catch (Throwable t) {
+                        failure = t;
                     }
-                    return List.of();
                 }
+                return List.<KSAnnotated>of();
             };
         }
 

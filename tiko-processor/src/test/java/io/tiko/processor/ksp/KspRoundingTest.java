@@ -9,6 +9,7 @@ import com.google.devtools.ksp.processing.SymbolProcessorProvider;
 import com.google.devtools.ksp.symbol.KSAnnotated;
 import com.tschuchort.compiletesting.KotlinCompilation;
 import io.tiko.processor.core.ksp.KspCompiler;
+import io.tiko.processor.core.ksp.RoundWatcher;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
@@ -44,6 +45,24 @@ class KspRoundingTest {
                 .flatMap(result::generatedJava);
         assertThat(container).as("generated container").isPresent();
         assertThat(container.get()).contains("TickerFactory").contains("ClockFactory");
+    }
+
+    /**
+     * The trigger: the first round whose new files carry no entry point, after one that did, is
+     * where the pipeline finishes, so its output arrives as the next round's new files.
+     */
+    @Test
+    void finishesInTheFirstRoundWithoutEntryPoints() {
+        var handWritten =
+                KspCompiler.kotlin("Clock.kt", "package app", "", "@io.tiko.annotations.Component", "class Clock");
+        var watcher = new RoundWatcher();
+
+        var result = KspCompiler.compile(List.of(watcher, new TikoSymbolProcessorProvider()), Map.of(), handWritten);
+
+        assertThat(result.exitCode()).as(result.messages()).isEqualTo(KotlinCompilation.ExitCode.OK);
+        assertThat(watcher.newFilesPerRound()).as("new files per round").hasSizeGreaterThanOrEqualTo(3);
+        assertThat(watcher.newFilesPerRound().get(1)).containsExactly("Plain.kt");
+        assertThat(watcher.newFilesPerRound().get(2)).anyMatch(name -> name.startsWith("TikoContainerImpl_"));
     }
 
     /**
