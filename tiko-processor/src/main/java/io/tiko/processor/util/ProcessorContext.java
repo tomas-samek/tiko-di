@@ -228,6 +228,17 @@ public final class ProcessorContext {
     }
 
     /**
+     * Whether {@code decl} is registered as a component under any name: a named
+     * {@code @Component(name = "x")} is keyed {@code fqn#x}, so a lookup by bare class name misses
+     * it (#612). A class carries one component annotation, hence at most one name.
+     */
+    public boolean isRegisteredComponent(ClassDecl decl) {
+        String fqn = decl.qualifiedName();
+        return components.values().stream()
+                .anyMatch(c -> c.getDecl().qualifiedName().equals(fqn));
+    }
+
+    /**
      * Flat snapshot of every registered factory method, across all profile-disjoint
      * variants stored under shared keys (see {@link #registerFactoryMethod} and #275).
      */
