@@ -3,7 +3,9 @@ package io.tiko.runtime;
 import io.tiko.ContainerInitializationException;
 import io.tiko.TikoModule;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -56,7 +58,7 @@ final class ModuleDescriptors {
     /** The descriptor's container class, or the URL itself when unreadable (the caller then reports it). */
     private static String implOf(URL descriptor) throws IOException {
         Properties props = new Properties();
-        try (var in = new java.io.InputStreamReader(descriptor.openStream(), java.nio.charset.StandardCharsets.UTF_8)) {
+        try (var in = new InputStreamReader(descriptor.openStream(), StandardCharsets.UTF_8)) {
             props.load(in);
         }
         String impl = props.getProperty("impl");
