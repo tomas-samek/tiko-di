@@ -589,6 +589,13 @@ class KspDeclarationFactsTest {
                                 .toList(),
                         List.of("getDescribed", "getId", "getNote", "setNote")),
                 fact(
+                        "mappedBuiltInPropertiesAreNoAccessors",
+                        env -> cls(env, "f.Color").allMethods().stream()
+                                .map(MethodDecl::name)
+                                .filter(List.of("getName", "getOrdinal")::contains)
+                                .toList(),
+                        List.of()),
+                fact(
                         "accessorEqualityAcrossLookups",
                         env -> method(env, "f.Accessors", "getPlain").equals(method(env, "f.Accessors", "getPlain")),
                         true),

@@ -56,11 +56,13 @@ final class KspAccessorDecl implements MethodDecl {
 
     /**
      * The accessors the JVM has for {@code property}, getter first: none for a Java field, a
-     * {@code private}, {@code const} or {@code @JvmField} property, or an annotation class member;
+     * {@code private}, {@code const} or {@code @JvmField} property, an annotation class member, or
+     * a property of a built-in mapped to a Java class;
      * a setter only for a {@code var} whose setter is not {@code private}.
      */
     static List<Boolean> accessorKinds(KSPropertyDeclaration property, KspModel model) {
         if (KspModel.isJava(property)
+                || isMappedBuiltIn(property, model)
                 || property.getModifiers().contains(Modifier.CONST)
                 || KspModel.visibility(property) == Visibility.PRIVATE
                 || (property.getParentDeclaration() instanceof KSClassDeclaration owner
@@ -73,6 +75,18 @@ final class KspAccessorDecl implements MethodDecl {
             return List.of(false);
         }
         return List.of(false, true);
+    }
+
+    /**
+     * A property of a Kotlin built-in that javac sees as a Java class ({@code kotlin.Enum} is
+     * {@code java.lang.Enum}, {@code kotlin.collections.List} is {@code java.util.List}): its JVM
+     * members are the Java class's ({@code name()}, {@code size()}), not accessors.
+     */
+    private static boolean isMappedBuiltIn(KSPropertyDeclaration property, KspModel model) {
+        return property.getParentDeclaration() instanceof KSClassDeclaration owner
+                && owner.getQualifiedName() != null
+                && !model.javaName(owner.getQualifiedName().asString())
+                        .equals(owner.getQualifiedName().asString());
     }
 
     private static boolean hasAnnotation(KSPropertyDeclaration property, String fqn, KspModel model) {
