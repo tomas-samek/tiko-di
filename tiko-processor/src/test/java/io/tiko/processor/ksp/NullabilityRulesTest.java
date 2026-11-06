@@ -149,6 +149,13 @@ class NullabilityRulesTest {
                         ErrorReporter.NULLABILITY_MISMATCH,
                         "`Provider<Foo>?`, but the container always passes a Provider",
                         "declare the parameter as `Provider<Foo>`, not `Provider<Foo>?`"),
+                rejected(
+                        "nullablePickerWrapperRejected",
+                        List.of(kotlin(SHAPES
+                                + "@Component(scope = Scope.SINGLETON) class Gallery(val shapes: Picker<Shape>?)")),
+                        ErrorReporter.NULLABILITY_MISMATCH,
+                        "`Picker<Shape>?`, but the container always passes a Picker",
+                        "declare the parameter as `Picker<Shape>`, not `Picker<Shape>?`"),
                 ok("nonNullPickerOverNonNullProviders", kotlin(SHAPES + GALLERY)),
                 rejected(
                         "nullableProducerReachableThroughPickerList",

@@ -51,7 +51,7 @@ One that would add new DI semantics is rejected at compile time with error kind
 |---|---|---|
 | `final` (default) class as a component | Supported. Proxies are interface-based; nothing is subclassed. | — |
 | `internal` class, constructor or member | Supported. Generated Java calls `internal` members by their JVM (mangled) names. | — |
-| Use-site targets `@param:` / `@field:` on constructor properties | Supported. `@Named` and `@Pick` target parameters, so write `@param:Named("x")`. | — |
+| Use-site target `@param:` on constructor properties | Supported. `@Named` and `@Pick` target parameters only, so write `@param:Named("x")`; `@field:Named` does not compile. | — |
 | Default parameter values | Supported, but never optional: Tiko injects the primary constructor with **all** parameters; defaults are not used. | — |
 | Secondary constructors | Ignored; the primary constructor is injected. | — |
 | `vararg` constructor parameter | An array dependency, as on Java (`B[]`); normally a missing dependency. | Declare a plain `B` parameter, or a `Picker<B>`. |

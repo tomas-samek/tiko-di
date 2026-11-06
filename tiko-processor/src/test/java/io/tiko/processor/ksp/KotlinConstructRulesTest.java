@@ -30,6 +30,7 @@ class KotlinConstructRulesTest {
             import io.tiko.annotations.EventHandler
             import io.tiko.annotations.Named
             import io.tiko.annotations.PostConstruct
+            import io.tiko.annotations.PreDestroy
             import io.tiko.annotations.Produces
 
             class Clock
@@ -64,7 +65,7 @@ class KotlinConstructRulesTest {
                         "() -> container.getRepository())",
                         "new Service(repository)"),
                 supported(
-                        "fieldUseSiteNamedIsSupported",
+                        "paramUseSiteNamedIsSupported",
                         """
                         interface Store
                         @Component(scope = Scope.SINGLETON, name = "x") class RedStore : Store
@@ -145,6 +146,36 @@ class KotlinConstructRulesTest {
                         """,
                         ErrorReporter.KOTLIN_UNSUPPORTED,
                         "@Produces on the extension function 'Factories.clock'",
+                        "declare a regular fun that takes the receiver as a parameter"),
+                rejected(
+                        "extensionEventHandlerRejected",
+                        """
+                        @Component(scope = Scope.SINGLETON) class Listener {
+                            @EventHandler fun Clock.onPing(event: Ping) {}
+                        }
+                        """,
+                        ErrorReporter.KOTLIN_UNSUPPORTED,
+                        "@EventHandler on the extension function 'Listener.onPing'",
+                        "declare a regular fun that takes the receiver as a parameter"),
+                rejected(
+                        "extensionPostConstructRejected",
+                        """
+                        @Component(scope = Scope.SINGLETON) class Starter {
+                            @PostConstruct fun Clock.start() {}
+                        }
+                        """,
+                        ErrorReporter.KOTLIN_UNSUPPORTED,
+                        "@PostConstruct on the extension function 'Starter.start'",
+                        "declare a regular fun that takes the receiver as a parameter"),
+                rejected(
+                        "extensionPreDestroyRejected",
+                        """
+                        @Component(scope = Scope.SINGLETON) class Stopper {
+                            @PreDestroy fun Clock.stop() {}
+                        }
+                        """,
+                        ErrorReporter.KOTLIN_UNSUPPORTED,
+                        "@PreDestroy on the extension function 'Stopper.stop'",
                         "declare a regular fun that takes the receiver as a parameter"),
                 rejected(
                         "companionProducesRejected",
