@@ -1,0 +1,76 @@
+package io.tiko.generated;
+
+import demo.Alpha;
+import demo.Mike;
+import demo.PingEvent;
+import io.tiko.ErrorHandler;
+import io.tiko.Event;
+import io.tiko.EventBus;
+import io.tiko.EventHandlerError;
+import io.tiko.EventHandlerInfo;
+import io.tiko.runtime.EventChainContext;
+import java.lang.Exception;
+import javax.annotation.processing.Generated;
+
+@Generated("io.tiko.processor.generator.EventRegistryGenerator")
+public final class EventRegistry_7a299740 {
+  private static final EventHandlerInfo HANDLER_INFO_0 = new EventHandlerInfo(Alpha.class, "onPing", PingEvent.class, false);
+
+  private static final EventHandlerInfo HANDLER_INFO_1 = new EventHandlerInfo(Mike.class, "onPing", PingEvent.class, false);
+
+  public static void registerHandlers(EventBus eventBus, TikoContainerImpl_7a299740 container) {
+    // Register all event handlers
+    eventBus.subscribe(PingEvent.class, event -> dispatch_Alpha_onPing_0(eventBus, container, event));
+    eventBus.subscribe(PingEvent.class, event -> dispatch_Mike_onPing_1(eventBus, container, event));
+  }
+
+  private static void dispatch_Alpha_onPing_0(EventBus eventBus,
+      TikoContainerImpl_7a299740 container, PingEvent event) {
+    if (container.__isStopped()) {
+      EventChainContext.logDroppedDuringShutdown(event);
+      return;
+    }
+    Event<PingEvent> __wrapper = EventChainContext.wrap(event);
+    Event<?> __previous = EventChainContext.enter(__wrapper);
+    try {
+      Alpha __handler = container.getAlpha();
+      try {
+        __handler.onPing(event);
+      } catch (Exception __t) {
+        ErrorHandler __err = container.getErrorHandler();
+        try {
+          __err.onError(new EventHandlerError(HANDLER_INFO_0, event, __t));
+        } catch (Exception __inner) {
+          EventChainContext.logErrorHandlerFailure(__inner);
+        }
+      }
+    } finally {
+      EventChainContext.exit(__previous);
+    }
+  }
+
+  private static void dispatch_Mike_onPing_1(EventBus eventBus,
+      TikoContainerImpl_7a299740 container, PingEvent event) {
+    if (container.__isStopped()) {
+      EventChainContext.logDroppedDuringShutdown(event);
+      return;
+    }
+    Event<PingEvent> __wrapper = EventChainContext.wrap(event);
+    Event<?> __previous = EventChainContext.enter(__wrapper);
+    try {
+      Mike __handler = container.getMike();
+      try {
+        __handler.onPing(event);
+      } catch (Exception __t) {
+        ErrorHandler __err = container.getErrorHandler();
+        try {
+          __err.onError(new EventHandlerError(HANDLER_INFO_1, event, __t));
+        } catch (Exception __inner) {
+          EventChainContext.logErrorHandlerFailure(__inner);
+        }
+      }
+    } finally {
+      EventChainContext.exit(__previous);
+    }
+  }
+}
