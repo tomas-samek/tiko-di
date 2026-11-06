@@ -24,7 +24,12 @@ public final class KafkaSymbolProcessorProvider implements SymbolProcessorProvid
 
     @Override
     public SymbolProcessor create(SymbolProcessorEnvironment environment) {
-        return new KafkaSymbolProcessor(environment);
+        var processor = new KafkaSymbolProcessor(environment);
+        // Opt in to KSP's upcoming features (backing fields, context parameters), once and right
+        // after creation: unregistered processors earn an "[ksp] ... has not opted in" notice on
+        // every build. Tiko reads classes, functions and @get:/@set: accessors, which they leave alone.
+        environment.getRegisterProcessorForNewFeatures().invoke(processor);
+        return processor;
     }
 
     private static final class KafkaSymbolProcessor implements SymbolProcessor {

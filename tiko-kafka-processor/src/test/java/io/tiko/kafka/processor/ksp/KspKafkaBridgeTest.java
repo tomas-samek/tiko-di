@@ -32,6 +32,16 @@ class KspKafkaBridgeTest {
                 .hasValue("io.tiko.generated.KafkaTransportBootstrap\n");
     }
 
+    /** KSP logs a notice for every processor that has not opted in to its upcoming features. */
+    @Test
+    void processorsHaveOptedInToUpcomingFeatures() {
+        var result = KspCompiler.compile(
+                List.of(new TikoSymbolProcessorProvider(), new KafkaSymbolProcessorProvider()), Map.of(), bridge());
+
+        assertThat(result.exitCode()).as(result.messages()).isEqualTo(KotlinCompilation.ExitCode.OK);
+        assertThat(result.messages()).doesNotContain("has not opted in for upcoming features");
+    }
+
     /** The trigger: the bootstrap is written in the first round without bridges after one with them. */
     @Test
     void bootstrapIsWrittenInTheFirstRoundWithoutBridges() {
