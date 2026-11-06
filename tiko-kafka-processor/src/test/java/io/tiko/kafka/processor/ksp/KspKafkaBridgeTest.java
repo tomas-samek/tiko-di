@@ -92,6 +92,7 @@ class KspKafkaBridgeTest {
                 "",
                 "import io.tiko.Scope",
                 "import io.tiko.annotations.Component",
+                "import io.tiko.annotations.EventTrigger",
                 "import io.tiko.kafka.annotations.KafkaSink",
                 "import io.tiko.kafka.annotations.KafkaSource",
                 "",
@@ -187,6 +188,20 @@ class KspKafkaBridgeTest {
                         }
                         """,
                         List.of("@KafkaSink inside a companion object", "move it to the enclosing @Component class")),
+                Arguments.of(
+                        "twoEventTriggersRejected",
+                        """
+                        @Component(scope = Scope.SINGLETON)
+                        class OrderConsumer {
+                            @KafkaSource(topic = "orders")
+                            @EventTrigger(eventName = "a")
+                            @EventTrigger(eventName = "b")
+                            fun fromKafka(placed: OrderPlaced): OrderPlaced = placed
+                        }
+                        """,
+                        List.of(
+                                "more than one @EventTrigger on a @KafkaSource is not supported",
+                                "Keep a single @EventTrigger")),
                 Arguments.of(
                         "valueClassPayloadRejected",
                         """
