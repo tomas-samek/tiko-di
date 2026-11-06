@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -51,7 +52,8 @@ class JavaRecordConfigurationTest {
                         "The components of record 'AppConfig' can't be told on KSP",
                         "javac builds read the header and are unaffected",
                         "1. Let the compiler supply the canonical constructor",
-                        "2. Give the other constructor a parameter that no accessor matches"));
+                        "2. Give the other constructor a parameter that no accessor matches",
+                        "3. If the record comes from a library, bind a record of your own"));
         assertThat(result.messages().lines())
                 .as(result.messages())
                 .anySatisfy(line -> assertThat(line)
@@ -84,6 +86,61 @@ class JavaRecordConfigurationTest {
 
         WiringErrorsJson.assertRejected(
                 result, ErrorReporter.KIND_OTHER, List.of("The components of record 'Pool' can't be told on KSP"));
+    }
+
+    @Test
+    void nestedRecordSharedByTwoConfigurationsIsReportedOnce() {
+        var first = configReferencingPool("app/FirstConfig.java", "FirstConfig", "first");
+        var second = configReferencingPool("app/SecondConfig.java", "SecondConfig", "second");
+        var pool = KspCompiler.java(
+                "app/Pool.java",
+                "package app;",
+                "",
+                "public record Pool(int size) {",
+                "    public Pool(int size) { this.size = size; }",
+                "    public Pool() { this(1); }",
+                "}");
+
+        var result = KspCompiler.compile(new TikoSymbolProcessorProvider(), first, second, pool, anchor());
+
+        WiringErrorsJson.assertRejected(
+                result, ErrorReporter.KIND_OTHER, List.of("The components of record 'Pool' can't be told on KSP"));
+        assertThat(WiringErrorsJson.errors(result))
+                .filteredOn(error -> String.valueOf(error.get("message")).contains("record 'Pool'"))
+                .hasSize(1);
+    }
+
+    /**
+     * A record compiled into a library has no synthesized constructor: its canonical one counts as
+     * declared, so a no-arg convenience constructor next to it makes the components unknown.
+     */
+    @Test
+    void libraryRecordWithConvenienceConstructorIsRejectedOnKsp() {
+        var library = KspCompiler.library(KspCompiler.java(
+                "lib/Pool.java",
+                "package lib;",
+                "",
+                "public record Pool(int size, String name) {",
+                "    public Pool() { this(1, \"default\"); }",
+                "}"));
+        var config = KspCompiler.java(
+                "app/AppConfig.java",
+                "package app;",
+                "",
+                "import io.tiko.annotations.Configuration;",
+                "",
+                "@Configuration(prefix = \"app\")",
+                "public record AppConfig(String host, lib.Pool pool) {}");
+
+        var result = KspCompiler.compile(
+                List.of(new TikoSymbolProcessorProvider()), Map.of(), List.of(library), config, anchor());
+
+        WiringErrorsJson.assertRejected(
+                result,
+                ErrorReporter.KIND_OTHER,
+                List.of(
+                        "The components of record 'Pool' can't be told on KSP",
+                        "3. If the record comes from a library, bind a record of your own with the same components"));
     }
 
     @Test
@@ -132,6 +189,17 @@ class JavaRecordConfigurationTest {
                 .compile(JavaFileObjects.forSourceString("app.AppConfig", AMBIGUOUS));
 
         CompilationSubject.assertThat(compilation).succeeded();
+    }
+
+    private static SourceFile configReferencingPool(String path, String name, String prefix) {
+        return KspCompiler.java(
+                path,
+                "package app;",
+                "",
+                "import io.tiko.annotations.Configuration;",
+                "",
+                "@Configuration(prefix = \"" + prefix + "\")",
+                "public record " + name + "(String host, Pool pool) {}");
     }
 
     private static SourceFile anchor() {

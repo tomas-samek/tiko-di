@@ -246,8 +246,8 @@ class JavacModelTest {
                             assertThat(pair.enumConstants()).isEmpty();
                         })),
                 Arguments.of(
-                        // The KSP model reports some of these unknown (RecordShapes.UNKNOWN_ON_KSP);
-                        // javac reads every header directly, whatever the constructors are.
+                        // The KSP model reports the components of some of these records as unknown,
+                        // and javac reads every header directly, whatever the constructors are.
                         "recordComponentsAreTheHeaderWhateverTheConstructors",
                         JavaFileObjects.forSourceString("r.Records", RecordShapes.SOURCE),
                         Check.model(env -> RecordShapes.HEADERS.forEach((recordName, header) -> {

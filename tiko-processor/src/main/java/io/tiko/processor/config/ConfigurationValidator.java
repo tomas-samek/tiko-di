@@ -38,31 +38,34 @@ public final class ConfigurationValidator {
      * Reports {@code root} and every record reachable through its components (also inside
      * {@code Optional}, {@code List}, {@code Set} and {@code Map} values) whose components are
      * unknown ({@link RecordComponentRules}). It runs before collection reads any components, so
-     * a rejected record is never bound by a guess.
+     * a rejected record is never bound by a guess. A record shared by several roots is reported once.
      *
-     * @return {@code false} when one was reported
+     * @param reported the records already reported, by qualified name; this call adds the ones it reports
+     * @return {@code false} when {@code root} or a record it reaches has unknown components
      */
-    public boolean checkComponentsKnown(ClassDecl root) {
-        return componentsKnown(root, new HashSet<>());
+    public boolean checkComponentsKnown(ClassDecl root, Set<String> reported) {
+        return componentsKnown(root, new HashSet<>(), reported);
     }
 
-    private boolean componentsKnown(ClassDecl recordDecl, Set<String> seen) {
+    private boolean componentsKnown(ClassDecl recordDecl, Set<String> seen, Set<String> reported) {
         if (!seen.add(recordDecl.qualifiedName())) {
             return true;
         }
         var violation = RecordComponentRules.unknownComponents(recordDecl);
         if (violation.isPresent()) {
-            ctx.getErrorReporter()
-                    .error(
-                            violation.get().location(),
-                            violation.get().problem(),
-                            violation.get().fixes().toArray(String[]::new));
+            if (reported.add(recordDecl.qualifiedName())) {
+                ctx.getErrorReporter()
+                        .error(
+                                violation.get().location(),
+                                violation.get().problem(),
+                                violation.get().fixes().toArray(String[]::new));
+            }
             return false;
         }
         var ok = true;
         for (var component : recordDecl.recordComponents()) {
             for (var nested : nestedRecords(component.type())) {
-                ok &= componentsKnown(nested, seen);
+                ok &= componentsKnown(nested, seen, reported);
             }
         }
         return ok;

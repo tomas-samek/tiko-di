@@ -43,6 +43,8 @@ public final class RecordComponentRules {
                         + " unaffected.",
                 List.of(
                         "Let the compiler supply the canonical constructor: drop the declared (or compact) one",
-                        "Give the other constructor a parameter that no accessor matches by name and type")));
+                        "Give the other constructor a parameter that no accessor matches by name and type",
+                        "If the record comes from a library, bind a record of your own with the same components"
+                                + " instead")));
     }
 }
