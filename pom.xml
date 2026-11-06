@@ -68,7 +68,8 @@
         <junit.version>5.10.1</junit.version>
         <compile-testing.version>0.21.0</compile-testing.version>
         <!-- KSP2 (the processors' Kotlin frontend) and the Kotlin stdlib its API is written against:
-             both provided in tiko-processor-core. kctfork drives KSP2 in tests only (MPL-2.0). -->
+             both provided in tiko-processor-core. kctfork drives KSP2 in tests only (MPL-2.0), so it is
+             pinned here and not in the consumer-facing tiko-bom. -->
         <ksp.version>2.3.13</ksp.version>
         <kotlin.version>2.4.21</kotlin.version>
         <kctfork.version>0.14.0</kctfork.version>
