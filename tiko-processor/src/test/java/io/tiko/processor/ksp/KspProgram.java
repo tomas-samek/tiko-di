@@ -43,12 +43,11 @@ final class KspProgram implements AutoCloseable {
         var thread = Thread.currentThread();
         var previous = thread.getContextClassLoader();
         thread.setContextClassLoader(loader);
-        try {
+        try (var guard = new LoaderGuard(loader)) {
             var container =
                     loader.loadClass("io.tiko.runtime.Tiko").getMethod("create").invoke(null);
-            return new KspProgram(loader, container);
+            return new KspProgram(guard.release(), container);
         } catch (ReflectiveOperationException e) {
-            closeLoader(loader);
             throw new AssertionError("Tiko.create() failed", unwrap(e));
         } finally {
             thread.setContextClassLoader(previous);
@@ -123,6 +122,29 @@ final class KspProgram implements AutoCloseable {
 
     private static Throwable unwrap(ReflectiveOperationException e) {
         return e instanceof InvocationTargetException invocation ? invocation.getCause() : e;
+    }
+
+    /** Closes the loader on close unless it was released to the program. */
+    private static final class LoaderGuard implements AutoCloseable {
+
+        private final URLClassLoader loader;
+        private boolean released;
+
+        LoaderGuard(URLClassLoader loader) {
+            this.loader = loader;
+        }
+
+        URLClassLoader release() {
+            released = true;
+            return loader;
+        }
+
+        @Override
+        public void close() {
+            if (!released) {
+                closeLoader(loader);
+            }
+        }
     }
 
     private static void closeLoader(URLClassLoader loader) {
