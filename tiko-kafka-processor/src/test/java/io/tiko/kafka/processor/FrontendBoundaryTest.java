@@ -44,7 +44,9 @@ class FrontendBoundaryTest {
                     .map(String::strip)
                     .filter(line -> !line.equals(JAVAPOET_MODIFIER_IMPORT))
                     .anyMatch(line -> line.startsWith("import javax.lang.model")
-                            || line.startsWith("import javax.annotation.processing"));
+                            || line.startsWith("import javax.annotation.processing")
+                            || line.startsWith("import static javax.lang.model")
+                            || line.startsWith("import static javax.annotation.processing"));
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
