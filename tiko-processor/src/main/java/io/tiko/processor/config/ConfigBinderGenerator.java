@@ -222,9 +222,9 @@ public final class ConfigBinderGenerator {
         }
     }
 
-    private void emitNestedCoercerClass(ClassDecl record, String coercerName) throws IOException {
-        ClassName recordType = record.className();
-        String recordSimpleName = record.className().simpleName();
+    private void emitNestedCoercerClass(ClassDecl recordDecl, String coercerName) throws IOException {
+        ClassName recordType = recordDecl.className();
+        String recordSimpleName = recordDecl.className().simpleName();
         ClassName coercerType = ClassName.get(GENERATED_PACKAGE, coercerName);
 
         TypeName coercerOfRecord = ParameterizedTypeName.get(ClassName.get(TypeCoercer.class), recordType);
@@ -248,17 +248,17 @@ public final class ConfigBinderGenerator {
         StringBuilder ctorArgs = new StringBuilder();
         Set<String> knownKeys = new LinkedHashSet<>();
 
-        List<FieldDecl> components = record.recordComponents();
+        List<FieldDecl> components = recordDecl.recordComponents();
         for (int i = 0; i < components.size(); i++) {
             FieldDecl comp = components.get(i);
             String fieldName = comp.name();
-            String yamlKey = readKeyAnnotation(record, comp).orElse(fieldName);
+            String yamlKey = readKeyAnnotation(recordDecl, comp).orElse(fieldName);
             knownKeys.add(yamlKey);
 
             TypeRef raw = comp.type();
             TypeRef inner = unwrapOptional(raw);
             boolean isOptional = isOptional(raw);
-            String defaultValue = readDefaultAnnotation(record, comp).orElse(null);
+            String defaultValue = readDefaultAnnotation(recordDecl, comp).orElse(null);
 
             CodeBlock coercer = coercerExpr(inner, recordSimpleName + "." + yamlKey);
             TypeName javaType = raw.javaPoet();
@@ -331,14 +331,14 @@ public final class ConfigBinderGenerator {
      * hex of the record's fully qualified name. Hash suffix avoids collisions when two
      * nested records share a simple name across packages.
      */
-    static String nestedCoercerSimpleName(ClassDecl record) {
-        String fqn = record.qualifiedName();
+    static String nestedCoercerSimpleName(ClassDecl recordDecl) {
+        String fqn = recordDecl.qualifiedName();
         String hash = String.format("%08x", fqn.hashCode());
-        return record.className().simpleName() + "NestedCoercer_" + hash;
+        return recordDecl.className().simpleName() + "NestedCoercer_" + hash;
     }
 
-    static String nestedCoercerQualifiedName(ClassDecl record) {
-        return GENERATED_PACKAGE + "." + nestedCoercerSimpleName(record);
+    static String nestedCoercerQualifiedName(ClassDecl recordDecl) {
+        return GENERATED_PACKAGE + "." + nestedCoercerSimpleName(recordDecl);
     }
 
     /**
@@ -346,22 +346,22 @@ public final class ConfigBinderGenerator {
      * given component. Mirrors {@link ConfigurationCollector#buildCanonicalCtorParamMap}
      * because {@code @Key} targets PARAMETER, not RECORD_COMPONENT.
      */
-    private Optional<String> readKeyAnnotation(ClassDecl record, FieldDecl component) {
-        return readParamAnnotationValue(record, component, KEY);
+    private Optional<String> readKeyAnnotation(ClassDecl recordDecl, FieldDecl component) {
+        return readParamAnnotationValue(recordDecl, component, KEY);
     }
 
-    private Optional<String> readDefaultAnnotation(ClassDecl record, FieldDecl component) {
-        return readParamAnnotationValue(record, component, DEFAULT);
+    private Optional<String> readDefaultAnnotation(ClassDecl recordDecl, FieldDecl component) {
+        return readParamAnnotationValue(recordDecl, component, DEFAULT);
     }
 
-    private Optional<String> readParamAnnotationValue(ClassDecl record, FieldDecl component, String annotationFqn) {
-        ParamDecl param = canonicalCtorParam(record, component);
+    private Optional<String> readParamAnnotationValue(ClassDecl recordDecl, FieldDecl component, String annotationFqn) {
+        ParamDecl param = canonicalCtorParam(recordDecl, component);
         if (param == null) return Optional.empty();
         return param.annotation(annotationFqn).map(annotation -> annotation.string("value"));
     }
 
-    private ParamDecl canonicalCtorParam(ClassDecl record, FieldDecl component) {
-        for (var ctor : record.constructors()) {
+    private ParamDecl canonicalCtorParam(ClassDecl recordDecl, FieldDecl component) {
+        for (var ctor : recordDecl.constructors()) {
             for (var p : ctor.parameters()) {
                 if (p.name().equals(component.name())) {
                     return p;

@@ -14,6 +14,7 @@ import io.tiko.processor.util.ProcessorContext;
 import io.tiko.processor.util.TypeRefs;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -37,47 +38,49 @@ public final class ConfigurationCollector {
     public void collect(ProcessingEnv env) {
         // @Configuration targets TYPE, so every annotated element is a type declaration.
         for (var type : env.classesAnnotatedWith(CONFIGURATION)) {
-            if (type.kind() != DeclKind.RECORD) {
-                ctx.getErrorReporter()
-                        .error(
-                                type.location(),
-                                "@Configuration must be applied to a record",
-                                "Change `class` to `record`");
-                continue;
-            }
-
-            var prefix = type.annotation(CONFIGURATION).orElseThrow().string("prefix");
-            var simple = type.className().simpleName();
-
-            // @Configuration records must be top-level: the binder is keyed by package + simple
-            // name, and nested records would collide. Guard against nesting so a nested record
-            // yields a clear diagnostic instead of a ClassCastException from inside the processor (#105).
-            var enclosing = type.enclosingClass();
-            if (enclosing.isPresent()) {
-                ctx.getErrorReporter()
-                        .error(
-                                type.location(),
-                                "@Configuration record '" + simple
-                                        + "' must be top-level (declared inside '"
-                                        + enclosing.get().qualifiedName()
-                                        + "'). Move it to its own .java file.",
-                                "Move " + simple + " to its own top-level .java file");
-                continue;
-            }
-            var pkg = type.className().packageName();
-            var qualified = type.qualifiedName();
-
-            // Build a map from component name → canonical constructor parameter
-            // so we can read @Default / @Key (which target PARAMETER, not RECORD_COMPONENT).
-            var ctorParams = buildCanonicalCtorParamMap(type, env.types());
-
-            var fields = new ArrayList<ConfigFieldModel>();
-            for (var component : type.recordComponents()) {
-                fields.add(buildField(component, ctorParams.get(component.name())));
-            }
-
-            ctx.registerConfiguration(new ConfigurationModel(type, pkg, simple, qualified, prefix, fields));
+            collectRecord(type, env.types());
         }
+    }
+
+    /** Registers the record's model, or reports why the type cannot be a configuration. */
+    private void collectRecord(ClassDecl type, TypeOracle types) {
+        if (type.kind() != DeclKind.RECORD) {
+            ctx.getErrorReporter()
+                    .error(type.location(), "@Configuration must be applied to a record", "Change `class` to `record`");
+            return;
+        }
+
+        var prefix = type.annotation(CONFIGURATION).orElseThrow().string("prefix");
+        var simple = type.className().simpleName();
+
+        // @Configuration records must be top-level: the binder is keyed by package + simple
+        // name, and nested records would collide. Guard against nesting so a nested record
+        // yields a clear diagnostic instead of a ClassCastException from inside the processor (#105).
+        var enclosing = type.enclosingClass();
+        if (enclosing.isPresent()) {
+            ctx.getErrorReporter()
+                    .error(
+                            type.location(),
+                            "@Configuration record '" + simple
+                                    + "' must be top-level (declared inside '"
+                                    + enclosing.get().qualifiedName()
+                                    + "'). Move it to its own .java file.",
+                            "Move " + simple + " to its own top-level .java file");
+            return;
+        }
+        var pkg = type.className().packageName();
+        var qualified = type.qualifiedName();
+
+        // Build a map from component name → canonical constructor parameter
+        // so we can read @Default / @Key (which target PARAMETER, not RECORD_COMPONENT).
+        var ctorParams = buildCanonicalCtorParamMap(type, types);
+
+        var fields = new ArrayList<ConfigFieldModel>();
+        for (var component : type.recordComponents()) {
+            fields.add(buildField(component, ctorParams.get(component.name())));
+        }
+
+        ctx.registerConfiguration(new ConfigurationModel(type, pkg, simple, qualified, prefix, fields));
     }
 
     /**
@@ -93,30 +96,30 @@ public final class ConfigurationCollector {
 
         for (var ctor : type.constructors()) {
             var params = ctor.parameters();
-
-            // Must have the same arity as the record component list.
-            if (params.size() != components.size()) continue;
-
-            // Every (component, parameter) pair must have the same type.
-            boolean allMatch = true;
-            for (int i = 0; i < components.size(); i++) {
-                if (!types.isSameType(components.get(i).type(), params.get(i).type())) {
-                    allMatch = false;
-                    break;
+            if (isCanonical(components, params, types)) {
+                var map = new HashMap<String, ParamDecl>();
+                for (var param : params) {
+                    map.put(param.name(), param);
                 }
+                return map;
             }
-            if (!allMatch) continue;
-
-            // This is the canonical constructor.
-            var map = new HashMap<String, ParamDecl>();
-            for (var param : params) {
-                map.put(param.name(), param);
-            }
-            return map;
         }
 
         // Defensive fallback: no canonical constructor matched (should not happen for valid records).
         return new HashMap<>();
+    }
+
+    /** Same arity as the record component list, and every (component, parameter) pair the same type. */
+    private static boolean isCanonical(List<FieldDecl> components, List<ParamDecl> params, TypeOracle types) {
+        if (params.size() != components.size()) {
+            return false;
+        }
+        for (int i = 0; i < components.size(); i++) {
+            if (!types.isSameType(components.get(i).type(), params.get(i).type())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static ConfigFieldModel buildField(FieldDecl comp, ParamDecl ctorParam) {

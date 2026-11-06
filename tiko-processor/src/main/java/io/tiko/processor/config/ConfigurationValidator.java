@@ -134,8 +134,8 @@ public final class ConfigurationValidator {
         }
         for (var member : type.recordComponents()) {
             var child = TypeRefs.declared(unwrapOptional(member.type()));
-            if (child.isPresent() && child.get().kind() == DeclKind.RECORD) {
-                if (!walk(child.get(), visiting, root)) return false;
+            if (child.isPresent() && child.get().kind() == DeclKind.RECORD && !walk(child.get(), visiting, root)) {
+                return false;
             }
         }
         visiting.remove(fqn);

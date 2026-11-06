@@ -163,8 +163,8 @@ class JavacModelTest {
                                             .containsExactly(false, false, true, true);
                                     assertThat(on.apply("oneUnresolvedElement").isUnresolved("label"))
                                             .isFalse();
-                                    assertThatThrownBy(() ->
-                                                    on.apply("resolvedSingle").isUnresolved("absent"))
+                                    var resolvedSingle = on.apply("resolvedSingle");
+                                    assertThatThrownBy(() -> resolvedSingle.isUnresolved("absent"))
                                             .isInstanceOf(NoSuchElementException.class)
                                             .hasMessage("@p.One has no member 'absent'");
                                 },

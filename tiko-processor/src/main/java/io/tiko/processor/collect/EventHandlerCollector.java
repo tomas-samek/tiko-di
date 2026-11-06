@@ -26,6 +26,7 @@ public final class EventHandlerCollector {
 
     private static final String EVENT_HANDLER = EventHandler.class.getCanonicalName();
     private static final String EVENT_TRIGGER = EventTrigger.class.getCanonicalName();
+    private static final String ASYNC = "async";
     private static final String ALWAYS_ALLOW = EventTriggerGuard.AlwaysAllow.class.getCanonicalName();
 
     private EventHandlerCollector() {}
@@ -84,7 +85,7 @@ public final class EventHandlerCollector {
                 .methodName(method.name())
                 .eventType(eventType)
                 .eventTypeName(eventTypeName)
-                .async(annotation.bool("async"))
+                .async(annotation.bool(ASYNC))
                 .hasEventWrapper(hasEventWrapper)
                 .timeoutNanos(timeoutNanos)
                 .retries(annotation.integer("retries"))
@@ -111,7 +112,7 @@ public final class EventHandlerCollector {
                     "Use a non-negative retry count, e.g. retries = 3");
             return false;
         }
-        if (!annotation.bool("async")) {
+        if (!annotation.bool(ASYNC)) {
             errors.error(
                     method.location(),
                     "@EventHandler retries requires async = true: retrying with backoff on the"
@@ -165,7 +166,7 @@ public final class EventHandlerCollector {
         if (timeout == null || timeout.isBlank()) {
             return 0L;
         }
-        if (!annotation.bool("async")) {
+        if (!annotation.bool(ASYNC)) {
             errors.error(
                     method.location(),
                     "@EventHandler timeout requires async = true: a sync handler runs on the publisher's"
@@ -217,7 +218,7 @@ public final class EventHandlerCollector {
 
             models.add(EventTriggerModel.builder()
                     .eventName(trigger.string("eventName"))
-                    .async(trigger.bool("async"))
+                    .async(trigger.bool(ASYNC))
                     .spread(trigger.bool("spread"))
                     .guardClasses(guards)
                     .build());
