@@ -12,7 +12,7 @@
 
     <artifactId>tiko-processor-core</artifactId>
     <name>Tiko Processor Core</name>
-    <description>Shared helpers for the Tiko annotation processors (generated-code markings, JSON writer, literals, stack traces)</description>
+    <description>Shared layer for the Tiko annotation processors: the frontend-neutral declaration model, its javac adapter, and generator helpers</description>
 
     <dependencies>
         <!-- Code generation -->
@@ -30,6 +30,17 @@
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.google.testing.compile</groupId>
+            <artifactId>compile-testing</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Test sources compile against @Component, @Pick and Provider; never a main-scope dependency. -->
+        <dependency>
+            <groupId>io.github.tomas-samek</groupId>
+            <artifactId>tiko-api</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
