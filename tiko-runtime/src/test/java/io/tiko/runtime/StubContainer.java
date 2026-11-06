@@ -110,4 +110,11 @@ public final class StubContainer implements Container {
     public ExecutorService getEventExecutor() {
         return Executors.newSingleThreadExecutor();
     }
+
+    /** Config types injected through the aggregator, recorded for {@code AggregatingContainerResourceCharsetTest}. */
+    static final List<Class<?>> INJECTED_CONFIG_TYPES = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    public void injectConfigs(java.util.Map<Class<?>, Object> configs) {
+        INJECTED_CONFIG_TYPES.addAll(configs.keySet());
+    }
 }
