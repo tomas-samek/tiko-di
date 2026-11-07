@@ -80,9 +80,13 @@ final class KspClassDecl implements ClassDecl {
         };
     }
 
-    /** KSP has no record kind: a Java record is a class extending {@code java.lang.Record}. */
+    /**
+     * KSP has no record kind: a Java record, or a class-file record of any origin, is a class
+     * extending {@code java.lang.Record}. That is how a Kotlin {@code @JvmRecord} class from a
+     * library reads, since {@code JvmRecord} has SOURCE retention and is gone from its class file.
+     */
     private static boolean isRecord(KSClassDeclaration declaration) {
-        return KspModel.isJava(declaration)
+        return (KspModel.isJava(declaration) || declaration.getOrigin() == Origin.KOTLIN_LIB)
                 && SequencesKt.any(declaration.getSuperTypes(), superType -> {
                     var resolved = superType.resolve().getDeclaration().getQualifiedName();
                     return resolved != null && resolved.asString().equals(RECORD);
@@ -90,8 +94,8 @@ final class KspClassDecl implements ClassDecl {
     }
 
     /**
-     * A Kotlin {@code @JvmRecord} class, which Kotlin compiles to a Java record: javac sees a
-     * record whose components are the primary constructor's properties.
+     * A Kotlin {@code @JvmRecord} class in this compilation, which Kotlin compiles to a Java record:
+     * javac sees a record whose components are the primary constructor's properties.
      */
     private boolean isJvmRecord(KSClassDeclaration declaration) {
         return !KspModel.isJava(declaration)

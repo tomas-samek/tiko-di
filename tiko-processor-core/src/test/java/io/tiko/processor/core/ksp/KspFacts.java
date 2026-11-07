@@ -7,6 +7,7 @@ import io.tiko.processor.core.ProcessingEnv;
 import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.FieldDecl;
 import io.tiko.processor.core.model.MethodDecl;
+import java.io.File;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +39,12 @@ final class KspFacts {
 
     /** Runs every fact's read in the first round over {@code sources}; the compilation may fail. */
     static Map<String, Object> collect(List<Fact> facts, Map<String, String> options, SourceFile... sources) {
+        return collect(facts, options, List.of(), sources);
+    }
+
+    /** As above, with separately compiled library class directories on the classpath. */
+    static Map<String, Object> collect(
+            List<Fact> facts, Map<String, String> options, List<File> libraries, SourceFile... sources) {
         var results = new LinkedHashMap<String, Object>();
         SymbolProcessorProvider probe = environment -> resolver -> {
             if (results.isEmpty()) {
@@ -47,7 +54,7 @@ final class KspFacts {
             }
             return List.<KSAnnotated>of();
         };
-        KspCompiler.compile(List.of(probe), options, sources);
+        KspCompiler.compile(List.of(probe), options, libraries, sources);
         if (results.isEmpty()) {
             throw new AssertionError("the probe never ran");
         }

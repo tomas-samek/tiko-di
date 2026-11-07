@@ -151,6 +151,18 @@ class KspDeclarationFactsTest {
             fun topLevelHelper() {}
             """;
 
+    /**
+     * Compiled in its own run, so KSP reads it from class files: {@code JvmRecord} has SOURCE
+     * retention, and only the {@code java.lang.Record} superclass tells the record (#587).
+     */
+    private static final String LIBRARY = """
+            package lib
+
+            @JvmRecord data class LibSpan(val start: Int, val label: String)
+
+            data class LibData(val start: Int)
+            """;
+
     private static final String JAVA = """
             package f;
 
@@ -197,6 +209,7 @@ class KspDeclarationFactsTest {
         results = KspFacts.collect(
                 facts(),
                 Map.of(OPTION, "on"),
+                List.of(KspCompiler.library(KspCompiler.kotlin("Lib.kt", LIBRARY))),
                 KspCompiler.kotlin("Facts.kt", KOTLIN),
                 KspCompiler.java("Legacy.java", JAVA),
                 KspCompiler.java("r/Records.java", RecordShapes.SOURCE));
@@ -448,6 +461,35 @@ class KspDeclarationFactsTest {
                         "jvmRecordSuperclassIsRecord",
                         env -> cls(env, "f.Span").superclass().map(TypeRef::displayName),
                         java.util.Optional.of("java.lang.Record")),
+                fact("libraryJvmRecordIsARecord", env -> cls(env, "lib.LibSpan").kind(), DeclKind.RECORD),
+                fact(
+                        "libraryPlainDataClassIsAClass",
+                        env -> cls(env, "lib.LibData").kind(),
+                        DeclKind.CLASS),
+                fact(
+                        "libraryJvmRecordComponentsAreKnown",
+                        env -> cls(env, "lib.LibSpan").recordComponentsKnown(),
+                        true),
+                fact(
+                        "libraryJvmRecordComponentsArePrimaryConstructorParameters",
+                        env -> cls(env, "lib.LibSpan").recordComponents().stream()
+                                .map(component -> component.name() + ":"
+                                        + component.type().displayName())
+                                .toList(),
+                        List.of("start:int", "label:java.lang.String")),
+                fact(
+                        "libraryJvmRecordSuperclassIsRecord",
+                        env -> cls(env, "lib.LibSpan").superclass().map(TypeRef::displayName),
+                        java.util.Optional.of("java.lang.Record")),
+                fact(
+                        "libraryJvmRecordComponentAccessorsAreRecordAccessors",
+                        env -> cls(env, "lib.LibSpan").methods().stream()
+                                .filter(method -> List.of("start", "label", "getStart", "getLabel")
+                                        .contains(method.name()))
+                                .map(method -> method.name() + "/" + method.jvmName())
+                                .sorted()
+                                .toList(),
+                        List.of("label/label", "start/start")),
                 fact("valueClassIsValueClass", env -> cls(env, "f.Meters").isValueClass(), true),
                 fact(
                         "classpathValueClassIsValueClass",
