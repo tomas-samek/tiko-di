@@ -2,6 +2,7 @@ package io.tiko.runtime;
 
 import io.tiko.Container;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Handle for a daemon-style Tiko application (#92): wraps a started {@link Container} and registers
@@ -23,6 +24,7 @@ public final class TikoDaemon {
 
     private final Container container;
     private final Thread hook;
+    private final AtomicBoolean shutdownStarted = new AtomicBoolean();
     private final CountDownLatch terminated = new CountDownLatch(1);
 
     TikoDaemon(Container container) {
@@ -44,7 +46,7 @@ public final class TikoDaemon {
      * immediately. An app that already runs a non-daemon foreground server (e.g. an HTTP server)
      * does not need it — that thread keeps the JVM up.
      *
-     * <p>Waiters are released when a shutdown attempt finishes, including when it throws.
+     * <p>Waiters are released when the caller performing teardown finishes, including when it throws.
      * If the waiting thread is interrupted, this method returns with its interrupt flag restored.
      */
     public void awaitShutdown() {
@@ -55,10 +57,21 @@ public final class TikoDaemon {
         }
     }
 
-    /** Shut the container down and release any {@link #awaitShutdown()} waiter. */
     private void onShutdown() {
+        if (!tryShutdown()) {
+            // The JVM waits for its hook, so keep it alive while an explicit stop tears down.
+            awaitShutdown();
+        }
+    }
+
+    /** Only the caller that runs teardown can release the termination latch. */
+    private boolean tryShutdown() {
+        if (!shutdownStarted.compareAndSet(false, true)) {
+            return false;
+        }
         try {
             container.shutdown();
+            return true;
         } finally {
             terminated.countDown();
         }
@@ -71,9 +84,9 @@ public final class TikoDaemon {
 
     /**
      * Shuts the daemon down now and removes the JVM hook so it does not fire again at exit. Safe to
-     * call more than once and safe to race with JVM shutdown — the container's own shutdown
-     * short-circuits a second call, and {@code removeShutdownHook} failing because the JVM is
-     * already exiting is treated as a no-op.
+     * call more than once and safe to race with JVM shutdown. The first caller runs teardown.
+     * Subsequent explicit calls return immediately. Use {@link #awaitShutdown()} to wait for
+     * teardown to finish. Hook removal is a no-op when the JVM is already exiting.
      */
     public void stop() {
         try {
@@ -81,6 +94,6 @@ public final class TikoDaemon {
         } catch (IllegalStateException jvmAlreadyShuttingDown) {
             // Reached during JVM shutdown (e.g. via the hook itself) — nothing to remove.
         }
-        onShutdown();
+        tryShutdown();
     }
 }
