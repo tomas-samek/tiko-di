@@ -210,11 +210,12 @@ when you read or edit a matching file. Read the file first when you start new co
 
 Issue bodies: scope + concrete file list + acceptance + out-of-scope. Rationale lives in linked predecessor issues, not duplicated. **No "## Probable cause" or "## Suggested fix" sections** — symptoms and observable facts only. Speculation in the body biases whoever picks the issue up; let them analyse the evidence with a clean head. Acceptance describes the user-visible outcome, not the proposed mechanism.
 
-The full discipline lives in two playbooks:
-- [docs/qa-playbook.md](./docs/qa-playbook.md) — surfacing bugs, structured QA passes, issue body template.
-- [docs/issue-fix-playbook.md](./docs/issue-fix-playbook.md) — reading a filed issue without anchoring, four-phase fix workflow, common traps.
+- Use the [QA playbook](./docs/qa-playbook.md) to find, verify, and report defects.
+- Use the [issue-fix playbook](./docs/issue-fix-playbook.md) when investigating,
+  fixing, or publishing work on a filed issue. It defines the deliverables for
+  each kind of request.
 
-### GitHub markdown — `@Annotation` is a mention-harvest hazard
+### GitHub Markdown formatting
 
 > **Wrap every `@Identifier` in proper backtick code spans when writing GitHub issue, PR, or release bodies.** GitHub `@username` mentions are case-insensitive, and common Java-annotation names map to real dormant accounts — `@Named` resolves to GitHub user `nAmed` (2011-era, zero public activity, almost certainly a username squatted to harvest mentions from any project documenting `jakarta.inject` / `javax.inject`). Same risk applies to `@Component`, `@Pick`, `@Produces`, etc.
 
