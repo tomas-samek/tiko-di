@@ -9,10 +9,10 @@ import java.util.concurrent.CopyOnWriteArrayList;
 @Component(scope = Scope.SINGLETON)
 public class ItOrderRecorder {
 
-    public final List<ItOrderPlaced> received = new CopyOnWriteArrayList<>();
+    public final List<ItOrderReceived> received = new CopyOnWriteArrayList<>();
 
     @EventHandler
-    public void on(ItOrderPlaced event) {
+    public void on(ItOrderReceived event) {
         received.add(event);
     }
 }

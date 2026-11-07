@@ -128,6 +128,17 @@ Container container = Tiko.create(sources);
 
 Each layer can supply any subset of keys; missing keys fall through to the next layer down. Maps merge recursively, lists replace atomically, scalars overwrite.
 
+Use the same map structure as the defaults you want to override. For example, Kafka defaults
+use a nested `tiko → kafka` section, so a programmatic override uses the same structure.
+
+```java
+ConfigSource source = ConfigSources.fromMap(Map.of(
+        "tiko", Map.of("kafka", Map.of("bootstrap-servers", "broker:9092"))));
+```
+
+A literal `"tiko.kafka"` key remains a separate section during the merge. If both forms
+are present, the binder reads the nested section.
+
 > Environment variables are not a layer of their own — they are read inline via `${VAR}` interpolation inside YAML scalars.
 
 When you pass nothing to `Tiko.create()`, the runtime still automatically discovers and layers every `META-INF/tiko/defaults.yaml` on the classpath, so `@Configuration` records bound entirely by module defaults + `@Default` annotations need no user-supplied source at all.

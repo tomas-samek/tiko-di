@@ -9,8 +9,8 @@ import io.tiko.kafka.annotations.KafkaSource;
 public class ItOrderConsumer {
 
     @KafkaSource(topic = "it-orders")
-    @EventTrigger(eventName = "ItOrderPlaced")
-    public ItOrderPlaced fromKafka(ItOrderPlaced payload) {
-        return payload;
+    @EventTrigger(eventName = "ItOrderReceived")
+    public ItOrderReceived fromKafka(ItOrderPlaced payload) {
+        return new ItOrderReceived(payload.orderId(), payload.amount());
     }
 }
