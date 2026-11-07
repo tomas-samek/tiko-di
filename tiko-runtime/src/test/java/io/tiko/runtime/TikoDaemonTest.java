@@ -10,9 +10,13 @@ import io.tiko.EventBus;
 import io.tiko.Provider;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /**
  * Unit tests for {@link TikoDaemon} (#92). Exercised directly with a stub delegate (tiko-runtime
@@ -98,6 +102,63 @@ class TikoDaemonTest {
         }
     }
 
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void concurrentShutdownKeepsWaiterBlockedUntilCleanupCompletes(boolean jvmHook) throws InterruptedException {
+        var entered = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var delegate = new RecordingContainer();
+        delegate.shutdownAction = () -> {
+            // Generated containers return early from a concurrent shutdown call.
+            if (delegate.shutdownCount == 1) {
+                entered.countDown();
+                try {
+                    release.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        };
+        var daemon = new TikoDaemon(delegate);
+        var timeout = Duration.ofSeconds(5);
+        var owner = Thread.ofPlatform().daemon().start(daemon::stop);
+        var waiter = Thread.ofPlatform().daemon().unstarted(daemon::awaitShutdown);
+        var duplicate = Thread.ofPlatform().daemon().unstarted(jvmHook ? daemon.shutdownHook() : daemon::stop);
+        try {
+            assertThat(entered.await(timeout.toMillis(), TimeUnit.MILLISECONDS)).isTrue();
+            waiter.start();
+            duplicate.start();
+            if (jvmHook) {
+                await().atMost(timeout)
+                        .until(() -> duplicate.getState() == Thread.State.WAITING || !duplicate.isAlive());
+            } else {
+                assertThat(duplicate.join(timeout)).isTrue();
+            }
+            assertThat(waiter.join(Duration.ofMillis(200)))
+                    .as("awaitShutdown must wait for the caller doing teardown")
+                    .isFalse();
+            if (jvmHook) {
+                assertThat(duplicate.getState()).isEqualTo(Thread.State.WAITING);
+            }
+
+            release.countDown();
+            assertThat(owner.join(timeout) && duplicate.join(timeout) && waiter.join(timeout))
+                    .isTrue();
+            assertThat(delegate.shutdownCount).isEqualTo(1);
+        } finally {
+            release.countDown();
+            owner.join(timeout);
+            if (waiter.isAlive()) {
+                waiter.interrupt();
+                waiter.join(timeout);
+            }
+            if (duplicate.isAlive()) {
+                duplicate.join(timeout);
+            }
+            Runtime.getRuntime().removeShutdownHook(daemon.shutdownHook());
+        }
+    }
+
     @Test
     void awaitShutdownUnblocksWhenHookFires() throws InterruptedException {
         TikoDaemon daemon = new TikoDaemon(new RecordingContainer());
@@ -133,10 +194,12 @@ class TikoDaemonTest {
     private static final class RecordingContainer implements Container {
         int shutdownCount;
         RuntimeException shutdownFailure;
+        Runnable shutdownAction = () -> {};
 
         @Override
         public void shutdown() {
             shutdownCount++;
+            shutdownAction.run();
             if (shutdownFailure != null) {
                 throw shutdownFailure;
             }
