@@ -1587,22 +1587,11 @@ public final class ContainerGenerator {
             method.addComment("Phase 4: @PreDestroy on SINGLETON components, reverse-creation (LIFO) order. "
                     + "Thread-local bypass so they can call get(). Each hook is isolated so one failure "
                     + "does not skip the rest.");
+            method.addStatement(
+                    "var __teardownErrors = new $T(errorHandler, __startupFailure)",
+                    BOUNDED_EXECUTION.nestedClass("TeardownErrors"));
             method.addStatement("inShutdownThread.set($T.TRUE)", Boolean.class);
             method.beginControlFlow("try");
-            method.addCode("""
-                    $T __teardownErrorHandler = errorHandler;
-                    if (__startupFailure != null) {
-                      __teardownErrorHandler = __context -> {
-                        try {
-                          errorHandler.onError(__context);
-                        } catch ($T __observerFailure) {
-                          if (__observerFailure != __startupFailure) {
-                            __startupFailure.addSuppressed(__observerFailure);
-                          }
-                        }
-                      };
-                    }
-                    """, ERROR_HANDLER, Throwable.class);
 
             for (int i = shutdownTargets.size() - 1; i >= 0; i--) {
                 ShutdownTarget target = shutdownTargets.get(i);
@@ -1639,6 +1628,13 @@ public final class ContainerGenerator {
         method.addStatement("this.eventExecutor.shutdownNow()");
         method.endControlFlow();
         method.endControlFlow();
+
+        if (hasDestroyWork) {
+            method.beginControlFlow("if (__startupFailure == null)");
+            method.addComment("Only the aggregator can finish cleanup of peer modules and the shared executor.");
+            method.addStatement("__teardownErrors.rethrowIfFailed(!publishLifecycleEvents)");
+            method.endControlFlow();
+        }
 
         return method.build();
     }
@@ -2243,7 +2239,7 @@ public final class ContainerGenerator {
         // thread (today's behavior, zero overhead), set → bounded with TimeoutException-caused
         // routing. Either way failures route solely through ErrorHandler (#116) — no catch-site log.
         method.addStatement(
-                "$T.run($L, this.options.teardownTimeout(), __teardownErrorHandler, __t -> new $T($T.class, __t))",
+                "$T.run($L, this.options.teardownTimeout(), __teardownErrors, __t -> new $T($T.class, __t))",
                 BOUNDED_EXECUTION,
                 componentDestroyTask(component, variableName, isAutoCloseOnly),
                 failureType,
@@ -2300,7 +2296,7 @@ public final class ContainerGenerator {
         // Bounded by options.teardownTimeout() (#106), same as component @PreDestroy; failures route
         // solely through ErrorHandler (#116).
         method.addStatement(
-                "$T.run(() -> $L.close(), this.options.teardownTimeout(), __teardownErrorHandler,"
+                "$T.run(() -> $L.close(), this.options.teardownTimeout(), __teardownErrors,"
                         + " __t -> new $T($L.getClass(), __t))",
                 BOUNDED_EXECUTION,
                 variableName,

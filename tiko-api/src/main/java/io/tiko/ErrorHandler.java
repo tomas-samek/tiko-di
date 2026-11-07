@@ -13,9 +13,11 @@ package io.tiko;
  *       dispatch flow. This hook is for logs, metrics, and alerts. To branch on
  *       handler outcomes, use {@code @EventTrigger} with an {@code EventTriggerGuard};
  *       do not throw exceptions from event handlers as a control-flow signal.</li>
- *   <li>Implementations should be fast and non-throwing. An exception thrown <em>from</em>
- *       {@code onError} is caught by the framework, logged at ERROR via {@code System.Logger}, and
- *       suppressed — preventing handler-of-handler recursion.</li>
+ *   <li>Implementations should be fast and non-throwing. Event dispatch catches and logs
+ *       observer exceptions to prevent handler-of-handler recursion.</li>
+ *   <li>During regular singleton teardown, the first observer failure propagates after cleanup.
+ *       The triggering teardown failure is attached as a suppressed exception when distinct.
+ *       During startup rollback, the startup failure remains primary.</li>
  * </ul>
  *
  * <p>The default implementation logs at WARNING via {@code System.Logger}. Override via

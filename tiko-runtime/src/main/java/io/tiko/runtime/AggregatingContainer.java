@@ -645,9 +645,12 @@ public final class AggregatingContainer implements Container {
         // Shutdown in reverse order. Per-module containers no longer shut down the executor
         // themselves (#51): they were constructed with the shared executor, so their internal
         // ownsEventExecutor is false. The aggregator owns the lifecycle below.
+        Throwable observerFailure = null;
         for (int i = moduleContainers.size() - 1; i >= 0; i--) {
             try {
                 moduleContainers.get(i).shutdown();
+            } catch (BoundedExecution.ModuleTeardownFailure e) {
+                observerFailure = BoundedExecution.retainFailure(observerFailure, e.getCause());
             } catch (Exception e) {
                 // Log but continue shutting down other containers
                 LoggerHolder.LOG.log(System.Logger.Level.WARNING, "Error shutting down module container", e);
@@ -667,6 +670,9 @@ public final class AggregatingContainer implements Container {
                 Thread.currentThread().interrupt();
                 eventExecutor.shutdownNow();
             }
+        }
+        if (observerFailure != null) {
+            throw Unchecked.<RuntimeException>sneakyThrow(observerFailure);
         }
     }
 
