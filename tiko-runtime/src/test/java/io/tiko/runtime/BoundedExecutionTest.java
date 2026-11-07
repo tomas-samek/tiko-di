@@ -1,6 +1,7 @@
 package io.tiko.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.tiko.ErrorContext;
 import io.tiko.PreDestroyFailure;
@@ -113,6 +114,28 @@ class BoundedExecutionTest {
         assertThat(((PreDestroyFailure) routed.get()).cause())
                 .as("a thrown failure is routed with its original cause, not wrapped in ExecutionException")
                 .isSameAs(boom);
+    }
+
+    @Test
+    void teardownRetainsMultipleObserverFailuresWithoutSelfSuppression() {
+        var firstHookFailure = new IllegalStateException("first hook");
+        var firstObserverFailure = new IllegalArgumentException("observer failed");
+        var secondHookFailure = new IllegalStateException("second hook");
+        var errors = new BoundedExecution.TeardownErrors(
+                context -> {
+                    if (context.cause() == firstHookFailure) {
+                        throw firstObserverFailure;
+                    }
+                    throw secondHookFailure;
+                },
+                null);
+
+        errors.onError(AS_PREDESTROY.apply(firstHookFailure));
+        errors.onError(AS_PREDESTROY.apply(secondHookFailure));
+
+        assertThatThrownBy(() -> errors.rethrowIfFailed(false)).isSameAs(firstObserverFailure);
+        assertThat(firstObserverFailure.getSuppressed()).containsExactly(firstHookFailure, secondHookFailure);
+        assertThat(secondHookFailure.getSuppressed()).isEmpty();
     }
 
     @Test

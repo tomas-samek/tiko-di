@@ -27,8 +27,8 @@ public final class BoundedExecution {
 
     /**
      * Runs {@code task}, routing any failure to {@code errorHandler} as {@code failure.apply(cause)}.
-     * Always returns normally — failures are routed, never propagated — so a caller iterating over
-     * hooks proceeds to the next one.
+     * Returns normally if the observer returns normally. Singleton teardown uses {@link TeardownErrors}
+     * to defer observer failures until all cleanup has run.
      *
      * <ul>
      *   <li>{@code timeout == null} → run inline on the calling thread (today's behavior, zero
@@ -92,6 +92,62 @@ public final class BoundedExecution {
         Thread t = new Thread(r, "tiko-teardown");
         t.setDaemon(true);
         return t;
+    }
+
+    static Throwable retainFailure(Throwable primary, Throwable next) {
+        if (primary == null) {
+            return next;
+        }
+        if (primary != next) {
+            primary.addSuppressed(next);
+        }
+        return primary;
+    }
+
+    /** Carries an observer failure across the internal module boundary without losing its identity. */
+    static final class ModuleTeardownFailure extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
+        ModuleTeardownFailure(Throwable cause) {
+            super("Module teardown observer failed", cause);
+        }
+    }
+
+    /** Collects observer failures across the callbacks of one generated singleton teardown. */
+    public static final class TeardownErrors implements ErrorHandler {
+        private final ErrorHandler delegate;
+        private Throwable primaryFailure;
+
+        /** Starts with the original startup failure during rollback, or {@code null} during regular shutdown. */
+        public TeardownErrors(ErrorHandler delegate, Throwable startupFailure) {
+            this.delegate = delegate;
+            this.primaryFailure = startupFailure;
+        }
+
+        @Override
+        @SuppressWarnings("java:S1181") // Preserve errors too and defer propagation until cleanup finishes.
+        public void onError(ErrorContext context) {
+            try {
+                delegate.onError(context);
+            } catch (Throwable observerFailure) {
+                var handledFailure = context.cause();
+                // Avoid self-suppression and a cycle back to the primary failure.
+                if (observerFailure != handledFailure && handledFailure != primaryFailure) {
+                    observerFailure.addSuppressed(handledFailure);
+                }
+                primaryFailure = retainFailure(primaryFailure, observerFailure);
+            }
+        }
+
+        /** Rethrows the observer failure, deferring its delivery to the aggregator for an internal module. */
+        public void rethrowIfFailed(boolean aggregatedModule) {
+            if (primaryFailure != null) {
+                if (aggregatedModule) {
+                    throw new ModuleTeardownFailure(primaryFailure);
+                }
+                throw Unchecked.<RuntimeException>sneakyThrow(primaryFailure);
+            }
+        }
     }
 
     /**
