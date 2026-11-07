@@ -266,6 +266,11 @@ public final class ContainerGenerator {
 
         // Add lifecycle methods
         containerBuilder.addMethod(createStartMethod());
+        containerBuilder.addMethod(MethodSpec.methodBuilder("shutdown")
+                .addModifiers(Modifier.PUBLIC)
+                .addAnnotation(Override.class)
+                .addStatement("__shutdown(null)")
+                .build());
         containerBuilder.addMethod(createShutdownMethod());
         containerBuilder.addMethod(createIsStoppedMethod());
 
@@ -1459,13 +1464,24 @@ public final class ContainerGenerator {
         method.addStatement("return");
         method.endControlFlow();
 
-        method.addComment("Initialize all SINGLETON components");
-
-        for (ComponentModel component : activeComponents()) {
-            if (component.getScope() == Scope.SINGLETON && !component.requiresProxy()) {
-                String getterName = "get" + component.getClassName();
-                method.addStatement("$L()", getterName);
+        var eagerSingletons = activeComponents().stream()
+                .filter(component -> component.getScope() == Scope.SINGLETON && !component.requiresProxy())
+                .toList();
+        if (!eagerSingletons.isEmpty()) {
+            method.beginControlFlow("try");
+            for (ComponentModel component : eagerSingletons) {
+                method.addStatement("get$L()", component.getClassName());
             }
+            method.nextControlFlow("catch ($T __startupFailure)", Throwable.class);
+            method.beginControlFlow("try");
+            method.addStatement("__shutdown(__startupFailure)");
+            method.nextControlFlow("catch ($T __cleanupFailure)", Throwable.class);
+            method.beginControlFlow("if (__cleanupFailure != __startupFailure)");
+            method.addStatement("__startupFailure.addSuppressed(__cleanupFailure)");
+            method.endControlFlow();
+            method.endControlFlow();
+            method.addStatement("throw __startupFailure");
+            method.endControlFlow();
         }
 
         method.addStatement("this.startedAt = $T.now()", Instant.class);
@@ -1483,7 +1499,7 @@ public final class ContainerGenerator {
      * <p>Phase order:
      * <ol>
      *   <li>CAS shutdownInvoked false → true. If already true, return immediately.</li>
-     *   <li>Publish ApplicationEndingEvent. get() still works so handlers can read state.</li>
+     *   <li>Publish ApplicationEndingEvent for normal shutdown. get() still works so handlers can read state.</li>
      *   <li>Set stopped, drain in-flight gets — bounded by the configured
      *       {@code shutdownTimeout} (same knob as the Phase 5 executor drain), parking
      *       between polls instead of busy-spinning (#305).</li>
@@ -1493,9 +1509,9 @@ public final class ContainerGenerator {
      * </ol>
      */
     private MethodSpec createShutdownMethod() {
-        MethodSpec.Builder method = MethodSpec.methodBuilder("shutdown")
-                .addModifiers(Modifier.PUBLIC)
-                .addAnnotation(Override.class);
+        MethodSpec.Builder method = MethodSpec.methodBuilder("__shutdown")
+                .addModifiers(Modifier.PRIVATE)
+                .addParameter(Throwable.class, "__startupFailure");
 
         ClassName loggerLevel = ClassName.get("java.lang", "System", "Logger", "Level");
         ClassName timeUnit = ClassName.get("java.util.concurrent", "TimeUnit");
@@ -1507,6 +1523,8 @@ public final class ContainerGenerator {
 
         method.addComment(
                 "Phase 2: publish ApplicationEndingEvent. get() still works here so handlers can read state.");
+        method.addComment("Failed bootstrap skips lifecycle notification so ending handlers cannot initialize beans.");
+        method.beginControlFlow("if (__startupFailure == null)");
         method.addComment(
                 "Gated on publishLifecycleEvents (#45): per-module containers under an AggregatingContainer skip this; aggregator publishes once.");
         method.addStatement("$T __endTimestamp = $T.now()", Instant.class, Instant.class);
@@ -1526,6 +1544,7 @@ public final class ContainerGenerator {
                 EVENTS_PACKAGE,
                 loggerLevel,
                 "ApplicationEndingEvent publish threw");
+        method.endControlFlow();
         method.endControlFlow();
         method.endControlFlow();
 
@@ -1570,6 +1589,20 @@ public final class ContainerGenerator {
                     + "does not skip the rest.");
             method.addStatement("inShutdownThread.set($T.TRUE)", Boolean.class);
             method.beginControlFlow("try");
+            method.addCode("""
+                    $T __teardownErrorHandler = errorHandler;
+                    if (__startupFailure != null) {
+                      __teardownErrorHandler = __context -> {
+                        try {
+                          errorHandler.onError(__context);
+                        } catch ($T __observerFailure) {
+                          if (__observerFailure != __startupFailure) {
+                            __startupFailure.addSuppressed(__observerFailure);
+                          }
+                        }
+                      };
+                    }
+                    """, ERROR_HANDLER, Throwable.class);
 
             for (int i = shutdownTargets.size() - 1; i >= 0; i--) {
                 ShutdownTarget target = shutdownTargets.get(i);
@@ -2210,7 +2243,7 @@ public final class ContainerGenerator {
         // thread (today's behavior, zero overhead), set → bounded with TimeoutException-caused
         // routing. Either way failures route solely through ErrorHandler (#116) — no catch-site log.
         method.addStatement(
-                "$T.run($L, this.options.teardownTimeout(), errorHandler, __t -> new $T($T.class, __t))",
+                "$T.run($L, this.options.teardownTimeout(), __teardownErrorHandler, __t -> new $T($T.class, __t))",
                 BOUNDED_EXECUTION,
                 componentDestroyTask(component, variableName, isAutoCloseOnly),
                 failureType,
@@ -2267,7 +2300,7 @@ public final class ContainerGenerator {
         // Bounded by options.teardownTimeout() (#106), same as component @PreDestroy; failures route
         // solely through ErrorHandler (#116).
         method.addStatement(
-                "$T.run(() -> $L.close(), this.options.teardownTimeout(), errorHandler,"
+                "$T.run(() -> $L.close(), this.options.teardownTimeout(), __teardownErrorHandler,"
                         + " __t -> new $T($L.getClass(), __t))",
                 BOUNDED_EXECUTION,
                 variableName,

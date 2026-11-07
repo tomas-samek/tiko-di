@@ -250,9 +250,19 @@ public final class TikoContainerImpl_4ae99f55 implements Container {
     if (!startInvoked.compareAndSet(false, true)) {
       return;
     }
-    // Initialize all SINGLETON components
-    getProducers();
-    getService();
+    try {
+      getProducers();
+      getService();
+    } catch (Throwable __startupFailure) {
+      try {
+        __shutdown(__startupFailure);
+      } catch (Throwable __cleanupFailure) {
+        if (__cleanupFailure != __startupFailure) {
+          __startupFailure.addSuppressed(__cleanupFailure);
+        }
+      }
+      throw __startupFailure;
+    }
     this.startedAt = Instant.now();
     if (publishLifecycleEvents) {
       eventBus.publish(new ApplicationStartedEvent(this.startedAt));
@@ -261,20 +271,27 @@ public final class TikoContainerImpl_4ae99f55 implements Container {
 
   @Override
   public void shutdown() {
+    __shutdown(null);
+  }
+
+  private void __shutdown(Throwable __startupFailure) {
     // Phase 1: idempotency CAS (#47)
     if (!shutdownInvoked.compareAndSet(false, true)) {
       return;
     }
     // Phase 2: publish ApplicationEndingEvent. get() still works here so handlers can read state.
-    // Gated on publishLifecycleEvents (#45): per-module containers under an AggregatingContainer skip this; aggregator publishes once.
-    Instant __endTimestamp = Instant.now();
-    Duration __uptime = (this.startedAt != null) ? Duration.between(this.startedAt, __endTimestamp) : Duration.ZERO;
-    if (publishLifecycleEvents) {
-      try {
-        eventBus.publish(new ApplicationEndingEvent(__endTimestamp, __uptime));
-      } catch (Throwable __t) {
-        // Bus-impl defect; @PreDestroy must still run (handler exceptions are isolated by #44)
-        System.getLogger("io.tiko.events").log(System.Logger.Level.WARNING, "ApplicationEndingEvent publish threw", __t);
+    // Failed bootstrap skips lifecycle notification so ending handlers cannot initialize beans.
+    if (__startupFailure == null) {
+      // Gated on publishLifecycleEvents (#45): per-module containers under an AggregatingContainer skip this; aggregator publishes once.
+      Instant __endTimestamp = Instant.now();
+      Duration __uptime = (this.startedAt != null) ? Duration.between(this.startedAt, __endTimestamp) : Duration.ZERO;
+      if (publishLifecycleEvents) {
+        try {
+          eventBus.publish(new ApplicationEndingEvent(__endTimestamp, __uptime));
+        } catch (Throwable __t) {
+          // Bus-impl defect; @PreDestroy must still run (handler exceptions are isolated by #44)
+          System.getLogger("io.tiko.events").log(System.Logger.Level.WARNING, "ApplicationEndingEvent publish threw", __t);
+        }
       }
     }
     // Phase 3: gate new get() calls and drain in-flight ones. Lookups register in
