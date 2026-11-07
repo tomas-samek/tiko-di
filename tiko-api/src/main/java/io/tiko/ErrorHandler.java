@@ -6,9 +6,9 @@ package io.tiko;
  *
  * <p><strong>Contract:</strong>
  * <ul>
- *   <li>Invoked synchronously on whichever thread surfaced the error (publisher thread
- *       for sync handlers; executor thread for async handlers). The framework does not
- *       hop threads to invoke this hook.</li>
+ *   <li>Invoked synchronously on the thread that reports the failure. An async handler's
+ *       failure can be reported on the publisher's thread if the executor runs the handler
+ *       inline, for example under the default {@code CALLER_RUNS} policy during saturation.</li>
  *   <li>The return type is {@code void} on purpose — implementations cannot influence
  *       dispatch flow. This hook is for logs, metrics, and alerts. To branch on
  *       handler outcomes, use {@code @EventTrigger} with an {@code EventTriggerGuard};
