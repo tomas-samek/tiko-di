@@ -1,13 +1,17 @@
 # AGENTS.md
 
-Agent-config pointer for tools that read `AGENTS.md` instead of
-`CLAUDE.md`. Same content applies.
-
 ## Repo-development reference
 
 [`CLAUDE.md`](./CLAUDE.md) covers conventions for working **on** the
 Tiko DI codebase: build commands, code style, annotation processor
 rules, testing strategy, generated-code markers, logging discipline.
+
+## QA and GitHub issues
+
+- Use the [QA playbook](./docs/qa-playbook.md) to find, verify, and report defects.
+- Use the [issue-fix playbook](./docs/issue-fix-playbook.md) when investigating,
+  fixing, or publishing work on a filed issue. It defines the deliverables for
+  each kind of request.
 
 ## Building a service with Tiko
 

@@ -13,9 +13,24 @@ Counterpart to [qa-playbook.md](./qa-playbook.md). The QA playbook tells you how
 
 The discipline below is what survived the 2026-05-24 #149 fix — see "Case study" at the bottom for the concrete walkthrough.
 
-## When to run this discipline
+## Match the work to the request
 
-Every time you pick up a `bug` or `enhancement` issue that names a specific defect or missing behaviour. Pure-doc and pure-refactor issues are usually mechanical and skip Phase 1; everything else gets all four phases.
+| Request | Deliverable |
+|---|---|
+| Investigate an issue | Verify the reported behaviour and public contract. Report the evidence, conclusion, and proposed next step. A scratch reproducer is part of the investigation when useful. |
+| Fix an issue | Apply and verify the local change in its own branch or worktree. Include a regression test for a behaviour change and report the verification and any gaps. |
+| Open a PR or run `/work-issue <number>` | Publish the verified change and follow the PR checks through completion. `/work-issue` starts at issue intake and includes the full local reactor build. A PR request for an existing fix starts from that change and its verification. |
+
+For a filed defect or missing behaviour, work through the phases below as far as
+the request requires. For a mechanical documentation or refactor change, verify
+the affected material or behaviour directly.
+
+## Prepare
+
+- Read the issue and relevant comments with `gh issue view <number> --comments`. Check prior design decisions and related issues against the current source. Use local project notes when available.
+- Resolve `gh` and `mvn` from PATH or known local installations, and verify the tools and JDK before running builds. Report any missing prerequisite and the checks it affects.
+- For a fix, fetch `origin/main` and branch from it using `<type>/issue-<number>-<slug>`. Use a conventional type such as `fix`, `test`, or `docs`, and a short kebab-case slug. Use a separate worktree when the existing checkout has unrelated changes or when working on issues in parallel.
+- Pause for a material design decision, a conflict with an explicit scope decision, or a proposed fix that spans multiple independent issues. Report the decision needed or the suggested split.
 
 ## The four phases
 
@@ -23,7 +38,7 @@ Every time you pick up a `bug` or `enhancement` issue that names a specific defe
 
 Before reading any speculative content in the issue body (well-written bodies won't have any per QA playbook policy, but legacy issues might):
 
-- [ ] Reproduce the failure on your machine, or in CI for environment-specific bugs. If you can't reproduce, you can't fix — file a "needs more info" comment, don't guess.
+- [ ] Reproduce the failure locally, or use CI evidence for environment-specific bugs. If the evidence remains inconclusive, report what you tried and what evidence is needed to proceed.
 - [ ] Capture the actual error verbatim. The text matters; "doesn't work" is not evidence.
 - [ ] Read the relevant code paths fresh. Anything the issue body claims about file paths is evidence-shaped but still hypothesis-shaped — treat as data, not gospel. Verify by reading the code.
 - [ ] If reproducing requires forked-subprocess execution (Kafka ITs, MCP server, custom-logger example), make sure diagnostic plumbing is in place — drain subprocess stdout, capture stderr, surface what the subprocess actually printed. Silent subprocess failures are the most common cause of "the test just times out" misdiagnosis.
@@ -37,17 +52,48 @@ Before reading any speculative content in the issue body (well-written bodies wo
 
 ### Phase 3 — Fix the root cause, not the symptom
 
+- [ ] For a behaviour fix, write the smallest regression test that pins the public contract and confirm it fails for the expected reason before applying the fix. For a false-green test, use a controlled negative case to show the strengthened assertion catches the broken path.
 - [ ] Narrowest possible scope. Smaller fixes are easier to verify, easier to revert, easier to bisect.
 - [ ] The acceptance is the user-visible outcome, not the mechanism. If your fix achieves the outcome by a different mechanism than the reporter imagined, that's fine — note the deviation in the PR description.
-- [ ] If your fix uncovers a deeper bug, file the deeper bug as a separate issue rather than scope-creeping the current one. Linking the two in commit messages or PR bodies keeps the trail intact.
+- [ ] Track independent bugs separately. Surface the finding and link a follow-up issue when filing it is in scope.
 - [ ] If the bug is in a shared API (config layer, processor, runtime container), consider whether the fix is *targeted* (one user-reported symptom) or *general* (one class of bugs). The general fix is usually right when both are similar size; when the general fix is much larger, ship the targeted one and file the general one.
 
 ### Phase 4 — Verify
 
-- [ ] Reproduce the failure one more time to confirm it stops failing.
-- [ ] Add a regression test that pins the contract. Mirror the existing test style for the module: unit test (`*Test`) for compile-time / pure-function behaviour, integration test (`*IT`) for subprocess / external-resource cases. Per CLAUDE.md, `*IT` needs failsafe wiring (root pom handles it project-wide post-#193).
-- [ ] Run the broader test suite (`mvn verify` if your fix touches anything beyond a single module). Catch unintended consequences before CI does.
+- [ ] Rerun the regression against the fix and check that it executed. Follow the [testing rules](../.claude/rules/testing.md) for Surefire (`*Test`) and Failsafe (`*IT`).
+- [ ] Run the affected modules and their relevant tests, for example `mvn -pl <module> -am verify` when integration tests are involved. For `/work-issue`, run `mvn clean install` from the repository root before committing.
+- [ ] Check for skipped tests in the reports. Record any verification gap, such as a broker test skipped because Docker was unavailable. For PR delivery, check that CI exercised the affected path.
 - [ ] On a multi-iteration fix, each CI cycle should pinpoint progress: name `await().alias(...)` phases, log subprocess stdout, prefer named exceptions over generic ones. The faster the next iteration knows which hypothesis to attack, the cheaper the loop.
+
+## Publish and verify the PR
+
+When the request includes a PR, carry the verified change through these steps.
+
+1. Review the diff and stage only the issue's files by explicit path. Use a
+   single-line conventional commit such as `fix(runtime): close resources on startup failure (#123)`.
+   Add a co-author trailer only if requested.
+2. Push the branch and open the PR with the commit subject as its title. Pass the
+   body as a Markdown file with `gh pr create --body-file` and follow the
+   [GitHub formatting rules](../CLAUDE.md#github-markdown-formatting).
+   Aim for at most 120 words and list only the checks actually run.
+
+   ```markdown
+   ## Summary
+   - <what changed and why>
+
+   ## Test plan
+   - [x] <check actually run>
+
+   Closes #<issue-number>
+   ```
+
+3. Use `gh pr checks <pr> --watch` to follow all configured checks to completion, including
+   the SonarCloud quality gate. The [Maven workflow](../.github/workflows/maven.yml)
+   defines the JDK matrix, integration runs, and SonarCloud scan. Diagnose failures
+   from the job logs, fix them on the same branch, then push and verify the new head.
+4. Report the PR URL and check results once all checks are green. If a check remains blocked,
+   report the specific blocker. The repository owner handles merging, and the
+   closing reference in the PR handles closing the issue on merge.
 
 ## Common traps
 
@@ -57,11 +103,11 @@ Before reading any speculative content in the issue body (well-written bodies wo
 - **Fixing the symptom in the example instead of the framework.** If the user's natural usage triggers a confusing error, the bug is likely in the framework's contract, not the user's config. Resist the urge to massage the user-facing artefact to placate the validator.
 - **Iterating CI cycles without diagnostic improvements.** Each red CI run should leave the test better instrumented, even if the fix didn't land. The cycle compounds if every failure gives you more visibility into the next attempt.
 
-## Workflow
+## Optional workflow tools
 
-The skill discipline behind this playbook lives in `superpowers:systematic-debugging` — invoke it when starting any debugging task. The phases above mirror its Phase 1 (Root Cause Investigation) → Phase 2 (Pattern Analysis) → Phase 3 (Hypothesis & Testing) → Phase 4 (Implementation), with the additions tuned for "you're picking up an issue someone else wrote."
-
-When the work is structurally larger than a single bug (multi-step fix touching several modules), upgrade to `superpowers:writing-plans` + `superpowers:subagent-driven-development`. The fix workflow remains the same; you're just delegating Phase 3 to subagents and reviewing between steps.
+Use `superpowers:systematic-debugging` when available. For a larger change,
+`superpowers:writing-plans` and `superpowers:subagent-driven-development`
+can help where supported. The same phases and verification apply in any tool.
 
 ## Case study — 2026-05-24 #149
 
@@ -83,4 +129,5 @@ When you find yourself iterating a fix and each cycle reveals something the issu
 
 ## Out of scope
 
-Bug investigation that doesn't have an issue filed yet. Use `superpowers:systematic-debugging` directly, or file the bug through the QA playbook first then work it through this one. Pure feature work (no underlying defect, just "add this") follows `superpowers:brainstorming` + `superpowers:writing-plans` instead.
+For a potential bug without a filed issue, follow the [QA playbook](./qa-playbook.md).
+For new feature design, agree on the contract and scope before implementation.
