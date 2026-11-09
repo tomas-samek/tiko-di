@@ -44,6 +44,8 @@ public final class ScriptedShutdownContainer implements Container {
     private final Duration teardownTimeout;
     private final ExecutorService executor;
 
+    // S1172: the runtime looks this constructor up by its canonical signature; not every parameter is used.
+    @SuppressWarnings("java:S1172")
     public ScriptedShutdownContainer(
             EventBus eventBus,
             ErrorHandler errorHandler,
@@ -149,6 +151,7 @@ public final class ScriptedShutdownContainer implements Container {
     }
 
     /** Single-module boots inject the test classpath's bound configs here; this module ignores them. */
+    @SuppressWarnings("java:S1172") // called reflectively with the bound configs; this module has none
     public void injectConfigs(Map<Class<?>, Object> configs) {
         // no configuration records in this module
     }
