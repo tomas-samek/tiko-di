@@ -40,7 +40,6 @@ class KspCompiledClassesTest {
                 List.of(KspCompiler.library(KspCompiler.kotlin("Lib.kt", LIBRARY))),
                 KspCompiler.kotlin("C.kt", SOURCE));
 
-        assertThat(results).containsEntry("known", List.of("lib.A", "lib.B"));
-        assertThat(results).containsEntry("unknown", List.of());
+        assertThat(results).containsEntry("known", List.of("lib.A", "lib.B")).containsEntry("unknown", List.of());
     }
 }
