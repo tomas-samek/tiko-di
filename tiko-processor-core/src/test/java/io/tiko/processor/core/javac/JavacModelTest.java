@@ -438,6 +438,11 @@ class JavacModelTest {
                                 env -> assertThat(env.classpath().readResource("META-INF/tiko-core-test/absent.txt"))
                                         .isEmpty())),
                 Arguments.of(
+                        "compiledClassesInIsAlwaysEmptyOnJavac",
+                        source("p.Lone", "package p;", "public class Lone {}"),
+                        Check.model(env -> assertThat(env.classpath().compiledClassesIn("java.util"))
+                                .isEmpty())),
+                Arguments.of(
                         "classpathResourceIsRead",
                         source("p.Lone", "package p;", "public class Lone {}"),
                         Check.model(env -> assertThat(

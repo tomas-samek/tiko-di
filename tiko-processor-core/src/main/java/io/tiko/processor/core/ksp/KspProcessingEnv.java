@@ -10,6 +10,7 @@ import com.google.devtools.ksp.symbol.KSFunctionDeclaration;
 import com.google.devtools.ksp.symbol.KSNode;
 import com.google.devtools.ksp.symbol.KSPropertyAccessor;
 import com.google.devtools.ksp.symbol.KSPropertySetter;
+import com.google.devtools.ksp.symbol.Origin;
 import io.tiko.processor.core.ClasspathProbe;
 import io.tiko.processor.core.CodeOutput;
 import io.tiko.processor.core.Diagnostics;
@@ -19,6 +20,7 @@ import io.tiko.processor.core.TypeOracle;
 import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.MethodDecl;
 import io.tiko.processor.core.model.PropertyAccessorDecl;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -97,7 +99,32 @@ public final class KspProcessingEnv implements ProcessingEnv {
 
     @Override
     public ClasspathProbe classpath() {
-        return path -> Optional.empty();
+        return new ClasspathProbe() {
+            @Override
+            public Optional<String> readResource(String path) {
+                return Optional.empty();
+            }
+
+            @Override
+            public List<ClassDecl> compiledClassesIn(String packageName) {
+                return KspProcessingEnv.this.compiledClassesIn(packageName);
+            }
+        };
+    }
+
+    /**
+     * Library classes of the package, from class files: {@code getDeclarationsFromPackage} is
+     * {@code @KspExperimental}, which only Kotlin callers must opt in to.
+     */
+    private List<ClassDecl> compiledClassesIn(String packageName) {
+        return SequencesKt.toList(resolver.getDeclarationsFromPackage(packageName)).stream()
+                .filter(KSClassDeclaration.class::isInstance)
+                .map(KSClassDeclaration.class::cast)
+                .filter(declaration ->
+                        declaration.getOrigin() == Origin.KOTLIN_LIB || declaration.getOrigin() == Origin.JAVA_LIB)
+                .map(model::classDecl)
+                .sorted(Comparator.comparing(ClassDecl::qualifiedName))
+                .toList();
     }
 
     @Override

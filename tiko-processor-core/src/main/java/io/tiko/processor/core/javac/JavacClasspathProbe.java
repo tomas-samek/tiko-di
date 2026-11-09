@@ -1,8 +1,10 @@
 package io.tiko.processor.core.javac;
 
 import io.tiko.processor.core.ClasspathProbe;
+import io.tiko.processor.core.model.ClassDecl;
 import java.io.IOException;
 import java.io.StringWriter;
+import java.util.List;
 import java.util.Optional;
 import javax.annotation.processing.Filer;
 import javax.tools.StandardLocation;
@@ -31,5 +33,11 @@ final class JavacClasspathProbe implements ClasspathProbe {
         } catch (IOException e) {
             return Optional.empty();
         }
+    }
+
+    /** Always empty: javac reads the resources instead. */
+    @Override
+    public List<ClassDecl> compiledClassesIn(String packageName) {
+        return List.of();
     }
 }
