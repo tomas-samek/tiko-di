@@ -44,7 +44,6 @@ public final class ComponentCollector {
     private static final String PRODUCES = Produces.class.getCanonicalName();
     private static final String POST_CONSTRUCT = PostConstruct.class.getCanonicalName();
     private static final String PRE_DESTROY = PreDestroy.class.getCanonicalName();
-    private static final String COMPONENTS_MANIFEST = "META-INF/tiko/components.txt";
     /** The {@code @TestComponent} member naming the shadowed type. */
     private static final String VALUE = "value";
 
@@ -52,6 +51,8 @@ public final class ComponentCollector {
     private final ProcessorContext context;
     private final ErrorReporter errors;
     private final TypeUtil typeUtil;
+    /** Read on the first implicit walk: most rounds have no test component. */
+    private MainModuleOnClasspath mainModule;
 
     private ComponentCollector(ProcessingEnv env, ProcessorContext context) {
         this.env = env;
@@ -74,28 +75,6 @@ public final class ComponentCollector {
                 collector.register(decl, TEST_COMPONENT_FQN, collector.buildTestComponent(decl));
             }
         }
-    }
-
-    /**
-     * Reads {@code META-INF/tiko/components.txt} from the compile classpath and returns
-     * the set of main-component FQNs declared there. Empty when no such manifest exists
-     * (e.g. the round is a first-emit main-compile rather than a peer test-compile).
-     * Lets a {@code @TestComponent} detect its shadow target even when the production
-     * {@code @Component} sources are absent from the round but already live on the
-     * classpath as compiled bytecode.
-     */
-    public static Set<String> mainComponentFqnsOnClasspath(ProcessingEnv env) {
-        return env.classpath()
-                .readResource(COMPONENTS_MANIFEST)
-                .map(text -> {
-                    Set<String> fqns = new LinkedHashSet<>();
-                    text.lines()
-                            .map(String::trim)
-                            .filter(line -> !line.isEmpty() && !line.startsWith("#"))
-                            .forEach(fqns::add);
-                    return fqns;
-                })
-                .orElse(Set.of());
     }
 
     /** Registers the model; marks the class rejected when it has none (an error was reported). */
@@ -234,14 +213,14 @@ public final class ComponentCollector {
     /**
      * Implicit walk: walk the superclass chain, returning routable types of the first
      * ancestor that is a main component. We check both (a) the @Component annotation
-     * (visible when the main is being compiled in the same round) and (b) the
-     * META-INF/tiko/components.txt manifest on the classpath (visible when the main
+     * (visible when the main is being compiled in the same round) and (b) the main module
+     * on the classpath, read by {@link MainModuleOnClasspath} (visible when the main
      * already lives in target/classes and only the test sources are being compiled).
      * The latter path is essential for the natural Maven layout where production
      * components and tests build in separate rounds.
      */
     private Set<String> implicitShadowKeys(ClassDecl testClass) {
-        var mainComponentFqns = mainComponentFqnsOnClasspath(env);
+        var mainComponentFqns = mainModule().componentFqns();
         var superType = testClass.superclass().flatMap(TypeRef::declaration);
         while (superType.isPresent()) {
             var decl = superType.get();
@@ -260,6 +239,13 @@ public final class ComponentCollector {
             superType = decl.superclass().flatMap(TypeRef::declaration);
         }
         return Set.of();
+    }
+
+    private MainModuleOnClasspath mainModule() {
+        if (mainModule == null) {
+            mainModule = MainModuleOnClasspath.read(env);
+        }
+        return mainModule;
     }
 
     /** A class literal of {@code java.lang.Void}: the annotation's "unset" default. */
