@@ -169,7 +169,12 @@ public final class Tiko {
             // entirely.
             boolean testMode = TEST_DESCRIPTOR.equals(descriptorName);
 
+            // container is the generated (or aggregating) container; handle is what callers get.
+            // The aggregate owns its threads itself. A single-module container is built with the
+            // boot's OwnedThreads bound, so its default executor takes its threads from it, and is
+            // always wrapped so close() can report the threads that outlive it (#634).
             Container container;
+            Container handle;
             if (moduleCount > 1 || testMode) {
                 container = new AggregatingContainer(
                         eventBus,
@@ -178,15 +183,20 @@ public final class Tiko {
                         effectiveShutdownTimeout,
                         options,
                         descriptorName);
+                handle = container;
             } else {
                 // Single module: Direct instantiation (does NOT call start yet)
+                var ownedThreads = new OwnedThreads();
                 container = createSingleModuleContainer(
                         eventBus,
                         errorHandler,
                         options.eventExecutor(),
                         effectiveShutdownTimeout,
                         options,
-                        descriptorName);
+                        descriptorName,
+                        ownedThreads);
+                handle = new TransportAwareContainer(
+                        container, java.util.List.of(), ownedThreads, options.threadsOutlivingCloseHandler());
             }
 
             // 4. Inject config singletons before start(), so @PostConstruct can use them.
@@ -201,12 +211,12 @@ public final class Tiko {
             // all SINGLETON components and publishes ApplicationStartedEvent;
             // multi-module's AggregatingContainer.start() publishes ApplicationStartedEvent
             // once on the shared bus and leaves per-module singleton init lazy (#45).
-            startOrShutdown(container);
+            startOrShutdown(handle);
 
             // 6. Discover transport modules (tiko-kafka, future tiko-http, ...) and start them.
             //    A failure discovering or starting any transport must not leak the
             //    already-started container (#348) — tear it down before the exception escapes.
-            return startTransportsOrShutdown(container, classLoader, options);
+            return startTransportsOrShutdown(handle, classLoader, options);
         } catch (RuntimeException e) {
             throw e;
         } catch (ClassNotFoundException e) {
@@ -277,7 +287,8 @@ public final class Tiko {
             ExecutorService userEventExecutor,
             java.time.Duration shutdownTimeout,
             TikoOptions options,
-            String descriptorName)
+            String descriptorName,
+            OwnedThreads ownedThreads)
             throws Exception {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
         if (classLoader == null) classLoader = Tiko.class.getClassLoader();
@@ -299,15 +310,16 @@ public final class Tiko {
         // its own ApplicationStartedEvent / ApplicationEndingEvent (no aggregator above it).
         // The 6th arg (TikoOptions) is held by the container so override-aware getters can
         // consult it during component lookup (test/runtime override support).
-        Container container = (Container) implClass
-                .getDeclaredConstructor(CONTAINER_CTOR_PARAM_TYPES)
-                .newInstance(
-                        eventBus,
-                        errorHandler,
-                        userEventExecutor,
-                        /* publishLifecycleEvents */ true,
-                        shutdownTimeout,
-                        options);
+        // Constructed with the boot's OwnedThreads bound: the generated constructor builds the
+        // default event executor, which captures that factory for its worker threads (#634).
+        var constructor = implClass.getDeclaredConstructor(CONTAINER_CTOR_PARAM_TYPES);
+        Container container = OwnedThreads.callBound(ownedThreads, () -> (Container) constructor.newInstance(
+                eventBus,
+                errorHandler,
+                userEventExecutor,
+                /* publishLifecycleEvents */ true,
+                shutdownTimeout,
+                options));
 
         registerEventHandlers(eventBus, container, implClass);
 
@@ -345,8 +357,11 @@ public final class Tiko {
         if (bootstraps.isEmpty()) {
             return container;
         }
-        // Build the wrapper first so start() callers receive the public-facing handle.
-        TransportAwareContainer wrapper = new TransportAwareContainer(container, bootstraps);
+        // Build the wrapper first so start() callers receive the public-facing handle. A
+        // single-module boot is already wrapped; it gains the transports instead of a second layer.
+        TransportAwareContainer wrapper = container instanceof TransportAwareContainer booted
+                ? booted.withTransports(bootstraps)
+                : new TransportAwareContainer(container, bootstraps, null, null);
         int started = 0;
         try {
             for (TransportBootstrap tb : bootstraps) {
@@ -512,18 +527,39 @@ public final class Tiko {
     }
 
     /**
-     * Wrapper that runs every {@link TransportBootstrap#shutdown()} before delegating to the
-     * underlying container's own {@code shutdown()} / {@code close()}. Method delegation is
-     * exhaustive; we cannot use {@code Container} as a sealed type because user-supplied
-     * implementations are not on the radar of this module.
+     * The handle {@code Tiko.create(...)} returns when the container needs one: a single-module
+     * boot always, any boot with transports. On {@code shutdown()} it runs every
+     * {@link TransportBootstrap#shutdown()} before the container's own {@code shutdown()}.
+     *
+     * <p>For a single-module boot it also owns the boot's {@link OwnedThreads} (#634): its
+     * {@link #threadFactory()} tracks, the container's shutdown runs bound so teardown threads are
+     * tracked, and the threads still alive afterwards are reported once. Over an aggregated boot
+     * {@code threads} is {@code null}: the aggregate owns and reports its threads itself.
+     *
+     * <p>Method delegation is exhaustive, default methods included, so the wrapper changes nothing
+     * but the identity of the returned object. We cannot use {@code Container} as a sealed type
+     * because user-supplied implementations are not on the radar of this module.
      */
     private static final class TransportAwareContainer implements Container {
         private final Container delegate;
         private final java.util.List<TransportBootstrap> bootstraps;
+        private final OwnedThreads threads;
+        private final java.util.function.Consumer<java.util.List<Thread>> onThreadsOutlivingClose;
 
-        TransportAwareContainer(Container delegate, java.util.List<TransportBootstrap> bootstraps) {
+        TransportAwareContainer(
+                Container delegate,
+                java.util.List<TransportBootstrap> bootstraps,
+                OwnedThreads threads,
+                java.util.function.Consumer<java.util.List<Thread>> onThreadsOutlivingClose) {
             this.delegate = delegate;
             this.bootstraps = bootstraps;
+            this.threads = threads;
+            this.onThreadsOutlivingClose = onThreadsOutlivingClose;
+        }
+
+        /** The same container and thread owner, now also stopping {@code transports} on shutdown. */
+        TransportAwareContainer withTransports(java.util.List<TransportBootstrap> transports) {
+            return new TransportAwareContainer(delegate, transports, threads, onThreadsOutlivingClose);
         }
 
         @Override
@@ -552,6 +588,11 @@ public final class Tiko {
         }
 
         @Override
+        public <T> io.tiko.PickBuilder<T> pick(Class<T> type) {
+            return delegate.pick(type);
+        }
+
+        @Override
         public void runInEventScope(Runnable runnable) {
             delegate.runInEventScope(runnable);
         }
@@ -572,13 +613,28 @@ public final class Tiko {
         }
 
         @Override
+        public io.tiko.EventBus events() {
+            return delegate.events();
+        }
+
+        @Override
         public java.util.concurrent.ExecutorService getEventExecutor() {
             return delegate.getEventExecutor();
         }
 
         @Override
+        public java.util.Optional<io.tiko.ExecutorMetrics> eventExecutorMetrics() {
+            return delegate.eventExecutorMetrics();
+        }
+
+        @Override
         public io.tiko.ErrorHandler getErrorHandler() {
             return delegate.getErrorHandler();
+        }
+
+        @Override
+        public java.util.concurrent.ThreadFactory threadFactory() {
+            return threads != null ? threads : delegate.threadFactory();
         }
 
         @Override
@@ -593,7 +649,22 @@ public final class Tiko {
                     /* best-effort */
                 }
             }
-            delegate.shutdown();
+            if (threads == null) {
+                delegate.shutdown();
+                return;
+            }
+            try {
+                OwnedThreads.runBound(threads, delegate::shutdown);
+            } finally {
+                threads.reportSurvivors(onThreadsOutlivingClose);
+            }
+        }
+
+        @Override
+        public void close() {
+            // Through this wrapper's shutdown(), never the delegate's close(): that would skip the
+            // transports and the report.
+            shutdown();
         }
     }
 }

@@ -45,7 +45,14 @@ Builder errorHandler(ErrorHandler handler)
 <T> Builder override(Class<T> type, Supplier<? extends T> supplier)
 <T extends TransportBootstrap> Builder replaceTransport(Class<T> transport, Function<T, TransportBootstrap> replacement)
 Builder testWiring(boolean enabled)   // apply @TestComponent wiring; @TikoTest sets it
+Builder onThreadsOutlivingClose(Consumer<List<Thread>> handler)
+    // threads the container started still alive after close() (+1 s exit grace), reported
+    // once; default: one WARNING on io.tiko.events naming each thread and its top frame
 TikoOptions build()
+
+// Container-owned threads (io.tiko.Container)
+ThreadFactory threadFactory()   // threads the container starts and reports if they outlive
+                                // close(); transports create their threads here
 
 // Config sources (io.tiko.config.ConfigSources)
 static ConfigSource classpath(String resourcePath)

@@ -58,6 +58,9 @@ public final class AggregatingContainer implements Container {
     private final Map<Class<?>, Container> componentToContainerMap;
     private final Map<Class<?>, Container> configToContainer = new ConcurrentHashMap<>();
     private final AtomicBoolean shutdownInvoked = new AtomicBoolean(false);
+    /** Every thread this container starts, for the report of those outliving {@link #shutdown()} (#634). */
+    private final OwnedThreads ownedThreads = new OwnedThreads();
+
     private final AtomicBoolean startInvoked = new AtomicBoolean(false);
     private volatile Instant startedAt;
 
@@ -157,7 +160,8 @@ public final class AggregatingContainer implements Container {
                         options.onOverflow(),
                         options.eventExecutorCoreSize(),
                         options.eventExecutorMaxSize(),
-                        options.eventExecutorKeepAlive());
+                        options.eventExecutorKeepAlive(),
+                        ownedThreads);
         this.ownsEventExecutor = (userEventExecutor == null);
         this.shutdownTimeout = shutdownTimeout;
         this.options = options;
@@ -505,6 +509,15 @@ public final class AggregatingContainer implements Container {
         return eventExecutor;
     }
 
+    /**
+     * The aggregate's tracking factory (#634). Transports receive a container that returns it, so
+     * threads they create are reported if they outlive {@link #shutdown()}.
+     */
+    @Override
+    public java.util.concurrent.ThreadFactory threadFactory() {
+        return ownedThreads;
+    }
+
     @Override
     public java.util.Optional<io.tiko.ExecutorMetrics> eventExecutorMetrics() {
         // Only the framework-owned default pool is sampleable (#110). A user-supplied executor —
@@ -645,17 +658,8 @@ public final class AggregatingContainer implements Container {
         // Shutdown in reverse order. Per-module containers no longer shut down the executor
         // themselves (#51): they were constructed with the shared executor, so their internal
         // ownsEventExecutor is false. The aggregator owns the lifecycle below.
-        Throwable observerFailure = null;
-        for (int i = moduleContainers.size() - 1; i >= 0; i--) {
-            try {
-                moduleContainers.get(i).shutdown();
-            } catch (BoundedExecution.ModuleTeardownFailure e) {
-                observerFailure = BoundedExecution.retainFailure(observerFailure, e.getCause());
-            } catch (Exception e) {
-                // Log but continue shutting down other containers
-                LoggerHolder.LOG.log(System.Logger.Level.WARNING, "Error shutting down module container", e);
-            }
-        }
+        // Bound to this container's threads so the modules' teardown threads are tracked (#634).
+        Throwable observerFailure = OwnedThreads.callBound(ownedThreads, this::shutdownModules);
         // Shut down framework-owned event executor (#51). User-supplied executors are not
         // touched — the user owns their lifecycle. Mirrors the per-module shutdown logic
         // moved up to the aggregator level.
@@ -671,9 +675,26 @@ public final class AggregatingContainer implements Container {
                 eventExecutor.shutdownNow();
             }
         }
+        ownedThreads.reportSurvivors(options.threadsOutlivingCloseHandler());
         if (observerFailure != null) {
             throw Unchecked.<RuntimeException>sneakyThrow(observerFailure);
         }
+    }
+
+    /** Shuts the module containers down in reverse order, returning the first observer failure, if any. */
+    private Throwable shutdownModules() {
+        Throwable observerFailure = null;
+        for (int i = moduleContainers.size() - 1; i >= 0; i--) {
+            try {
+                moduleContainers.get(i).shutdown();
+            } catch (BoundedExecution.ModuleTeardownFailure e) {
+                observerFailure = BoundedExecution.retainFailure(observerFailure, e.getCause());
+            } catch (Exception e) {
+                // Log but continue shutting down other containers
+                LoggerHolder.LOG.log(System.Logger.Level.WARNING, "Error shutting down module container", e);
+            }
+        }
+        return observerFailure;
     }
 
     /**

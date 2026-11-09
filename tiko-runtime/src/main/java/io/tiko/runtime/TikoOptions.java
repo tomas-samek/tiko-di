@@ -41,6 +41,7 @@ public final class TikoOptions {
     private final java.util.Map<OverrideKey, java.util.function.Supplier<?>> overrides;
     private final java.util.Map<Class<?>, java.util.function.UnaryOperator<TransportBootstrap>> transportReplacements;
     private final boolean testWiring;
+    private final java.util.function.Consumer<java.util.List<Thread>> onThreadsOutlivingClose;
 
     /** Sentinel for an unset pool-size knob: the framework derives the default from {@code availableProcessors()}. */
     static final int UNSET_POOL_SIZE = -1;
@@ -64,6 +65,7 @@ public final class TikoOptions {
                 ? java.util.Map.of()
                 : java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(b.transportReplacements));
         this.testWiring = b.testWiring;
+        this.onThreadsOutlivingClose = b.onThreadsOutlivingClose;
     }
 
     /**
@@ -175,6 +177,14 @@ public final class TikoOptions {
         return testWiring;
     }
 
+    /**
+     * The handler for threads still running after {@code close()} (#634), or {@code null} for the
+     * default WARNING. Package-private: only the container reads it.
+     */
+    java.util.function.Consumer<java.util.List<Thread>> threadsOutlivingCloseHandler() {
+        return onThreadsOutlivingClose;
+    }
+
     public boolean hasOverride(Class<?> type) {
         return overrides.containsKey(new OverrideKey(type, ""));
     }
@@ -273,6 +283,7 @@ public final class TikoOptions {
         private java.util.Map<OverrideKey, java.util.function.Supplier<?>> overrides;
         private java.util.Map<Class<?>, java.util.function.UnaryOperator<TransportBootstrap>> transportReplacements;
         private boolean testWiring;
+        private java.util.function.Consumer<java.util.List<Thread>> onThreadsOutlivingClose;
 
         private Builder() {}
 
@@ -524,6 +535,27 @@ public final class TikoOptions {
          */
         public Builder testWiring(boolean enabled) {
             this.testWiring = enabled;
+            return this;
+        }
+
+        /**
+         * Receives the threads the container started that are still running once
+         * {@link io.tiko.Container#close()} has finished (#634). Covers the framework's
+         * event-dispatch and teardown threads and every thread created through
+         * {@link io.tiko.Container#threadFactory()}. Threads of a user-supplied
+         * {@link #eventExecutor(java.util.concurrent.ExecutorService)} are yours and not tracked.
+         *
+         * <p>{@code close()} first runs its bounded waits ({@link #shutdownTimeout(Duration)},
+         * {@link #teardownTimeout(Duration)}), then gives tracked threads one more second to
+         * exit. The handler is called once with the threads still alive after that, and not at all
+         * when none are. A second {@code close()} reports nothing. When unset, the container logs
+         * one WARNING on {@code io.tiko.events} naming each thread and the frame it is in.
+         *
+         * @param handler receives the surviving threads, oldest first; runs on the closing thread
+         * @throws NullPointerException if {@code handler} is null
+         */
+        public Builder onThreadsOutlivingClose(java.util.function.Consumer<java.util.List<Thread>> handler) {
+            this.onThreadsOutlivingClose = Objects.requireNonNull(handler, "onThreadsOutlivingClose");
             return this;
         }
 

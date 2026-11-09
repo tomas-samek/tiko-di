@@ -235,6 +235,23 @@ public interface Container extends AutoCloseable {
     }
 
     /**
+     * Returns the factory for threads the container starts and reports if they outlive
+     * {@link #close()}; transports create their threads here.
+     *
+     * <p>A container booted by {@code Tiko.create(...)} tracks every thread this factory
+     * creates, along with its own event-dispatch and teardown threads. Threads still running
+     * once {@code close()} has finished its bounded waits are reported, by default as a WARNING
+     * naming each thread. The default implementation returns an untracked factory of daemon
+     * platform threads, so user-supplied {@code Container} implementations remain
+     * source-compatible.
+     *
+     * @return the factory for container-owned threads (never {@code null})
+     */
+    default java.util.concurrent.ThreadFactory threadFactory() {
+        return Thread.ofPlatform().daemon().factory();
+    }
+
+    /**
      * Closes the container and releases all resources.
      * <p>
      * This method is called automatically when using try-with-resources.
