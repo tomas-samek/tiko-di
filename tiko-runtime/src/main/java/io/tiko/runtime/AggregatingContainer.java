@@ -51,6 +51,8 @@ public final class AggregatingContainer implements Container {
     private final ErrorHandler errorHandler;
     private final java.util.concurrent.ExecutorService eventExecutor;
     private final boolean ownsEventExecutor;
+    // Every thread this container starts, for the report of those outliving shutdown() (#634).
+    private final OwnedThreads ownedThreads = new OwnedThreads();
     private final Duration shutdownTimeout;
     private final TikoOptions options;
     private final String descriptorName;
@@ -58,9 +60,6 @@ public final class AggregatingContainer implements Container {
     private final Map<Class<?>, Container> componentToContainerMap;
     private final Map<Class<?>, Container> configToContainer = new ConcurrentHashMap<>();
     private final AtomicBoolean shutdownInvoked = new AtomicBoolean(false);
-    /** Every thread this container starts, for the report of those outliving {@link #shutdown()} (#634). */
-    private final OwnedThreads ownedThreads = new OwnedThreads();
-
     private final AtomicBoolean startInvoked = new AtomicBoolean(false);
     private volatile Instant startedAt;
 
@@ -675,7 +674,8 @@ public final class AggregatingContainer implements Container {
                 eventExecutor.shutdownNow();
             }
         }
-        ownedThreads.reportSurvivors(options.threadsOutlivingCloseHandler());
+        // The report never masks the observer failure: a throwing handler is suppressed on it.
+        ownedThreads.reportSurvivors(options.threadsOutlivingCloseHandler(), observerFailure);
         if (observerFailure != null) {
             throw Unchecked.<RuntimeException>sneakyThrow(observerFailure);
         }

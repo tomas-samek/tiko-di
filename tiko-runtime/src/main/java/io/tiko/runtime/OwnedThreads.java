@@ -51,6 +51,9 @@ final class OwnedThreads implements ThreadFactory {
      * Joins every live tracked thread within one shared {@code grace} deadline and returns those
      * still alive, oldest first. The calling thread is never reported: {@code close()} may run on
      * a thread the container started.
+     *
+     * <p>An interrupted caller still gives the threads the whole grace: its interrupt is cleared
+     * for the joins and restored afterwards, as is one that arrives during them.
      */
     List<Thread> stillAlive(Duration grace) {
         List<Thread> snapshot;
@@ -60,10 +63,21 @@ final class OwnedThreads implements ThreadFactory {
         snapshot.sort(Comparator.comparingLong(Thread::threadId));
         var deadline = System.nanoTime() + grace.toNanos();
         var current = Thread.currentThread();
+        var interrupted = Thread.interrupted();
         var alive = new ArrayList<Thread>();
-        for (var thread : snapshot) {
-            if (thread != current && thread.isAlive() && !exitsBy(thread, deadline)) {
-                alive.add(thread);
+        try {
+            for (var thread : snapshot) {
+                if (thread == current || !thread.isAlive()) {
+                    continue;
+                }
+                interrupted |= joinUntil(thread, deadline);
+                if (thread.isAlive()) {
+                    alive.add(thread);
+                }
+            }
+        } finally {
+            if (interrupted) {
+                current.interrupt();
             }
         }
         return List.copyOf(alive);
@@ -73,8 +87,15 @@ final class OwnedThreads implements ThreadFactory {
      * Hands the threads still alive after {@link #THREAD_EXIT_GRACE} to {@code handler}, or logs
      * them when it is {@code null}. Runs at most once per owner, so a second {@code close()}
      * reports nothing.
+     *
+     * <p>The handler never masks the failure already leaving {@code close()}: when
+     * {@code primaryFailure} is set, anything the handler throws is added to it as suppressed and
+     * the caller rethrows the primary. Without one, the handler's throwable propagates.
+     *
+     * @param primaryFailure the shutdown or boot failure the caller is about to rethrow, or {@code null}
      */
-    void reportSurvivors(Consumer<List<Thread>> handler) {
+    @SuppressWarnings("java:S1181") // An Error from the handler must not replace the primary failure either.
+    void reportSurvivors(Consumer<List<Thread>> handler, Throwable primaryFailure) {
         if (!reported.compareAndSet(false, true)) {
             return;
         }
@@ -82,10 +103,19 @@ final class OwnedThreads implements ThreadFactory {
         if (survivors.isEmpty()) {
             return;
         }
-        if (handler != null) {
-            handler.accept(survivors);
-        } else {
+        if (handler == null) {
             logSurvivors(survivors);
+            return;
+        }
+        try {
+            handler.accept(survivors);
+        } catch (Throwable handlerFailure) {
+            if (primaryFailure == null) {
+                throw handlerFailure;
+            }
+            if (handlerFailure != primaryFailure) {
+                primaryFailure.addSuppressed(handlerFailure);
+            }
         }
     }
 
@@ -102,14 +132,24 @@ final class OwnedThreads implements ThreadFactory {
         return thread.getName() + " (at " + (stack.length > 0 ? stack[0] : "unknown frame") + ")";
     }
 
-    private static boolean exitsBy(Thread thread, long deadline) {
+    /**
+     * Waits for {@code thread} until {@code deadline} and returns whether the wait was interrupted.
+     * The interrupt is reported back rather than restored, so the remaining joins still wait; the
+     * caller restores it.
+     */
+    @SuppressWarnings("java:S2142") // not swallowed: returned to stillAlive, which restores the interrupt
+    private static boolean joinUntil(Thread thread, long deadline) {
+        var interrupted = false;
         var remaining = deadline - System.nanoTime();
-        try {
-            return remaining > 0 ? thread.join(Duration.ofNanos(remaining)) : !thread.isAlive();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return !thread.isAlive();
+        while (remaining > 0 && thread.isAlive()) {
+            try {
+                thread.join(Duration.ofNanos(remaining));
+            } catch (InterruptedException e) {
+                interrupted = true;
+            }
+            remaining = deadline - System.nanoTime();
         }
+        return interrupted;
     }
 
     /** An action run while an owner is bound; may throw what the bound call throws. */

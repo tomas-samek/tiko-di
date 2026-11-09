@@ -375,7 +375,7 @@ public final class Tiko {
             for (int i = started - 1; i >= 0; i--) {
                 shutdownQuietly(bootstraps.get(i));
             }
-            shutdownQuietly(container);
+            shutdownQuietly(container, e);
             throw e;
         }
     }
@@ -395,7 +395,7 @@ public final class Tiko {
             }
             bootstraps = applyTransportReplacements(bootstraps, options);
         } catch (RuntimeException | java.util.ServiceConfigurationError e) {
-            shutdownQuietly(container);
+            shutdownQuietly(container, e);
             throw e;
         }
         return startTransports(container, bootstraps);
@@ -463,12 +463,19 @@ public final class Tiko {
                 + "2. Remove the replaceTransport(...) registration if the transport is not part of this app.");
     }
 
-    /** Best-effort container teardown on a failing bootstrap path — never masks the original failure. */
-    private static void shutdownQuietly(Container container) {
+    /**
+     * Best-effort container teardown on a failing bootstrap path — never masks the original failure.
+     * Anything the teardown throws, an {@link Error} from a thread-report handler included, is
+     * suppressed on {@code bootFailure}.
+     */
+    @SuppressWarnings("java:S1181") // unwinding a bootstrap failure; the original exception is the one that matters
+    private static void shutdownQuietly(Container container, Throwable bootFailure) {
         try {
             container.shutdown();
-        } catch (Exception ignored) {
-            /* unwinding a bootstrap failure; the original exception is the one that matters */
+        } catch (Throwable cleanupFailure) {
+            if (cleanupFailure != bootFailure) {
+                bootFailure.addSuppressed(cleanupFailure);
+            }
         }
     }
 
@@ -638,6 +645,7 @@ public final class Tiko {
         }
 
         @Override
+        @SuppressWarnings("java:S1181") // Error included: the thread report runs before it is rethrown.
         public void shutdown() {
             // Shut transports down BEFORE the container's @PreDestroy chain so their bridge
             // components are still live. Per-bootstrap throws are isolated so one bad
@@ -653,10 +661,16 @@ public final class Tiko {
                 delegate.shutdown();
                 return;
             }
+            Throwable shutdownFailure = null;
             try {
                 OwnedThreads.runBound(threads, delegate::shutdown);
-            } finally {
-                threads.reportSurvivors(onThreadsOutlivingClose);
+            } catch (Throwable t) {
+                shutdownFailure = t;
+            }
+            // The report never masks the shutdown failure: a throwing handler is suppressed on it.
+            threads.reportSurvivors(onThreadsOutlivingClose, shutdownFailure);
+            if (shutdownFailure != null) {
+                throw Unchecked.<RuntimeException>sneakyThrow(shutdownFailure);
             }
         }
 

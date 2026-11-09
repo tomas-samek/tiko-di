@@ -551,6 +551,12 @@ public final class TikoOptions {
          * when none are. A second {@code close()} reports nothing. When unset, the container logs
          * one WARNING on {@code io.tiko.events} naming each thread and the frame it is in.
          *
+         * <p>A handler may throw, for example to fail a test. What it throws never masks a failure
+         * already leaving {@code close()} or a failed {@code Tiko.create(...)}: when a shutdown
+         * failure (such as a {@code @PreDestroy} observer failure) or a boot failure is on its way
+         * out, that failure wins and the handler's throwable is added to it as suppressed. With no
+         * other failure, the handler's throwable propagates from {@code close()}.
+         *
          * @param handler receives the surviving threads, oldest first; runs on the closing thread
          * @throws NullPointerException if {@code handler} is null
          */

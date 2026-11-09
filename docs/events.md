@@ -352,6 +352,11 @@ TikoOptions opts = TikoOptions.builder()
         .build();
 ```
 
+The handler may throw. When `close()` (or a failed `Tiko.create(...)`) already has a failure on
+its way out, such as a `@PreDestroy` observer failure, that failure wins and the handler's
+throwable is attached to it as suppressed. Otherwise the handler's throwable propagates from
+`close()`.
+
 A second `close()` reports nothing. Threads of an executor you supply with
 `TikoOptions.eventExecutor(...)` are yours and not tracked, and neither are threads your own
 components start.

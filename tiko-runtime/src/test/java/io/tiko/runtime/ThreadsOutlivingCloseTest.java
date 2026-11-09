@@ -98,21 +98,47 @@ class ThreadsOutlivingCloseTest {
     void threadThatExitsWithinTheGraceIsNotReported(Shape shape) throws Exception {
         var container = boot(shape, reportingOptions());
         var started = new CountDownLatch(1);
-        container.getEventExecutor().execute(() -> {
-            started.countDown();
-            try {
-                release.await();
-            } catch (InterruptedException e) {
-                // Finishes its last bit of work about 100 ms after the interrupt, then exits.
-                await().pollDelay(Duration.ofMillis(100)).until(() -> true);
-                Thread.currentThread().interrupt();
-            }
-        });
+        container.getEventExecutor().execute(exitingShortlyAfterInterrupt(started));
         started.await();
 
         container.close();
 
         assertThat(reports).isEmpty();
+    }
+
+    @ParameterizedTest
+    @EnumSource(Shape.class)
+    void interruptedCloserStillGivesThreadsTheGrace(Shape shape) throws Exception {
+        var container = boot(shape, reportingOptions());
+        var started = new CountDownLatch(1);
+        container.getEventExecutor().execute(exitingShortlyAfterInterrupt(started));
+        started.await();
+
+        boolean stillInterrupted;
+        Thread.currentThread().interrupt();
+        try {
+            container.close();
+        } finally {
+            stillInterrupted = Thread.interrupted();
+        }
+
+        assertThat(reports).isEmpty();
+        assertThat(stillInterrupted)
+                .as("the closing thread's interrupt is restored")
+                .isTrue();
+    }
+
+    /** Finishes its last bit of work about 100 ms after the interrupt, then exits. */
+    private Runnable exitingShortlyAfterInterrupt(CountDownLatch started) {
+        return () -> {
+            started.countDown();
+            try {
+                release.await();
+            } catch (InterruptedException e) {
+                await().pollDelay(Duration.ofMillis(100)).until(() -> true);
+                Thread.currentThread().interrupt();
+            }
+        };
     }
 
     @ParameterizedTest
