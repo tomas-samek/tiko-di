@@ -7,6 +7,7 @@ import io.tiko.annotations.Produces;
 import io.tiko.processor.collect.ComponentCollector;
 import io.tiko.processor.collect.EventHandlerCollector;
 import io.tiko.processor.collect.FactoryMethodCollector;
+import io.tiko.processor.collect.MainModuleOnClasspath;
 import io.tiko.processor.config.ConfigBinderGenerator;
 import io.tiko.processor.config.ConfigBinderServicesWriter;
 import io.tiko.processor.config.ConfigManifestWriter;
@@ -39,14 +40,10 @@ import io.tiko.processor.validation.PickerValidator;
 import io.tiko.processor.validation.ProducesSignatureValidator;
 import io.tiko.processor.validation.ScopeValidator;
 import java.io.IOException;
-import java.io.StringReader;
-import java.io.UncheckedIOException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
-import java.util.Properties;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -302,15 +299,15 @@ public final class TikoPipeline {
 
     /**
      * Marks any {@code @TestComponent} whose implicit-walk or explicit-value keys point at
-     * a main {@code @Component} FQN listed in the classpath
-     * {@code META-INF/tiko/components.txt} manifest. Bridges the gap left by
+     * a main {@code @Component} FQN of the main module on the classpath (see
+     * {@link MainModuleOnClasspath}). Bridges the gap left by
      * {@code AmbiguityValidator} in standalone test-compile rounds — main sources are not
      * present in the round, so the validator's shadow-pair detection (requires both sides
      * visible) cannot fire. Single-round compiles still rely on the validator path; this
      * helper only adds shadow entries the validator could not have seen.
      */
     private void markClasspathShadowedTestComponents() {
-        Set<String> mainFqns = ComponentCollector.mainComponentFqnsOnClasspath(context.env());
+        Set<String> mainFqns = MainModuleOnClasspath.read(context.env()).componentFqns();
         if (mainFqns.isEmpty()) {
             return;
         }
@@ -519,7 +516,7 @@ public final class TikoPipeline {
      * This ensures different modules generate different container class names.
      *
      * <p>When the round is a test-compile happening on top of an existing main
-     * container (detected via {@link #mainDescriptorFqnOnClasspath()}), the emitted
+     * container (detected via {@link MainModuleOnClasspath}), the emitted
      * container is a standalone test container that peers with the existing main
      * via {@code AggregatingContainer} at runtime — so its class name carries the
      * {@code TestContainerImpl_} prefix instead of {@code TikoContainerImpl_}. All
@@ -537,35 +534,12 @@ public final class TikoPipeline {
         // Convert to positive hex string
         String suffix = Integer.toHexString(hash & 0x7FFFFFFF);
 
-        String prefix = (mainDescriptorFqnOnClasspath().isPresent() && context.hasTestComponents())
+        String prefix = (context.hasTestComponents()
+                        && MainModuleOnClasspath.read(context.env())
+                                .containerFqn()
+                                .isPresent())
                 ? "TestContainerImpl_"
                 : "TikoContainerImpl_";
         return prefix + suffix;
-    }
-
-    /**
-     * Probes the compile classpath for an existing {@code META-INF/tiko/container.properties}.
-     * Returns the main container's FQN if found, or empty if no main container is on the
-     * classpath. Used by {@link #computeContainerClassName()} to decide whether the round
-     * is a standalone test-compile (peer to an existing main) or a regular main-compile.
-     */
-    private Optional<String> mainDescriptorFqnOnClasspath() {
-        return context.env()
-                .classpath()
-                .readResource("META-INF/tiko/container.properties")
-                .map(TikoPipeline::implProperty)
-                .filter(fqn -> !fqn.isBlank());
-    }
-
-    /** The {@code impl} entry of a container descriptor; {@code null} when it has none. */
-    private static String implProperty(String descriptor) {
-        var props = new Properties();
-        try {
-            props.load(new StringReader(descriptor));
-        } catch (IOException e) {
-            // A StringReader never fails; an IOException here is unreachable.
-            throw new UncheckedIOException(e);
-        }
-        return props.getProperty("impl");
     }
 }

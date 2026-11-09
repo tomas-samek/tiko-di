@@ -43,26 +43,48 @@ final class KspProgram implements AutoCloseable {
      * {@code @Configuration} records bind from that YAML file.
      */
     static KspProgram boot(KspResult result, Path yaml) {
-        return boot(new URLClassLoader(classpath(result.outputRoots()), ClassLoader.getPlatformClassLoader()), yaml);
+        return bootWith(result, loader -> {
+            var tiko = loader.loadClass("io.tiko.runtime.Tiko");
+            if (yaml == null) {
+                return tiko.getMethod("create").invoke(null);
+            }
+            var sourceType = loader.loadClass("io.tiko.ConfigSource");
+            var source = loader.loadClass("io.tiko.config.ConfigSources")
+                    .getMethod("file", Path.class)
+                    .invoke(null, yaml);
+            return tiko.getMethod("create", sourceType).invoke(null, source);
+        });
     }
 
-    /** Boots over {@code loader}, which is closed again when the boot fails and owned by the program otherwise. */
-    private static KspProgram boot(URLClassLoader loader, Path yaml) {
+    /**
+     * Boots {@code Tiko.create(TikoOptions.builder().testWiring(true).build())} over the compiled
+     * program: the test container a test compile generated replaces the main one.
+     */
+    static KspProgram bootTestWiring(KspResult result) {
+        return bootWith(result, loader -> {
+            var optionsType = loader.loadClass("io.tiko.runtime.TikoOptions");
+            var builderFactory = optionsType.getMethod("builder");
+            var builderType = builderFactory.getReturnType();
+            var builder = builderFactory.invoke(null);
+            builderType.getMethod("testWiring", boolean.class).invoke(builder, true);
+            var options = builderType.getMethod("build").invoke(builder);
+            return loader.loadClass("io.tiko.runtime.Tiko")
+                    .getMethod("create", optionsType)
+                    .invoke(null, options);
+        });
+    }
+
+    /**
+     * Boots with {@code create} over a fresh loader, which is closed again when the boot fails and
+     * owned by the program otherwise.
+     */
+    private static KspProgram bootWith(KspResult result, ContainerFactory create) {
+        var loader = new URLClassLoader(classpath(result.outputRoots()), ClassLoader.getPlatformClassLoader());
         var thread = Thread.currentThread();
         var previous = thread.getContextClassLoader();
         thread.setContextClassLoader(loader);
         try (var guard = new LoaderGuard(loader)) {
-            var tiko = loader.loadClass("io.tiko.runtime.Tiko");
-            Object container;
-            if (yaml == null) {
-                container = tiko.getMethod("create").invoke(null);
-            } else {
-                var sourceType = loader.loadClass("io.tiko.ConfigSource");
-                var source = loader.loadClass("io.tiko.config.ConfigSources")
-                        .getMethod("file", Path.class)
-                        .invoke(null, yaml);
-                container = tiko.getMethod("create", sourceType).invoke(null, source);
-            }
+            var container = create.create(loader);
             return new KspProgram(guard.release(), container);
         } catch (ReflectiveOperationException e) {
             throw new AssertionError("Tiko.create() failed", unwrap(e));
@@ -139,6 +161,12 @@ final class KspProgram implements AutoCloseable {
 
     private static Throwable unwrap(ReflectiveOperationException e) {
         return e instanceof InvocationTargetException invocation ? invocation.getCause() : e;
+    }
+
+    /** Creates the container reflectively through the program's loader. */
+    @FunctionalInterface
+    private interface ContainerFactory {
+        Object create(ClassLoader loader) throws ReflectiveOperationException;
     }
 
     /** Closes the loader on close unless it was released to the program. */
