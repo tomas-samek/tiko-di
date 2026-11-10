@@ -91,7 +91,7 @@ class TikoTestTeardownTest {
             thread.join(Duration.ofSeconds(5));
         }
         assertThat(StuckHandler.stuckThreads()).noneMatch(Thread::isAlive);
-        assertThat(FACTORY_THREADS).noneMatch(Thread::isAlive);
+        assertThat(List.copyOf(FACTORY_THREADS)).noneMatch(Thread::isAlive);
     }
 
     @Test
