@@ -80,6 +80,22 @@ class PerClassLifecycleTest {
 
 Use `PER_CLASS` when boot cost matters (e.g. configuration parsing, schema work) and when test methods are not allowed to mutate singleton state.
 
+### Leaked threads fail the test
+
+When a test's container closes, `@TikoTest` checks for threads that are still running. That covers threads the container started (event dispatch, Kafka consumers, anything created through `container.threadFactory()`) and the workers of the test's event executor. If any are left, the test that owned the container fails. With `PER_CLASS` the class fails. Other tests running at the same time are not blamed.
+
+The failure names each thread and shows where it is stuck:
+
+```
+OrderServiceTest.createsOrder: 1 thread(s) still running after its container closed:
+  tiko-event-async-test-1
+    at java.base/jdk.internal.misc.Unsafe.park(Native Method)
+    at java.base/java.util.concurrent.locks.LockSupport.park(LockSupport.java:371)
+    at java.base/java.util.concurrent.CountDownLatch.await(CountDownLatch.java:230)
+```
+
+To fix it, stop or join the thread before the test ends, or let it react to interruption so the shutdown can end it. Create threads through `container.threadFactory()`, not `new Thread(...)`, so the report can tie them to the test. The container is closed and its executor shut down on every path: when the test fails, when the boot fails, and when `close()` itself throws.
+
 ## `RecordingEventBus` — spy for event assertions
 
 `@TikoTest` installs `RecordingEventBus` as a transparent decorator over the in-memory bus via `TikoOptions.eventBusDecorator`. Every `publish` is captured locally and then forwarded, so production handlers still observe every event.

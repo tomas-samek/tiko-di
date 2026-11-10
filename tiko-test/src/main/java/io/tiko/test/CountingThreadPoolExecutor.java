@@ -1,5 +1,10 @@
 package io.tiko.test;
 
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionHandler;
@@ -35,6 +40,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class CountingThreadPoolExecutor extends ThreadPoolExecutor {
 
     private final AtomicLong inFlight = new AtomicLong();
+    private final TrackingThreadFactory threads;
 
     public CountingThreadPoolExecutor(
             int corePoolSize,
@@ -44,7 +50,26 @@ public class CountingThreadPoolExecutor extends ThreadPoolExecutor {
             BlockingQueue<Runnable> workQueue,
             ThreadFactory threadFactory,
             RejectedExecutionHandler handler) {
+        this(
+                corePoolSize,
+                maximumPoolSize,
+                keepAliveTime,
+                unit,
+                workQueue,
+                new TrackingThreadFactory(threadFactory),
+                handler);
+    }
+
+    private CountingThreadPoolExecutor(
+            int corePoolSize,
+            int maximumPoolSize,
+            long keepAliveTime,
+            TimeUnit unit,
+            BlockingQueue<Runnable> workQueue,
+            TrackingThreadFactory threadFactory,
+            RejectedExecutionHandler handler) {
         super(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue, threadFactory, handler);
+        this.threads = threadFactory;
     }
 
     /**
@@ -83,6 +108,15 @@ public class CountingThreadPoolExecutor extends ThreadPoolExecutor {
         return inFlight.get();
     }
 
+    /**
+     * The worker threads this executor created that are still alive, oldest first. After
+     * {@link #shutdownNow()} and {@link #awaitTermination(long, TimeUnit)} these are the workers
+     * stuck in a task that ignores interrupts; {@code @TikoTest} fails the test that left them (#637).
+     */
+    public List<Thread> liveThreads() {
+        return threads.alive();
+    }
+
     // S1181 (do not catch Error): deliberately caught and re-thrown, never swallowed. A submit-time
     // failure — RejectedExecutionException (queue full / shut down) or the OutOfMemoryError that
     // addWorker throws when it cannot start a native thread — means the wrapper below never runs, so
@@ -103,6 +137,34 @@ public class CountingThreadPoolExecutor extends ThreadPoolExecutor {
         } catch (RuntimeException | Error e) {
             inFlight.decrementAndGet();
             throw e;
+        }
+    }
+
+    /** Records every thread the wrapped factory creates, weakly, so exited workers cost nothing. */
+    private static final class TrackingThreadFactory implements ThreadFactory {
+        private final ThreadFactory delegate;
+        private final Set<Thread> created = Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
+
+        TrackingThreadFactory(ThreadFactory delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public Thread newThread(Runnable task) {
+            var thread = delegate.newThread(task);
+            if (thread != null) {
+                created.add(thread);
+            }
+            return thread;
+        }
+
+        List<Thread> alive() {
+            synchronized (created) {
+                return created.stream()
+                        .filter(Thread::isAlive)
+                        .sorted(Comparator.comparingLong(Thread::threadId))
+                        .toList();
+            }
         }
     }
 }

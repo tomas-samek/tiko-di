@@ -66,6 +66,7 @@
         <slf4j.version>2.0.9</slf4j.version>
         <logback.version>1.5.38</logback.version>
         <junit.version>5.10.1</junit.version>
+        <junit-platform.version>1.10.1</junit-platform.version>
         <compile-testing.version>0.21.0</compile-testing.version>
         <!-- KSP2 (the processors' Kotlin frontend) and the Kotlin stdlib its API is written against:
              both provided in tiko-processor-core. kctfork drives KSP2 in tests only (MPL-2.0), so it is
@@ -252,6 +253,12 @@
                 <groupId>org.junit.jupiter</groupId>
                 <artifactId>junit-jupiter-engine</artifactId>
                 <version>${junit.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.platform</groupId>
+                <artifactId>junit-platform-testkit</artifactId>
+                <version>${junit-platform.version}</version>
                 <scope>test</scope>
             </dependency>
             <dependency>
