@@ -9,8 +9,10 @@ import io.tiko.kafka.runtime.integration.fixtures.ItOrderPlaced;
 import io.tiko.kafka.runtime.integration.fixtures.ItOrderReceived;
 import io.tiko.kafka.runtime.integration.fixtures.ItOrderRecorder;
 import io.tiko.runtime.Tiko;
+import io.tiko.runtime.TikoOptions;
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.kafka.KafkaContainer;
@@ -41,7 +43,13 @@ class KafkaRealBrokerRoundTripIT {
                 "tiko",
                 Map.of("kafka", Map.of("bootstrap-servers", bootstrapServers, "consumer-group", consumerGroup))));
 
-        try (var container = Tiko.create(configSource)) {
+        var outlived = new CopyOnWriteArrayList<Thread>();
+        var options = TikoOptions.builder()
+                .configSource(configSource)
+                .onThreadsOutlivingClose(outlived::addAll)
+                .build();
+
+        try (var container = Tiko.create(options)) {
             var config = container.get(KafkaConfig.class);
             assertThat(config.bootstrapServers()).as("Kafka bootstrap servers").isEqualTo(bootstrapServers);
             assertThat(config.consumerGroup()).as("Kafka consumer group").isEqualTo(consumerGroup);
@@ -53,5 +61,11 @@ class KafkaRealBrokerRoundTripIT {
                     .atMost(Duration.ofSeconds(30))
                     .untilAsserted(() -> assertThat(recorder.received).contains(new ItOrderReceived("real-1", 99)));
         }
+
+        // A clean close leaves no consumer thread behind (#635).
+        assertThat(outlived).as("threads outliving close()").isEmpty();
+        assertThat(Thread.getAllStackTraces().keySet())
+                .as("live consumer threads")
+                .noneMatch(t -> t.isAlive() && t.getName().startsWith("tiko-kafka-consumer-"));
     }
 }

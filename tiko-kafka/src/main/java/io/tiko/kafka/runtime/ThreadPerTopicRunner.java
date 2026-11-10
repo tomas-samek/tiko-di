@@ -126,7 +126,9 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
     public void start() {
         if (!running.compareAndSet(false, true)) return;
         consumer.subscribe(List.of(source.topic()));
-        thread = new Thread(this::run, "tiko-kafka-consumer-" + source.topic());
+        // The container's factory tracks the thread, so a consumer that outlives close() is reported (#635).
+        thread = container.threadFactory().newThread(this::run);
+        thread.setName("tiko-kafka-consumer-" + source.topic());
         thread.setDaemon(true);
         thread.start();
     }
