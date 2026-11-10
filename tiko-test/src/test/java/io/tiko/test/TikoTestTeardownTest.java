@@ -3,6 +3,7 @@ package io.tiko.test;
 import static org.assertj.core.api.Assertions.as;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.fail;
 
 import io.tiko.Container;
 import io.tiko.EventBus;
@@ -180,8 +181,10 @@ class TikoTestTeardownTest {
                             .singleElement()
                             .isInstanceOf(AssertionError.class)
                             .extracting(Throwable::getMessage, as(InstanceOfAssertFactories.STRING))
-                            .startsWith("CloseFixture.closes: 1 thread(s) still running after its container closed:\n"
-                                    + "  leaked-by-close-fixture\n    at "));
+                            .startsWith("""
+                                    CloseFixture.closes: 1 thread(s) still running after its container closed:
+                                      leaked-by-close-fixture
+                                        at\s"""));
         } finally {
             release.countDown();
             leaked.join(Duration.ofSeconds(5));
@@ -294,7 +297,7 @@ class TikoTestTeardownTest {
 
         @Test
         void neverRuns() {
-            throw new AssertionError("the container boot should have failed first");
+            fail("the container boot should have failed first");
         }
     }
 
