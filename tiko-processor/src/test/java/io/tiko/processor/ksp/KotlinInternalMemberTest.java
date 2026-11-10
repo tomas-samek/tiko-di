@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.tschuchort.compiletesting.KotlinCompilation;
 import io.tiko.processor.core.ksp.KspCompiler;
+import io.tiko.processor.core.ksp.KspProgram;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 

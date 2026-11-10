@@ -9,6 +9,7 @@ import com.tschuchort.compiletesting.KotlinCompilation;
 import com.tschuchort.compiletesting.SourceFile;
 import io.tiko.processor.TikoAnnotationProcessor;
 import io.tiko.processor.core.ksp.KspCompiler;
+import io.tiko.processor.core.ksp.KspProgram;
 import io.tiko.processor.util.ErrorReporter;
 import java.io.File;
 import java.nio.charset.StandardCharsets;

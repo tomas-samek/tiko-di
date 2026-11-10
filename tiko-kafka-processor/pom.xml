@@ -92,6 +92,12 @@
             <artifactId>compile-testing</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>4.2.2</version>
+            <scope>test</scope>
+        </dependency>
         <!-- KSP2 tests: KspCompiler from the core test-jar, over kctfork. -->
         <dependency>
             <groupId>io.github.tomas-samek</groupId>
