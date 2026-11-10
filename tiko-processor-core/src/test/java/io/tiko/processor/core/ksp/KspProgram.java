@@ -110,8 +110,8 @@ public final class KspProgram implements AutoCloseable {
                     .getMethod("replaceTransport", Class.class, Function.class)
                     .invoke(builder, transportType, replacement);
 
-            Consumer<List<Thread>> record = threads -> extras.leakReports.add(List.copyOf(threads));
-            builderType.getMethod("onThreadsOutlivingClose", Consumer.class).invoke(builder, record);
+            Consumer<List<Thread>> collector = threads -> extras.leakReports.add(List.copyOf(threads));
+            builderType.getMethod("onThreadsOutlivingClose", Consumer.class).invoke(builder, collector);
 
             var options = builderType.getMethod("build").invoke(builder);
             return loader.loadClass("io.tiko.runtime.Tiko")
