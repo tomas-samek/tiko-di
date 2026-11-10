@@ -3,8 +3,6 @@ package io.tiko.test;
 import io.tiko.Container;
 import io.tiko.EventBus;
 import io.tiko.annotations.Named;
-import io.tiko.runtime.Tiko;
-import io.tiko.runtime.TikoOptions;
 import java.lang.reflect.Method;
 import org.junit.jupiter.api.extension.AfterAllCallback;
 import org.junit.jupiter.api.extension.AfterEachCallback;
@@ -15,6 +13,7 @@ import org.junit.jupiter.api.extension.ExtensionContext.Namespace;
 import org.junit.jupiter.api.extension.ExtensionContext.Store;
 import org.junit.jupiter.api.extension.InvocationInterceptor;
 import org.junit.jupiter.api.extension.ParameterContext;
+import org.junit.jupiter.api.extension.ParameterResolutionException;
 import org.junit.jupiter.api.extension.ParameterResolver;
 import org.junit.jupiter.api.extension.ReflectiveInvocationContext;
 
@@ -29,7 +28,8 @@ import org.junit.jupiter.api.extension.ReflectiveInvocationContext;
  *   <li>Resolve test-method / lifecycle-method parameters from that container:
  *       {@link Container}, {@link EventBus}, and {@link RecordingEventBus} come from the
  *       store; every other type is resolved via {@code container.get(type[, name])}.</li>
- *   <li>Shut the container down at the end of the matching lifecycle boundary.</li>
+ *   <li>Shut the container down at the end of the matching lifecycle boundary, release its event
+ *       executor on every path, and fail the test whose container left threads running (#637).</li>
  * </ul>
  */
 public final class TikoTestExtension
@@ -41,8 +41,7 @@ public final class TikoTestExtension
                 InvocationInterceptor {
 
     private static final Namespace NS = Namespace.create(TikoTestExtension.class);
-    private static final String KEY_CONTAINER = "container";
-    private static final String KEY_BUS = "bus";
+    private static final String KEY_BOOT = "boot";
 
     @Override
     public void beforeAll(ExtensionContext ctx) {
@@ -103,8 +102,16 @@ public final class TikoTestExtension
     @Override
     public Object resolveParameter(ParameterContext pCtx, ExtensionContext eCtx) {
         Class<?> type = pCtx.getParameter().getType();
-        Container container = store(eCtx).get(KEY_CONTAINER, Container.class);
-        RecordingEventBus bus = store(eCtx).get(KEY_BUS, RecordingEventBus.class);
+        BootedContainer boot = store(eCtx).get(KEY_BOOT, BootedContainer.class);
+        if (boot == null) {
+            throw new ParameterResolutionException("@TikoTest has no container to resolve parameter ["
+                    + pCtx.getParameter() + "] in " + pCtx.getDeclaringExecutable() + ". With the default "
+                    + "Lifecycle.PER_METHOD the container is booted for each test, so @BeforeAll and @AfterAll "
+                    + "methods cannot take container parameters. Use @BeforeEach / @AfterEach, or "
+                    + "@TikoTest(lifecycle = Lifecycle.PER_CLASS).");
+        }
+        Container container = boot.container();
+        RecordingEventBus bus = boot.bus();
 
         if (type == Container.class) return container;
         if (type == EventBus.class) return bus;
@@ -121,7 +128,7 @@ public final class TikoTestExtension
     public void interceptTestMethod(
             Invocation<Void> invocation, ReflectiveInvocationContext<Method> invocationContext, ExtensionContext eCtx)
             throws Throwable {
-        Container container = store(eCtx).get(KEY_CONTAINER, Container.class);
+        Container container = store(eCtx).get(KEY_BOOT, BootedContainer.class).container();
         Method method = invocationContext.getExecutable();
         boolean evt = method.isAnnotationPresent(EventScopeTest.class);
 
@@ -149,34 +156,28 @@ public final class TikoTestExtension
     }
 
     private void bootContainer(ExtensionContext ctx) {
-        // Supply a CountingThreadPoolExecutor so awaitAsyncDispatch(Duration) detects drain
-        // deterministically (#443). Because it is supplied, the container does not own it
-        // (ownsEventExecutor = false) — closeContainer shuts it down.
-        CountingThreadPoolExecutor executor = CountingThreadPoolExecutor.withFrameworkDefaults();
-        // A @TikoTest container is a test container: apply @TestComponent wiring (#497).
-        TikoOptions opts = TikoOptions.builder()
-                .eventBusDecorator(RecordingEventBus::new)
-                .eventExecutor(executor)
-                .testWiring(true)
-                .build();
-        Container container = Tiko.create(opts);
-        RecordingEventBus bus = (RecordingEventBus) container.getEventBus();
-        // Wire the executor in so RecordingEventBus.awaitAsyncDispatch(Duration) works.
-        bus.setEventExecutor(container.getEventExecutor());
-        store(ctx).put(KEY_CONTAINER, container);
-        store(ctx).put(KEY_BUS, bus);
+        // Stored as a CloseableResource: JUnit closes it even if the matching after-callback never runs.
+        store(ctx).put(KEY_BOOT, BootedContainer.boot(owner(ctx)));
     }
 
+    /**
+     * Closes the boot stored for {@code ctx}. Throws an {@link AssertionError} when threads the
+     * container or its event executor started are still running, which fails this test (or, per
+     * class, this class) and no other (#637).
+     */
     private void closeContainer(ExtensionContext ctx) {
-        Container container = store(ctx).remove(KEY_CONTAINER, Container.class);
-        store(ctx).remove(KEY_BUS);
-        if (container == null) return;
-        // Capture the supplied executor before close(); the container will not shut it down for us.
-        var executor = container.getEventExecutor();
-        container.close();
-        if (executor instanceof CountingThreadPoolExecutor cte) {
-            cte.shutdownNow();
+        BootedContainer boot = store(ctx).remove(KEY_BOOT, BootedContainer.class);
+        if (boot != null) {
+            boot.close();
         }
+    }
+
+    /** {@code Class.method} for a per-method container, {@code Class} for a per-class one. */
+    private static String owner(ExtensionContext ctx) {
+        var className = ctx.getRequiredTestClass().getSimpleName();
+        return ctx.getTestMethod()
+                .map(method -> className + "." + method.getName())
+                .orElse(className);
     }
 
     private static Store store(ExtensionContext ctx) {
