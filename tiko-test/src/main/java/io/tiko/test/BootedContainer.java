@@ -24,11 +24,11 @@ import org.junit.jupiter.api.extension.ExtensionContext;
  */
 final class BootedContainer implements ExtensionContext.Store.CloseableResource {
 
-    /** How long a closed boot's event-executor workers get to exit after {@code shutdownNow()}. */
+    /**
+     * How long a closed boot's event-executor workers get to leave their tasks after
+     * {@code shutdownNow()}, and, once the executor has terminated, how long they then get to exit.
+     */
     private static final Duration EXECUTOR_GRACE = Duration.ofSeconds(1);
-
-    /** The minimum wait for a worker of a terminated executor, which is already on its way out. */
-    private static final Duration EXITING_WORKER_GRACE = Duration.ofMillis(50);
 
     private static final int FRAMES_PER_THREAD = 3;
 
@@ -51,9 +51,10 @@ final class BootedContainer implements ExtensionContext.Store.CloseableResource 
     }
 
     /**
-     * Boots a test container for {@code owner}. When the boot fails, the executor created for it is
-     * shut down before the failure propagates.
+     * Boots a test container for {@code owner}. When the boot fails, the container (if one was
+     * created) is closed and the executor created for it is shut down before the failure propagates.
      */
+    @SuppressWarnings("java:S1181") // any boot failure, Error included, is rethrown unchanged after the cleanup
     static BootedContainer boot(String owner) {
         // Supply a CountingThreadPoolExecutor so awaitAsyncDispatch(Duration) detects drain
         // deterministically (#443). Because it is supplied, the container does not own it —
@@ -71,15 +72,33 @@ final class BootedContainer implements ExtensionContext.Store.CloseableResource 
         Container container = null;
         try {
             container = Tiko.create(options);
-        } finally {
-            if (container == null) {
-                executor.shutdownNow();
-            }
+            // Wire the executor in so RecordingEventBus.awaitAsyncDispatch(Duration) works.
+            ((RecordingEventBus) container.getEventBus()).setEventExecutor(container.getEventExecutor());
+        } catch (Throwable bootFailure) {
+            releaseAfterFailedBoot(container, executor, bootFailure);
+            throw bootFailure;
         }
-        var booted = new BootedContainer(owner, container, executor, reported);
-        // Wire the executor in so RecordingEventBus.awaitAsyncDispatch(Duration) works.
-        booted.bus().setEventExecutor(container.getEventExecutor());
-        return booted;
+        return new BootedContainer(owner, container, executor, reported);
+    }
+
+    /**
+     * Closes the container of a failed boot, when there is one, and always shuts its executor down. A
+     * close failure is added to {@code bootFailure} as suppressed rather than replacing it.
+     */
+    @SuppressWarnings("java:S1181") // a close failure, Error included, must not replace the boot failure
+    private static void releaseAfterFailedBoot(
+            Container container, CountingThreadPoolExecutor executor, Throwable bootFailure) {
+        try {
+            if (container != null) {
+                container.close();
+            }
+        } catch (Throwable closeFailure) {
+            if (closeFailure != bootFailure) {
+                bootFailure.addSuppressed(closeFailure);
+            }
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     Container container() {
@@ -120,18 +139,43 @@ final class BootedContainer implements ExtensionContext.Store.CloseableResource 
         }
     }
 
-    /** Interrupts the executor's workers and gives them {@link #EXECUTOR_GRACE} to exit. */
+    /**
+     * Interrupts the executor's workers and gives them {@link #EXECUTOR_GRACE} to leave their tasks.
+     * Once the executor has terminated, joins each worker for up to another {@link #EXECUTOR_GRACE}:
+     * a terminated executor can still have workers finishing their exit, and those are not leaks. A
+     * clean close returns as soon as the workers are gone.
+     *
+     * <p>A closing thread that arrives interrupted (a test that left its interrupt flag set) still
+     * gives the workers the whole grace: the flag is cleared for the waits and restored afterwards.
+     */
     private void releaseExecutor() {
         executor.shutdownNow();
+        var arrivedInterrupted = Thread.interrupted();
         try {
-            if (executor.awaitTermination(EXECUTOR_GRACE.toNanos(), TimeUnit.NANOSECONDS)) {
-                // Terminated: every worker has left its task; wait out the last instants of their exit.
+            if (awaitTermination()) {
+                var deadline = System.nanoTime() + EXECUTOR_GRACE.toNanos();
                 for (var worker : executor.liveThreads()) {
-                    worker.join(EXITING_WORKER_GRACE);
+                    joinUntil(worker, deadline);
                 }
             }
         } catch (InterruptedException e) {
+            // Interrupted during the waits: stop waiting and keep the flag for the caller.
             Thread.currentThread().interrupt();
+        } finally {
+            if (arrivedInterrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    private boolean awaitTermination() throws InterruptedException {
+        return executor.awaitTermination(EXECUTOR_GRACE.toNanos(), TimeUnit.NANOSECONDS);
+    }
+
+    private static void joinUntil(Thread thread, long deadline) throws InterruptedException {
+        var remaining = deadline - System.nanoTime();
+        if (remaining > 0) {
+            thread.join(Duration.ofNanos(remaining));
         }
     }
 

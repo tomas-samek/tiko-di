@@ -20,8 +20,10 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.AfterAll;
@@ -31,6 +33,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.junit.jupiter.api.extension.ExtensionContext;
+import org.junit.jupiter.api.extension.ParameterResolutionException;
 import org.junit.platform.engine.DiscoverySelector;
 import org.junit.platform.engine.TestExecutionResult;
 import org.junit.platform.engine.discovery.DiscoverySelectors;
@@ -57,17 +60,38 @@ class TikoTestTeardownTest {
 
     private static final Duration ENTER_TIMEOUT = Duration.ofSeconds(10);
 
+    /** How long each parallel fixture waits for the other one; bounded so a sequential run fails, not hangs. */
+    private static final Duration OVERLAP_TIMEOUT = Duration.ofSeconds(10);
+
+    /** Threads {@link ThreadFactoryLeakFixture} started through {@code container.threadFactory()}. */
+    private static final List<Thread> FACTORY_THREADS = new CopyOnWriteArrayList<>();
+
+    private static final AtomicInteger OVERLAPS = new AtomicInteger();
+    private static volatile CountDownLatch factoryThreadRelease = new CountDownLatch(1);
+    private static volatile CountDownLatch leakingFixtureArrived = new CountDownLatch(1);
+    private static volatile CountDownLatch cleanFixtureArrived = new CountDownLatch(1);
+
     @BeforeEach
     void resetFixtures() {
         StuckHandler.arm();
         ShutdownProbe.reset();
         FailingTransport.reset();
+        FACTORY_THREADS.clear();
+        factoryThreadRelease = new CountDownLatch(1);
+        leakingFixtureArrived = new CountDownLatch(1);
+        cleanFixtureArrived = new CountDownLatch(1);
+        OVERLAPS.set(0);
     }
 
     @AfterEach
     void releaseStuckThreads() throws InterruptedException {
         StuckHandler.releaseAndJoin();
+        factoryThreadRelease.countDown();
+        for (var thread : FACTORY_THREADS) {
+            thread.join(Duration.ofSeconds(5));
+        }
         assertThat(StuckHandler.stuckThreads()).noneMatch(Thread::isAlive);
+        assertThat(FACTORY_THREADS).noneMatch(Thread::isAlive);
     }
 
     @Test
@@ -146,6 +170,46 @@ class TikoTestTeardownTest {
                                         "LeakingParallelFixture.publishesAndReturns: 1 thread(s) still running"));
         assertThat(failures(results.containerEvents())).isEmpty();
         results.testEvents().assertStatistics(stats -> stats.succeeded(1).failed(1));
+        assertThat(OVERLAPS.get())
+                .as("both fixture classes were inside their tests at the same time")
+                .isEqualTo(2);
+    }
+
+    @Test
+    void threadFromTheContainerThreadFactoryFailsTheTest() {
+        var results = run(ThreadFactoryLeakFixture.class);
+
+        assertThat(failures(results.testEvents()))
+                .containsOnlyKeys("ThreadFactoryLeakFixture")
+                .hasEntrySatisfying(
+                        "ThreadFactoryLeakFixture",
+                        failure -> assertThat(failure)
+                                .isInstanceOf(AssertionError.class)
+                                .hasMessageStartingWith(
+                                        "ThreadFactoryLeakFixture.startsAThreadThroughTheContainer: 1 thread(s) still running")
+                                .hasMessageContaining("\n  stuck-from-container-thread-factory\n"));
+    }
+
+    @Test
+    void testLeavingItsInterruptFlagSetDoesNotReportItsIdleWorkers() {
+        var results = run(InterruptedTestFixture.class);
+
+        assertThat(failures(results.testEvents())).isEmpty();
+        assertThat(failures(results.containerEvents())).isEmpty();
+        results.testEvents().assertStatistics(stats -> stats.succeeded(1));
+    }
+
+    @Test
+    void beforeAllContainerParameterUnderPerMethodIsAClearResolutionError() {
+        var results = run(BeforeAllParameterFixture.class);
+
+        assertThat(failures(results.containerEvents()))
+                .hasEntrySatisfying(
+                        "BeforeAllParameterFixture",
+                        failure -> assertThat(failure)
+                                .isInstanceOf(ParameterResolutionException.class)
+                                .hasMessageContaining("Lifecycle.PER_METHOD")
+                                .hasMessageContaining("@BeforeAll"));
     }
 
     // A @TikoTest container's close() fails only when a custom ErrorHandler throws, which the
@@ -325,6 +389,7 @@ class TikoTestTeardownTest {
         @Test
         void publishesAndReturns(EventBus bus) throws InterruptedException {
             publishAndWaitUntilStuck(bus);
+            meetTheOtherFixture(leakingFixtureArrived, cleanFixtureArrived);
         }
     }
 
@@ -335,9 +400,61 @@ class TikoTestTeardownTest {
         @Test
         void returnsWhileTheOtherClassLeaks(EventBus bus) throws InterruptedException {
             assertThat(bus).isNotNull();
-            assertThat(StuckHandler.awaitEntered(ENTER_TIMEOUT))
-                    .as("the leaking fixture runs at the same time")
-                    .isTrue();
+            meetTheOtherFixture(cleanFixtureArrived, leakingFixtureArrived);
+        }
+    }
+
+    /**
+     * Signals {@code mine}, then waits a bounded time for {@code theirs}. Without parallel execution
+     * the first fixture to run fails here after {@link #OVERLAP_TIMEOUT} instead of hanging.
+     */
+    private static void meetTheOtherFixture(CountDownLatch mine, CountDownLatch theirs) throws InterruptedException {
+        mine.countDown();
+        assertThat(theirs.await(OVERLAP_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                .as("the other fixture class ran at the same time (parallel execution on)")
+                .isTrue();
+        OVERLAPS.incrementAndGet();
+    }
+
+    @TikoTest
+    @EnabledIf("io.tiko.test.TikoTestTeardownTest#launchedByTeardownTest")
+    static class ThreadFactoryLeakFixture {
+        @Test
+        void startsAThreadThroughTheContainer(Container container) {
+            var release = factoryThreadRelease;
+            var thread = container.threadFactory().newThread(() -> awaitIgnoringInterrupts(release));
+            thread.setName("stuck-from-container-thread-factory");
+            FACTORY_THREADS.add(thread);
+            thread.start();
+            assertThat(thread.isAlive()).isTrue();
+        }
+    }
+
+    /** Leaves an idle event-executor worker and its own interrupt flag set; leaks nothing. */
+    @TikoTest
+    @EnabledIf("io.tiko.test.TikoTestTeardownTest#launchedByTeardownTest")
+    static class InterruptedTestFixture {
+        @Test
+        void returnsInterrupted(Container container) throws Exception {
+            var ran = new CompletableFuture<Void>();
+            container.getEventExecutor().execute(() -> ran.complete(null));
+            ran.get(5, TimeUnit.SECONDS);
+            Thread.currentThread().interrupt();
+            assertThat(Thread.currentThread().isInterrupted()).isTrue();
+        }
+    }
+
+    @TikoTest
+    @EnabledIf("io.tiko.test.TikoTestTeardownTest#launchedByTeardownTest")
+    static class BeforeAllParameterFixture {
+        @BeforeAll
+        static void needsTheContainer(Container container) {
+            fail("a PER_METHOD container does not exist yet in @BeforeAll: " + container);
+        }
+
+        @Test
+        void neverRuns() {
+            fail("@BeforeAll should have failed first");
         }
     }
 

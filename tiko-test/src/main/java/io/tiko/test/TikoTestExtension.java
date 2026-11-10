@@ -13,6 +13,7 @@ import org.junit.jupiter.api.extension.ExtensionContext.Namespace;
 import org.junit.jupiter.api.extension.ExtensionContext.Store;
 import org.junit.jupiter.api.extension.InvocationInterceptor;
 import org.junit.jupiter.api.extension.ParameterContext;
+import org.junit.jupiter.api.extension.ParameterResolutionException;
 import org.junit.jupiter.api.extension.ParameterResolver;
 import org.junit.jupiter.api.extension.ReflectiveInvocationContext;
 
@@ -102,6 +103,13 @@ public final class TikoTestExtension
     public Object resolveParameter(ParameterContext pCtx, ExtensionContext eCtx) {
         Class<?> type = pCtx.getParameter().getType();
         BootedContainer boot = store(eCtx).get(KEY_BOOT, BootedContainer.class);
+        if (boot == null) {
+            throw new ParameterResolutionException("@TikoTest has no container to resolve parameter ["
+                    + pCtx.getParameter() + "] in " + pCtx.getDeclaringExecutable() + ". With the default "
+                    + "Lifecycle.PER_METHOD the container is booted for each test, so @BeforeAll and @AfterAll "
+                    + "methods cannot take container parameters. Use @BeforeEach / @AfterEach, or "
+                    + "@TikoTest(lifecycle = Lifecycle.PER_CLASS).");
+        }
         Container container = boot.container();
         RecordingEventBus bus = boot.bus();
 
