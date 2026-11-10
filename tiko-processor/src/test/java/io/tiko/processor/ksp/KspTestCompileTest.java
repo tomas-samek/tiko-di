@@ -15,6 +15,7 @@ import io.tiko.processor.collect.MainModuleOnClasspath;
 import io.tiko.processor.core.ksp.KspCompiler;
 import io.tiko.processor.core.ksp.KspCompiler.KspResult;
 import io.tiko.processor.core.ksp.KspProcessingEnv;
+import io.tiko.processor.core.ksp.KspProgram;
 import java.io.File;
 import java.io.IOException;
 import java.io.StringReader;
