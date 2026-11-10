@@ -58,10 +58,29 @@ public final class DefaultEventExecutorFactory {
      * cores * 4}, keep-alive {@value #DEFAULT_KEEP_ALIVE_SECONDS}s) — so omitting every #110 knob
      * reproduces the historical behaviour exactly.
      *
+     * <p>Threads come from the booting container's {@link OwnedThreads} when one is bound to the
+     * calling thread (the generated constructor runs bound, #634), so they are reported if they
+     * outlive {@code close()}; otherwise they are untracked.
+     *
      * @throws IllegalArgumentException if the effective max pool size is less than the effective core size
      */
     public static ExecutorService create(
             int queueCapacity, OverflowPolicy overflowPolicy, int coreSize, int maxSize, Duration keepAlive) {
+        return create(queueCapacity, overflowPolicy, coreSize, maxSize, keepAlive, OwnedThreads.boundOr(Thread::new));
+    }
+
+    /**
+     * Builds the default event executor taking its threads from {@code threads}, renamed
+     * {@code tiko-event-async-{n}} and made daemon (#634). The factory is captured here, once:
+     * worker threads are started later, from whichever thread submits.
+     */
+    static ExecutorService create(
+            int queueCapacity,
+            OverflowPolicy overflowPolicy,
+            int coreSize,
+            int maxSize,
+            Duration keepAlive,
+            ThreadFactory threads) {
         int cores = Runtime.getRuntime().availableProcessors();
         int corePoolSize = coreSize == TikoOptions.UNSET_POOL_SIZE ? Math.max(2, cores / 2) : coreSize;
         int maxPoolSize = maxSize == TikoOptions.UNSET_POOL_SIZE ? cores * 4 : maxSize;
@@ -72,15 +91,12 @@ public final class DefaultEventExecutorFactory {
         long keepAliveMs =
                 keepAlive == null ? TimeUnit.SECONDS.toMillis(DEFAULT_KEEP_ALIVE_SECONDS) : keepAlive.toMillis();
 
-        ThreadFactory threadFactory = new ThreadFactory() {
-            private final AtomicInteger counter = new AtomicInteger();
-
-            @Override
-            public Thread newThread(Runnable r) {
-                Thread t = new Thread(r, "tiko-event-async-" + counter.incrementAndGet());
-                t.setDaemon(true);
-                return t;
-            }
+        var counter = new AtomicInteger();
+        ThreadFactory threadFactory = r -> {
+            Thread t = threads.newThread(r);
+            t.setName("tiko-event-async-" + counter.incrementAndGet());
+            t.setDaemon(true);
+            return t;
         };
 
         return new ThreadPoolExecutor(

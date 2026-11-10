@@ -327,6 +327,40 @@ tiko-config's `TikoFrameworkConfig`, #114): `${VAR}` interpolation works
 startup with a `ConfigurationFailure` anchored at its `file:line:column`. The YAML key
 needs tiko-config on the classpath; without it only the programmatic setting applies.
 
+### Threads that outlive `close()`
+
+The bounded waits stop *waiting*, not threads: a handler that ignores the interrupt from
+`shutdownNow()`, or a teardown hook stuck past `teardownTimeout`, keeps running after
+`close()` returns. The container reports these threads instead of leaving them to surface
+later as a clash nobody can attribute (#634).
+
+Every thread a container booted by `Tiko.create(...)` starts is tracked: the default
+executor's `tiko-event-async-N` workers, `tiko-teardown` threads, and any thread a transport
+creates through `container.threadFactory()`. After the bounded waits, `close()` gives the
+tracked threads one more second to exit. If any are still alive, it reports them once. By
+default it logs a single `WARNING` on `io.tiko.events`:
+
+```
+Container closed, but 1 thread(s) it started are still running: tiko-event-async-3 (at com.acme.Ledger.flush(Ledger.java:42))
+```
+
+To handle the report yourself, for example to fail a test, set a handler:
+
+```java
+TikoOptions opts = TikoOptions.builder()
+        .onThreadsOutlivingClose(threads -> leaked.addAll(threads))
+        .build();
+```
+
+The handler may throw. When `close()` (or a failed `Tiko.create(...)`) already has a failure on
+its way out, such as a `@PreDestroy` observer failure, that failure wins and the handler's
+throwable is attached to it as suppressed. Otherwise the handler's throwable propagates from
+`close()`.
+
+A second `close()` reports nothing. Threads of an executor you supply with
+`TikoOptions.eventExecutor(...)` are yours and not tracked, and neither are threads your own
+components start.
+
 ## Lifecycle events
 
 The container automatically publishes lifecycle events that you can subscribe to for metrics, logging, tracing, and cleanup. They keep observability concerns out of your business logic.

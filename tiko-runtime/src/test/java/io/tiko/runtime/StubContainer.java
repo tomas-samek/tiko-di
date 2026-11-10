@@ -6,7 +6,7 @@ import io.tiko.EventBus;
 import io.tiko.Provider;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 /**
@@ -32,6 +32,12 @@ public final class StubContainer implements Container {
     // Consulted before own resolution, mirroring the generated get(Class) head.
     private final TikoOptions options;
 
+    // Mirrors the generated container: it builds and owns the framework default executor when
+    // none is passed in (single-module boot) and drains it on shutdown (#634).
+    private final ExecutorService executor;
+    private final boolean ownsExecutor;
+    private final java.time.Duration shutdownTimeout;
+
     // Tiko.createSingleModuleContainer + AggregatingContainer.processContainerResource
     // both reflectively look up the canonical 6-arg constructor (TikoOptions is the
     // sixth param so generated getters can consult test/runtime overrides via this field).
@@ -44,6 +50,20 @@ public final class StubContainer implements Container {
             TikoOptions options) {
         this.eventBus = eventBus;
         this.options = options;
+        this.ownsExecutor = executor == null;
+        if (executor != null) {
+            this.executor = executor;
+        } else if (options != null) {
+            this.executor = DefaultEventExecutorFactory.create(
+                    options.queueCapacity(),
+                    options.onOverflow(),
+                    options.eventExecutorCoreSize(),
+                    options.eventExecutorMaxSize(),
+                    options.eventExecutorKeepAlive());
+        } else {
+            this.executor = DefaultEventExecutorFactory.create();
+        }
+        this.shutdownTimeout = shutdownTimeout != null ? shutdownTimeout : java.time.Duration.ofSeconds(10);
     }
 
     @Override
@@ -98,7 +118,18 @@ public final class StubContainer implements Container {
 
     @Override
     public void shutdown() {
-        // no-op: test stub
+        if (!ownsExecutor) {
+            return;
+        }
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(shutdownTimeout.toNanos(), TimeUnit.NANOSECONDS)) {
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            executor.shutdownNow();
+        }
     }
 
     @Override
@@ -108,7 +139,7 @@ public final class StubContainer implements Container {
 
     @Override
     public ExecutorService getEventExecutor() {
-        return Executors.newSingleThreadExecutor();
+        return executor;
     }
 
     /** Config types injected through the aggregator, recorded for {@code AggregatingContainerResourceCharsetTest}. */
