@@ -91,6 +91,7 @@ class RetrySchedulingExecutorTest {
 
         assertThat(owner.scheduleRetry(() -> {}, 0L)).isFalse();
         assertThat(CapturingLoggerFinder.RECORDS)
-                .noneMatch(r -> r.message() != null && r.message().contains("pending async retr"));
+                .filteredOn(r -> r.message() != null && r.message().contains("pending async retr"))
+                .isEmpty();
     }
 }
