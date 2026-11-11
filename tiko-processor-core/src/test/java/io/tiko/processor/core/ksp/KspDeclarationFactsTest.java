@@ -498,6 +498,10 @@ class KspDeclarationFactsTest {
                 fact("plainClassIsNoValueClass", env -> cls(env, "f.Circle").isValueClass(), false),
                 fact("javaClassIsNoValueClass", env -> cls(env, "f.Legacy").isValueClass(), false),
                 fact(
+                        "classpathDataClassIsKotlinDataClass",
+                        env -> cls(env, "kotlin.Pair").isKotlinDataClass(),
+                        true),
+                fact(
                         "dataClassIsKotlinDataClass",
                         env -> cls(env, "f.PlainData").isKotlinDataClass(),
                         true),
