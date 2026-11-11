@@ -613,13 +613,10 @@ public final class Tiko {
         /**
          * Runs bound, like {@link #shutdown()}: a failing generated {@code start()} rolls the module
          * back from inside itself, and that rollback's teardown threads must be tracked too (#651).
+         * Over an aggregate {@code threads} is {@code null}, which binds no owner.
          */
         @Override
         public void start() {
-            if (threads == null) {
-                delegate.start();
-                return;
-            }
             OwnedThreads.runBound(threads, delegate::start);
         }
 

@@ -159,7 +159,10 @@ final class OwnedThreads implements ThreadFactory {
         T run() throws E;
     }
 
-    /** Runs {@code action} with {@code owner} bound to the calling thread, restoring the previous binding. */
+    /**
+     * Runs {@code action} with {@code owner} bound to the calling thread, restoring the previous
+     * binding. A {@code null} owner binds none, so the factories fall back to untracked threads.
+     */
     static <T, E extends Exception> T callBound(OwnedThreads owner, BoundAction<T, E> action) throws E {
         var previous = BOUND.get();
         BOUND.set(owner);
