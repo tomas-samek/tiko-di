@@ -30,6 +30,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.junit.jupiter.api.extension.ExtensionContext;
@@ -122,6 +123,27 @@ class TikoTestTeardownTest {
     }
 
     @Test
+    void leakIsSuppressedOnTheBootFailure() {
+        StuckHandler.armAtStartup();
+
+        var results = run(StuckBootFailureFixture.class);
+
+        assertThat(failures(results.testEvents()))
+                .containsOnlyKeys("StuckBootFailureFixture")
+                .hasEntrySatisfying(
+                        "StuckBootFailureFixture",
+                        failure -> assertThat(failure)
+                                .hasMessage("transport refused to start")
+                                .satisfies(bootFailure -> assertThat(bootFailure.getSuppressed())
+                                        .filteredOn(AssertionError.class::isInstance)
+                                        .singleElement()
+                                        .extracting(Throwable::getMessage, as(InstanceOfAssertFactories.STRING))
+                                        .startsWith("StuckBootFailureFixture.neverRuns: 1 thread(s) still running"
+                                                + " after its container closed:\n  tiko-event-async-test-")));
+        assertThat(StuckHandler.stuckThreads()).as("the stuck startup handler").hasSize(1);
+    }
+
+    @Test
     void leakedThreadFailsTheTestThatLeakedIt() {
         var results = run(StuckHandlerFixture.class);
 
@@ -173,6 +195,20 @@ class TikoTestTeardownTest {
         assertThat(OVERLAPS.get())
                 .as("both fixture classes were inside their tests at the same time")
                 .isEqualTo(2);
+    }
+
+    @Test
+    void leakInANestedClassNamesItsEnclosingClass() {
+        var results = run(NestedLeakFixture.class);
+
+        assertThat(failures(results.testEvents()))
+                .containsOnlyKeys("Inner")
+                .hasEntrySatisfying(
+                        "Inner",
+                        failure -> assertThat(failure)
+                                .isInstanceOf(AssertionError.class)
+                                .hasMessageStartingWith(
+                                        "NestedLeakFixture.Inner.publishesAndReturns: 1 thread(s) still running"));
     }
 
     @Test
@@ -341,27 +377,58 @@ class TikoTestTeardownTest {
     @TikoTest
     @EnabledIf("io.tiko.test.TikoTestTeardownTest#launchedByTeardownTest")
     static class BootFailureFixture {
-        private static ClassLoader previous;
-        private static URLClassLoader withFailingTransport;
-
         /** Runs before the extension boots each test's container, so that boot finds {@link FailingTransport}. */
         @BeforeAll
         static void addFailingTransport() {
-            URL root = BootFailureFixture.class.getResource("/boot-failure/");
-            previous = Thread.currentThread().getContextClassLoader();
-            withFailingTransport = new URLClassLoader(new URL[] {root}, previous);
-            Thread.currentThread().setContextClassLoader(withFailingTransport);
+            FailingTransportLoader.install();
         }
 
         @AfterAll
         static void restoreClassLoader() throws IOException {
-            Thread.currentThread().setContextClassLoader(previous);
-            withFailingTransport.close();
+            FailingTransportLoader.restore();
         }
 
         @Test
         void neverRuns() {
             fail("the container boot should have failed first");
+        }
+    }
+
+    /** Boots like {@link BootFailureFixture} while an async startup handler is stuck (#646). */
+    @TikoTest
+    @EnabledIf("io.tiko.test.TikoTestTeardownTest#launchedByTeardownTest")
+    static class StuckBootFailureFixture {
+        @BeforeAll
+        static void addFailingTransport() {
+            FailingTransportLoader.install();
+        }
+
+        @AfterAll
+        static void restoreClassLoader() throws IOException {
+            FailingTransportLoader.restore();
+        }
+
+        @Test
+        void neverRuns() {
+            fail("the container boot should have failed first");
+        }
+    }
+
+    /** Puts {@link FailingTransport} on the context class loader the extension boots with, and takes it off again. */
+    private static final class FailingTransportLoader {
+        private static ClassLoader previous;
+        private static URLClassLoader withFailingTransport;
+
+        static void install() {
+            URL root = FailingTransportLoader.class.getResource("/boot-failure/");
+            previous = Thread.currentThread().getContextClassLoader();
+            withFailingTransport = new URLClassLoader(new URL[] {root}, previous);
+            Thread.currentThread().setContextClassLoader(withFailingTransport);
+        }
+
+        static void restore() throws IOException {
+            Thread.currentThread().setContextClassLoader(previous);
+            withFailingTransport.close();
         }
     }
 
@@ -371,6 +438,19 @@ class TikoTestTeardownTest {
         @Test
         void publishesAndReturns(EventBus bus) throws InterruptedException {
             publishAndWaitUntilStuck(bus);
+        }
+    }
+
+    /** Its leak names the {@code @Nested} class with the class enclosing it (#646). */
+    @TikoTest
+    @EnabledIf("io.tiko.test.TikoTestTeardownTest#launchedByTeardownTest")
+    static class NestedLeakFixture {
+        @Nested
+        class Inner {
+            @Test
+            void publishesAndReturns(EventBus bus) throws InterruptedException {
+                publishAndWaitUntilStuck(bus);
+            }
         }
     }
 

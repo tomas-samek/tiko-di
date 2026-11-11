@@ -113,7 +113,7 @@ public class CountingThreadPoolExecutor extends ThreadPoolExecutor {
      * {@link #shutdownNow()} and {@link #awaitTermination(long, TimeUnit)} these are the workers
      * stuck in a task that ignores interrupts; {@code @TikoTest} fails the test that left them (#637).
      */
-    public List<Thread> liveThreads() {
+    List<Thread> liveThreads() {
         return threads.alive();
     }
 

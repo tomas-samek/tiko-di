@@ -94,7 +94,7 @@ OrderServiceTest.createsOrder: 1 thread(s) still running after its container clo
     at java.base/java.util.concurrent.CountDownLatch.await(CountDownLatch.java:230)
 ```
 
-To fix it, stop or join the thread before the test ends, or let it react to interruption so the shutdown can end it. Create threads through `container.threadFactory()`, not `new Thread(...)`, so the report can tie them to the test. The executor is shut down on every path: when the test fails, when `close()` itself throws, and when the boot fails (then there is no container to close). A clean close adds no time. A leaking test's close takes about 1–2 s longer, because the threads get a grace period to exit before the test fails.
+To fix it, stop or join the thread before the test ends, or let it react to interruption so the shutdown can end it. Test code and transports, which hold the `Container`, create their threads through `container.threadFactory()`, not `new Thread(...)`, so the report can tie them to the test. A component cannot reach the `Container`, and the threads it starts itself are not tracked: stopping them belongs in its `@PreDestroy`. The executor is shut down on every path: when the test fails, when `close()` itself throws, and when the boot fails. When the boot fails, the test fails with the boot error, and threads still running are reported on it as a suppressed failure in the same format. A clean close adds no time. A leaking test's close takes about 1–2 s longer, because the threads get a grace period to exit before the test fails.
 
 ## `RecordingEventBus` — spy for event assertions
 
