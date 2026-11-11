@@ -60,4 +60,50 @@ class KspFakeKafkaBootTest {
 
         assertThat(program.leakReports()).isEmpty();
     }
+
+    @Test
+    void plainDataClassPayloadRoundTripsOverTheFakeBroker() throws Exception {
+        var result = KspCompiler.compile(
+                List.of(new TikoSymbolProcessorProvider(), new KafkaSymbolProcessorProvider()),
+                Map.of(),
+                KspCompiler.kotlin(
+                        "Orders.kt",
+                        "package demo",
+                        "",
+                        "import io.tiko.Scope",
+                        "import io.tiko.annotations.Component",
+                        "import io.tiko.annotations.EventHandler",
+                        "import io.tiko.annotations.EventTrigger",
+                        "import io.tiko.kafka.annotations.KafkaSource",
+                        "",
+                        "data class OrderPlaced(val orderId: String, val quantity: Int)",
+                        "",
+                        "@Component(scope = Scope.SINGLETON)",
+                        "class OrderConsumer {",
+                        "    @KafkaSource(topic = \"orders\")",
+                        "    @EventTrigger(eventName = \"OrderPlaced\")",
+                        "    fun fromKafka(placed: OrderPlaced): OrderPlaced = placed",
+                        "}",
+                        "",
+                        "@Component(scope = Scope.SINGLETON)",
+                        "class Recorder {",
+                        "    companion object { @JvmField val seen: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList() }",
+                        "    @EventHandler",
+                        "    fun on(placed: OrderPlaced) { seen.add(placed.orderId + \":\" + placed.quantity) }",
+                        "}"));
+        assertThat(result.exitCode()).as(result.messages()).isEqualTo(KotlinCompilation.ExitCode.OK);
+
+        var program = KspProgram.bootWithFakeKafka(result);
+        try {
+            program.send("orders", "A1", "{\"orderId\":\"A1\",\"quantity\":3}");
+
+            await().atMost(Duration.ofSeconds(10))
+                    .untilAsserted(() -> assertThat(program.staticList("demo.Recorder", "seen"))
+                            .contains("A1:3"));
+        } finally {
+            program.close();
+        }
+
+        assertThat(program.leakReports()).isEmpty();
+    }
 }
