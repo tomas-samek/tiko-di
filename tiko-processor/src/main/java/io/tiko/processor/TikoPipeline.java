@@ -315,24 +315,25 @@ public final class TikoPipeline {
         }
         for (var component : context.getActiveComponents()) {
             if (!component.isTestComponent()) continue;
-            var extraKeys = component.getTestExtraKeys();
-            boolean namesMainComponent = false;
-            for (String extraKey : extraKeys) {
-                if (mainFqns.contains(extraKey)) {
-                    namesMainComponent = true;
-                    context.markShadowedByTestOverride(extraKey, component);
-                }
-            }
-            // An explicit value() naming an interface of a main component names no component
-            // itself; the implicit walk always does, so it never reaches this branch.
-            if (!namesMainComponent) {
-                for (String extraKey : extraKeys) {
-                    if (isInterfaceOfAny(extraKey, mainFqns)) {
-                        context.markShadowedByTestOverride(extraKey, component);
-                    }
-                }
+            for (String shadowedKey : classpathShadowedKeys(component, mainFqns)) {
+                context.markShadowedByTestOverride(shadowedKey, component);
             }
         }
+    }
+
+    /**
+     * The keys of {@code component} that shadow a main component: those naming one, or, when none
+     * does, those naming an interface one implements. The second case is an explicit
+     * {@code value()} on an interface; the implicit walk always names a component, so it never
+     * reaches it.
+     */
+    private List<String> classpathShadowedKeys(ComponentModel component, Set<String> mainFqns) {
+        var extraKeys = component.getTestExtraKeys();
+        var named = extraKeys.stream().filter(mainFqns::contains).toList();
+        if (!named.isEmpty()) {
+            return named;
+        }
+        return extraKeys.stream().filter(key -> isInterfaceOfAny(key, mainFqns)).toList();
     }
 
     /** Whether {@code key} is an interface that at least one of the main components implements. */
