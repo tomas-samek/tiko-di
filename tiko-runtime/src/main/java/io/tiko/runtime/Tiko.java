@@ -312,14 +312,13 @@ public final class Tiko {
         // consult it during component lookup (test/runtime override support).
         // Constructed with the boot's OwnedThreads bound: the generated constructor builds the
         // default event executor, which captures that factory for its worker threads (#634).
+        // A supplied executor reaches the generated code as a view that schedules async retries on
+        // the boot's retry thread (#653); getEventExecutor() on the handle unwraps it again.
         var constructor = implClass.getDeclaredConstructor(CONTAINER_CTOR_PARAM_TYPES);
+        var dispatchExecutor =
+                userEventExecutor == null ? null : new RetrySchedulingExecutor(userEventExecutor, ownedThreads);
         Container container = OwnedThreads.callBound(ownedThreads, () -> (Container) constructor.newInstance(
-                eventBus,
-                errorHandler,
-                userEventExecutor,
-                /* publishLifecycleEvents */ true,
-                shutdownTimeout,
-                options));
+                eventBus, errorHandler, dispatchExecutor, /* publishLifecycleEvents */ true, shutdownTimeout, options));
 
         registerEventHandlers(eventBus, container, implClass);
 
@@ -632,7 +631,8 @@ public final class Tiko {
 
         @Override
         public java.util.concurrent.ExecutorService getEventExecutor() {
-            return delegate.getEventExecutor();
+            // The supplied executor itself, not the retry-scheduling view the module holds (#653).
+            return RetrySchedulingExecutor.unwrap(delegate.getEventExecutor());
         }
 
         @Override

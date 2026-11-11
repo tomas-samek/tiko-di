@@ -11,6 +11,7 @@ import io.tiko.test.fixtures.FailingTransport;
 import io.tiko.test.fixtures.ShutdownProbe;
 import io.tiko.test.fixtures.StuckEvent;
 import io.tiko.test.fixtures.StuckHandler;
+import io.tiko.test.fixtures.StuckRetryEvent;
 import java.io.IOException;
 import java.lang.reflect.Proxy;
 import java.net.URL;
@@ -22,6 +23,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -69,6 +71,7 @@ class TikoTestTeardownTest {
 
     private static final AtomicInteger OVERLAPS = new AtomicInteger();
     private static volatile CountDownLatch factoryThreadRelease = new CountDownLatch(1);
+    private static volatile CountDownLatch fillerRelease = new CountDownLatch(1);
     private static volatile CountDownLatch leakingFixtureArrived = new CountDownLatch(1);
     private static volatile CountDownLatch cleanFixtureArrived = new CountDownLatch(1);
 
@@ -79,6 +82,7 @@ class TikoTestTeardownTest {
         FailingTransport.reset();
         FACTORY_THREADS.clear();
         factoryThreadRelease = new CountDownLatch(1);
+        fillerRelease = new CountDownLatch(1);
         leakingFixtureArrived = new CountDownLatch(1);
         cleanFixtureArrived = new CountDownLatch(1);
         OVERLAPS.set(0);
@@ -88,6 +92,7 @@ class TikoTestTeardownTest {
     void releaseStuckThreads() throws InterruptedException {
         StuckHandler.releaseAndJoin();
         factoryThreadRelease.countDown();
+        fillerRelease.countDown();
         for (var thread : FACTORY_THREADS) {
             thread.join(Duration.ofSeconds(5));
         }
@@ -155,6 +160,22 @@ class TikoTestTeardownTest {
                                 .hasMessageStartingWith(
                                         "StuckHandlerFixture.publishesAndReturns: 1 thread(s) still running")
                                 .hasMessageContaining("tiko-event-async-test-"));
+    }
+
+    @Test
+    void retryStuckAfterItsBackoffFailsTheTestThatLeakedIt() {
+        var results = run(StuckRetryFixture.class);
+
+        assertThat(failures(results.testEvents()))
+                .containsOnlyKeys("StuckRetryFixture")
+                .hasEntrySatisfying(
+                        "StuckRetryFixture",
+                        failure -> assertThat(failure)
+                                .isInstanceOf(AssertionError.class)
+                                .hasMessageStartingWith(
+                                        "StuckRetryFixture.retriesOnASaturatedQueue: 1 thread(s) still running")
+                                .hasMessageContaining("\n  tiko-event-retry-"));
+        assertThat(StuckHandler.stuckThreads()).as("the stuck retry").hasSize(1);
     }
 
     @Test
@@ -439,6 +460,51 @@ class TikoTestTeardownTest {
         void publishesAndReturns(EventBus bus) throws InterruptedException {
             publishAndWaitUntilStuck(bus);
         }
+    }
+
+    /**
+     * Saturates the caller-runs event executor, then publishes to a handler whose retry, scheduled
+     * after its backoff, gets stuck on the thread that re-submits it (#653).
+     */
+    @TikoTest
+    @EnabledIf("io.tiko.test.TikoTestTeardownTest#launchedByTeardownTest")
+    static class StuckRetryFixture {
+        @Test
+        void retriesOnASaturatedQueue(Container container, EventBus bus) throws InterruptedException {
+            saturate((ThreadPoolExecutor) container.getEventExecutor());
+            bus.publish(new StuckRetryEvent());
+            assertThat(StuckHandler.awaitEntered(ENTER_TIMEOUT)).isTrue();
+        }
+    }
+
+    /**
+     * Occupies every worker and every queue slot of {@code executor} until {@link #fillerRelease},
+     * so its next task runs on the thread that submits it. The fillers leave on interrupt, so the
+     * executor's release at close takes them down.
+     */
+    private static void saturate(ThreadPoolExecutor executor) throws InterruptedException {
+        var release = fillerRelease;
+        var submitter = Thread.currentThread();
+        var workers = executor.getMaximumPoolSize();
+        var running = new CountDownLatch(workers);
+        var fillers = workers + executor.getQueue().remainingCapacity();
+        for (var i = 0; i < fillers; i++) {
+            executor.execute(() -> {
+                if (Thread.currentThread() == submitter) {
+                    return; // rejected and run here: never block the fixture, let the checks below fail
+                }
+                running.countDown();
+                try {
+                    release.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+        }
+        assertThat(running.await(ENTER_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                .isTrue();
+        assertThat(executor.getQueue().remainingCapacity()).isZero();
+        assertThat(executor.getActiveCount()).isEqualTo(workers);
     }
 
     /** Its leak names the {@code @Nested} class with the class enclosing it (#646). */

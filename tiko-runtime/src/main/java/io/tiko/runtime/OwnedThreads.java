@@ -7,8 +7,12 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.WeakHashMap;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -26,6 +30,11 @@ import java.util.stream.Collectors;
  * it with {@link #boundOr}. This class is the only
  * place that binding lives. The executor captures the factory once, at creation, because its worker
  * threads are started later, from other threads.
+ *
+ * <p><strong>Retry thread.</strong> A retried async handler waits out its backoff on this owner's
+ * {@code tiko-event-retry} thread ({@link #scheduleRetry}), created on first use, so the attempt it
+ * re-submits never lands on an untracked thread (#653). Closing stops it before the exit grace
+ * ({@link #reportSurvivors}).
  */
 final class OwnedThreads implements ThreadFactory {
 
@@ -41,11 +50,75 @@ final class OwnedThreads implements ThreadFactory {
     private final Set<Thread> threads = Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
     private final AtomicBoolean reported = new AtomicBoolean();
 
+    /** Guards {@link #retryScheduler} and {@link #retriesStopped}. */
+    private final Object retryLock = new Object();
+
+    private final AtomicInteger retryThreadCount = new AtomicInteger();
+
+    private ScheduledThreadPoolExecutor retryScheduler;
+    private boolean retriesStopped;
+
     @Override
     public Thread newThread(Runnable task) {
         var thread = Thread.ofPlatform().daemon().unstarted(task);
         threads.add(thread);
         return thread;
+    }
+
+    /**
+     * Runs {@code resubmit} after {@code delayNanos} on this owner's retry thread, created from
+     * this factory on first use and named {@code tiko-event-retry-N} (#653). A retried async
+     * handler re-submits its next attempt from there, so a {@code CALLER_RUNS} attempt that runs on
+     * the re-submitting thread runs on a tracked one.
+     *
+     * @return {@code false} once {@link #stopRetries()} has run, so {@code resubmit} will never run
+     */
+    boolean scheduleRetry(Runnable resubmit, long delayNanos) {
+        synchronized (retryLock) {
+            if (retriesStopped) {
+                return false;
+            }
+            if (retryScheduler == null) {
+                retryScheduler = new ScheduledThreadPoolExecutor(1, this::newRetryThread);
+            }
+            retryScheduler.schedule(resubmit, delayNanos, TimeUnit.NANOSECONDS);
+            return true;
+        }
+    }
+
+    private Thread newRetryThread(Runnable task) {
+        var thread = newThread(task);
+        thread.setName("tiko-event-retry-" + retryThreadCount.incrementAndGet());
+        return thread;
+    }
+
+    /**
+     * Stops the retry thread: no retry is scheduled from now on, and those still waiting out their
+     * backoff are dropped with one WARNING. A retry already running keeps its thread until it
+     * returns; an idle thread exits at once, so it is never reported as outliving close.
+     */
+    void stopRetries() {
+        ScheduledThreadPoolExecutor scheduler;
+        synchronized (retryLock) {
+            retriesStopped = true;
+            scheduler = retryScheduler;
+        }
+        if (scheduler == null) {
+            return;
+        }
+        var dropped = 0;
+        for (var pending : scheduler.getQueue().toArray(new Runnable[0])) {
+            if (pending instanceof Future<?> future && future.cancel(false)) {
+                dropped++;
+            }
+        }
+        scheduler.shutdown();
+        if (dropped > 0) {
+            LoggerHolder.LOG.log(
+                    System.Logger.Level.WARNING,
+                    (dropped == 1 ? "1 pending async retry was" : dropped + " pending async retries were")
+                            + " dropped: the container is shutting down.");
+        }
     }
 
     /**
@@ -87,7 +160,8 @@ final class OwnedThreads implements ThreadFactory {
     /**
      * Hands the threads still alive after {@link #THREAD_EXIT_GRACE} to {@code handler}, or logs
      * them when it is {@code null}. Runs at most once per owner, so a second {@code close()}
-     * reports nothing.
+     * reports nothing. Stops the retry thread first ({@link #stopRetries()}), so an idle one has
+     * exited before the grace runs out.
      *
      * <p>The handler never masks the failure already leaving {@code close()}: when
      * {@code primaryFailure} is set, anything the handler throws is added to it as suppressed and
@@ -97,6 +171,7 @@ final class OwnedThreads implements ThreadFactory {
      */
     @SuppressWarnings("java:S1181") // An Error from the handler must not replace the primary failure either.
     void reportSurvivors(Consumer<List<Thread>> handler, Throwable primaryFailure) {
+        stopRetries();
         if (!reported.compareAndSet(false, true)) {
             return;
         }

@@ -38,6 +38,12 @@ public final class StubContainer implements Container {
     private final boolean ownsExecutor;
     private final java.time.Duration shutdownTimeout;
 
+    /**
+     * The executor the last constructed stub dispatches through: what generated {@code EventRegistry}
+     * code passes to {@code EventChainContext} as {@code container.getEventExecutor()} (#653).
+     */
+    static volatile ExecutorService lastDispatchExecutor;
+
     // Tiko.createSingleModuleContainer + AggregatingContainer.processContainerResource
     // both reflectively look up the canonical 6-arg constructor (TikoOptions is the
     // sixth param so generated getters can consult test/runtime overrides via this field).
@@ -64,6 +70,7 @@ public final class StubContainer implements Container {
             this.executor = DefaultEventExecutorFactory.create();
         }
         this.shutdownTimeout = shutdownTimeout != null ? shutdownTimeout : java.time.Duration.ofSeconds(10);
+        lastDispatchExecutor = this.executor;
     }
 
     @Override

@@ -51,6 +51,13 @@ public final class AggregatingContainer implements Container {
     private final ErrorHandler errorHandler;
     private final java.util.concurrent.ExecutorService eventExecutor;
     private final boolean ownsEventExecutor;
+
+    /**
+     * The executor every module's dispatch code sees: the default one itself, or a supplied one as a
+     * view that schedules async retries on this container's retry thread (#653). One instance,
+     * shared by every module, like the executor behind it (#51).
+     */
+    private final java.util.concurrent.ExecutorService dispatchExecutor;
     // Every thread this container starts, for the report of those outliving shutdown() (#634).
     private final OwnedThreads ownedThreads = new OwnedThreads();
     private final Duration shutdownTimeout;
@@ -162,6 +169,8 @@ public final class AggregatingContainer implements Container {
                         options.eventExecutorKeepAlive(),
                         ownedThreads);
         this.ownsEventExecutor = (userEventExecutor == null);
+        this.dispatchExecutor =
+                ownsEventExecutor ? eventExecutor : new RetrySchedulingExecutor(eventExecutor, ownedThreads);
         this.shutdownTimeout = shutdownTimeout;
         this.options = options;
         this.descriptorName = descriptorName;
@@ -331,7 +340,7 @@ public final class AggregatingContainer implements Container {
         Container moduleContainer = (Container) constructor.newInstance(
                 sharedEventBus,
                 errorHandler,
-                eventExecutor,
+                dispatchExecutor,
                 /* publishLifecycleEvents */ false,
                 shutdownTimeout,
                 options);

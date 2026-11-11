@@ -33,22 +33,28 @@ class MultiModuleExecutorPropagationTest {
     }
 
     @Test
-    void all_per_module_containers_share_the_same_executor_instance() throws Exception {
+    void all_per_module_containers_share_one_executor_running_on_the_supplied_one() throws Exception {
         ExecutorService custom = Executors.newSingleThreadExecutor();
         try {
+            Thread customThread = custom.submit(Thread::currentThread).get(5, TimeUnit.SECONDS);
             TikoOptions opts = TikoOptions.builder().eventExecutor(custom).build();
             try (Container aggregator = Tiko.create(opts)) {
-                // Reflectively walk the aggregator's per-module containers and assert
-                // each reports the same executor instance.
+                // Reflectively walk the aggregator's per-module containers: they share one executor
+                // (#51), which dispatches onto the supplied one. It is a view of it that also
+                // schedules async retries on the container's retry thread (#653).
                 var perModule = perModuleContainers(aggregator);
                 assertThat(perModule)
                         .as("multi-module setup must have at least 2 per-module containers")
                         .hasSizeGreaterThanOrEqualTo(2);
+                ExecutorService shared = perModule.get(0).getEventExecutor();
                 for (Container module : perModule) {
                     assertThat(module.getEventExecutor())
-                            .as("per-module container's executor must be the shared aggregator executor")
-                            .isSameAs(custom);
+                            .as("per-module containers must share one executor")
+                            .isSameAs(shared);
                 }
+                assertThat(shared.submit(Thread::currentThread).get(5, TimeUnit.SECONDS))
+                        .as("the shared executor runs tasks on the user-supplied executor")
+                        .isSameAs(customThread);
             }
         } finally {
             custom.shutdownNow();
