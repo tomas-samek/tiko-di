@@ -24,6 +24,9 @@ dependencies {
     ksp("io.github.tomas-samek:tiko-processor:<version>")
     // Kafka bridges: also ksp("io.github.tomas-samek:tiko-kafka-processor:<version>")
     //                and implementation("io.github.tomas-samek:tiko-kafka:<version>")
+    // Tests: run the processor on the test compile too, so @TestComponent overrides apply.
+    kspTest("io.github.tomas-samek:tiko-processor:<version>")
+    testImplementation("io.github.tomas-samek:tiko-test:<version>")
 }
 
 kotlin { jvmToolchain(21) }
@@ -31,14 +34,15 @@ kotlin { jvmToolchain(21) }
 
 - **KSP2 only.** `com.google.devtools.ksp` 2.3.13 or newer. KSP1 is not supported.
 - The processors go on the `ksp(...)` configuration. There are no separate `*-ksp` artifacts.
+- **Tests:** a `@TestComponent` that replaces a class subclasses it, so that class and the members
+  it overrides must be `open`. Replacing an interface-keyed component needs no `open`.
 - No Tiko Gradle plugin exists; use the standard KSP plugin.
 - Gradle is the supported build for Kotlin.
 - **Maven + Kotlin:** may work with any Maven plugin that runs a KSP `SymbolProcessorProvider`;
   untested.
 
-## What does not work on KSP yet
+## What does not work on KSP
 
-- `@TikoTest` and `@TestComponent` (the `tiko-test` module) don't work on KSP yet. Planned.
 - `suspend` event handlers and `suspend` `@KafkaSource` bridges: rejected until Tiko's
   coroutine support.
 

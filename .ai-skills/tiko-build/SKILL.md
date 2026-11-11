@@ -68,7 +68,7 @@ dependencies {
   extension functions, `@get:` / `@set:` DI annotations, `suspend` handlers.
 - Nullability must match exactly. `T?` is legal only where the provider is a `@Produces`
   returning `T?`; it never means "optional" (`NULLABILITY_MISMATCH` otherwise).
-- `@TikoTest` / `@TestComponent` don't work on KSP yet.
+- `@TikoTest` / `@TestComponent` work on KSP; add `kspTest(tiko-processor)` and `testImplementation(tiko-test)`.
 
 The full table is in [`reference/kotlin.md`](reference/kotlin.md).
 
