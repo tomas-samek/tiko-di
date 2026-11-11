@@ -363,8 +363,11 @@ throwable is attached to it as suppressed. Otherwise the handler's throwable pro
 `close()`.
 
 A second `close()` reports nothing. Threads of an executor you supply with
-`TikoOptions.eventExecutor(...)` are yours and not tracked, and neither are threads your own
-components start.
+`TikoOptions.eventExecutor(...)` are yours and not tracked, and neither are threads a component
+starts with its own executor. Threads created through Tiko's own factories
+(`DefaultEventExecutorFactory.create(...)`, `BoundedExecution.run(...)`) during construction,
+`start()` (eager singletons, `@PostConstruct`, `@Produces` singletons, synchronous
+`ApplicationStartedEvent` handlers) or shutdown are tracked.
 
 ## Lifecycle events
 

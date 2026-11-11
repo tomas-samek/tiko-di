@@ -36,7 +36,7 @@ class TikoTestDescriptorRoutingTest {
 
         try (Container c = Tiko.create(TikoOptions.builder().testWiring(true).build())) {
             // The container should be (or wrap) an AggregatingContainer instance.
-            // TransportAwareContainer may wrap the inner container; unwrap if needed.
+            // BootHandle wraps the inner container; unwrap if needed.
             Container inner = c;
             try {
                 var delegateField = inner.getClass().getDeclaredField("delegate");
