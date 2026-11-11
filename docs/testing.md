@@ -234,6 +234,10 @@ does not shadow a `@Component(name = "primary")` — the validator's shadow path
 processes unnamed components only. For named test doubles, use the runtime
 `TikoOptions.override(Class, "name", Supplier)` hook instead.
 
+**Several modules on the test classpath.** When the test classpath holds more than one Tiko
+module (your main module plus library modules that ship their own components), a
+`@TestComponent` can shadow a component of any of them. javac and KSP agree on this.
+
 ## `TikoOptions.override(...)` — runtime overrides
 
 For per-test substitutions without writing a new `@TestComponent`, hand a supplier to `TikoOptions.override`. Key the override by the type the consumer depends on — typically an interface:

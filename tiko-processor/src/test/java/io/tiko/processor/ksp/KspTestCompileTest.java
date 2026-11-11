@@ -280,6 +280,40 @@ class KspTestCompileTest {
                         .anyMatch(line -> line.startsWith("b.Beta=")));
     }
 
+    /** The javac counterpart of {@link #testCompileSeesComponentsOfEveryCompiledModule}: same shadows. */
+    @Test
+    void javacTestCompileSeesComponentsOfEveryCompiledModule(@TempDir Path dir) throws Exception {
+        var alpha = javacCompile(
+                List.of(),
+                JavaFileObjects.forSourceLines(
+                        "a.Alpha", "package a;", "@io.tiko.annotations.Component", "public class Alpha {}"));
+        var beta = javacCompile(
+                List.of(),
+                JavaFileObjects.forSourceLines(
+                        "b.Beta", "package b;", "@io.tiko.annotations.Component", "public class Beta {}"));
+        var alphaClasses = writeClassOutput(alpha, dir.resolve("alpha"));
+        var betaClasses = writeClassOutput(beta, dir.resolve("beta"));
+
+        var test = javacCompile(
+                List.of(alphaClasses.toFile(), betaClasses.toFile()),
+                JavaFileObjects.forSourceString("io.tiko.test.TestComponent", TEST_COMPONENT_ANNOTATION),
+                JavaFileObjects.forSourceLines(
+                        "fakes.FakeAlpha",
+                        "package fakes;",
+                        "@io.tiko.test.TestComponent",
+                        "public class FakeAlpha extends a.Alpha {}"),
+                JavaFileObjects.forSourceLines(
+                        "fakes.FakeBeta",
+                        "package fakes;",
+                        "@io.tiko.test.TestComponent",
+                        "public class FakeBeta extends b.Beta {}"));
+
+        var testClasses = writeClassOutput(test, dir.resolve("test"));
+        assertThat(Files.readString(testClasses.resolve(TEST_SHADOWS)).lines())
+                .anyMatch(line -> line.startsWith("a.Alpha="))
+                .anyMatch(line -> line.startsWith("b.Beta="));
+    }
+
     @Test
     void testOnlyModuleKeepsTheMainContainerName() {
         var javac = javacCompile(

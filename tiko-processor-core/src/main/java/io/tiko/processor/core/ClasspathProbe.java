@@ -5,8 +5,9 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Reads the compile classpath. Each frontend answers one of the two questions: {@link #readResource}
- * is always empty on KSP, and {@link #compiledClassesIn} is always empty on javac.
+ * Reads the compile classpath. Each frontend answers some of the questions: {@link #readResource}
+ * and {@link #simpleClassNamesIn} are always empty on KSP, and {@link #compiledClassesIn} is always
+ * empty on javac.
  */
 public interface ClasspathProbe {
 
@@ -18,4 +19,11 @@ public interface ClasspathProbe {
      * round's sources, sorted by qualified name. Empty for an unknown package.
      */
     List<ClassDecl> compiledClassesIn(String packageName);
+
+    /**
+     * The simple names of the top-level classes of the package, from every classpath entry that
+     * holds some, where {@link #readResource} sees only the first entry's resource. Empty for an
+     * unknown package.
+     */
+    List<String> simpleClassNamesIn(String packageName);
 }
