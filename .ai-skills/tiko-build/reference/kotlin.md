@@ -90,7 +90,7 @@ One that would add new DI semantics is rejected at compile time with error kind
 | `@KafkaSource` / `@KafkaSink` on an extension function | Rejected: the bootstrap passes only the payload (and `KafkaContext`). | Declare a regular `fun` taking the receiver as a parameter. |
 | `suspend` `@KafkaSource` | Rejected until coroutine support. | Make it a regular `fun`. |
 | `suspend` `@KafkaSink`, or a value class in a bridge's signature | Rejected. | Drop `suspend`; use a regular class. |
-| Plain `data class` (no `@JvmRecord`) as a `@KafkaSource` parameter or `@KafkaSink` return payload, with the default `serializer` | Rejected (a located compile error): the default JSON serializer can't build it, because its constructor has no parameter names Jackson can read. A `@JvmRecord data class` (like a Java record or POJO) works as a payload. | Annotate it `@JvmRecord`, or set an explicit `serializer = YourSerializer::class` on the annotation, which turns the rule off. |
+| Plain `data class` (no `@JvmRecord`) as a `@KafkaSource` parameter or `@KafkaSink` return payload, with the default `serializer` | Rejected (a located compile error): the default JSON serializer can't build it, because its constructor has no parameter names Jackson can read. A `@JvmRecord data class`, a Java record or a Java POJO works as a payload. The check covers the payload's top-level type only, so a data class nested inside a payload or inside a collection is yours to annotate; a data class whose parameters all have defaults is rejected too. | Annotate it `@JvmRecord`, or set an explicit `serializer = YourSerializer::class` on the annotation, which turns the rule off. |
 
 ## Nullability
 
