@@ -71,6 +71,11 @@ record JavacClassDecl(TypeElement element, JavacModel model) implements ClassDec
     }
 
     @Override
+    public boolean isKotlinDataClass() {
+        return false;
+    }
+
+    @Override
     public SourceLanguage language() {
         return model.language(element);
     }

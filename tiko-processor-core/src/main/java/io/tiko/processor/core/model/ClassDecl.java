@@ -35,6 +35,13 @@ public interface ClassDecl {
      */
     boolean isValueClass();
 
+    /**
+     * A Kotlin {@code data class}, declared in this compilation or read from the classpath. Always
+     * false on javac, which sees a Kotlin-compiled data class as the plain class it compiles to.
+     * A {@code @JvmRecord data class} is one too; tell it apart by {@link #kind()}.
+     */
+    boolean isKotlinDataClass();
+
     SourceLanguage language();
 
     List<AnnotationRef> annotations();
