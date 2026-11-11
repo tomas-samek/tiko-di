@@ -59,6 +59,11 @@ record KspErrorClassDecl(String name, TypeRef type) implements ClassDecl {
     }
 
     @Override
+    public boolean isKotlinDataClass() {
+        return false;
+    }
+
+    @Override
     public boolean isStatic() {
         return false;
     }

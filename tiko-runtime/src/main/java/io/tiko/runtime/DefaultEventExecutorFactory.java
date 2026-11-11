@@ -59,9 +59,9 @@ public final class DefaultEventExecutorFactory {
      * reproduces the historical behaviour exactly.
      *
      * <p>Threads come from the booting container's {@link OwnedThreads} when one is bound to the
-     * calling thread (the generated constructor runs bound, #634), so they are reported if they
-     * outlive {@code close()}; otherwise they are untracked. A bound executor also schedules async
-     * retries on that owner's retry thread (#653).
+     * calling thread (the generated constructor and {@code start()} run bound, #634, #651), so
+     * they are reported if they outlive {@code close()}; otherwise they are untracked. A bound
+     * executor also schedules async retries on that owner's retry thread (#653).
      *
      * @throws IllegalArgumentException if the effective max pool size is less than the effective core size
      */
