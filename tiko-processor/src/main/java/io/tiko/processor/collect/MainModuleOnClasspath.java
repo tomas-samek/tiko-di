@@ -66,13 +66,16 @@ public final class MainModuleOnClasspath {
     /**
      * Every main module's own descriptors, found through its {@code TikoModule_<hash>} class: the
      * fixed-name resources hold only the first module's on a classpath that has several. The
-     * container is the first module's. Empty for modules compiled before the per-module
+     * container is that of the module whose class name sorts first, the same pick on both frontends,
+     * whatever order the classpath or the adapter lists them in. Empty for modules compiled before the per-module
      * descriptors, which the fixed-name resources still cover.
      */
     private static MainModuleOnClasspath readModules(ClasspathProbe classpath) {
         String container = null;
         var components = new LinkedHashSet<String>();
-        for (var name : classpath.simpleClassNamesIn(GENERATED_PACKAGE)) {
+        for (var name : classpath.simpleClassNamesIn(GENERATED_PACKAGE).stream()
+                .sorted()
+                .toList()) {
             if (!name.startsWith(MODULE_PREFIX)) {
                 continue;
             }
@@ -94,12 +97,13 @@ public final class MainModuleOnClasspath {
 
     /**
      * The main module as its generated classes show it. With several main modules on the classpath
-     * the container is the first module's, and the components are every module's.
+     * the container is that of the lowest-named module, and the components are every module's.
      */
     private static MainModuleOnClasspath fromGeneratedClasses(List<ClassDecl> generated) {
         var container = generated.stream()
                 .map(decl -> decl.className().simpleName())
                 .filter(name -> name.startsWith(MODULE_PREFIX))
+                .sorted()
                 .findFirst()
                 .map(name -> GENERATED_PACKAGE + "." + CONTAINER_PREFIX + name.substring(MODULE_PREFIX.length()))
                 .orElse(null);

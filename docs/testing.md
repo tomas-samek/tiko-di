@@ -236,7 +236,7 @@ processes unnamed components only. For named test doubles, use the runtime
 
 **Several modules on the test classpath.** When the test classpath holds more than one Tiko
 module (your main module plus library modules that ship their own components), a
-`@TestComponent` can shadow a component of any of them. javac and KSP agree on this.
+`@TestComponent` can shadow a component of any of them. javac and KSP agree on this. The main container a test compile builds against is that of the module whose generated `TikoModule_<hash>` class name sorts first, whatever the classpath order.
 
 ## `TikoOptions.override(...)` — runtime overrides
 
