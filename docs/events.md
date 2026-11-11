@@ -207,6 +207,7 @@ public void onPayment(PaymentEvent event) {
 - **ISO-8601 backoff:** `backoff` is a `Duration` string (`"PT0.1S"`), like `timeout`.
 - **Composes with `timeout`:** if both are set, each attempt is time-boxed and a timed-out attempt counts as a failed attempt to be retried.
 - **Errors are not retried:** an `Error` (vs an `Exception`) stops the loop and is logged, never retried.
+- **Retry thread:** the backoff waits on the container's own `tiko-event-retry-N` thread, created the first time a handler retries. That thread re-submits the next attempt to the event executor. When the executor's queue is full under `CALLER_RUNS`, the attempt runs on the retry thread itself, so it is tracked like every other container thread (see [Threads that outlive `close()`](#threads-that-outlive-close)). There is one retry thread per container, so under a full `CALLER_RUNS` queue a slow attempt delays every other pending retry in the container, and a stuck one blocks them until `close()`. `close()` drops the retries still waiting out their backoff with one `WARNING`, and a retry that would start after `close()` is dropped the same way.
 - **Idempotency is your responsibility** — a retried handler runs its side effects more than once. Make the work safe to repeat.
 
 ### Dead-letter handling
@@ -335,8 +336,9 @@ The bounded waits stop *waiting*, not threads: a handler that ignores the interr
 later as a clash nobody can attribute (#634).
 
 Every thread a container booted by `Tiko.create(...)` starts is tracked: the default
-executor's `tiko-event-async-N` workers, `tiko-teardown` threads, and any thread a transport
-creates through `container.threadFactory()`. After the bounded waits, `close()` gives the
+executor's `tiko-event-async-N` workers, `tiko-teardown` threads, the `tiko-event-retry-N`
+thread that schedules handler retries, and any thread a transport creates through
+`container.threadFactory()`. After the bounded waits, `close()` gives the
 tracked threads one more second to exit. If any are still alive, it reports them once. By
 default it logs a single `WARNING` on `io.tiko.events`:
 
@@ -367,7 +369,9 @@ A second `close()` reports nothing. Threads of an executor you supply with
 starts with its own executor. Threads created through Tiko's own factories
 (`DefaultEventExecutorFactory.create(...)`, `BoundedExecution.run(...)`) during construction,
 `start()` (eager singletons, `@PostConstruct`, `@Produces` singletons, synchronous
-`ApplicationStartedEvent` handlers) or shutdown are tracked.
+`ApplicationStartedEvent` handlers) or shutdown are tracked. So is the `tiko-event-retry-N`
+thread, with the default executor or one you supply: a retry that runs on it when your
+executor's queue is full is reported like any other container thread.
 
 ## Lifecycle events
 

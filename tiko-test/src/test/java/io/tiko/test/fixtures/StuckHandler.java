@@ -9,14 +9,15 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * An async handler that leaks its worker thread: it blocks until {@link #releaseAndJoin()} and
  * ignores interrupts, so the thread survives the executor's {@code shutdownNow()} (#637).
  *
- * <p>Inert in every other test of this module, which never publish {@link StuckEvent} and never call
- * {@link #armAtStartup()}. The test that uses it calls {@link #arm()} before and
- * {@link #releaseAndJoin()} after, so no stuck thread outlives it.
+ * <p>Inert in every other test of this module, which never publish {@link StuckEvent} or
+ * {@link StuckRetryEvent} and never call {@link #armAtStartup()}. The test that uses it calls
+ * {@link #arm()} before and {@link #releaseAndJoin()} after, so no stuck thread outlives it.
  */
 @Component(scope = Scope.SINGLETON)
 public class StuckHandler {
@@ -25,9 +26,22 @@ public class StuckHandler {
     private static volatile CountDownLatch entered = new CountDownLatch(1);
     private static volatile CountDownLatch release = new CountDownLatch(1);
     private static volatile boolean armedAtStartup;
+    private static final AtomicInteger RETRY_ATTEMPTS = new AtomicInteger();
 
     @EventHandler(async = true)
     public void onStuck(StuckEvent event) {
+        block();
+    }
+
+    /**
+     * Fails its first attempt, then blocks like {@link #onStuck} in the retry its backoff schedules
+     * (#653).
+     */
+    @EventHandler(async = true, retries = 1, backoff = "PT0.01S")
+    public void onStuckRetry(StuckRetryEvent event) {
+        if (RETRY_ATTEMPTS.incrementAndGet() == 1) {
+            throw new IllegalStateException("first attempt fails");
+        }
         block();
     }
 
@@ -60,6 +74,7 @@ public class StuckHandler {
     /** Resets the latches before a test publishes {@link StuckEvent}. */
     public static void arm() {
         armedAtStartup = false;
+        RETRY_ATTEMPTS.set(0);
         STUCK.clear();
         entered = new CountDownLatch(1);
         release = new CountDownLatch(1);

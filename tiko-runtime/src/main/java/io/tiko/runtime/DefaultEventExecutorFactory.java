@@ -59,8 +59,9 @@ public final class DefaultEventExecutorFactory {
      * reproduces the historical behaviour exactly.
      *
      * <p>Threads come from the booting container's {@link OwnedThreads} when one is bound to the
-     * calling thread (the generated constructor and {@code start()} run bound, #634, #651), so they are reported if they
-     * outlive {@code close()}; otherwise they are untracked.
+     * calling thread (the generated constructor and {@code start()} run bound, #634, #651), so
+     * they are reported if they outlive {@code close()}; otherwise they are untracked. A bound
+     * executor also schedules async retries on that owner's retry thread (#653).
      *
      * @throws IllegalArgumentException if the effective max pool size is less than the effective core size
      */
@@ -99,6 +100,11 @@ public final class DefaultEventExecutorFactory {
             return t;
         };
 
+        var rejectionHandler = rejectionHandlerFor(overflowPolicy);
+        if (threads instanceof OwnedThreads owner) {
+            return new TrackedEventExecutor(
+                    corePoolSize, maxPoolSize, keepAliveMs, queueCapacity, threadFactory, rejectionHandler, owner);
+        }
         return new ThreadPoolExecutor(
                 corePoolSize,
                 maxPoolSize,
@@ -106,7 +112,40 @@ public final class DefaultEventExecutorFactory {
                 TimeUnit.MILLISECONDS,
                 new LinkedBlockingQueue<>(queueCapacity),
                 threadFactory,
-                rejectionHandlerFor(overflowPolicy));
+                rejectionHandler);
+    }
+
+    /**
+     * The default executor of a booted container: its workers come from the boot's
+     * {@link OwnedThreads} (#634), and a retried async handler waits out its backoff on that
+     * owner's retry thread (#653).
+     */
+    private static final class TrackedEventExecutor extends ThreadPoolExecutor implements RetryScheduling {
+        private final OwnedThreads owner;
+
+        TrackedEventExecutor(
+                int corePoolSize,
+                int maxPoolSize,
+                long keepAliveMs,
+                int queueCapacity,
+                ThreadFactory threadFactory,
+                RejectedExecutionHandler rejectionHandler,
+                OwnedThreads owner) {
+            super(
+                    corePoolSize,
+                    maxPoolSize,
+                    keepAliveMs,
+                    TimeUnit.MILLISECONDS,
+                    new LinkedBlockingQueue<>(queueCapacity),
+                    threadFactory,
+                    rejectionHandler);
+            this.owner = owner;
+        }
+
+        @Override
+        public boolean scheduleRetry(Runnable resubmit, long delayNanos) {
+            return owner.scheduleRetry(resubmit, delayNanos);
+        }
     }
 
     private static RejectedExecutionHandler rejectionHandlerFor(OverflowPolicy policy) {

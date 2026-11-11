@@ -264,8 +264,8 @@ public final class EventChainContext {
      * <p>The body is re-invoked up to {@code retries} times after the initial attempt. The first
      * attempt that completes normally wins (no error routed). Once the budget is exhausted, a single
      * {@link EventHandlerError} carrying the total {@code attempts} is routed. Backoff between
-     * attempts is scheduled (via {@link CompletableFuture#delayedExecutor}), so it never holds an
-     * executor slot. When {@code timeoutNanos > 0} each attempt is time-boxed (composing #107) and a
+     * attempts is scheduled on the container's retry thread (#653), so it never holds an executor
+     * slot. When {@code timeoutNanos > 0} each attempt is time-boxed (composing #107) and a
      * timed-out attempt counts as a failed attempt. {@link Error}s are not retried — they are logged
      * and stop the loop, consistent with the plain async path.
      */
@@ -322,11 +322,18 @@ public final class EventChainContext {
     }
 
     /**
-     * Schedules the next retry attempt. Backoff waits on the default delayed executor, then the
-     * re-submission to {@code executor} runs under the {@code ROUTE_TO_DLQ} guard — so an overflow at
-     * (re)submit time is dead-lettered even when backoff defers the submit onto a scheduler thread.
-     * (Wrapping {@code delayedExecutor(.., executor).execute(..)} directly would miss that: the real
+     * Schedules the next retry attempt. Backoff waits on a scheduler thread, then the re-submission
+     * to {@code executor} runs under the {@code ROUTE_TO_DLQ} guard — so an overflow at (re)submit
+     * time is dead-lettered even when backoff defers the submit onto a scheduler thread. (Wrapping
+     * {@code delayedExecutor(.., executor).execute(..)} directly would miss that: the real
      * {@code executor.execute} then runs off the catch's stack and the signal would leak and be lost.)
+     *
+     * <p>The re-submitting thread runs the attempt itself when a {@code CALLER_RUNS} queue is full,
+     * so it must be one the container tracks (#653). The executors of a {@code Tiko.create(...)}
+     * boot are {@link RetryScheduling}: the wait and the re-submission run on the container's retry
+     * thread, even without backoff, because the failed attempt may have completed on an untracked
+     * thread (a timeout completes on the JDK's delay scheduler). Once the container is closing, the
+     * retry is dropped with a WARNING. Any other executor keeps the JDK's default delayed executor.
      */
     private static void scheduleRetry(
             Runnable body,
@@ -342,7 +349,11 @@ public final class EventChainContext {
                 event,
                 errorHandler);
         long delay = backoffDelayNanos(policy, attemptIndex);
-        if (delay > 0) {
+        if (executor instanceof RetryScheduling tracked) {
+            if (!tracked.scheduleRetry(resubmit, delay)) {
+                logDroppedDuringShutdown(event);
+            }
+        } else if (delay > 0) {
             CompletableFuture.delayedExecutor(delay, TimeUnit.NANOSECONDS).execute(resubmit);
         } else {
             resubmit.run();
