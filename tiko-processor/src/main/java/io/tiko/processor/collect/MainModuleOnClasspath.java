@@ -34,7 +34,7 @@ public final class MainModuleOnClasspath {
 
     private MainModuleOnClasspath(String containerFqn, Set<String> componentFqns) {
         this.containerFqn = containerFqn;
-        this.componentFqns = componentFqns;
+        this.componentFqns = withCanonicalNames(componentFqns);
     }
 
     /**
@@ -148,9 +148,22 @@ public final class MainModuleOnClasspath {
         return Optional.ofNullable(containerFqn);
     }
 
-    /** The fully qualified names of the main module's component classes. */
+    /**
+     * The names of the main module's component classes. A nested class appears under its binary name
+     * ({@code a.Outer$Inner}, as the manifests and factories write it) and under its canonical name
+     * ({@code a.Outer.Inner}, as the type lookups and test-component keys spell it).
+     */
     public Set<String> componentFqns() {
         return componentFqns;
+    }
+
+    private static Set<String> withCanonicalNames(Set<String> binaryNames) {
+        var names = new LinkedHashSet<String>();
+        for (var name : binaryNames) {
+            names.add(name);
+            names.add(name.replace('$', '.'));
+        }
+        return names;
     }
 
     /** The {@code impl} entry of a container descriptor; {@code null} when it has none. */

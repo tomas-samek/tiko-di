@@ -188,11 +188,11 @@ public final class ContainerGenerator {
         for (String shadowedKey : shadows) {
             ComponentModel testComponent = context.getTestComponentShadowing(shadowedKey);
             if (testComponent == null) continue;
-            content.append(shadowedKey)
+            content.append(binaryName(shadowedKey))
                     .append("=")
                     .append(testFqn)
                     .append("|")
-                    .append(testComponent.getQualifiedName())
+                    .append(binaryName(testComponent.getQualifiedName()))
                     .append("\n");
         }
         context.env()
@@ -201,6 +201,15 @@ public final class ContainerGenerator {
                         "META-INF/tiko/test-shadows.properties",
                         content.toString(),
                         context.getOriginatingDeclarations());
+    }
+
+    /** The binary name of the class {@code key} names, which the runtime loads it by. */
+    private String binaryName(String key) {
+        return context.env()
+                .types()
+                .findClass(key)
+                .map(decl -> decl.className().reflectionName())
+                .orElse(key);
     }
 
     /**
