@@ -71,8 +71,8 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
     private final Map<TopicPartition, Long> resumeAt = new HashMap<>();
 
     private final AtomicBoolean running = new AtomicBoolean(false);
-    private volatile Thread thread;
-    private volatile CountDownLatch loopExited = new CountDownLatch(0);
+    private Thread thread; // guarded by this
+    private CountDownLatch loopExited = new CountDownLatch(0);
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
     public ThreadPerTopicRunner(
@@ -135,13 +135,16 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
         var consumerThread = container.threadFactory().newThread(this::runAndClose);
         consumerThread.setName("tiko-kafka-consumer-" + source.topic());
         consumerThread.setDaemon(true);
+        var started = false;
         try {
             consumerThread.start();
-        } catch (RuntimeException | Error startFailure) {
-            // The thread never ran, so nobody else will close the consumer.
-            running.set(false);
-            closeConsumer();
-            throw startFailure;
+            started = true;
+        } finally {
+            if (!started) {
+                // The thread never ran, so nobody else will close the consumer.
+                running.set(false);
+                closeConsumer();
+            }
         }
         thread = consumerThread;
     }

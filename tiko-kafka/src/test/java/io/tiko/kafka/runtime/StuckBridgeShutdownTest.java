@@ -58,7 +58,9 @@ class StuckBridgeShutdownTest {
             closed.countDown();
         }
 
-        void beforeClosed() {}
+        void beforeClosed() {
+            // hook for subclasses
+        }
     }
 
     private static KafkaConfig shortTimeout() {
