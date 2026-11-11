@@ -52,7 +52,8 @@ final class BootedContainer implements ExtensionContext.Store.CloseableResource 
 
     /**
      * Boots a test container for {@code owner}. When the boot fails, the container (if one was
-     * created) is closed and the executor created for it is shut down before the failure propagates.
+     * created) is closed and the executor created for it is released before the failure propagates,
+     * with the threads still running added to it as a suppressed leak report (#646).
      */
     @SuppressWarnings("java:S1181") // any boot failure, Error included, is rethrown unchanged after the cleanup
     static BootedContainer boot(String owner) {
@@ -76,13 +77,14 @@ final class BootedContainer implements ExtensionContext.Store.CloseableResource 
             ((RecordingEventBus) container.getEventBus()).setEventExecutor(container.getEventExecutor());
         } catch (Throwable bootFailure) {
             releaseAfterFailedBoot(container, executor, bootFailure);
+            leakError(owner, reported, executor).ifPresent(bootFailure::addSuppressed);
             throw bootFailure;
         }
         return new BootedContainer(owner, container, executor, reported);
     }
 
     /**
-     * Closes the container of a failed boot, when there is one, and always shuts its executor down. A
+     * Closes the container of a failed boot, when there is one, and always releases its executor. A
      * close failure is added to {@code bootFailure} as suppressed rather than replacing it.
      */
     @SuppressWarnings("java:S1181") // a close failure, Error included, must not replace the boot failure
@@ -97,7 +99,7 @@ final class BootedContainer implements ExtensionContext.Store.CloseableResource 
                 bootFailure.addSuppressed(closeFailure);
             }
         } finally {
-            executor.shutdownNow();
+            releaseExecutor(executor);
         }
     }
 
@@ -128,12 +130,12 @@ final class BootedContainer implements ExtensionContext.Store.CloseableResource 
         try {
             container.close();
         } catch (Throwable closeFailure) {
-            releaseExecutor();
-            leakError().ifPresent(closeFailure::addSuppressed);
+            releaseExecutor(executor);
+            leakError(owner, reported, executor).ifPresent(closeFailure::addSuppressed);
             throw closeFailure;
         }
-        releaseExecutor();
-        var leak = leakError();
+        releaseExecutor(executor);
+        var leak = leakError(owner, reported, executor);
         if (leak.isPresent()) {
             throw leak.get();
         }
@@ -148,11 +150,11 @@ final class BootedContainer implements ExtensionContext.Store.CloseableResource 
      * <p>A closing thread that arrives interrupted (a test that left its interrupt flag set) still
      * gives the workers the whole grace: the flag is cleared for the waits and restored afterwards.
      */
-    private void releaseExecutor() {
+    private static void releaseExecutor(CountingThreadPoolExecutor executor) {
         executor.shutdownNow();
         var arrivedInterrupted = Thread.interrupted();
         try {
-            if (awaitTermination()) {
+            if (executor.awaitTermination(EXECUTOR_GRACE.toNanos(), TimeUnit.NANOSECONDS)) {
                 var deadline = System.nanoTime() + EXECUTOR_GRACE.toNanos();
                 for (var worker : executor.liveThreads()) {
                     joinUntil(worker, deadline);
@@ -168,10 +170,6 @@ final class BootedContainer implements ExtensionContext.Store.CloseableResource 
         }
     }
 
-    private boolean awaitTermination() throws InterruptedException {
-        return executor.awaitTermination(EXECUTOR_GRACE.toNanos(), TimeUnit.NANOSECONDS);
-    }
-
     private static void joinUntil(Thread thread, long deadline) throws InterruptedException {
         var remaining = deadline - System.nanoTime();
         if (remaining > 0) {
@@ -179,7 +177,12 @@ final class BootedContainer implements ExtensionContext.Store.CloseableResource 
         }
     }
 
-    private Optional<AssertionError> leakError() {
+    /**
+     * The leak report of one boot: the threads its container reported plus its executor's live
+     * workers, those still alive, or empty when there are none.
+     */
+    private static Optional<AssertionError> leakError(
+            String owner, List<Thread> reported, CountingThreadPoolExecutor executor) {
         var survivors = new LinkedHashSet<Thread>(reported);
         survivors.addAll(executor.liveThreads());
         survivors.removeIf(thread -> !thread.isAlive());

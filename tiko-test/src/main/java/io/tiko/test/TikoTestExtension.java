@@ -4,6 +4,7 @@ import io.tiko.Container;
 import io.tiko.EventBus;
 import io.tiko.annotations.Named;
 import java.lang.reflect.Method;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.extension.AfterAllCallback;
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeAllCallback;
@@ -172,12 +173,24 @@ public final class TikoTestExtension
         }
     }
 
-    /** {@code Class.method} for a per-method container, {@code Class} for a per-class one. */
+    /**
+     * {@code Class.method} for a per-method container, {@code Class} for a per-class one. A
+     * {@code @Nested} class is named with the classes enclosing it, {@code Outer.Nested}, so
+     * same-named nested classes in different outer classes stay apart.
+     */
     private static String owner(ExtensionContext ctx) {
-        var className = ctx.getRequiredTestClass().getSimpleName();
+        var className = className(ctx.getRequiredTestClass());
         return ctx.getTestMethod()
                 .map(method -> className + "." + method.getName())
                 .orElse(className);
+    }
+
+    private static String className(Class<?> testClass) {
+        var enclosing = testClass.getEnclosingClass();
+        if (enclosing != null && testClass.isAnnotationPresent(Nested.class)) {
+            return className(enclosing) + "." + testClass.getSimpleName();
+        }
+        return testClass.getSimpleName();
     }
 
     private static Store store(ExtensionContext ctx) {
