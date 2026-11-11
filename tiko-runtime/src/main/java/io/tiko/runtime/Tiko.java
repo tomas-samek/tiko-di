@@ -195,7 +195,7 @@ public final class Tiko {
                         options,
                         descriptorName,
                         ownedThreads);
-                handle = new TransportAwareContainer(
+                handle = new BootHandle(
                         container, java.util.List.of(), ownedThreads, options.threadsOutlivingCloseHandler());
             }
 
@@ -359,9 +359,9 @@ public final class Tiko {
         }
         // Build the wrapper first so start() callers receive the public-facing handle. A
         // single-module boot is already wrapped; it gains the transports instead of a second layer.
-        TransportAwareContainer wrapper = container instanceof TransportAwareContainer booted
+        BootHandle wrapper = container instanceof BootHandle booted
                 ? booted.withTransports(bootstraps)
-                : new TransportAwareContainer(container, bootstraps, null, null);
+                : new BootHandle(container, bootstraps, null, null);
         int started = 0;
         try {
             for (TransportBootstrap tb : bootstraps) {
@@ -548,13 +548,13 @@ public final class Tiko {
      * but the identity of the returned object. We cannot use {@code Container} as a sealed type
      * because user-supplied implementations are not on the radar of this module.
      */
-    private static final class TransportAwareContainer implements Container {
+    private static final class BootHandle implements Container {
         private final Container delegate;
         private final java.util.List<TransportBootstrap> bootstraps;
         private final OwnedThreads threads;
         private final java.util.function.Consumer<java.util.List<Thread>> onThreadsOutlivingClose;
 
-        TransportAwareContainer(
+        BootHandle(
                 Container delegate,
                 java.util.List<TransportBootstrap> bootstraps,
                 OwnedThreads threads,
@@ -566,8 +566,8 @@ public final class Tiko {
         }
 
         /** The same container and thread owner, now also stopping {@code transports} on shutdown. */
-        TransportAwareContainer withTransports(java.util.List<TransportBootstrap> transports) {
-            return new TransportAwareContainer(delegate, transports, threads, onThreadsOutlivingClose);
+        BootHandle withTransports(java.util.List<TransportBootstrap> transports) {
+            return new BootHandle(delegate, transports, threads, onThreadsOutlivingClose);
         }
 
         @Override
@@ -663,6 +663,8 @@ public final class Tiko {
                     /* best-effort */
                 }
             }
+            // Unlike start(), skip the bound call for a null owner: there is nothing to report, and
+            // runBound(null) would hide an outer binding.
             if (threads == null) {
                 delegate.shutdown();
                 return;
