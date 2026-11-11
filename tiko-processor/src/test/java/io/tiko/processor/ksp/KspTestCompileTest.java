@@ -247,9 +247,93 @@ class KspTestCompileTest {
         }
     }
 
+    /**
+     * An implicit {@code @TestComponent} extending a main component shadows the superclass's
+     * interfaces too: a main component injecting one gets the test component on both frontends.
+     * The lifecycle marker {@code AutoCloseable} is no dispatch key and stays unshadowed.
+     */
+    @Test
+    void implicitTestComponentShadowsTheInterfacesOfItsSuperclass(@TempDir Path dir) throws Exception {
+        var javacMain = javacCompile(
+                List.of(),
+                JavaFileObjects.forSourceLines("demo.Clock", "package demo;", "public interface Clock {}"),
+                JavaFileObjects.forSourceLines(
+                        "demo.Scheduler",
+                        "package demo;",
+                        "@io.tiko.annotations.Component",
+                        "public class Scheduler implements Clock, AutoCloseable {",
+                        "    public void close() {}",
+                        "}"),
+                JavaFileObjects.forSourceLines(
+                        "demo.Consumer",
+                        "package demo;",
+                        "@io.tiko.annotations.Component",
+                        "public class Consumer {",
+                        "    private final Clock clock;",
+                        "    public Consumer(Clock clock) { this.clock = clock; }",
+                        "    public Clock getClock() { return clock; }",
+                        "}"));
+        var mainClasses = writeClassOutput(javacMain, dir.resolve("main"));
+        var javacTest = javacCompile(
+                List.of(mainClasses.toFile()),
+                JavaFileObjects.forSourceString("io.tiko.test.TestComponent", TEST_COMPONENT_ANNOTATION),
+                JavaFileObjects.forSourceLines(
+                        "demo.FixedScheduler",
+                        "package demo;",
+                        "@io.tiko.test.TestComponent",
+                        "public class FixedScheduler extends Scheduler {}"));
+        var testClasses = writeClassOutput(javacTest, dir.resolve("test"));
+        assertThat(Files.readString(testClasses.resolve(TEST_SHADOWS)).lines())
+                .anyMatch(line -> line.startsWith("demo.Clock=") && line.endsWith("|demo.FixedScheduler"))
+                .noneMatch(line -> line.startsWith("java.lang.AutoCloseable="));
+        String javacInjected;
+        try (var program = KspProgram.bootTestWiring(programOver(testClasses, mainClasses))) {
+            javacInjected = clockOf(program, "demo.Consumer");
+        }
+
+        var main = compileMain(KspCompiler.kotlin("Clock.kt", """
+                package demo
+
+                import io.tiko.annotations.Component
+
+                interface Clock
+
+                @Component
+                open class Scheduler : Clock, AutoCloseable {
+                    override fun close() {}
+                }
+
+                @Component
+                class Consumer(val clock: Clock)
+                """));
+        var test = compileTest(librariesOf(main), KspCompiler.kotlin("FixedScheduler.kt", """
+                        package demo
+
+                        import io.tiko.test.TestComponent
+
+                        @TestComponent
+                        class FixedScheduler : Scheduler()
+                        """));
+
+        assertThat(test.generatedResource(TEST_SHADOWS))
+                .hasValueSatisfying(shadows -> assertThat(shadows.lines())
+                        .anyMatch(line -> line.startsWith("demo.Clock=") && line.endsWith("|demo.FixedScheduler"))
+                        .noneMatch(line -> line.startsWith("java.lang.AutoCloseable=")));
+        try (var program = KspProgram.bootTestWiring(test)) {
+            assertThat(clockOf(program, "demo.Consumer"))
+                    .isEqualTo(javacInjected)
+                    .isEqualTo("demo.FixedScheduler");
+        }
+    }
+
     /** The class of the {@code Clock} the main {@code Scheduler} component was wired with. */
     private static String clockOfScheduler(KspProgram program) throws Exception {
-        var scheduler = program.get("demo.Scheduler");
+        return clockOf(program, "demo.Scheduler");
+    }
+
+    /** The class of the {@code Clock} the main {@code component} was wired with. */
+    private static String clockOf(KspProgram program, String component) throws Exception {
+        var scheduler = program.get(component);
         return scheduler
                 .getClass()
                 .getMethod("getClock")

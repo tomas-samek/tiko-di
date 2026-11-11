@@ -322,18 +322,20 @@ public final class TikoPipeline {
     }
 
     /**
-     * The keys of {@code component} that shadow a main component: those naming one, or, when none
-     * does, those naming an interface one implements. The second case is an explicit
-     * {@code value()} on an interface; the implicit walk always names a component, so it never
-     * reaches it.
+     * The keys of {@code component} that shadow a main component: those naming one, plus the
+     * interfaces among the rest that a main component implements. The interface keys are an
+     * explicit {@code value()} on an interface, or the interfaces the implicit walk takes from the
+     * main superclass it names. Lifecycle markers ({@code AutoCloseable}) are no dispatch keys of
+     * the main container, so the implicit walk never shadows them.
      */
     private List<String> classpathShadowedKeys(ComponentModel component, Set<String> mainFqns) {
         var extraKeys = component.getTestExtraKeys();
         var named = extraKeys.stream().filter(mainFqns::contains).toList();
-        if (!named.isEmpty()) {
-            return named;
-        }
-        return extraKeys.stream().filter(key -> isInterfaceOfAny(key, mainFqns)).toList();
+        return extraKeys.stream()
+                .filter(key -> mainFqns.contains(key)
+                        || (named.isEmpty() || !TypeUtil.isLifecycleMarkerInterface(key))
+                                && isInterfaceOfAny(key, mainFqns))
+                .toList();
     }
 
     /** Whether {@code key} is an interface that at least one of the main components implements. */
