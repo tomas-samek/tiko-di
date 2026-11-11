@@ -10,13 +10,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 /**
  * Test module whose {@code shutdown()} behaves the way a test scripts it, mirroring the generated
  * container's teardown (#634): a {@code @PreDestroy} hook run through {@link BoundedExecution} under
  * {@code teardownTimeout}, an observer failure rethrown as the generated code does (directly when
- * single-module, wrapped for the aggregate otherwise), or a plain shutdown failure.
+ * single-module, wrapped for the aggregate otherwise), or a plain shutdown failure. Like the
+ * generated container, its teardown runs at most once, and a scripted startup failure rolls the
+ * module back from inside {@code start()} before it is rethrown (#651).
  *
  * <p>Booted reflectively through a temporary descriptor, so the script lives in static fields; tests
  * set it before booting and call {@link #reset()} afterwards.
@@ -32,10 +35,14 @@ public final class ScriptedShutdownContainer implements Container {
     /** When set, shutdown ends by throwing it. */
     static volatile RuntimeException shutdownFailure;
 
+    /** When set, {@code start()} fails with it, after tearing the module down as a failed start does. */
+    static volatile RuntimeException startFailure;
+
     static void reset() {
         stuckTeardownUntil = null;
         observerFailure = null;
         shutdownFailure = null;
+        startFailure = null;
     }
 
     private final EventBus eventBus;
@@ -43,6 +50,7 @@ public final class ScriptedShutdownContainer implements Container {
     private final boolean publishLifecycle;
     private final Duration teardownTimeout;
     private final ExecutorService executor;
+    private final AtomicBoolean shutdownInvoked = new AtomicBoolean();
 
     // S1172: the runtime looks this constructor up by its canonical signature; not every parameter is used.
     @SuppressWarnings("java:S1172")
@@ -62,6 +70,9 @@ public final class ScriptedShutdownContainer implements Container {
 
     @Override
     public void shutdown() {
+        if (!shutdownInvoked.compareAndSet(false, true)) {
+            return;
+        }
         var stuck = stuckTeardownUntil;
         if (stuck != null) {
             BoundedExecution.run(
@@ -135,9 +146,19 @@ public final class ScriptedShutdownContainer implements Container {
         return supplier.get();
     }
 
+    /** Mirrors the generated {@code start()}: a failing singleton init rolls the module back, then rethrows. */
     @Override
     public void start() {
-        // no-op: test stub
+        var failure = startFailure;
+        if (failure == null) {
+            return;
+        }
+        try {
+            shutdown();
+        } catch (RuntimeException cleanupFailure) {
+            failure.addSuppressed(cleanupFailure);
+        }
+        throw failure;
     }
 
     @Override

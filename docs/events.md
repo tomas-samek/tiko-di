@@ -352,6 +352,11 @@ TikoOptions opts = TikoOptions.builder()
         .build();
 ```
 
+A `Tiko.create(...)` or `Tiko.daemon(...)` that fails after starting the container, for example
+on a failing `@PostConstruct` or a transport that refuses to start, rolls back what it started
+and reports the same way before the failure is thrown. The report includes the threads the
+rollback itself starts, such as a `tiko-teardown` thread stuck in a `@PreDestroy`.
+
 The handler may throw. When `close()` (or a failed `Tiko.create(...)`) already has a failure on
 its way out, such as a `@PreDestroy` observer failure, that failure wins and the handler's
 throwable is attached to it as suppressed. Otherwise the handler's throwable propagates from

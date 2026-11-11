@@ -19,10 +19,11 @@ import java.util.stream.Collectors;
  *
  * <p><strong>Routing without a parameter.</strong> The generated container builds its default
  * event executor in its constructor ({@link DefaultEventExecutorFactory#create(int, OverflowPolicy,
- * int, int, Duration)}) and starts teardown threads from its {@code shutdown()}
- * ({@link BoundedExecution}). Neither call can be handed the owner without changing generated
- * code, so the runtime binds the owner to the calling thread around exactly those two moments
- * ({@link #callBound}) and the two factories read it with {@link #boundOr}. This class is the only
+ * int, int, Duration)}) and starts teardown threads ({@link BoundedExecution}) from its
+ * {@code shutdown()}, and from its {@code start()} when a failed start rolls back (#651). Neither
+ * call can be handed the owner without changing generated code, so the runtime binds the owner to
+ * the calling thread around exactly those moments ({@link #callBound}) and the two factories read
+ * it with {@link #boundOr}. This class is the only
  * place that binding lives. The executor captures the factory once, at creation, because its worker
  * threads are started later, from other threads.
  */

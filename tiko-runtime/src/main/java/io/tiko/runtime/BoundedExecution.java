@@ -88,7 +88,10 @@ public final class BoundedExecution {
         }
     }
 
-    /** Taken from the closing container's {@link OwnedThreads} when one is bound (#634), else untracked. */
+    /**
+     * Taken from the closing or rolling-back container's {@link OwnedThreads} when one is bound
+     * (#634, #651), else untracked.
+     */
     private static Thread daemonThread(Runnable r) {
         Thread t = OwnedThreads.boundOr(Thread::new).newThread(r);
         t.setName("tiko-teardown");

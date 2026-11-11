@@ -29,11 +29,18 @@ import org.junit.jupiter.params.provider.EnumSource;
 
 /**
  * The close-time thread report against a module whose shutdown is scripted (#634): teardown
- * threads of a real {@code close()} are reported, a transport's threads are tracked, and a throwing
- * {@code onThreadsOutlivingClose} handler never masks the failure that was already on its way out.
- * Every scenario runs on both shapes {@code Tiko.create(...)} returns.
+ * threads of a real {@code close()} and of a failed boot's rollback (#651) are reported, a
+ * transport's threads are tracked, and a throwing {@code onThreadsOutlivingClose} handler never
+ * masks the failure that was already on its way out. Every scenario runs on each shape
+ * {@code Tiko.create(...)} returns that can reach it.
  */
 class ThreadsOutlivingCloseScriptedTest {
+
+    /**
+     * Long enough for the teardown thread to reach its hook before the bound cancels it, even on a
+     * loaded machine: a hook cancelled before it starts never gets stuck.
+     */
+    private static final Duration ROLLBACK_TEARDOWN_TIMEOUT = Duration.ofMillis(500);
 
     private final List<List<Thread>> reports = new CopyOnWriteArrayList<>();
     private final CountDownLatch release = new CountDownLatch(1);
@@ -143,6 +150,77 @@ class ThreadsOutlivingCloseScriptedTest {
         assertThat(thrown.getSuppressed()).contains(handlerFailure);
     }
 
+    /** How a failing boot is entered: both roll back inside {@code Tiko.create(...)}. */
+    enum Entry {
+        CREATE,
+        DAEMON
+    }
+
+    /**
+     * A failed start rolls the module back from inside {@code start()} (#651). Single-module only: the
+     * aggregate starts no module, so its only rollback is the transport case below.
+     */
+    @ParameterizedTest
+    @EnumSource(Entry.class)
+    void teardownStuckInAFailedStartsRollbackIsReported(Entry entry) throws InterruptedException {
+        var bootFailure = new IllegalStateException("@PostConstruct failed");
+        ScriptedShutdownContainer.startFailure = bootFailure;
+        ScriptedShutdownContainer.stuckTeardownUntil = release;
+        var handlerFailure = new AssertionError("leak");
+        var options = throwingHandler(handlerFailure).teardownTimeout(ROLLBACK_TEARDOWN_TIMEOUT);
+        try {
+            var thrown = catchThrowable(() -> boot(Shape.SINGLE_MODULE, options, entry));
+
+            assertThat(thrown).isSameAs(bootFailure);
+            assertThat(thrown.getSuppressed()).contains(handlerFailure);
+            assertReportedTeardownThread();
+        } finally {
+            releaseAndJoinReported();
+        }
+    }
+
+    /** A transport that refuses to start rolls the started container back (#651). */
+    @ParameterizedTest
+    @EnumSource(Shape.class)
+    void teardownStuckInARefusedTransportsRollbackIsReported(Shape shape) throws InterruptedException {
+        var bootFailure = new IllegalStateException("transport failed to start");
+        ScriptedShutdownContainer.stuckTeardownUntil = release;
+        var handlerFailure = new AssertionError("leak");
+        var options = withTransport(throwingHandler(handlerFailure), c -> {
+                    throw bootFailure;
+                })
+                .teardownTimeout(ROLLBACK_TEARDOWN_TIMEOUT);
+        try {
+            var thrown = catchThrowable(() -> boot(shape, options));
+
+            assertThat(thrown).isSameAs(bootFailure);
+            assertThat(thrown.getSuppressed()).contains(handlerFailure);
+            assertReportedTeardownThread();
+        } finally {
+            releaseAndJoinReported();
+        }
+    }
+
+    private void assertReportedTeardownThread() {
+        assertThat(reports)
+                .singleElement()
+                .satisfies(threads -> assertThat(threads)
+                        .singleElement()
+                        .satisfies(t -> assertThat(t.getName()).isEqualTo("tiko-teardown")));
+    }
+
+    /** Lets every reported thread finish, so none outlives the test that started it. */
+    private void releaseAndJoinReported() throws InterruptedException {
+        release.countDown();
+        for (var threads : reports) {
+            for (var thread : threads) {
+                assertThat(thread.join(Duration.ofSeconds(5)))
+                        .as(thread.getName() + " exits")
+                        .isTrue();
+            }
+        }
+    }
+
     @ParameterizedTest
     @EnumSource(Shape.class)
     void handlerFailurePropagatesWhenNothingElseFailed(Shape shape) throws Exception {
@@ -188,12 +266,20 @@ class ThreadsOutlivingCloseScriptedTest {
      * module (single-module) or as the opted-in test module next to the classpath's main one.
      */
     private Container boot(Shape shape, TikoOptions.Builder options) {
+        return boot(shape, options, Entry.CREATE);
+    }
+
+    private Container boot(Shape shape, TikoOptions.Builder options, Entry entry) {
         if (options.build().threadsOutlivingCloseHandler() == null) {
             options.onThreadsOutlivingClose(reports::add);
         }
         var descriptor = shape == Shape.SINGLE_MODULE ? "container.properties" : "test-container.properties";
         Thread.currentThread().setContextClassLoader(descriptorLoader(descriptor));
-        return Tiko.create(options.testWiring(shape == Shape.AGGREGATED).build());
+        var built = options.testWiring(shape == Shape.AGGREGATED).build();
+        return switch (entry) {
+            case CREATE -> Tiko.create(built);
+            case DAEMON -> Tiko.daemon(built).container();
+        };
     }
 
     private ClassLoader descriptorLoader(String descriptor) {
