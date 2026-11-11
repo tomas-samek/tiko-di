@@ -34,6 +34,8 @@ kotlin { jvmToolchain(21) }
 
 - **KSP2 only.** `com.google.devtools.ksp` 2.3.13 or newer. KSP1 is not supported.
 - The processors go on the `ksp(...)` configuration. There are no separate `*-ksp` artifacts.
+- **Tests:** a `@TestComponent` that replaces a class subclasses it, so that class and the members
+  it overrides must be `open`. Replacing an interface-keyed component needs no `open`.
 - No Tiko Gradle plugin exists; use the standard KSP plugin.
 - Gradle is the supported build for Kotlin.
 - **Maven + Kotlin:** may work with any Maven plugin that runs a KSP `SymbolProcessorProvider`;
