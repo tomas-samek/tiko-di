@@ -18,6 +18,8 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.LockSupport;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -69,7 +71,9 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
     private final Map<TopicPartition, Long> resumeAt = new HashMap<>();
 
     private final AtomicBoolean running = new AtomicBoolean(false);
-    private Thread thread;
+    private volatile Thread thread;
+    private volatile CountDownLatch loopExited = new CountDownLatch(0);
+    private final AtomicBoolean closed = new AtomicBoolean(false);
 
     public ThreadPerTopicRunner(
             GeneratedSourceDescriptor source,
@@ -123,21 +127,30 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
     }
 
     @Override
-    public void start() {
+    public synchronized void start() {
         if (!running.compareAndSet(false, true)) return;
         consumer.subscribe(List.of(source.topic()));
+        loopExited = new CountDownLatch(1);
         // The container's factory tracks the thread, so a consumer that outlives close() is reported (#635).
-        thread = container.threadFactory().newThread(this::runAndClose);
-        thread.setName("tiko-kafka-consumer-" + source.topic());
-        thread.setDaemon(true);
-        thread.start();
+        var consumerThread = container.threadFactory().newThread(this::runAndClose);
+        consumerThread.setName("tiko-kafka-consumer-" + source.topic());
+        consumerThread.setDaemon(true);
+        try {
+            consumerThread.start();
+        } catch (RuntimeException | Error startFailure) {
+            // The thread never ran, so nobody else will close the consumer.
+            running.set(false);
+            closeConsumer();
+            throw startFailure;
+        }
+        thread = consumerThread;
     }
 
     @Override
-    public void stop() {
+    public synchronized void stop() {
         // running may already be false if a FAIL decision stopped the loop from the consumer
         // thread (#385). KafkaConsumer is single-thread-access, so once the consumer thread exists
-        // it closes its own client on exit (#648) — even if a bridge keeps it past the join below.
+        // only it touches the consumer: it closes its own client on exit (#648).
         running.set(false);
         consumer.wakeup();
         if (thread == null) {
@@ -145,7 +158,11 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
             return;
         }
         try {
-            thread.join(config.shutdownTimeout().toMillis());
+            // shutdown-timeout bounds the loop exiting (a bridge may be stuck); the close that
+            // follows is bounded by the consumer's own close timeout, as before.
+            if (loopExited.await(config.shutdownTimeout().toMillis(), TimeUnit.MILLISECONDS)) {
+                thread.join();
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -155,11 +172,13 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
         try {
             run();
         } finally {
+            loopExited.countDown();
             closeConsumer();
         }
     }
 
     private void closeConsumer() {
+        if (!closed.compareAndSet(false, true)) return;
         try {
             consumer.close();
         } catch (Exception ignored) {
