@@ -539,8 +539,9 @@ public final class Tiko {
      * {@link TransportBootstrap#shutdown()} before the container's own {@code shutdown()}.
      *
      * <p>For a single-module boot it also owns the boot's {@link OwnedThreads} (#634): its
-     * {@link #threadFactory()} tracks, the container's shutdown runs bound so teardown threads are
-     * tracked, and the threads still alive afterwards are reported once. Over an aggregated boot
+     * {@link #threadFactory()} tracks, the container's start and shutdown run bound so teardown
+     * threads, those of a failed start's rollback included (#651), are tracked, and the threads
+     * still alive afterwards are reported once. Over an aggregated boot
      * {@code threads} is {@code null}: the aggregate owns and reports its threads itself.
      *
      * <p>Method delegation is exhaustive, default methods included, so the wrapper changes nothing
@@ -609,9 +610,14 @@ public final class Tiko {
             return delegate.supplyInEventScope(s);
         }
 
+        /**
+         * Runs bound, like {@link #shutdown()}: a failing generated {@code start()} rolls the module
+         * back from inside itself, and that rollback's teardown threads must be tracked too (#651).
+         * Over an aggregate {@code threads} is {@code null}, which binds no owner.
+         */
         @Override
         public void start() {
-            delegate.start();
+            OwnedThreads.runBound(threads, delegate::start);
         }
 
         @Override
