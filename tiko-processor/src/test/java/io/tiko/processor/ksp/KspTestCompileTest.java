@@ -179,7 +179,16 @@ class KspTestCompileTest {
                         "demo.SystemClock",
                         "package demo;",
                         "@io.tiko.annotations.Component",
-                        "public class SystemClock implements Clock {}"));
+                        "public class SystemClock implements Clock {}"),
+                JavaFileObjects.forSourceLines(
+                        "demo.Scheduler",
+                        "package demo;",
+                        "@io.tiko.annotations.Component",
+                        "public class Scheduler {",
+                        "    private final Clock clock;",
+                        "    public Scheduler(Clock clock) { this.clock = clock; }",
+                        "    public Clock getClock() { return clock; }",
+                        "}"));
         var mainClasses = writeClassOutput(javacMain, dir.resolve("main"));
         var javacTest = javacCompile(
                 List.of(mainClasses.toFile()),
@@ -190,9 +199,13 @@ class KspTestCompileTest {
                         "@io.tiko.test.TestComponent(Clock.class)",
                         "public class FixedClock implements Clock {}"));
         var testClasses = writeClassOutput(javacTest, dir.resolve("test"));
+        assertThat(Files.readString(testClasses.resolve(TEST_SHADOWS)).lines())
+                .anyMatch(line -> line.startsWith("demo.Clock=") && line.endsWith("|demo.FixedClock"));
         String javacBooted;
+        String javacInjected;
         try (var program = KspProgram.bootTestWiring(programOver(testClasses, mainClasses))) {
             javacBooted = program.get("demo.Clock").getClass().getName();
+            javacInjected = clockOfScheduler(program);
         }
 
         var main = compileMain(KspCompiler.kotlin("Clock.kt", """
@@ -204,6 +217,9 @@ class KspTestCompileTest {
 
                 @Component
                 class SystemClock : Clock
+
+                @Component
+                class Scheduler(val clock: Clock)
                 """));
         var test = compileTest(librariesOf(main), KspCompiler.kotlin("FixedClock.kt", """
                         package demo
@@ -214,11 +230,26 @@ class KspTestCompileTest {
                         class FixedClock : Clock
                         """));
 
+        assertThat(test.generatedResource(TEST_SHADOWS))
+                .hasValueSatisfying(shadows -> assertThat(shadows.lines())
+                        .anyMatch(line -> line.startsWith("demo.Clock=") && line.endsWith("|demo.FixedClock")));
         try (var program = KspProgram.bootTestWiring(test)) {
             assertThat(program.get("demo.Clock").getClass().getName())
                     .isEqualTo(javacBooted)
                     .isEqualTo("demo.FixedClock");
+            assertThat(clockOfScheduler(program)).isEqualTo(javacInjected).isEqualTo("demo.FixedClock");
         }
+    }
+
+    /** The class of the {@code Clock} the main {@code Scheduler} component was wired with. */
+    private static String clockOfScheduler(KspProgram program) throws Exception {
+        var scheduler = program.get("demo.Scheduler");
+        return scheduler
+                .getClass()
+                .getMethod("getClock")
+                .invoke(scheduler)
+                .getClass()
+                .getName();
     }
 
     @Test

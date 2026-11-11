@@ -16,6 +16,7 @@ import io.tiko.processor.config.ConfigurationModel;
 import io.tiko.processor.config.ConfigurationValidator;
 import io.tiko.processor.core.ProcessingEnv;
 import io.tiko.processor.core.StackTraces;
+import io.tiko.processor.core.model.DeclKind;
 import io.tiko.processor.generator.ComponentFactoryGenerator;
 import io.tiko.processor.generator.ContainerGenerator;
 import io.tiko.processor.generator.EventRegistryGenerator;
@@ -44,6 +45,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -313,12 +315,39 @@ public final class TikoPipeline {
         }
         for (var component : context.getActiveComponents()) {
             if (!component.isTestComponent()) continue;
-            for (String extraKey : component.getTestExtraKeys()) {
-                if (mainFqns.contains(extraKey)) {
-                    context.markShadowedByTestOverride(extraKey, component);
-                }
+            for (String shadowedKey : classpathShadowedKeys(component, mainFqns)) {
+                context.markShadowedByTestOverride(shadowedKey, component);
             }
         }
+    }
+
+    /**
+     * The keys of {@code component} that shadow a main component: those naming one, or, when none
+     * does, those naming an interface one implements. The second case is an explicit
+     * {@code value()} on an interface; the implicit walk always names a component, so it never
+     * reaches it.
+     */
+    private List<String> classpathShadowedKeys(ComponentModel component, Set<String> mainFqns) {
+        var extraKeys = component.getTestExtraKeys();
+        var named = extraKeys.stream().filter(mainFqns::contains).toList();
+        if (!named.isEmpty()) {
+            return named;
+        }
+        return extraKeys.stream().filter(key -> isInterfaceOfAny(key, mainFqns)).toList();
+    }
+
+    /** Whether {@code key} is an interface that at least one of the main components implements. */
+    private boolean isInterfaceOfAny(String key, Set<String> mainComponentFqns) {
+        var types = context.env().types();
+        var keyDecl = types.findClass(key).filter(decl -> decl.kind() == DeclKind.INTERFACE);
+        if (keyDecl.isEmpty()) {
+            return false;
+        }
+        var keyType = types.erasure(keyDecl.get().asType());
+        return mainComponentFqns.stream()
+                .map(types::findClass)
+                .flatMap(Optional::stream)
+                .anyMatch(main -> types.isAssignable(types.erasure(main.asType()), keyType));
     }
 
     /**
