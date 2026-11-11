@@ -12,6 +12,7 @@ import com.tschuchort.compiletesting.KotlinCompilation;
 import com.tschuchort.compiletesting.SourceFile;
 import io.tiko.processor.TikoAnnotationProcessor;
 import io.tiko.processor.collect.MainModuleOnClasspath;
+import io.tiko.processor.core.javac.JavacProcessingEnv;
 import io.tiko.processor.core.ksp.KspCompiler;
 import io.tiko.processor.core.ksp.KspCompiler.KspResult;
 import io.tiko.processor.core.ksp.KspProcessingEnv;
@@ -26,7 +27,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.annotation.processing.AbstractProcessor;
+import javax.annotation.processing.RoundEnvironment;
+import javax.lang.model.SourceVersion;
+import javax.lang.model.element.TypeElement;
 import javax.tools.JavaFileObject;
 import javax.tools.StandardLocation;
 import org.junit.jupiter.api.Test;
@@ -312,6 +318,82 @@ class KspTestCompileTest {
         assertThat(Files.readString(testClasses.resolve(TEST_SHADOWS)).lines())
                 .anyMatch(line -> line.startsWith("a.Alpha="))
                 .anyMatch(line -> line.startsWith("b.Beta="));
+    }
+
+    /** Two modules on the classpath in either order: both frontends pick the lowest-named module's container. */
+    @Test
+    void bothFrontendsPickTheSameContainerInEitherClasspathOrder(@TempDir Path dir) throws Exception {
+        var javacAlpha = writeClassOutput(
+                javacCompile(
+                        List.of(),
+                        JavaFileObjects.forSourceLines(
+                                "a.Alpha", "package a;", "@io.tiko.annotations.Component", "public class Alpha {}")),
+                dir.resolve("alpha"));
+        var javacBeta = writeClassOutput(
+                javacCompile(
+                        List.of(),
+                        JavaFileObjects.forSourceLines(
+                                "b.Beta", "package b;", "@io.tiko.annotations.Component", "public class Beta {}")),
+                dir.resolve("beta"));
+        var kspAlpha = compileMain(
+                KspCompiler.kotlin("Alpha.kt", "package a", "", "@io.tiko.annotations.Component", "open class Alpha"));
+        var kspBeta = compileMain(
+                KspCompiler.kotlin("Beta.kt", "package b", "", "@io.tiko.annotations.Component", "open class Beta"));
+
+        var javacContainers = List.of(
+                implOf(Files.readString(javacAlpha.resolve(CONTAINER_DESCRIPTOR))),
+                implOf(Files.readString(javacBeta.resolve(CONTAINER_DESCRIPTOR))));
+        var kspContainers = List.of(
+                implOf(kspAlpha.generatedResource(CONTAINER_DESCRIPTOR).orElseThrow()),
+                implOf(kspBeta.generatedResource(CONTAINER_DESCRIPTOR).orElseThrow()));
+        var javacLowest = javacContainers.stream().sorted().findFirst().orElseThrow();
+        var kspLowest = kspContainers.stream().sorted().findFirst().orElseThrow();
+
+        for (var javacOrder : List.of(List.of(javacAlpha, javacBeta), List.of(javacBeta, javacAlpha))) {
+            assertThat(javacMainModuleSeenBy(
+                                    javacOrder.stream().map(Path::toFile).toList())
+                            .containerFqn())
+                    .hasValue(javacLowest);
+        }
+        var alphaLibraries = librariesOf(kspAlpha);
+        var betaLibraries = librariesOf(kspBeta);
+        var forward = new ArrayList<File>(alphaLibraries);
+        forward.addAll(betaLibraries);
+        var backward = new ArrayList<File>(betaLibraries);
+        backward.addAll(alphaLibraries);
+        assertThat(mainModuleSeenBy(forward).containerFqn()).hasValue(kspLowest);
+        assertThat(mainModuleSeenBy(backward).containerFqn()).hasValue(kspLowest);
+    }
+
+    /** What {@link MainModuleOnClasspath} reads in a javac round compiled against {@code libraries}. */
+    private static MainModuleOnClasspath javacMainModuleSeenBy(List<File> libraries) {
+        var seen = new AtomicReference<MainModuleOnClasspath>();
+        var probe = new AbstractProcessor() {
+            @Override
+            public Set<String> getSupportedAnnotationTypes() {
+                return Set.of("*");
+            }
+
+            @Override
+            public SourceVersion getSupportedSourceVersion() {
+                return SourceVersion.latestSupported();
+            }
+
+            @Override
+            public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment round) {
+                if (seen.get() == null) {
+                    seen.set(MainModuleOnClasspath.read(JavacProcessingEnv.of(processingEnv, round)));
+                }
+                return false;
+            }
+        };
+        var compilation = Compiler.javac()
+                .withProcessors(probe)
+                .withClasspath(libraries)
+                .compile(JavaFileObjects.forSourceLines("probe.Probe", "package probe;", "public class Probe {}"));
+        CompilationSubject.assertThat(compilation).succeeded();
+        assertThat(seen.get()).as("the probe ran").isNotNull();
+        return seen.get();
     }
 
     @Test
