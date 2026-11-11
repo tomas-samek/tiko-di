@@ -143,6 +143,12 @@ final class KspClassDecl implements ClassDecl {
         return modifiers.contains(Modifier.VALUE) || modifiers.contains(Modifier.INLINE);
     }
 
+    /** The {@code data} modifier. */
+    @Override
+    public boolean isKotlinDataClass() {
+        return declaration().getModifiers().contains(Modifier.DATA);
+    }
+
     @Override
     public SourceLanguage language() {
         return KspModel.language(declaration().getOrigin());

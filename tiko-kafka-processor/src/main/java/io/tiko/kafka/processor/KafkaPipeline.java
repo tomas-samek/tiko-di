@@ -9,6 +9,7 @@ import io.tiko.kafka.processor.model.KafkaSinkDescriptor;
 import io.tiko.kafka.processor.model.KafkaSourceDescriptor;
 import io.tiko.kafka.processor.validation.BridgeMethodShapeValidator;
 import io.tiko.kafka.processor.validation.KotlinBridgeValidator;
+import io.tiko.kafka.processor.validation.KotlinDataClassPayloadValidator;
 import io.tiko.kafka.processor.validation.PartitionKeyValidator;
 import io.tiko.kafka.processor.validation.RequiredSiblingValidator;
 import io.tiko.kafka.processor.validation.SingletonBridgeValidator;
@@ -100,6 +101,7 @@ public final class KafkaPipeline {
             ok &= RequiredSiblingValidator.validate(diagnostics, roundSources, roundSinks);
             ok &= BridgeMethodShapeValidator.validate(diagnostics, roundSources, roundSinks);
             ok &= PartitionKeyValidator.validate(diagnostics, roundSinks);
+            ok &= KotlinDataClassPayloadValidator.validate(diagnostics, roundSources, roundSinks);
         }
         failed |= !ok;
         sources.addAll(roundSources);

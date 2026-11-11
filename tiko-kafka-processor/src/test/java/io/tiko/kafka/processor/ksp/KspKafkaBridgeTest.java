@@ -152,7 +152,7 @@ class KspKafkaBridgeTest {
                 "import io.tiko.kafka.annotations.KafkaSink",
                 "import io.tiko.kafka.annotations.KafkaSource",
                 "",
-                "data class OrderPlaced(val orderId: String)",
+                "@JvmRecord data class OrderPlaced(val orderId: String)",
                 "",
                 body);
 
@@ -334,7 +334,7 @@ class KspKafkaBridgeTest {
                 "import io.tiko.annotations.EventTrigger",
                 "import io.tiko.kafka.annotations.KafkaSource",
                 "",
-                "data class OrderPlaced(val orderId: String)",
+                "@JvmRecord data class OrderPlaced(val orderId: String)",
                 "",
                 "@Component(scope = Scope.SINGLETON)",
                 "class OrderConsumer {",
