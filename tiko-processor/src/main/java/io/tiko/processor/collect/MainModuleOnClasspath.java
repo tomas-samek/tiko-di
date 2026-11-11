@@ -1,5 +1,6 @@
 package io.tiko.processor.collect;
 
+import io.tiko.processor.core.ClasspathProbe;
 import io.tiko.processor.core.ProcessingEnv;
 import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.Visibility;
@@ -21,6 +22,7 @@ public final class MainModuleOnClasspath {
 
     private static final String CONTAINER_DESCRIPTOR = "META-INF/tiko/container.properties";
     private static final String COMPONENTS_MANIFEST = "META-INF/tiko/components.txt";
+    private static final String MODULES_ROOT = "META-INF/tiko/modules/";
     private static final String GENERATED_PACKAGE = "io.tiko.generated";
     private static final String MODULE_PREFIX = "TikoModule_";
     private static final String CONTAINER_PREFIX = "TikoContainerImpl_";
@@ -44,17 +46,50 @@ public final class MainModuleOnClasspath {
      */
     public static MainModuleOnClasspath read(ProcessingEnv env) {
         var classpath = env.classpath();
+        var modules = readModules(classpath);
         var descriptor = classpath.readResource(CONTAINER_DESCRIPTOR);
         var manifest = classpath.readResource(COMPONENTS_MANIFEST);
-        if (descriptor.isPresent() || manifest.isPresent()) {
-            return new MainModuleOnClasspath(
-                    descriptor
+        if (!modules.componentFqns().isEmpty() || descriptor.isPresent() || manifest.isPresent()) {
+            var components = new LinkedHashSet<>(modules.componentFqns());
+            manifest.map(MainModuleOnClasspath::manifestLines).ifPresent(components::addAll);
+            var container = modules.containerFqn != null
+                    ? modules.containerFqn
+                    : descriptor
                             .map(MainModuleOnClasspath::implProperty)
                             .filter(fqn -> !fqn.isBlank())
-                            .orElse(null),
-                    manifest.map(MainModuleOnClasspath::manifestLines).orElse(Set.of()));
+                            .orElse(null);
+            return new MainModuleOnClasspath(container, components);
         }
         return fromGeneratedClasses(classpath.compiledClassesIn(GENERATED_PACKAGE));
+    }
+
+    /**
+     * Every main module's own descriptors, found through its {@code TikoModule_<hash>} class: the
+     * fixed-name resources hold only the first module's on a classpath that has several. The
+     * container is the first module's. Empty for modules compiled before the per-module
+     * descriptors, which the fixed-name resources still cover.
+     */
+    private static MainModuleOnClasspath readModules(ClasspathProbe classpath) {
+        String container = null;
+        var components = new LinkedHashSet<String>();
+        for (var name : classpath.simpleClassNamesIn(GENERATED_PACKAGE)) {
+            if (!name.startsWith(MODULE_PREFIX)) {
+                continue;
+            }
+            var root = MODULES_ROOT + CONTAINER_PREFIX + name.substring(MODULE_PREFIX.length()) + "/";
+            var moduleContainer = classpath
+                    .readResource(root + "container.properties")
+                    .map(MainModuleOnClasspath::implProperty)
+                    .filter(fqn -> !fqn.isBlank());
+            if (container == null) {
+                container = moduleContainer.orElse(null);
+            }
+            classpath
+                    .readResource(root + "components.txt")
+                    .map(MainModuleOnClasspath::manifestLines)
+                    .ifPresent(components::addAll);
+        }
+        return new MainModuleOnClasspath(container, components);
     }
 
     /**

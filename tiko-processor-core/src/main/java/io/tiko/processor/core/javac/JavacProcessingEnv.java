@@ -35,7 +35,7 @@ public final class JavacProcessingEnv implements ProcessingEnv {
         this.diagnostics = new JavacDiagnostics(env.getMessager(), model);
         this.output = new JavacCodeOutput(env.getFiler());
         this.types = new JavacTypeOracle(model);
-        this.classpath = new JavacClasspathProbe(env.getFiler());
+        this.classpath = new JavacClasspathProbe(env.getFiler(), env.getElementUtils());
     }
 
     /** Wraps one round; create a new instance for every round. */

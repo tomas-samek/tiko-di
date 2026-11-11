@@ -109,6 +109,12 @@ public final class KspProcessingEnv implements ProcessingEnv {
             public List<ClassDecl> compiledClassesIn(String packageName) {
                 return KspProcessingEnv.this.compiledClassesIn(packageName);
             }
+
+            /** Always empty: KSP reads the compiled classes instead. */
+            @Override
+            public List<String> simpleClassNamesIn(String packageName) {
+                return List.of();
+            }
         };
     }
 
