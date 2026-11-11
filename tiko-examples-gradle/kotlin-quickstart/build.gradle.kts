@@ -16,7 +16,9 @@ dependencies {
     implementation("io.github.tomas-samek:tiko-api:$tikoVersion")
     implementation("io.github.tomas-samek:tiko-runtime:$tikoVersion")
     ksp("io.github.tomas-samek:tiko-processor:$tikoVersion")
+    kspTest("io.github.tomas-samek:tiko-processor:$tikoVersion")
 
+    testImplementation("io.github.tomas-samek:tiko-test:$tikoVersion")
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.1")
     testImplementation("org.assertj:assertj-core:3.27.7")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.1")

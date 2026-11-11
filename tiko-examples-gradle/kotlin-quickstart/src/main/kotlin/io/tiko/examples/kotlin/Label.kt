@@ -4,6 +4,6 @@ import io.tiko.annotations.Component
 
 /** Default PROTOTYPE scope; used as the default value of a constructor parameter below. */
 @Component
-class Label {
-    fun text(): String = "audit"
+open class Label {
+    open fun text(): String = "audit"
 }

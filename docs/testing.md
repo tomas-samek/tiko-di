@@ -186,6 +186,17 @@ try (Container c = Tiko.create(TikoOptions.builder().testWiring(true).build())) 
 
 A `@TestComponent` in `src/main/` is a compile error — it would ship test wiring in the jar.
 
+**Kotlin (Gradle + KSP).** Put the processor on the test compile and add `tiko-test`:
+
+```kotlin
+dependencies {
+    kspTest("io.github.tomas-samek:tiko-processor:<version>")
+    testImplementation("io.github.tomas-samek:tiko-test:<version>")
+}
+```
+
+`@TestComponent` classes in `src/test/kotlin` then override the main components, the same as in Java. A class you override must be `open`. See [`kotlin-quickstart`](../tiko-examples-gradle/kotlin-quickstart).
+
 ## Shadow detection
 
 `@TestComponent` discovers its shadow target two ways:
