@@ -16,6 +16,7 @@ import io.tiko.processor.config.ConfigurationModel;
 import io.tiko.processor.config.ConfigurationValidator;
 import io.tiko.processor.core.ProcessingEnv;
 import io.tiko.processor.core.StackTraces;
+import io.tiko.processor.core.model.DeclKind;
 import io.tiko.processor.generator.ComponentFactoryGenerator;
 import io.tiko.processor.generator.ContainerGenerator;
 import io.tiko.processor.generator.EventRegistryGenerator;
@@ -44,6 +45,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -313,12 +315,38 @@ public final class TikoPipeline {
         }
         for (var component : context.getActiveComponents()) {
             if (!component.isTestComponent()) continue;
-            for (String extraKey : component.getTestExtraKeys()) {
+            var extraKeys = component.getTestExtraKeys();
+            boolean namesMainComponent = false;
+            for (String extraKey : extraKeys) {
                 if (mainFqns.contains(extraKey)) {
+                    namesMainComponent = true;
                     context.markShadowedByTestOverride(extraKey, component);
                 }
             }
+            // An explicit value() naming an interface of a main component names no component
+            // itself; the implicit walk always does, so it never reaches this branch.
+            if (!namesMainComponent) {
+                for (String extraKey : extraKeys) {
+                    if (isInterfaceOfAny(extraKey, mainFqns)) {
+                        context.markShadowedByTestOverride(extraKey, component);
+                    }
+                }
+            }
         }
+    }
+
+    /** Whether {@code key} is an interface that at least one of the main components implements. */
+    private boolean isInterfaceOfAny(String key, Set<String> mainComponentFqns) {
+        var types = context.env().types();
+        var keyDecl = types.findClass(key).filter(decl -> decl.kind() == DeclKind.INTERFACE);
+        if (keyDecl.isEmpty()) {
+            return false;
+        }
+        var keyType = types.erasure(keyDecl.get().asType());
+        return mainComponentFqns.stream()
+                .map(types::findClass)
+                .flatMap(Optional::stream)
+                .anyMatch(main -> types.isAssignable(types.erasure(main.asType()), keyType));
     }
 
     /**
