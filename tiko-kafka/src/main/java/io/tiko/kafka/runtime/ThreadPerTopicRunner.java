@@ -127,7 +127,7 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
         if (!running.compareAndSet(false, true)) return;
         consumer.subscribe(List.of(source.topic()));
         // The container's factory tracks the thread, so a consumer that outlives close() is reported (#635).
-        thread = container.threadFactory().newThread(this::run);
+        thread = container.threadFactory().newThread(this::runAndClose);
         thread.setName("tiko-kafka-consumer-" + source.topic());
         thread.setDaemon(true);
         thread.start();
@@ -136,15 +136,30 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
     @Override
     public void stop() {
         // running may already be false if a FAIL decision stopped the loop from the consumer
-        // thread (#385); still wake and join before close so we never close the client while a
-        // poll() is in flight — KafkaConsumer is single-thread-access.
+        // thread (#385). KafkaConsumer is single-thread-access, so once the consumer thread exists
+        // it closes its own client on exit (#648) — even if a bridge keeps it past the join below.
         running.set(false);
         consumer.wakeup();
+        if (thread == null) {
+            closeConsumer();
+            return;
+        }
         try {
-            if (thread != null) thread.join(config.shutdownTimeout().toMillis());
+            thread.join(config.shutdownTimeout().toMillis());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    private void runAndClose() {
+        try {
+            run();
+        } finally {
+            closeConsumer();
+        }
+    }
+
+    private void closeConsumer() {
         try {
             consumer.close();
         } catch (Exception ignored) {
@@ -175,7 +190,7 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
                 LockSupport.parkNanos(config.pollTimeout().toNanos());
             }
         }
-        // close is handled by stop() to ensure exactly-once close
+        // runAndClose() closes the consumer on this same thread, exactly once
     }
 
     /**
