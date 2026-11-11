@@ -480,6 +480,83 @@ class KspTestCompileTest {
                     .isEqualTo("demo.FixedClock");
         }
     }
+    /**
+     * A {@code @TestComponent} declared as a nested class shadows a main component: the shadows file
+     * names it by its binary name, and a main component injecting the interface gets it on both
+     * frontends.
+     */
+    @Test
+    void nestedTestComponentShadowsAMainComponent(@TempDir Path dir) throws Exception {
+        var javacMain = javacCompile(
+                List.of(),
+                JavaFileObjects.forSourceLines("demo.Clock", "package demo;", "public interface Clock {}"),
+                JavaFileObjects.forSourceLines(
+                        "demo.SystemClock",
+                        "package demo;",
+                        "@io.tiko.annotations.Component",
+                        "public class SystemClock implements Clock {}"),
+                JavaFileObjects.forSourceLines(
+                        "demo.Consumer",
+                        "package demo;",
+                        "@io.tiko.annotations.Component",
+                        "public class Consumer {",
+                        "    private final Clock clock;",
+                        "    public Consumer(Clock clock) { this.clock = clock; }",
+                        "    public Clock getClock() { return clock; }",
+                        "}"));
+        var mainClasses = writeClassOutput(javacMain, dir.resolve("main"));
+        var javacTest = javacCompile(
+                List.of(mainClasses.toFile()),
+                JavaFileObjects.forSourceString("io.tiko.test.TestComponent", TEST_COMPONENT_ANNOTATION),
+                JavaFileObjects.forSourceLines(
+                        "demo.Fixtures",
+                        "package demo;",
+                        "public class Fixtures {",
+                        "    @io.tiko.test.TestComponent(Clock.class)",
+                        "    public static class FixedClock implements Clock {}",
+                        "}"));
+        var testClasses = writeClassOutput(javacTest, dir.resolve("test"));
+        assertThat(Files.readString(testClasses.resolve(TEST_SHADOWS)).lines())
+                .anyMatch(line -> line.startsWith("demo.Clock=") && line.endsWith("|demo.Fixtures$FixedClock"));
+        String javacInjected;
+        try (var program = KspProgram.bootTestWiring(programOver(testClasses, mainClasses))) {
+            javacInjected = clockOf(program, "demo.Consumer");
+        }
+
+        var main = compileMain(KspCompiler.kotlin("Clock.kt", """
+                package demo
+
+                import io.tiko.annotations.Component
+
+                interface Clock
+
+                @Component
+                class SystemClock : Clock
+
+                @Component
+                class Consumer(val clock: Clock)
+                """));
+        var test = compileTest(librariesOf(main), KspCompiler.kotlin("Fixtures.kt", """
+                        package demo
+
+                        import io.tiko.test.TestComponent
+
+                        class Fixtures {
+                            @TestComponent(Clock::class)
+                            class FixedClock : Clock
+                        }
+                        """));
+
+        assertThat(test.generatedResource(TEST_SHADOWS))
+                .hasValueSatisfying(shadows -> assertThat(shadows.lines())
+                        .anyMatch(
+                                line -> line.startsWith("demo.Clock=") && line.endsWith("|demo.Fixtures$FixedClock")));
+        try (var program = KspProgram.bootTestWiring(test)) {
+            assertThat(clockOf(program, "demo.Consumer"))
+                    .isEqualTo(javacInjected)
+                    .isEqualTo("demo.Fixtures$FixedClock");
+        }
+    }
 
     /** The class of the {@code Clock} the main {@code Scheduler} component was wired with. */
     private static String clockOfScheduler(KspProgram program) throws Exception {

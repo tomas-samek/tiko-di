@@ -192,7 +192,7 @@ public final class ContainerGenerator {
                     .append("=")
                     .append(testFqn)
                     .append("|")
-                    .append(testComponent.getQualifiedName())
+                    .append(binaryName(testComponent.getQualifiedName()))
                     .append("\n");
         }
         context.env()
@@ -203,7 +203,7 @@ public final class ContainerGenerator {
                         context.getOriginatingDeclarations());
     }
 
-    /** The binary name of the class a shadow key names, which the runtime loads it by. */
+    /** The binary name of the class {@code key} names, which the runtime loads it by. */
     private String binaryName(String key) {
         return context.env()
                 .types()
