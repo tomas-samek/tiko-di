@@ -4,7 +4,7 @@ plugins {
     application
 }
 
-val tikoVersion: String by project
+val tikoVersion = providers.gradleProperty("tikoVersion").get()
 
 repositories {
     // The reactor's artifacts (`mvn install -DskipTests` at the repo root) land here.

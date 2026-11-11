@@ -10,7 +10,8 @@ no runtime reflection on this path either.
 ## Gradle setup
 
 Reference build: [`tiko-examples-gradle/kotlin-quickstart`](../../../tiko-examples-gradle/kotlin-quickstart)
-(Gradle 9.8.2, Kotlin 2.4.21, JVM 21).
+(Gradle 9.8.2, Kotlin 2.4.21, JVM 21). Fuller services: [`kotlin-ktor-exposed`](../../../tiko-examples-gradle/kotlin-ktor-exposed)
+(Ktor + Exposed REST API) and [`kotlin-kafka-consumer`](../../../tiko-examples-gradle/kotlin-kafka-consumer).
 
 ```kotlin
 plugins {
