@@ -1,0 +1,13 @@
+.git
+.github
+.idea
+.worktrees
+**/target
+**/build
+**/.gradle
+**/.kotlin
+**/.env
+**/.env.*
+**/*.mv.db
+**/*.trace.db
+**/dependency-reduced-pom.xml

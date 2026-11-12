@@ -1,0 +1,59 @@
+x-outbox-service: &outbox-service
+  image: tiko-kotlin-transactional-outbox:local
+  build:
+    context: ../..
+    dockerfile: tiko-examples-gradle/kotlin-transactional-outbox/Dockerfile
+  depends_on:
+    kafka:
+      condition: service_healthy
+  stop_grace_period: 30s
+
+services:
+  kafka:
+    image: apache/kafka:3.9.2
+    environment:
+      CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "kafka:9092", "--list"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+
+  orders:
+    <<: *outbox-service
+    command: ["/app/orders/bin/orders"]
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      ORDERS_HTTP_HOST: 0.0.0.0
+      ORDERS_DB_URL: jdbc:h2:file:/data/orders;WRITE_DELAY=0;DB_CLOSE_DELAY=-1
+    ports:
+      - "127.0.0.1:8081:8080"
+    volumes:
+      - orders-data:/data
+
+  warehouse:
+    <<: *outbox-service
+    command: ["/app/warehouse/bin/warehouse"]
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      WAREHOUSE_DB_URL: jdbc:h2:file:/data/warehouse;WRITE_DELAY=0;DB_CLOSE_DELAY=-1
+    volumes:
+      - warehouse-data:/data
+
+volumes:
+  kafka-data:
+  orders-data:
+  warehouse-data:

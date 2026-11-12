@@ -129,3 +129,10 @@ mvn -pl tiko-examples/01_basic_di test
 ```
 
 Or from the repo root, `mvn test` runs everything.
+
+## 17 - Transactional outbox &nbsp;<sub>[`17_transactional_outbox/`](./17_transactional_outbox)</sub>
+
+Orders and warehouse services exchange events over Kafka. Each service commits the business
+change and its outbox row together. The integration test kills the orders process after the
+HTTP commit, restarts it, and checks that replay leaves warehouse stock unchanged after the
+first reservation. See the example README for commands and delivery boundaries.

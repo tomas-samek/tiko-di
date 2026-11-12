@@ -1,0 +1,79 @@
+package io.tiko.examples.outbox;
+
+import java.time.Duration;
+import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import javax.sql.DataSource;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.Producer;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.common.serialization.ByteArraySerializer;
+import org.apache.kafka.common.serialization.StringSerializer;
+
+public final class OutboxRelay implements AutoCloseable {
+    private static final System.Logger LOG = System.getLogger(OutboxRelay.class.getName());
+
+    private final ScheduledExecutorService worker;
+    private final JdbcOutbox outbox;
+    private final Producer<String, byte[]> producer;
+
+    public OutboxRelay(DataSource database, String bootstrapServers) {
+        this(database, connect(bootstrapServers));
+    }
+
+    /** Starts relaying {@code database}'s outbox through {@code producer}; tests pass a {@code MockProducer}. */
+    public OutboxRelay(DataSource database, Producer<String, byte[]> producer) {
+        this.outbox = new JdbcOutbox(database);
+        this.producer = producer;
+        this.worker = Executors.newSingleThreadScheduledExecutor(
+                Thread.ofPlatform().name("outbox-relay").factory());
+        worker.scheduleWithFixedDelay(this::drainOutbox, 0, 250, TimeUnit.MILLISECONDS);
+    }
+
+    private static Producer<String, byte[]> connect(String bootstrapServers) {
+        return new KafkaProducer<>(
+                Map.of(
+                        ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
+                        bootstrapServers,
+                        ProducerConfig.ACKS_CONFIG,
+                        "all",
+                        ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG,
+                        true,
+                        ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG,
+                        5000,
+                        ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG,
+                        3000,
+                        ProducerConfig.MAX_BLOCK_MS_CONFIG,
+                        2000),
+                new StringSerializer(),
+                new ByteArraySerializer());
+    }
+
+    private void drainOutbox() {
+        try {
+            while (!Thread.currentThread().isInterrupted() && outbox.publishNext(producer::send)) {
+                // Continue until the outbox is empty.
+            }
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        } catch (Throwable failure) {
+            LOG.log(System.Logger.Level.WARNING, "Outbox publish failed. The pending row will be retried.", failure);
+        }
+    }
+
+    @Override
+    public void close() {
+        worker.shutdownNow();
+        try {
+            if (!worker.awaitTermination(10, TimeUnit.SECONDS)) {
+                LOG.log(System.Logger.Level.WARNING, "Outbox relay did not stop within the shutdown deadline.");
+            }
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        } finally {
+            producer.close(Duration.ofSeconds(5));
+        }
+    }
+}

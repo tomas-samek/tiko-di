@@ -78,3 +78,10 @@ docker exec -i kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server
 docker exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 \
     --topic receipts --from-beginning --property print.key=true
 ```
+
+## kotlin-transactional-outbox &nbsp;<sub>[`kotlin-transactional-outbox/`](./kotlin-transactional-outbox)</sub>
+
+Orders and warehouse services use file-backed H2, Kafka and Tiko's KSP wiring. Each service
+commits its business change and outbox row together. The Docker-backed test kills the orders
+JVM after commit and verifies recovery and deduplication. See the example README for Docker
+Compose and local run commands.
