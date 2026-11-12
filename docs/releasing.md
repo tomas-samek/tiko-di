@@ -101,7 +101,11 @@ release → next-snapshot dance — you only supply two version strings.
    which builds with `-Prelease` (attaches `-sources`/`-javadoc`, GPG-signs every
    artifact) and uploads the bundle to Central Portal **staging**.
    The Gradle `tikoVersion` is bumped again at next-snapshot.
-   It tracks the reactor SNAPSHOT, unlike `.mcp.json`.
+   It tracks the reactor SNAPSHOT, unlike the archetype's `.mcp.json`. So does the
+   `tiko-mcp-<version>.jar` name in `tiko-examples/13_mcp_introspection/.mcp.json`,
+   which runs the locally built jar.
+   Example READMEs never name a versioned jar or a `-SNAPSHOT` version, because no step
+   bumps them; `ExampleVersionsInSyncTest` (tiko-archetype) fails the build if one does.
 3. Open <https://central.sonatype.com> → *Deployments*. Verify the staged deployment
    contains exactly the twelve artifacts listed above — and **nothing else** — then
    click **Publish**. (`autoPublish=false` is deliberate: this is the human gate.)
