@@ -101,7 +101,11 @@ The warehouse service reconnects to the same broker.
 mvn -pl :outbox-e2e -am verify
 ```
 
-The database tests run without Docker. The Testcontainers integration test starts a real broker
+The database tests run without Docker. So does `OutboxRelayTest` in `common`, which runs the
+relay against a `MockProducer`. It checks that a 50-row backlog drains in order within 2 s, far
+less than one row per 250 ms poll would take. It also checks that a failed send keeps its row,
+with nothing behind it sent first, and that an empty outbox sends nothing.
+The Testcontainers integration test starts a real broker
 and forks separate JVMs for the two services. It commits two HTTP orders while the order process
 cannot reach Kafka, kills that process, and checks that the orders and their outbox rows survived.
 It puts a stale result ahead of the valid results on the same Kafka partition and verifies that

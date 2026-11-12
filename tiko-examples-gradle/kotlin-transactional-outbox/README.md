@@ -51,8 +51,12 @@ each service's working directory. The default URLs keep H2 open between polls wi
 `DB_CLOSE_DELAY=-1`. `ORDERS_DB_URL` and `WAREHOUSE_DB_URL` override those URLs.
 
 ```sh
-./gradlew :e2e:test -PrequireDocker
+./gradlew :common:test :e2e:test -PrequireDocker
 ```
+
+`:common:test` runs the relay against a `MockProducer`, with no Docker. It checks that a 50-row
+backlog drains in order within 2 s, that a failed send keeps its row with nothing behind it sent
+first, and that an empty outbox sends nothing.
 
 The test starts Kafka with Testcontainers, forks both Kotlin applications, and verifies that a
 backlog of committed orders survives a forced JVM exit while Kafka is unreachable. After
