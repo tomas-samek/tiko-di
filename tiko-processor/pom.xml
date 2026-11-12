@@ -24,10 +24,11 @@
             <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-processor-core</artifactId>
         </dependency>
+        <!-- Compile scope, not provided: the processor runs tiko-config's coercers on @Configuration
+             records, so tiko-config must follow tiko-processor onto every processor path (#670). -->
         <dependency>
             <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-config</artifactId>
-            <scope>provided</scope>
         </dependency>
 
         <!-- Annotation processing -->
@@ -108,5 +109,30 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Writes the processor's runtime dependency closure for ProcessorPathTest, which runs
+                 javac with only that closure on the processor path, as annotationProcessorPaths and
+                 ksp(...) do (#670). -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>processor-path</id>
+                        <phase>generate-test-resources</phase>
+                        <goals>
+                            <goal>build-classpath</goal>
+                        </goals>
+                        <configuration>
+                            <includeScope>runtime</includeScope>
+                            <outputFile>${project.build.directory}/processor-path.txt</outputFile>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 
 </project>
