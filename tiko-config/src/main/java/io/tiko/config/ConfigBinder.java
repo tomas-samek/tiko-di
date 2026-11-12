@@ -15,7 +15,9 @@ public interface ConfigBinder<T> {
 
     /**
      * Walks {@code root} at {@link #prefix()}, binds, and returns the constructed
-     * record. Errors are accumulated into {@code ctx} rather than thrown.
+     * record. Errors are accumulated into {@code ctx} rather than thrown; when {@code ctx}
+     * holds any, a generated binder returns {@code null} instead of constructing the record
+     * from fallback values, since the whole bind then fails with the report (#671).
      *
      * @param root the entire YAML document tree (not pre-walked to {@link #prefix()});
      *             the binder is responsible for navigating to its own section.

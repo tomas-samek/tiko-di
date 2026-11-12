@@ -148,6 +148,11 @@ public final class ConfigBinderGenerator {
 
         bind.addStatement(
                 "ctx.checkUnknownKeys(node, $S, $T.of($L))", cfg.prefix(), Set.class, quotedJoin(consumedKeys));
+        // A failed read left a fallback (null) in its variable, which a Kotlin constructor rejects
+        // before the report is thrown (#671). The bind fails anyway, so the record is not built.
+        bind.beginControlFlow("if (ctx.hasErrors())")
+                .addStatement("return null")
+                .endControlFlow();
         bind.addStatement("return new $T($L)", recordType, ctorArgs.toString());
 
         MethodSpec typeM = MethodSpec.methodBuilder("type")
