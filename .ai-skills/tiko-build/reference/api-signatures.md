@@ -117,6 +117,11 @@ enum IngestDecision { SEEK, SKIP, DEAD_LETTER, FAIL }
 `timeout` / `backoff` take ISO-8601 durations (`"PT5S"`); `timeout` and
 `retries` require `async = true`.
 
+A SINGLETON `@Component` is constructed when the container starts; a SINGLETON
+`@Produces` value only on first use. To start a produced resource at boot (a relay,
+a scheduler), take it as a constructor parameter of a SINGLETON `@Component`. See
+[When singletons are constructed](../../../docs/di-and-scopes.md#when-singletons-are-constructed).
+
 ### Config keys — the two rules and the `tiko.kafka.*` table
 
 1. **Your `@Configuration` records:** YAML keys bind to record component
