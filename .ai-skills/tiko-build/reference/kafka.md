@@ -69,6 +69,13 @@ the write itself, or an outbox row that later work picks up. Make it idempotent,
 redelivered record runs the bridge again. Handlers get the work whose failure may be logged
 and dropped, or that you recover yourself.
 
+But a bridge exception is retried under `SEEK` until the bridge stops throwing, so a failure
+that retrying can't fix (a result for an order your database doesn't have) blocks the partition
+for good. Throw a dedicated exception for those permanent cases and dead-letter it from a
+`KafkaIngestErrorDecider` (below); everything else keeps being sought back. Reference:
+`OrderKafkaConsumer` + `WarehouseIngestPolicy` + `RejectedOrderDoesNotBlockPartitionIT` in
+[`tiko-examples/08_kafka_order_warehouse`](../../../tiko-examples/08_kafka_order_warehouse).
+
 ### A record that fails ingest: the default blocks its partition, on purpose
 
 When deserialize, the bridge method, or the local publish throws, the runner routes a

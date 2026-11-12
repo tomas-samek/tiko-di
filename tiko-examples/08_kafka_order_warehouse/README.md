@@ -25,6 +25,7 @@ java -jar tiko-examples/08_kafka_order_warehouse/warehouse-service/target/kafka-
 # 4. Run order-service (CLI prompts for amounts)
 java -jar tiko-examples/08_kafka_order_warehouse/order-service/target/kafka-order-service-*.jar
 # Type "19.99" + ENTER → watch warehouse-service log "warehouse received: …"
+# Type "0" + ENTER → the warehouse rejects it and dead-letters the record; the next order still arrives
 ```
 
 ## Layout
@@ -33,7 +34,7 @@ java -jar tiko-examples/08_kafka_order_warehouse/order-service/target/kafka-orde
 |---|---|
 | `shared-events/` | `OrderPlaced` record — used by both services as-is |
 | `order-service/` | `OrderService` (creates order), `OrderKafkaPublisher` (`@KafkaSink`), `Main` |
-| `warehouse-service/` | `WarehouseService` (`@EventHandler` on `OrderPlaced`), `OrderKafkaConsumer` (`@KafkaSource` + `@EventTrigger`), `Main` |
+| `warehouse-service/` | `WarehouseService` (`@EventHandler` on `OrderPlaced`), `OrderKafkaConsumer` (`@KafkaSource` + `@EventTrigger`, rejects a non-positive amount), `WarehouseIngestPolicy` (`KafkaIngestErrorDecider`: dead-letters a rejected order, retries everything else), `Main` |
 | `e2e/` | Testcontainers + `ProcessBuilder` test asserting cross-JVM message flow |
 | `docker-compose.yml` | Local Kafka broker; service images are added once they exist |
 
@@ -67,3 +68,13 @@ The Testcontainers e2e (`OrderToWarehouseE2EIT`) still covers the real-broker pa
 
 Service images for `order-service` / `warehouse-service` will be added to
 `docker-compose.yml` once published. Until then, run them as plain JVMs from the shaded jars.
+
+## When an order can't be processed
+
+`OrderKafkaConsumer` throws `RejectedOrderException` for an order with a non-positive amount.
+A bridge exception takes the ingest-error path, and under the default `SEEK` policy the record
+would be redelivered forever, blocking every order behind it on its partition.
+`WarehouseIngestPolicy` dead-letters that exception instead and keeps retrying any other failure.
+`RejectedOrderDoesNotBlockPartitionIT` pins this on the fake broker: a rejected order followed by a
+valid one on the same partition, and the valid one is processed. Background:
+[Kafka cookbook, "Which failures redeliver a record"](../../docs/cookbooks/kafka.md#which-failures-redeliver-a-record).

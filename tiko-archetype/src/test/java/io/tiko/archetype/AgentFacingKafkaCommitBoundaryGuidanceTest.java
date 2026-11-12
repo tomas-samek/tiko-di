@@ -18,6 +18,11 @@ class AgentFacingKafkaCommitBoundaryGuidanceTest {
         var doc = ArchetypeDocSync.canonicalDir("tiko-build").resolve("reference/kafka.md");
 
         assertThat(Files.readString(doc))
-                .contains("the offset is committed anyway", "goes in the bridge method", "idempotent");
+                .contains(
+                        "the offset is committed anyway",
+                        "goes in the bridge method",
+                        "idempotent",
+                        "blocks the partition",
+                        "WarehouseIngestPolicy");
     }
 }

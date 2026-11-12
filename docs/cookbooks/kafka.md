@@ -110,6 +110,21 @@ write itself, or a record of the intent (an outbox row) that later work picks up
 record runs the bridge again, so make that work idempotent. Keep in handlers the work whose
 failure the `ErrorHandler` may log, or that you recover yourself.
 
+A bridge exception is retried under the default `SEEK` until the bridge stops throwing. That is
+right for a transient failure, such as a database that is briefly down. It is wrong for a failure
+that retrying can't fix, such as a result for an order your database doesn't have: that record
+blocks its partition for good, and every record behind it waits. So sort your bridge's exceptions.
+Throw a dedicated exception for the permanent cases and let a
+[`KafkaIngestErrorDecider`](#programmatic-ingest-error-decisions-kafkaingesterrordecider) skip or
+dead-letter it, while everything else is still sought back and retried.
+
+The runnable example does exactly this. In
+[`tiko-examples/08_kafka_order_warehouse`](../../tiko-examples/08_kafka_order_warehouse),
+`OrderKafkaConsumer` rejects an order with a non-positive amount by throwing
+`RejectedOrderException`, and `WarehouseIngestPolicy` dead-letters it. `RejectedOrderDoesNotBlockPartitionIT`
+shows that the valid order behind it on the same partition is processed. Without the decider, that
+test times out.
+
 `@KafkaSource` elements: `topic` (required); `consumerGroup` (default `""` → falls back
 to `tiko.kafka.consumer-group`); `serializer` (default → `tiko.kafka.serializer`);
 `commitMode` (`PER_RECORD`; the MVP supports per-record commits only).
@@ -255,8 +270,9 @@ ingest failure; when absent, the static `poison-record-policy` runs unchanged
 public class OrderIngestPolicy implements KafkaIngestErrorDecider {
     @Override
     public IngestDecision decide(KafkaIngestError error, int attempt) {
-        if (error.cause() instanceof io.tiko.UndecodablePayloadException) {
-            return IngestDecision.DEAD_LETTER; // can never decode — hand off now, no retry
+        if (error.cause() instanceof io.tiko.UndecodablePayloadException
+                || error.cause() instanceof RejectedOrderException) {
+            return IngestDecision.DEAD_LETTER; // fails the same way every time — hand off now, no retry
         }
         return attempt < 5 ? IngestDecision.SEEK   // possibly transient — retry
                            : IngestDecision.DEAD_LETTER;
@@ -268,7 +284,9 @@ public class OrderIngestPolicy implements KafkaIngestErrorDecider {
 can never be decoded into the target type. The bundled JSON serializer raises it for every
 decode failure; it carries the target type (`targetType()`) and no cause or payload value.
 For a decode failure, `error.cause()` is that exception itself, so test it with
-`instanceof` — never by matching the message text.
+`instanceof` — never by matching the message text. The same holds for an exception your bridge
+throws: `RejectedOrderException` above is the bridge's own exception for an order that can never be
+fulfilled.
 
 `attempt` is the consecutive failure count for the record's offset, starting at
 `1`; bounding the retry is your code's job. The outcomes:
