@@ -138,3 +138,23 @@ jobs:
       - name: Incremental KSP rebuild adds and changes components
         working-directory: tiko-examples-gradle/kotlin-quickstart
         run: ci/incremental-check.sh
+      # `--smoke` opens and lists a ticket over real HTTP, then exits non-zero on failure.
+      - name: Build, test and smoke-run the Ktor + Exposed example
+        working-directory: tiko-examples-gradle/kotlin-ktor-exposed
+        run: |
+          for attempt in 1 2 3; do
+            ./gradlew build run --args=--smoke && exit 0
+            echo "gradle attempt $attempt failed" >&2
+            sleep 15
+          done
+          exit 1
+      # `run` needs a broker; the build's test runs the flow on the in-memory FakeKafkaBroker.
+      - name: Build and test the Kafka consumer example
+        working-directory: tiko-examples-gradle/kotlin-kafka-consumer
+        run: |
+          for attempt in 1 2 3; do
+            ./gradlew build && exit 0
+            echo "gradle attempt $attempt failed" >&2
+            sleep 15
+          done
+          exit 1

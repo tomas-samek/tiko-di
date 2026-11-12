@@ -1,0 +1,9 @@
+# Configuration for @TikoTest containers. @TikoTest takes no config source, but every
+# META-INF/tiko/defaults.yaml on the classpath is always read. Without DB_CLOSE_DELAY the
+# in-memory database lives as long as the container's pool, so each test starts empty.
+db:
+  url: jdbc:h2:mem:tickets-test
+  user: sa
+  password: ""
+http:
+  port: 0

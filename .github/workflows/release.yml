@@ -106,7 +106,7 @@ jobs:
         # that are not Maven modules (tiko-bom has no <parent>; the archetype's
         # resource template isn't a reactor module) — sed those surgically so
         # everything is in lockstep before we deploy. The Gradle example's
-        # `tikoVersion` (tiko-examples-gradle/, also not a reactor module) follows suit, and
+        # `tikoVersion` (every tiko-examples-gradle/*/gradle.properties, also not reactor modules) follows suit, and
         # is bumped again in the next-snapshot step so the kotlin-gradle CI job tracks the
         # reactor SNAPSHOT (unlike .mcp.json below).
         #
@@ -122,7 +122,7 @@ jobs:
               tiko-bom/pom.xml \
               tiko-archetype/src/main/resources/archetype-resources/pom.xml
           sed -i "s|^tikoVersion=.*|tikoVersion=${{ inputs.release_version }}|" \
-              tiko-examples-gradle/kotlin-quickstart/gradle.properties
+              tiko-examples-gradle/*/gradle.properties
           sed -i "s|tiko-mcp:[0-9]\+\.[0-9]\+\.[0-9]\+|tiko-mcp:${{ inputs.release_version }}|g" \
               tiko-archetype/src/main/resources/archetype-resources/.mcp.json
 
@@ -159,7 +159,7 @@ jobs:
               tiko-bom/pom.xml \
               tiko-archetype/src/main/resources/archetype-resources/pom.xml
           sed -i "s|^tikoVersion=.*|tikoVersion=${{ inputs.next_snapshot }}|" \
-              tiko-examples-gradle/kotlin-quickstart/gradle.properties
+              tiko-examples-gradle/*/gradle.properties
 
       - name: Commit next snapshot
         run: |
