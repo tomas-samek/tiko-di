@@ -225,7 +225,7 @@ Scopes: `SINGLETON` > `EVENT` > `PROTOTYPE` (longest to shortest lifetime). Shor
 
 ## Runnable examples
 
-Fifteen worked examples ship under [`tiko-examples/`](./tiko-examples/README.md), each a self-contained Maven project:
+Worked examples ship under [`tiko-examples/`](./tiko-examples/README.md), each a self-contained Maven project:
 
 | #  | Module                                                              | Demonstrates                                                                                            |
 |----|---------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------|
@@ -244,6 +244,8 @@ Fifteen worked examples ship under [`tiko-examples/`](./tiko-examples/README.md)
 | 13 | [`13_mcp_introspection`](./tiko-examples/13_mcp_introspection)      | Runnable demo of the `tiko-mcp` topology server reading a built project's `META-INF/tiko/` artifacts |
 | 14 | [`14_profiles`](./tiko-examples/14_profiles)                        | `@Component(profiles = "...")` — dev/prod implementation switching with default-profile resolution |
 | 15 | [`15_quickstart`](./tiko-examples/15_quickstart)                    | **Orchestrator-model reference app** — HikariCP + Javalin + event-driven handler the `tiko-build` skill cites |
+| 16 | [`16_async_scope`](./tiko-examples/16_async_scope) | Separate EVENT units for synchronous and asynchronous handlers |
+| 17 | [`17_transactional_outbox`](./tiko-examples/17_transactional_outbox) | HTTP to Kafka across two databases, transactional outbox, durable deduplication and crash recovery |
 
 ## Measured cold-start
 
