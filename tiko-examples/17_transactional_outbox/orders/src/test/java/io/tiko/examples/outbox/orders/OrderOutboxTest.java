@@ -29,7 +29,7 @@ import org.junit.jupiter.api.io.TempDir;
 class OrderOutboxTest {
 
     @Test
-    void generatedKafkaBridgeAppliesAndDeduplicatesReservationResult() throws Exception {
+    void generatedKafkaBridgeSkipsInvalidResultsAndAppliesValidOnes() throws Exception {
         String url = "jdbc:h2:file:" + directory.resolve("orders");
         var broker = new FakeKafkaBroker();
         var options = TikoOptions.builder()
@@ -46,7 +46,15 @@ class OrderOutboxTest {
             var delivered = new AtomicInteger();
             container.getEventBus().subscribe(Messages.ReservationDecided.class, event -> delivered.incrementAndGet());
 
+            var serializer = new JsonKafkaSerializer();
+            broker.produce(
+                    Messages.RESULTS,
+                    serializer.serialize(
+                            new Messages.ReservationDecided(UUID.randomUUID(), Messages.Decision.RESERVED)));
             broker.produce(Messages.RESULTS, payload);
+            broker.produce(
+                    Messages.RESULTS,
+                    serializer.serialize(new Messages.ReservationDecided(order.orderId(), Messages.Decision.REJECTED)));
             broker.produce(Messages.RESULTS, payload);
             await().atMost(Duration.ofSeconds(5)).until(() -> delivered.get() == 2);
             await().atMost(Duration.ofSeconds(5))

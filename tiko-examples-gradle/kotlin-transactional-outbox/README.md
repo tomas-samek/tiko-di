@@ -3,11 +3,13 @@
 This is the Gradle and KSP version of the [Java transactional outbox example](../../tiko-examples/17_transactional_outbox).
 Orders accepts HTTP requests through Javalin. Orders and warehouse each commit their business
 change and outbox row in one file-backed H2 transaction. The relay waits for Kafka to acknowledge
-an event before deleting the outbox row. The warehouse uses the order ID to deduplicate replay.
+an event before deleting the outbox row. It sends pending rows in order and waits between polls
+only when the outbox is empty or a send fails. The warehouse uses the order ID to deduplicate replay.
 
 Tiko generates wiring for each application with KSP. The Kafka payloads and typed configuration
 are Kotlin `@JvmRecord` data classes. Kafka ingress commits the business transaction inside
-`@KafkaSource`, so a failure can reach the Kafka runner before it commits the offset.
+`@KafkaSource`, so a failure can reach the Kafka runner before it commits the offset. The orders bridge logs and skips
+results for missing orders or conflicting decisions so those messages cannot block later results.
 
 ## Run with Docker Compose
 
@@ -45,13 +47,15 @@ services in separate shells:
 
 For local JVMs, the API defaults to port 8080. Set `KAFKA_BOOTSTRAP` to use another broker, or
 `ORDERS_HTTP_PORT` to change the port. The databases default to `build/outbox-data` relative to
-each service's working directory. `ORDERS_DB_URL` and `WAREHOUSE_DB_URL` override those paths.
+each service's working directory. The default URLs keep H2 open between polls with
+`DB_CLOSE_DELAY=-1`. `ORDERS_DB_URL` and `WAREHOUSE_DB_URL` override those URLs.
 
 ```sh
 ./gradlew :e2e:test -PrequireDocker
 ```
 
 The test starts Kafka with Testcontainers, forks both Kotlin applications, and verifies that a
-committed order survives a forced JVM exit while Kafka is unreachable. After restart, it waits
-for the reservation, replays the order, and checks that the consumer advances its offset while
-stock is decremented only once. Omitting `-PrequireDocker` allows the test to skip without Docker.
+backlog of committed orders survives a forced JVM exit while Kafka is unreachable. After
+restart, it checks that the valid results are applied even with a stale result ahead of them
+in the same partition. It then replays an order and checks the consumer offset and stock.
+Omitting `-PrequireDocker` allows the test to skip without Docker.

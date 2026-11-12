@@ -1,5 +1,5 @@
 outbox:
-  dbUrl: ${ORDERS_DB_URL:jdbc:h2:file:./target/outbox-data/orders;WRITE_DELAY=0}
+  dbUrl: ${ORDERS_DB_URL:jdbc:h2:file:./target/outbox-data/orders;WRITE_DELAY=0;DB_CLOSE_DELAY=-1}
   kafkaBootstrap: ${KAFKA_BOOTSTRAP:localhost:9092}
   httpHost: ${ORDERS_HTTP_HOST:127.0.0.1}
   httpPort: ${ORDERS_HTTP_PORT:8080}

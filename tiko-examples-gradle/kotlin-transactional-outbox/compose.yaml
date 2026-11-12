@@ -38,7 +38,7 @@ services:
     environment:
       KAFKA_BOOTSTRAP: kafka:9092
       ORDERS_HTTP_HOST: 0.0.0.0
-      ORDERS_DB_URL: jdbc:h2:file:/data/orders;WRITE_DELAY=0
+      ORDERS_DB_URL: jdbc:h2:file:/data/orders;WRITE_DELAY=0;DB_CLOSE_DELAY=-1
     ports:
       - "127.0.0.1:8081:8080"
     volumes:
@@ -49,7 +49,7 @@ services:
     command: ["/app/warehouse/bin/warehouse"]
     environment:
       KAFKA_BOOTSTRAP: kafka:9092
-      WAREHOUSE_DB_URL: jdbc:h2:file:/data/warehouse;WRITE_DELAY=0
+      WAREHOUSE_DB_URL: jdbc:h2:file:/data/warehouse;WRITE_DELAY=0;DB_CLOSE_DELAY=-1
     volumes:
       - warehouse-data:/data
 

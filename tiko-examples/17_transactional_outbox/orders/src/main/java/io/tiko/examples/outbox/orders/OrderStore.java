@@ -66,21 +66,18 @@ public class OrderStore {
         }
     }
 
-    public void record(ReservationDecided result) throws SQLException {
-        Database.transaction(database, transaction -> {
+    public boolean record(ReservationDecided result) throws SQLException {
+        return Database.transaction(database, transaction -> {
             try (var update = transaction.prepareStatement(
                     "UPDATE orders SET status = ? WHERE order_id = ? AND status = 'PENDING'")) {
                 update.setString(1, result.decision().name());
                 update.setObject(2, result.orderId());
-                if (update.executeUpdate() == 0
-                        && find(transaction, result.orderId())
-                                .filter(order ->
+                return update.executeUpdate() > 0
+                        || find(transaction, result.orderId())
+                                .map(order ->
                                         order.status().equals(result.decision().name()))
-                                .isEmpty()) {
-                    throw new IllegalStateException("Unexpected reservation result for order " + result.orderId());
-                }
+                                .orElse(false);
             }
-            return null;
         });
     }
 

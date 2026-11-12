@@ -65,6 +65,7 @@
     </dependencies>
 
     <build>
+        <finalName>outbox-warehouse</finalName>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

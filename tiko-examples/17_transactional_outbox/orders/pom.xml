@@ -73,6 +73,7 @@
     </dependencies>
 
     <build>
+        <finalName>outbox-orders</finalName>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

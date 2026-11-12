@@ -48,19 +48,13 @@ class OrderStore(private val database: DataSource) {
 
     fun find(orderId: UUID): Order? = database.connection.use { find(it, orderId) }
 
-    fun record(result: ReservationDecided) {
-        Database.transaction(database) { transaction ->
-            transaction.prepareStatement(
-                "UPDATE orders SET status = ? WHERE order_id = ? AND status = 'PENDING'",
-            ).use { update ->
-                update.setString(1, result.decision.name)
-                update.setObject(2, result.orderId)
-                if (update.executeUpdate() == 0) {
-                    check(find(transaction, result.orderId)?.status == result.decision.name) {
-                        "Unexpected reservation result for order " + result.orderId
-                    }
-                }
-            }
+    fun record(result: ReservationDecided): Boolean = Database.transaction(database) { transaction ->
+        transaction.prepareStatement(
+            "UPDATE orders SET status = ? WHERE order_id = ? AND status = 'PENDING'",
+        ).use { update ->
+            update.setString(1, result.decision.name)
+            update.setObject(2, result.orderId)
+            update.executeUpdate() > 0 || find(transaction, result.orderId)?.status == result.decision.name
         }
     }
 

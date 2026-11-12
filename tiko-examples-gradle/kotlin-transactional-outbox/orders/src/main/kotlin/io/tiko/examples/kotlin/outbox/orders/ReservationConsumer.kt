@@ -11,8 +11,13 @@ import io.tiko.kafka.annotations.KafkaSource
 class ReservationConsumer(private val orders: OrderStore) {
     @KafkaSource(topic = RESULTS)
     @EventTrigger(eventName = "ReservationRecorded")
-    fun receive(result: ReservationDecided): ReservationDecided {
-        orders.record(result)
-        return result
+    fun receive(result: ReservationDecided): ReservationDecided? {
+        if (orders.record(result)) return result
+        log.log(System.Logger.Level.WARNING, "Ignoring result for unknown order or conflicting decision: {0}", result)
+        return null
+    }
+
+    companion object {
+        private val log = System.getLogger(ReservationConsumer::class.java.name)
     }
 }

@@ -20,6 +20,7 @@ class OrdersHttpServer(
     private val settings: Settings,
     private val relay: Provider<OutboxRelay>,
 ) : AutoCloseable {
+    @Volatile
     private var app: Javalin? = null
 
     fun start(container: Container) {

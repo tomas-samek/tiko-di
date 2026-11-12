@@ -1,9 +1,11 @@
 package io.tiko.examples.kotlin.outbox.e2e
 
 import io.tiko.examples.kotlin.outbox.Database
+import io.tiko.examples.kotlin.outbox.Decision
 import io.tiko.examples.kotlin.outbox.ORDERS
 import io.tiko.examples.kotlin.outbox.OrderPlaced
 import io.tiko.examples.kotlin.outbox.RESULTS
+import io.tiko.examples.kotlin.outbox.ReservationDecided
 import io.tiko.kafka.serializer.JsonKafkaSerializer
 import java.io.File
 import java.io.IOException
@@ -23,9 +25,8 @@ import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.apache.kafka.common.serialization.StringSerializer
+import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -41,7 +42,7 @@ class OutboxRecoveryTest {
     fun recoversCommittedOrderAfterProcessDiesAndDeduplicatesReplay() {
         val dockerAvailable = DockerClientFactory.instance().isDockerAvailable
         if (java.lang.Boolean.getBoolean("outbox.requireDocker")) {
-            assertTrue(dockerAvailable, "Docker is required for the outbox recovery test")
+            assertThat(dockerAvailable).describedAs("Docker is required for the outbox recovery test").isTrue()
         }
         assumeTrue(dockerAvailable, "Docker is unavailable")
 
@@ -55,6 +56,7 @@ class OutboxRecoveryTest {
         val orderDb = jdbcUrl("orders")
         val warehouseDb = jdbcUrl("warehouse")
         val orderId = UUID.randomUUID()
+        val orderIds = listOf(orderId, UUID.randomUUID())
         val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build()
 
         http.use {
@@ -63,36 +65,44 @@ class OutboxRecoveryTest {
                     .all().get(TIMEOUT.seconds, TimeUnit.SECONDS)
 
                 start("orders", "orders-disconnected", orderDb, "127.0.0.1:1").use { orders ->
-                    val accepted = send(http, HttpRequest.newBuilder(orders.orderUri(orderId))
-                        .header("Content-Type", "application/json")
-                        .PUT(HttpRequest.BodyPublishers.ofString("""{"sku":"widget","quantity":2}""")))
-                    assertEquals(202, accepted.statusCode())
-                    assertTrue(accepted.body().contains("PENDING"), accepted.body())
+                    for (id in orderIds) {
+                        val accepted = send(http, HttpRequest.newBuilder(orders.orderUri(id))
+                            .header("Content-Type", "application/json")
+                            .PUT(HttpRequest.BodyPublishers.ofString("""{"sku":"widget","quantity":2}""")))
+                        assertThat(accepted.statusCode()).isEqualTo(202)
+                        assertThat(accepted.body()).contains("PENDING")
+                    }
                     // The HTTP response proves the commit completed. Kill without running shutdown hooks.
                     orders.kill()
                 }
-                assertEquals(1, scalar(orderDb, "SELECT COUNT(*) FROM orders WHERE status = 'PENDING'"))
-                assertEquals(1, scalar(orderDb, "SELECT COUNT(*) FROM outbox"))
+                assertThat(scalar(orderDb, "SELECT COUNT(*) FROM orders WHERE status = 'PENDING'")).isEqualTo(2)
+                assertThat(scalar(orderDb, "SELECT COUNT(*) FROM outbox")).isEqualTo(2)
+
+                // The stale result arrives first in the same partition as both valid results.
+                val missingOrderId = UUID.randomUUID()
+                publish(bootstrap, RESULTS, missingOrderId, ReservationDecided(missingOrderId, Decision.RESERVED))
 
                 start("warehouse", "warehouse", warehouseDb, bootstrap).use {
                     start("orders", "orders-restarted", orderDb, bootstrap).use { orders ->
-                        val uri = orders.orderUri(orderId)
-                        await().atMost(TIMEOUT).ignoreExceptionsInstanceOf(IOException::class.java).untilAsserted {
-                            val response = send(http, HttpRequest.newBuilder(uri).GET())
-                            assertEquals(200, response.statusCode())
-                            assertTrue(response.body().contains("RESERVED"), response.body())
+                        for (id in orderIds) {
+                            val uri = orders.orderUri(id)
+                            await().atMost(TIMEOUT).ignoreExceptionsInstanceOf(IOException::class.java).untilAsserted {
+                                val response = send(http, HttpRequest.newBuilder(uri).GET())
+                                assertThat(response.statusCode()).isEqualTo(200)
+                                assertThat(response.body()).contains("RESERVED")
+                            }
                         }
-                        val replayOffset = publishDuplicate(bootstrap, OrderPlaced(orderId, "widget", 2))
+                        val replayOffset = publish(bootstrap, ORDERS, orderId, OrderPlaced(orderId, "widget", 2))
                         await().atMost(TIMEOUT).untilAsserted {
                             val offsets = admin.listConsumerGroupOffsets("kotlin-outbox-warehouse")
                                 .partitionsToOffsetAndMetadata().get(5, TimeUnit.SECONDS)
                             val offset = offsets[TopicPartition(ORDERS, 0)]?.offset() ?: -1
-                            assertTrue(offset > replayOffset, "Kafka has not committed the replayed order")
+                            assertThat(offset).describedAs("Kafka offset for the replayed order").isGreaterThan(replayOffset)
                         }
                     }
                 }
-                assertEquals(8, scalar(warehouseDb, "SELECT available FROM stock WHERE sku = 'widget'"))
-                assertEquals(1, scalar(warehouseDb, "SELECT COUNT(*) FROM reservations"))
+                assertThat(scalar(warehouseDb, "SELECT available FROM stock WHERE sku = 'widget'")).isEqualTo(6)
+                assertThat(scalar(warehouseDb, "SELECT COUNT(*) FROM reservations")).isEqualTo(2)
             }
         }
     }
@@ -117,12 +127,12 @@ class OutboxRecoveryTest {
     private fun send(http: HttpClient, request: HttpRequest.Builder): HttpResponse<String> =
         http.send(request.timeout(Duration.ofSeconds(5)).build(), HttpResponse.BodyHandlers.ofString())
 
-    private fun publishDuplicate(bootstrap: String, order: OrderPlaced): Long = KafkaProducer(
+    private fun publish(bootstrap: String, topic: String, orderId: UUID, message: Any): Long = KafkaProducer(
         mapOf<String, Any>("bootstrap.servers" to bootstrap, "max.block.ms" to 5000),
         StringSerializer(),
         ByteArraySerializer(),
     ).use { producer ->
-        val record = ProducerRecord(ORDERS, order.orderId.toString(), JsonKafkaSerializer().serialize(order))
+        val record = ProducerRecord(topic, orderId.toString(), JsonKafkaSerializer().serialize(message))
         producer.send(record).get(10, TimeUnit.SECONDS).offset()
     }
 
@@ -148,7 +158,7 @@ class OutboxRecoveryTest {
         fun kill() {
             if (process.isAlive) {
                 process.destroyForcibly()
-                assertTrue(process.waitFor(15, TimeUnit.SECONDS), "Service process did not stop")
+                assertThat(process.waitFor(15, TimeUnit.SECONDS)).describedAs("Service process stopped").isTrue()
             }
         }
 

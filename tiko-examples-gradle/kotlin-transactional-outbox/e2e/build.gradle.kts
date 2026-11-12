@@ -5,6 +5,7 @@ plugins {
 dependencies {
     testImplementation(project(":common"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.1")
+    testImplementation("org.assertj:assertj-core:3.27.7")
     testImplementation("org.awaitility:awaitility:4.3.0")
     testImplementation("org.testcontainers:kafka:1.20.4")
     testImplementation("org.apache.commons:commons-compress:1.28.0")

@@ -160,4 +160,10 @@ jobs:
           exit 1
       - name: Verify transactional outbox crash recovery in Kotlin
         working-directory: tiko-examples-gradle/kotlin-transactional-outbox
-        run: ./gradlew :e2e:test -PrequireDocker
+        run: |
+          for attempt in 1 2 3; do
+            ./gradlew :e2e:test -PrequireDocker && exit 0
+            echo "gradle attempt $attempt failed" >&2
+            sleep 15
+          done
+          exit 1

@@ -1,13 +1,10 @@
 package io.tiko.examples.outbox;
 
-import java.sql.SQLException;
 import java.time.Duration;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import javax.sql.DataSource;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -41,15 +38,17 @@ public final class OutboxRelay implements AutoCloseable {
                 new ByteArraySerializer());
         this.worker = Executors.newSingleThreadScheduledExecutor(
                 Thread.ofPlatform().name("outbox-relay").factory());
-        worker.scheduleWithFixedDelay(this::publishNext, 0, 250, TimeUnit.MILLISECONDS);
+        worker.scheduleWithFixedDelay(this::drainOutbox, 0, 250, TimeUnit.MILLISECONDS);
     }
 
-    private void publishNext() {
+    private void drainOutbox() {
         try {
-            outbox.publishNext(producer::send);
+            while (!Thread.currentThread().isInterrupted() && outbox.publishNext(producer::send)) {
+                // Continue until the outbox is empty.
+            }
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
-        } catch (SQLException | ExecutionException | TimeoutException | RuntimeException failure) {
+        } catch (Throwable failure) {
             LOG.log(System.Logger.Level.WARNING, "Outbox publish failed. The pending row will be retried.", failure);
         }
     }

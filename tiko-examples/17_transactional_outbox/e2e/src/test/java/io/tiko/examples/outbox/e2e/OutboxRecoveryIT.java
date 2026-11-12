@@ -52,6 +52,7 @@ class OutboxRecoveryIT {
         String orderDb = jdbcUrl("orders");
         String warehouseDb = jdbcUrl("warehouse");
         UUID orderId = UUID.randomUUID();
+        UUID queuedOrderId = UUID.randomUUID();
 
         try (var admin = Admin.create(Map.of("bootstrap.servers", bootstrap));
                 var http = HttpClient.newBuilder()
@@ -63,38 +64,50 @@ class OutboxRecoveryIT {
                     .get(TIMEOUT.toSeconds(), TimeUnit.SECONDS);
 
             try (var disconnected = start("orders", "orders-disconnected", orderDb, "127.0.0.1:1")) {
-                URI orderUri = disconnected.orderUri(orderId);
-                var accepted = send(
-                        http,
-                        HttpRequest.newBuilder(orderUri)
-                                .header("Content-Type", "application/json")
-                                .PUT(HttpRequest.BodyPublishers.ofString("""
-                                {"sku":"widget","quantity":2}
-                                """)));
-                assertThat(accepted.statusCode()).isEqualTo(202);
-                assertThat(accepted.body()).contains("PENDING");
+                for (UUID id : List.of(orderId, queuedOrderId)) {
+                    var accepted = send(
+                            http,
+                            HttpRequest.newBuilder(disconnected.orderUri(id))
+                                    .header("Content-Type", "application/json")
+                                    .PUT(HttpRequest.BodyPublishers.ofString("""
+                                    {"sku":"widget","quantity":2}
+                                    """)));
+                    assertThat(accepted.statusCode()).isEqualTo(202);
+                    assertThat(accepted.body()).contains("PENDING");
+                }
 
                 // No route to this test's Kafka broker. Force process death after the HTTP
                 // response proves the database commit completed, without running shutdown hooks.
                 disconnected.kill();
             }
             assertThat(scalar(orderDb, "SELECT COUNT(*) FROM orders WHERE status = 'PENDING'"))
-                    .isEqualTo(1);
-            assertThat(scalar(orderDb, "SELECT COUNT(*) FROM outbox")).isEqualTo(1);
+                    .isEqualTo(2);
+            assertThat(scalar(orderDb, "SELECT COUNT(*) FROM outbox")).isEqualTo(2);
+
+            // The stale result arrives first in the same partition as both valid results.
+            UUID missingOrderId = UUID.randomUUID();
+            publish(
+                    bootstrap,
+                    Messages.RESULTS,
+                    missingOrderId,
+                    new Messages.ReservationDecided(missingOrderId, Messages.Decision.RESERVED));
 
             try (var warehouse = start("warehouse", "warehouse", warehouseDb, bootstrap);
                     var orders = start("orders", "orders-restarted", orderDb, bootstrap)) {
-                URI orderUri = orders.orderUri(orderId);
-                await().atMost(TIMEOUT)
-                        .ignoreExceptionsInstanceOf(IOException.class)
-                        .untilAsserted(() -> {
-                            var response =
-                                    send(http, HttpRequest.newBuilder(orderUri).GET());
-                            assertThat(response.statusCode()).isEqualTo(200);
-                            assertThat(response.body()).contains("RESERVED");
-                        });
+                for (UUID id : List.of(orderId, queuedOrderId)) {
+                    URI orderUri = orders.orderUri(id);
+                    await().atMost(TIMEOUT)
+                            .ignoreExceptionsInstanceOf(IOException.class)
+                            .untilAsserted(() -> {
+                                var response = send(
+                                        http, HttpRequest.newBuilder(orderUri).GET());
+                                assertThat(response.statusCode()).isEqualTo(200);
+                                assertThat(response.body()).contains("RESERVED");
+                            });
+                }
 
-                long duplicateOffset = publishDuplicate(bootstrap, new OrderPlaced(orderId, "widget", 2));
+                long duplicateOffset =
+                        publish(bootstrap, Messages.ORDERS, orderId, new OrderPlaced(orderId, "widget", 2));
                 await().atMost(TIMEOUT).untilAsserted(() -> {
                     var offsets = admin.listConsumerGroupOffsets("outbox-warehouse")
                             .partitionsToOffsetAndMetadata()
@@ -107,8 +120,8 @@ class OutboxRecoveryIT {
                 });
             }
             assertThat(scalar(warehouseDb, "SELECT available FROM stock WHERE sku = 'widget'"))
-                    .isEqualTo(8);
-            assertThat(scalar(warehouseDb, "SELECT COUNT(*) FROM reservations")).isEqualTo(1);
+                    .isEqualTo(6);
+            assertThat(scalar(warehouseDb, "SELECT COUNT(*) FROM reservations")).isEqualTo(2);
         }
     }
 
@@ -117,15 +130,7 @@ class OutboxRecoveryIT {
     }
 
     private Service start(String service, String name, String url, String bootstrap) throws IOException {
-        var target = Path.of("..", service, "target");
-        Path jar;
-        try (var files = Files.list(target)) {
-            jar = files.filter(path -> path.getFileName().toString().matches("outbox-" + service + "-[0-9].*\\.jar"))
-                    .filter(path -> !path.getFileName().toString().matches(".*-(sources|javadoc|tests)\\.jar"))
-                    .findFirst()
-                    .orElseThrow(() -> new IllegalStateException("No runnable JAR in " + target));
-        }
-
+        Path jar = Path.of("..", service, "target", "outbox-" + service + ".jar");
         Path log = directory.resolve(name + ".log");
         var command = new ProcessBuilder(
                 Path.of(System.getProperty("java.home"), "bin", "java").toString(), "-jar", jar.toString());
@@ -141,11 +146,10 @@ class OutboxRecoveryIT {
         return http.send(request.timeout(Duration.ofSeconds(5)).build(), HttpResponse.BodyHandlers.ofString());
     }
 
-    private static long publishDuplicate(String bootstrap, OrderPlaced order) throws Exception {
+    private static long publish(String bootstrap, String topic, UUID orderId, Object message) throws Exception {
         var properties = Map.<String, Object>of("bootstrap.servers", bootstrap, "max.block.ms", "5000");
         try (var producer = new KafkaProducer<>(properties, new StringSerializer(), new ByteArraySerializer())) {
-            var record = new ProducerRecord<>(
-                    Messages.ORDERS, order.orderId().toString(), new JsonKafkaSerializer().serialize(order));
+            var record = new ProducerRecord<>(topic, orderId.toString(), new JsonKafkaSerializer().serialize(message));
             return producer.send(record).get(10, TimeUnit.SECONDS).offset();
         }
     }

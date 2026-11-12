@@ -1,5 +1,5 @@
 outbox:
-  dbUrl: ${WAREHOUSE_DB_URL:jdbc:h2:file:./build/outbox-data/warehouse;WRITE_DELAY=0}
+  dbUrl: ${WAREHOUSE_DB_URL:jdbc:h2:file:./build/outbox-data/warehouse;WRITE_DELAY=0;DB_CLOSE_DELAY=-1}
   kafkaBootstrap: ${KAFKA_BOOTSTRAP:localhost:9092}
 tiko:
   kafka:

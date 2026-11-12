@@ -35,8 +35,8 @@ In another terminal, build and run the services in separate shells, both from th
 
 ```sh
 mvn -pl :outbox-e2e -am package
-java -jar tiko-examples/17_transactional_outbox/warehouse/target/outbox-warehouse-0.6.1-SNAPSHOT.jar
-java -jar tiko-examples/17_transactional_outbox/orders/target/outbox-orders-0.6.1-SNAPSHOT.jar
+java -jar tiko-examples/17_transactional_outbox/warehouse/target/outbox-warehouse.jar
+java -jar tiko-examples/17_transactional_outbox/orders/target/outbox-orders.jar
 ```
 
 The warehouse starts with ten units of `widget`. Submit an order and query its state:
@@ -54,7 +54,8 @@ Repeating the same ID and payload reuses the order. Reusing the ID with a differ
 `KAFKA_BOOTSTRAP` defaults to `localhost:9092`. The order server listens on loopback and accepts
 `ORDERS_HTTP_PORT`. `ORDERS_DB_URL` and `WAREHOUSE_DB_URL` override the JDBC URLs. By default,
 both database files live under `target/outbox-data` in the working directory and survive process
-restarts. Use dedicated database paths if running multiple copies of the demo.
+restarts. The default URLs keep H2 open between relay polls with `DB_CLOSE_DELAY=-1`. Use
+dedicated database paths if running multiple copies of the demo.
 
 ## Delivery and transaction boundaries
 
@@ -64,15 +65,16 @@ restarts. Use dedicated database paths if running multiple copies of the demo.
 | Outbox relay | A failed send or acknowledgement leaves the row pending. A crash after broker acknowledgement and before row deletion may publish the row twice. |
 | Kafka ingress | Each bridge commits its local database work before returning. Tiko closes its `EVENT` scope and then commits the Kafka offset. A bridge exception reaches the Kafka runner, which uses the default `SEEK` policy to retry. |
 | Warehouse deduplication | The unique order ID in `reservations` is the durable deduplication key. The stock update, recorded decision and result outbox row share one transaction. |
-| Order result | Applying the same terminal decision again has no effect. A missing order or conflicting decision is an ingest failure. |
+| Order result | Applying the same terminal decision again has no effect. A result for a missing order or with a conflicting decision is logged and skipped. Transient database failures still retry. |
 
 The JDBC transactions are explicit application code. An `EVENT` scope defines the DI and event
 lifecycle. The database change is inside `@KafkaSource`, where a thrown failure prevents offset
 commit on that delivery. A later bus handler has separate error handling, so the example keeps
 the acknowledgement-critical write at the bridge boundary.
 
-The example assumes one relay per database and uses one pending row at a time. A relay that
-cannot publish its oldest row retries it and delays later rows. The Kafka demo runs a single broker.
+The example assumes one relay per database. It publishes pending rows in order and waits for
+the next poll only when the outbox is empty or a send fails. An unsent oldest row delays later
+rows. The Kafka demo runs a single broker.
 Scaling the relay, retention and operator-driven replay, credentials, and schema evolution depend
 on the production deployment.
 
@@ -100,7 +102,8 @@ mvn -pl :outbox-e2e -am verify
 ```
 
 The database tests run without Docker. The Testcontainers integration test starts a real broker
-and forks separate JVMs for the two services. It commits an HTTP order while the order process
-cannot reach Kafka, kills that process, and checks that both the order and its outbox row survived.
-It restarts the service against the broker, waits for the warehouse decision over Kafka, then
-delivers the same order again and checks the consumer offset and persisted stock.
+and forks separate JVMs for the two services. It commits two HTTP orders while the order process
+cannot reach Kafka, kills that process, and checks that the orders and their outbox rows survived.
+It puts a stale result ahead of the valid results on the same Kafka partition and verifies that
+both orders still reach a warehouse decision after restart. It then replays one order and checks
+the consumer offset and persisted stock.

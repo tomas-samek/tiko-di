@@ -10,8 +10,8 @@ import org.apache.kafka.clients.producer.RecordMetadata
 
 /** Each example database has one relay. Writers can enqueue while it waits for Kafka. */
 class JdbcOutbox(private val database: DataSource) {
-    fun publishNext(send: (ProducerRecord<String, ByteArray>) -> Future<RecordMetadata>) {
-        val row = first() ?: return
+    fun publishNext(send: (ProducerRecord<String, ByteArray>) -> Future<RecordMetadata>): Boolean {
+        val row = first() ?: return false
         send(ProducerRecord(row.topic, row.key, row.payload)).get(6, TimeUnit.SECONDS)
         // A crash after the acknowledgement and before the delete can produce a duplicate.
         database.connection.use { connection ->
@@ -20,6 +20,7 @@ class JdbcOutbox(private val database: DataSource) {
                 delete.executeUpdate()
             }
         }
+        return true
     }
 
     private fun first(): Pending? = database.connection.use { connection ->

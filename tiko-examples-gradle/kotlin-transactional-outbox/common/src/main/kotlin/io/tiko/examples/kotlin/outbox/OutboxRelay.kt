@@ -26,15 +26,17 @@ class OutboxRelay(database: DataSource, bootstrap: String) : AutoCloseable {
     private val worker = Executors.newSingleThreadScheduledExecutor(Thread.ofPlatform().name("outbox-relay").factory())
 
     init {
-        worker.scheduleWithFixedDelay(::publishNext, 0, 250, TimeUnit.MILLISECONDS)
+        worker.scheduleWithFixedDelay(::drainOutbox, 0, 250, TimeUnit.MILLISECONDS)
     }
 
-    private fun publishNext() {
+    private fun drainOutbox() {
         try {
-            outbox.publishNext { producer.send(it) }
+            while (!Thread.currentThread().isInterrupted && outbox.publishNext { producer.send(it) }) {
+                // Continue until the outbox is empty.
+            }
         } catch (interrupted: InterruptedException) {
             Thread.currentThread().interrupt()
-        } catch (failure: Exception) {
+        } catch (failure: Throwable) {
             log.log(System.Logger.Level.WARNING, "Outbox publish failed. The pending row will be retried.", failure)
         }
     }
