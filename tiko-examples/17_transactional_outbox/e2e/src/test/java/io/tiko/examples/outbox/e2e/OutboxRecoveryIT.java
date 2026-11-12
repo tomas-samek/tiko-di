@@ -60,7 +60,7 @@ class OutboxRecoveryIT {
             admin.createTopics(List.of(
                             new NewTopic(Messages.ORDERS, 1, (short) 1), new NewTopic(Messages.RESULTS, 1, (short) 1)))
                     .all()
-                    .get(30, TimeUnit.SECONDS);
+                    .get(TIMEOUT.toSeconds(), TimeUnit.SECONDS);
 
             try (var disconnected = start("orders", "orders-disconnected", orderDb, "127.0.0.1:1")) {
                 URI orderUri = disconnected.orderUri(orderId);
@@ -85,11 +85,14 @@ class OutboxRecoveryIT {
             try (var warehouse = start("warehouse", "warehouse", warehouseDb, bootstrap);
                     var orders = start("orders", "orders-restarted", orderDb, bootstrap)) {
                 URI orderUri = orders.orderUri(orderId);
-                await().atMost(TIMEOUT).untilAsserted(() -> {
-                    var response = send(http, HttpRequest.newBuilder(orderUri).GET());
-                    assertThat(response.statusCode()).isEqualTo(200);
-                    assertThat(response.body()).contains("RESERVED");
-                });
+                await().atMost(TIMEOUT)
+                        .ignoreExceptionsInstanceOf(IOException.class)
+                        .untilAsserted(() -> {
+                            var response =
+                                    send(http, HttpRequest.newBuilder(orderUri).GET());
+                            assertThat(response.statusCode()).isEqualTo(200);
+                            assertThat(response.body()).contains("RESERVED");
+                        });
 
                 long duplicateOffset = publishDuplicate(bootstrap, new OrderPlaced(orderId, "widget", 2));
                 await().atMost(TIMEOUT).untilAsserted(() -> {
