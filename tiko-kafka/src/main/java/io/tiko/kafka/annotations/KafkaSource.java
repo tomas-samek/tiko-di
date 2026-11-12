@@ -14,6 +14,11 @@ import java.lang.annotation.Target;
  * invokes the method (with an optional {@link io.tiko.kafka.KafkaContext} as the second
  * parameter), and publishes the return value to the local {@code EventBus}.
  *
+ * <p>A method that returns {@code null} consumes the record without publishing anything: the
+ * offset is committed and the record is not redelivered (in Kotlin, declare the return type
+ * nullable). A method that throws takes the ingest-error path instead
+ * ({@code tiko.kafka.poison-record-policy}, or a registered {@code KafkaIngestErrorDecider}).
+ *
  * <p>A sibling {@code @io.tiko.annotations.EventTrigger(eventName = "...")} on the same
  * method is required and declares the tracing name for the published event. The actual
  * dispatch on the local bus is by return-type class, not by name. See the spec

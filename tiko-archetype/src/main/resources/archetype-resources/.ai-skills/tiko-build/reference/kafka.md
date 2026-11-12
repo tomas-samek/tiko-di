@@ -9,7 +9,8 @@ service — **fails the processor**. A `@KafkaSource` is a *bridge into the loca
 event bus*, not a consumer: it has three hard compile-time rules.
 
 1. Enclosing class is `@Component(scope = Scope.SINGLETON)`.
-2. The method is **non-void** — it returns the local event payload.
+2. The method is **non-void** — it returns the local event payload (or `null` to consume the
+   record without publishing anything).
 3. It carries a sibling **`@EventTrigger`** on the same method.
 
 The return value is published on the local bus **by its type**; an ordinary
@@ -71,8 +72,11 @@ and dropped, or that you recover yourself.
 
 But a bridge exception is retried under `SEEK` until the bridge stops throwing, so a failure
 that retrying can't fix (a result for an order your database doesn't have) blocks the partition
-for good. Throw a dedicated exception for those permanent cases and dead-letter it from a
-`KafkaIngestErrorDecider` (below); everything else keeps being sought back. Reference:
+for good. Handle the permanent cases without letting them retry: if the bridge recognizes the
+case itself, log it and **return `null`** (the record is committed, nothing is published; in Kotlin
+declare the return type nullable). For an exception from deeper down, or to dead-letter it, throw
+a dedicated exception and decide it from a `KafkaIngestErrorDecider` (below). Everything else keeps
+being sought back. Decider reference:
 `OrderKafkaConsumer` + `WarehouseIngestPolicy` + `RejectedOrderDoesNotBlockPartitionIT` in
 [`tiko-examples/08_kafka_order_warehouse`](https://github.com/tomas-samek/tiko-di/tree/main/tiko-examples/08_kafka_order_warehouse).
 

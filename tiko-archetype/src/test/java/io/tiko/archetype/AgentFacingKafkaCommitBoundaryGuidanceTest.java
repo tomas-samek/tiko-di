@@ -23,6 +23,7 @@ class AgentFacingKafkaCommitBoundaryGuidanceTest {
                         "goes in the bridge method",
                         "idempotent",
                         "blocks the partition",
-                        "WarehouseIngestPolicy");
+                        "WarehouseIngestPolicy",
+                        "return `null`");
     }
 }
