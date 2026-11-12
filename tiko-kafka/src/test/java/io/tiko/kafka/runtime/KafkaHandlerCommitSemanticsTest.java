@@ -65,6 +65,42 @@ class KafkaHandlerCommitSemanticsTest {
                 .isEmpty();
     }
 
+    /** #692: a bridge that returns null consumes the record: committed, nothing published, no redelivery. */
+    @Test
+    void bridgeReturningNullCommitsWithoutPublishingAndTheNextRecordFlows() {
+        TopicPartition p0 = new TopicPartition("commit-null", 0);
+        ScriptedConsumerClient client = new ScriptedConsumerClient(List.of(new ConsumerRecords<>(Map.of(
+                p0,
+                List.of(
+                        RunnerTestSupport.consumerRecord("commit-null", 0, 0, "skip"),
+                        RunnerTestSupport.consumerRecord("commit-null", 0, 1, "ok"))))));
+        List<ErrorContext> ingestErrors = new CopyOnWriteArrayList<>();
+        List<Object> delivered = new CopyOnWriteArrayList<>();
+
+        try (Container container = Tiko.create()) {
+            container.getEventBus().subscribe(String.class, delivered::add);
+            ThreadPerTopicRunner runner = new ThreadPerTopicRunner(
+                    RunnerTestSupport.stringSource("commit-null", payload -> payload.equals("skip") ? null : payload),
+                    client,
+                    container,
+                    container.getEventBus(),
+                    ingestErrors::add,
+                    RunnerTestSupport.UTF8,
+                    RunnerTestSupport.config());
+            runner.start();
+            try {
+                await().atMost(Duration.ofSeconds(5)).until(() -> client.commits.contains(Map.entry(p0, 2L)));
+            } finally {
+                runner.stop();
+            }
+        }
+
+        assertThat(client.commits).contains(Map.entry(p0, 1L), Map.entry(p0, 2L));
+        assertThat(delivered).containsExactly("ok");
+        assertThat(client.seeks).isEmpty();
+        assertThat(ingestErrors).isEmpty();
+    }
+
     @Test
     void offsetCommitsBeforeAsyncHandlerExecutes() {
         TopicPartition p0 = new TopicPartition("commit-async", 0);

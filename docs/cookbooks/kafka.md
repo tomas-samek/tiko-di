@@ -58,7 +58,8 @@ Both artifacts are managed by `tiko-bom`; with the BOM imported, the explicit
 
 A `@KafkaSource` method polls a topic, deserializes each record into the method's
 first parameter type, invokes the method, and publishes the **return value** onto the
-local `EventBus` (dispatched **by return type**, not by name).
+local `EventBus` (dispatched **by return type**, not by name). A `null` return publishes nothing
+and still commits the record (see [below](#which-failures-redeliver-a-record)).
 
 **Rules (enforced at compile time):**
 - The enclosing class is `@Component(scope = Scope.SINGLETON)` (consumer threads run
@@ -98,6 +99,7 @@ handlers did with it:
 | What throws | What happens to the record |
 |---|---|
 | Deserialization, the bridge method, or the publish | It takes the ingest-error path ([section 5](#5-poison-messages-ingest-failures)). With the default `SEEK` it is redelivered. |
+| Nothing throws, but the bridge returns `null` | The offset is committed and nothing is published. The record is not redelivered. |
 | A sync `@EventHandler` of the emitted event, or a handler further down an `@EventTrigger` chain | The exception goes to the `ErrorHandler` and the offset is committed. The record is not redelivered. |
 | An async handler (`async = true`) | The commit doesn't wait for the handler. Its failure, or a crash while it runs, is not redelivered. |
 
@@ -113,12 +115,20 @@ failure the `ErrorHandler` may log, or that you recover yourself.
 A bridge exception is retried under the default `SEEK` until the bridge stops throwing. That is
 right for a transient failure, such as a database that is briefly down. It is wrong for a failure
 that retrying can't fix, such as a result for an order your database doesn't have: that record
-blocks its partition for good, and every record behind it waits. So sort your bridge's exceptions.
-Throw a dedicated exception for the permanent cases and let a
-[`KafkaIngestErrorDecider`](#programmatic-ingest-error-decisions-kafkaingesterrordecider) skip or
-dead-letter it, while everything else is still sought back and retried.
+blocks its partition for good, and every record behind it waits. So sort your failures into the two
+kinds, and handle the permanent ones without throwing:
 
-The runnable example does exactly this. In
+- **The bridge recognizes the case itself** (an unknown order, a value out of range): log it and
+  return `null`. The record is consumed, nothing is published, and the offset moves on. In Kotlin,
+  declare the return type nullable (`OrderPlaced?`).
+- **The failure comes from deeper down** (a library, the serializer) or needs a dead-letter record:
+  throw, or let it propagate, and register a
+  [`KafkaIngestErrorDecider`](#programmatic-ingest-error-decisions-kafkaingesterrordecider) that
+  skips or dead-letters the permanent exception types.
+
+Either way, everything else is still sought back and retried.
+
+The runnable example shows the decider form. In
 [`tiko-examples/08_kafka_order_warehouse`](../../tiko-examples/08_kafka_order_warehouse),
 `OrderKafkaConsumer` rejects an order with a non-positive amount by throwing
 `RejectedOrderException`, and `WarehouseIngestPolicy` dead-letters it. `RejectedOrderDoesNotBlockPartitionIT`
