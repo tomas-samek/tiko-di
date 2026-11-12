@@ -5,6 +5,7 @@ import io.tiko.examples.kotlin.outbox.ORDERS
 import io.tiko.examples.kotlin.outbox.OrderPlaced
 import io.tiko.examples.kotlin.outbox.RESULTS
 import io.tiko.kafka.serializer.JsonKafkaSerializer
+import java.io.File
 import java.io.IOException
 import java.net.URI
 import java.net.http.HttpClient
@@ -99,11 +100,11 @@ class OutboxRecoveryTest {
     private fun jdbcUrl(service: String) = "jdbc:h2:file:" + directory.resolve(service) + ";WRITE_DELAY=0"
 
     private fun start(service: String, name: String, url: String, bootstrap: String): Service {
-        val lib = Path.of(System.getProperty("$service.lib"))
+        val lib = System.getProperty("$service.lib")
         val log = directory.resolve("$name.log")
         val command = ProcessBuilder(
             Path.of(System.getProperty("java.home"), "bin", "java").toString(),
-            "-cp", lib.resolve("*").toString(), "io.tiko.examples.kotlin.outbox.$service.MainKt",
+            "-cp", lib + File.separator + "*", "io.tiko.examples.kotlin.outbox.$service.MainKt",
         ).redirectErrorStream(true).redirectOutput(log.toFile())
         command.environment().apply {
             put("KAFKA_BOOTSTRAP", bootstrap)
