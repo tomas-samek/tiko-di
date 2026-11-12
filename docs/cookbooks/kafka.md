@@ -1,6 +1,8 @@
 # Cookbook: Kafka transport (`@KafkaSource` / `@KafkaSink`)
 
 > Runnable example: [`tiko-examples/08_kafka_order_warehouse`](../../tiko-examples/08_kafka_order_warehouse).
+> HTTP → database → Kafka including its failure paths (a broker outage, a crash between commit and
+> publish, replayed and stale messages): [`tiko-examples/17_transactional_outbox`](../../tiko-examples/17_transactional_outbox).
 
 Tiko's core is compile-time DI + an in-process event bus. A message broker is
 intentionally out of scope of the core — but Tiko ships a **first-party Kafka

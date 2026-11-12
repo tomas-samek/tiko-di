@@ -7,6 +7,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.sql.DataSource;
 import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.StringSerializer;
@@ -16,11 +17,23 @@ public final class OutboxRelay implements AutoCloseable {
 
     private final ScheduledExecutorService worker;
     private final JdbcOutbox outbox;
-    private final KafkaProducer<String, byte[]> producer;
+    private final Producer<String, byte[]> producer;
 
     public OutboxRelay(DataSource database, String bootstrapServers) {
+        this(database, connect(bootstrapServers));
+    }
+
+    /** Starts relaying {@code database}'s outbox through {@code producer}; tests pass a {@code MockProducer}. */
+    public OutboxRelay(DataSource database, Producer<String, byte[]> producer) {
         this.outbox = new JdbcOutbox(database);
-        this.producer = new KafkaProducer<>(
+        this.producer = producer;
+        this.worker = Executors.newSingleThreadScheduledExecutor(
+                Thread.ofPlatform().name("outbox-relay").factory());
+        worker.scheduleWithFixedDelay(this::drainOutbox, 0, 250, TimeUnit.MILLISECONDS);
+    }
+
+    private static Producer<String, byte[]> connect(String bootstrapServers) {
+        return new KafkaProducer<>(
                 Map.of(
                         ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
                         bootstrapServers,
@@ -36,9 +49,6 @@ public final class OutboxRelay implements AutoCloseable {
                         2000),
                 new StringSerializer(),
                 new ByteArraySerializer());
-        this.worker = Executors.newSingleThreadScheduledExecutor(
-                Thread.ofPlatform().name("outbox-relay").factory());
-        worker.scheduleWithFixedDelay(this::drainOutbox, 0, 250, TimeUnit.MILLISECONDS);
     }
 
     private void drainOutbox() {

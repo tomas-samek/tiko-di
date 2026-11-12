@@ -162,7 +162,7 @@ jobs:
         working-directory: tiko-examples-gradle/kotlin-transactional-outbox
         run: |
           for attempt in 1 2 3; do
-            ./gradlew :e2e:test -PrequireDocker && exit 0
+            ./gradlew :common:test :e2e:test -PrequireDocker && exit 0
             echo "gradle attempt $attempt failed" >&2
             sleep 15
           done
