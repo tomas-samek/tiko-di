@@ -40,6 +40,7 @@ class ConfigBinderGeneratorTest {
         assertThat(content).contains("ctx.scalarOrDefault(node, \"maxConnections\"");
         assertThat(content).contains("ctx.optionalScalar(node, \"connectTimeout\"");
         assertThat(content).contains("ctx.checkUnknownKeys(node, \"db\"");
+        assertThat(content).contains("if (ctx.hasErrors())");
         assertThat(content).contains("return new DbConfig(");
     }
 

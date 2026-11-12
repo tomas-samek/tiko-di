@@ -1,6 +1,7 @@
 package io.tiko.processor.ksp;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.google.testing.compile.CompilationSubject;
 import com.google.testing.compile.Compiler;
@@ -80,6 +81,52 @@ class KotlinConfigurationTest {
             var server = program.get("app.Server");
             assertThat(server.getClass().getMethod("describe").invoke(server)).isEqualTo("example.org:8080/12/PT5S/3");
         }
+    }
+
+    /**
+     * Required keys the configuration does not supply fail the boot with the config report naming
+     * every one of them, across records and for each kind of field, not with the Kotlin
+     * constructor's null check on the first (#671).
+     */
+    @Test
+    void missingRequiredKeysFailBootWithConfigReport(@TempDir Path dir) throws Exception {
+        var source = KspCompiler.kotlin(
+                "App.kt",
+                "package app",
+                "",
+                "import io.tiko.Scope",
+                "import io.tiko.annotations.Component",
+                "import io.tiko.annotations.Configuration",
+                "",
+                "@Configuration(prefix = \"app\")",
+                "@JvmRecord",
+                "data class AppConfig(val host: String, val port: Int, val tags: List<String>, val pool: Pool)",
+                "",
+                "@JvmRecord",
+                "data class Pool(val size: Int)",
+                "",
+                "@Configuration(prefix = \"db\")",
+                "@JvmRecord",
+                "data class DbConfig(val url: String, val user: String, val poolSize: Int)",
+                "",
+                "@Component(scope = Scope.SINGLETON)",
+                "class Server(val app: AppConfig, val db: DbConfig)");
+        var yaml = dir.resolve("app.yaml");
+        Files.writeString(yaml, String.join("\n", "app:", "  port: 8080", "db:", "  user: sa"), StandardCharsets.UTF_8);
+
+        var result = KspCompiler.compile(new TikoSymbolProcessorProvider(), source);
+
+        assertThat(result.exitCode()).as(result.messages()).isEqualTo(KotlinCompilation.ExitCode.OK);
+        assertThatThrownBy(() -> KspProgram.boot(result, yaml).close())
+                .cause()
+                .satisfies(cause ->
+                        assertThat(cause.getClass().getName()).isEqualTo("io.tiko.config.ConfigValidationException"))
+                .hasMessageContaining("5 problem(s)")
+                .hasMessageContaining("app.host is required but missing")
+                .hasMessageContaining("app.tags is required but missing")
+                .hasMessageContaining("app.pool is required but missing")
+                .hasMessageContaining("db.url is required but missing")
+                .hasMessageContaining("db.poolSize is required but missing");
     }
 
     @Test
