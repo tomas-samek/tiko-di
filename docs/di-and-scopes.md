@@ -18,6 +18,30 @@ A **unit of work** is the synchronous reach of an inbound stimulus, bounded at e
 
 EVENT-scoped beans only resolve while a unit of work is open. Resolving one outside a frame — via `container.get(...)`, `getAll(...)`, or a method call on a proxy held by a SINGLETON — throws `NoActiveEventScopeException` instead of silently materializing an instance that no teardown would ever drain.
 
+### When singletons are constructed
+
+When the container starts (`Tiko.create(...)`, `Tiko.daemon(...)`), it constructs every SINGLETON `@Component`, and with it everything those constructors take. Everything else is constructed on first use:
+
+- **A SINGLETON value from a `@Produces` method** is built the first time something resolves it: a constructor that takes it, a `container.get(...)`, or `Provider.get()`. Constructing the `@Component` that declares the method does not call the method.
+- **A dependency taken as `Provider<T>`** is not resolved until `get()` is called.
+- **EVENT and PROTOTYPE beans** are built inside a unit of work and per injection.
+
+A failure while the container starts fails `Tiko.create(...)` or `Tiko.daemon(...)`, and the container shuts down what it already started. A produced value that is first resolved later fails at that later call instead.
+
+So a produced resource that starts its own work, such as a relay, a scheduler or a pool you want to fail fast, does nothing until something asks for it. To start it at boot, take it as a constructor parameter of a SINGLETON `@Component`:
+
+```java
+@Component(scope = Scope.SINGLETON)
+public class OutboxStartup {
+    @Inject
+    public OutboxStartup(OutboxRelay relay) {
+        // Constructed at container start, so the produced relay is built and running too.
+    }
+}
+```
+
+If the class is yours, making it a SINGLETON `@Component` instead of producing it does the same.
+
 ### Cross-scope injection
 
 An EVENT-scoped bean injected into a SINGLETON is wired through an **auto-generated proxy** that resolves the current unit's instance on every call. The proxied bean must implement an interface (no reflection — the processor emits a typed proxy class).

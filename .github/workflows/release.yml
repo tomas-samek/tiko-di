@@ -108,7 +108,8 @@ jobs:
         # everything is in lockstep before we deploy. The Gradle example's
         # `tikoVersion` (every tiko-examples-gradle/*/gradle.properties, also not reactor modules) follows suit, and
         # is bumped again in the next-snapshot step so the kotlin-gradle CI job tracks the
-        # reactor SNAPSHOT (unlike .mcp.json below).
+        # reactor SNAPSHOT (unlike .mcp.json below). Example 13's .mcp.json runs the locally built
+        # tiko-mcp jar, so its jar name follows the reactor version at both steps too.
         #
         # The archetype's .mcp.json template also carries a tiko-mcp coordinate that
         # must match the released version (it's the version users of the scaffolded
@@ -125,6 +126,8 @@ jobs:
               tiko-examples-gradle/*/gradle.properties
           sed -i "s|tiko-mcp:[0-9]\+\.[0-9]\+\.[0-9]\+|tiko-mcp:${{ inputs.release_version }}|g" \
               tiko-archetype/src/main/resources/archetype-resources/.mcp.json
+          sed -i "s|tiko-mcp-[^\"]*\.jar|tiko-mcp-${{ inputs.release_version }}.jar|" \
+              tiko-examples/13_mcp_introspection/.mcp.json
 
       # -Prelease attaches -sources/-javadoc jars (#211) and GPG-signs every artifact
       # (#212); the central-publishing-maven-plugin (#213) bundles the reactor and uploads
@@ -160,6 +163,8 @@ jobs:
               tiko-archetype/src/main/resources/archetype-resources/pom.xml
           sed -i "s|^tikoVersion=.*|tikoVersion=${{ inputs.next_snapshot }}|" \
               tiko-examples-gradle/*/gradle.properties
+          sed -i "s|tiko-mcp-[^\"]*\.jar|tiko-mcp-${{ inputs.next_snapshot }}.jar|" \
+              tiko-examples/13_mcp_introspection/.mcp.json
 
       - name: Commit next snapshot
         run: |

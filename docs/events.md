@@ -368,8 +368,10 @@ A second `close()` reports nothing. Threads of an executor you supply with
 `TikoOptions.eventExecutor(...)` are yours and not tracked, and neither are threads a component
 starts with its own executor. Threads created through Tiko's own factories
 (`DefaultEventExecutorFactory.create(...)`, `BoundedExecution.run(...)`) during construction,
-`start()` (eager singletons, `@PostConstruct`, `@Produces` singletons, synchronous
-`ApplicationStartedEvent` handlers) or shutdown are tracked. So is the `tiko-event-retry-N`
+`start()` (SINGLETON components with their `@PostConstruct`, the `@Produces` singletons those
+components take, synchronous `ApplicationStartedEvent` handlers) or shutdown are tracked. A
+`@Produces` singleton nothing takes is built later, on first use (see
+[When singletons are constructed](di-and-scopes.md#when-singletons-are-constructed)). So is the `tiko-event-retry-N`
 thread, with the default executor or one you supply: a retry that runs on it when your
 executor's queue is full is reported like any other container thread.
 

@@ -58,7 +58,8 @@ Both artifacts are managed by `tiko-bom`; with the BOM imported, the explicit
 
 A `@KafkaSource` method polls a topic, deserializes each record into the method's
 first parameter type, invokes the method, and publishes the **return value** onto the
-local `EventBus` (dispatched **by return type**, not by name).
+local `EventBus` (dispatched **by return type**, not by name). A `null` return publishes nothing
+and still commits the record (see [below](#which-failures-redeliver-a-record)).
 
 **Rules (enforced at compile time):**
 - The enclosing class is `@Component(scope = Scope.SINGLETON)` (consumer threads run
@@ -88,6 +89,51 @@ public class ReferenceData {
     public void onProductUpdate(ProductUpdate u) { repository.upsert(u); }
 }
 ```
+
+### Which failures redeliver a record
+
+The bridge and the sync handlers of its event run in one unit of work, but they don't fail
+the same way. The offset acknowledges that the event reached the local bus, not what its
+handlers did with it:
+
+| What throws | What happens to the record |
+|---|---|
+| Deserialization, the bridge method, or the publish | It takes the ingest-error path ([section 5](#5-poison-messages-ingest-failures)). With the default `SEEK` it is redelivered. |
+| Nothing throws, but the bridge returns `null` | The offset is committed and nothing is published. The record is not redelivered. |
+| A sync `@EventHandler` of the emitted event, or a handler further down an `@EventTrigger` chain | The exception goes to the `ErrorHandler` and the offset is committed. The record is not redelivered. |
+| An async handler (`async = true`) | The commit doesn't wait for the handler. Its failure, or a crash while it runs, is not redelivered. |
+
+So moving a write from the bridge into a handler looks like an ordinary refactor, but it
+changes what happens when the write fails. In the example above, a failed
+`repository.upsert(u)` is logged and the update is lost.
+
+Put work that must be redelivered when it fails in the bridge method, before it returns: the
+write itself, or a record of the intent (an outbox row) that later work picks up. A redelivered
+record runs the bridge again, so make that work idempotent. Keep in handlers the work whose
+failure the `ErrorHandler` may log, or that you recover yourself.
+
+A bridge exception is retried under the default `SEEK` until the bridge stops throwing. That is
+right for a transient failure, such as a database that is briefly down. It is wrong for a failure
+that retrying can't fix, such as a result for an order your database doesn't have: that record
+blocks its partition for good, and every record behind it waits. So sort your failures into the two
+kinds, and handle the permanent ones without throwing:
+
+- **The bridge recognizes the case itself** (an unknown order, a value out of range): log it and
+  return `null`. The record is consumed, nothing is published, and the offset moves on. In Kotlin,
+  declare the return type nullable (`OrderPlaced?`).
+- **The failure comes from deeper down** (a library, the serializer) or needs a dead-letter record:
+  throw, or let it propagate, and register a
+  [`KafkaIngestErrorDecider`](#programmatic-ingest-error-decisions-kafkaingesterrordecider) that
+  skips or dead-letters the permanent exception types.
+
+Either way, everything else is still sought back and retried.
+
+The runnable example shows the decider form. In
+[`tiko-examples/08_kafka_order_warehouse`](../../tiko-examples/08_kafka_order_warehouse),
+`OrderKafkaConsumer` rejects an order with a non-positive amount by throwing
+`RejectedOrderException`, and `WarehouseIngestPolicy` dead-letters it. `RejectedOrderDoesNotBlockPartitionIT`
+shows that the valid order behind it on the same partition is processed. Without the decider, that
+test times out.
 
 `@KafkaSource` elements: `topic` (required); `consumerGroup` (default `""` → falls back
 to `tiko.kafka.consumer-group`); `serializer` (default → `tiko.kafka.serializer`);
@@ -171,6 +217,10 @@ YAML key.
 
 ## 5. Poison messages (ingest failures)
 
+A handler of the emitted event that throws is not an ingest failure: its record is committed
+and nothing in this section applies (see
+[Which failures redeliver a record](#which-failures-redeliver-a-record)).
+
 When a record fails to ingest — deserialize, bridge dispatch, or publish — the runner
 routes a `KafkaIngestError` to your `ErrorHandler`, then applies the configured
 **`tiko.kafka.poison-record-policy`**:
@@ -230,8 +280,9 @@ ingest failure; when absent, the static `poison-record-policy` runs unchanged
 public class OrderIngestPolicy implements KafkaIngestErrorDecider {
     @Override
     public IngestDecision decide(KafkaIngestError error, int attempt) {
-        if (error.cause() instanceof io.tiko.UndecodablePayloadException) {
-            return IngestDecision.DEAD_LETTER; // can never decode — hand off now, no retry
+        if (error.cause() instanceof io.tiko.UndecodablePayloadException
+                || error.cause() instanceof RejectedOrderException) {
+            return IngestDecision.DEAD_LETTER; // fails the same way every time — hand off now, no retry
         }
         return attempt < 5 ? IngestDecision.SEEK   // possibly transient — retry
                            : IngestDecision.DEAD_LETTER;
@@ -243,7 +294,9 @@ public class OrderIngestPolicy implements KafkaIngestErrorDecider {
 can never be decoded into the target type. The bundled JSON serializer raises it for every
 decode failure; it carries the target type (`targetType()`) and no cause or payload value.
 For a decode failure, `error.cause()` is that exception itself, so test it with
-`instanceof` — never by matching the message text.
+`instanceof` — never by matching the message text. The same holds for an exception your bridge
+throws: `RejectedOrderException` above is the bridge's own exception for an order that can never be
+fulfilled.
 
 `attempt` is the consecutive failure count for the record's offset, starting at
 `1`; bounding the retry is your code's job. The outcomes:

@@ -34,6 +34,35 @@ class KspKafkaBridgeTest {
                 .hasValue("io.tiko.generated.KafkaTransportBootstrap\n");
     }
 
+    /** #692: a bridge may return null to consume a record without publishing, so a nullable return type is valid. */
+    @Test
+    void kotlinKafkaSourceWithNullableReturnGeneratesBootstrap() {
+        var source = KspCompiler.kotlin(
+                "Orders.kt",
+                "package demo",
+                "",
+                "import io.tiko.Scope",
+                "import io.tiko.annotations.Component",
+                "import io.tiko.annotations.EventTrigger",
+                "import io.tiko.kafka.annotations.KafkaSource",
+                "",
+                "@JvmRecord data class OrderPlaced(val orderId: String)",
+                "",
+                "@Component(scope = Scope.SINGLETON)",
+                "class OrderConsumer {",
+                "    @KafkaSource(topic = \"orders\")",
+                "    @EventTrigger(eventName = \"OrderPlaced\")",
+                "    fun fromKafka(placed: OrderPlaced): OrderPlaced? = placed.takeIf { it.orderId.isNotEmpty() }",
+                "}");
+
+        var result = KspCompiler.compile(
+                List.of(new TikoSymbolProcessorProvider(), new KafkaSymbolProcessorProvider()), Map.of(), source);
+
+        assertThat(result.exitCode()).as(result.messages()).isEqualTo(KotlinCompilation.ExitCode.OK);
+        assertThat(result.generatedJava("io.tiko.generated.KafkaTransportBootstrap"))
+                .hasValueSatisfying(bootstrap -> assertThat(bootstrap).contains("fromKafka"));
+    }
+
     /** KSP logs a notice for every processor that has not opted in to its upcoming features. */
     @Test
     void processorsHaveOptedInToUpcomingFeatures() {

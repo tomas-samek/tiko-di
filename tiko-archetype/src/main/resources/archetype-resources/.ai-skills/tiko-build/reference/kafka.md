@@ -9,7 +9,8 @@ service — **fails the processor**. A `@KafkaSource` is a *bridge into the loca
 event bus*, not a consumer: it has three hard compile-time rules.
 
 1. Enclosing class is `@Component(scope = Scope.SINGLETON)`.
-2. The method is **non-void** — it returns the local event payload.
+2. The method is **non-void** — it returns the local event payload (or `null` to consume the
+   record without publishing anything).
 3. It carries a sibling **`@EventTrigger`** on the same method.
 
 The return value is published on the local bus **by its type**; an ordinary
@@ -30,7 +31,7 @@ public class OrderKafkaConsumer {
 @Component(scope = Scope.SINGLETON)
 public class WarehouseService {
     @EventHandler
-    public void on(OrderPlaced event) { /* the actual work — dispatched by type */ }
+    public void on(OrderPlaced event) { /* dispatched by type; a failure here is not redelivered (below) */ }
 }
 ```
 
@@ -55,6 +56,29 @@ Broker config binds to `tiko.kafka.*` with **kebab-case** keys
 (`bootstrap-servers`, not `bootstrapServers`) — they are `@Key`-declared;
 see the key table in [`reference/api-signatures.md`](api-signatures.md). Full contract, configuration, and
 the poison-record story: [`docs/cookbooks/kafka.md`](https://github.com/tomas-samek/tiko-di/blob/main/docs/cookbooks/kafka.md).
+
+### The offset commits when the event reaches the bus, not when handlers succeed
+
+The bridge and the handlers of its event look like one flow, but only the bridge side is
+redelivered. Deserialize, the bridge method and the local publish fail onto the ingest-error
+path below (`SEEK` by default: redelivered). A sync `@EventHandler` that throws goes to the
+`ErrorHandler`, and the offset is committed anyway; the commit doesn't wait for an async handler.
+So moving a write from the bridge into a handler changes what happens when the write fails.
+
+Work that must be redelivered when it fails goes in the bridge method, before it returns:
+the write itself, or an outbox row that later work picks up. Make it idempotent, because a
+redelivered record runs the bridge again. Handlers get the work whose failure may be logged
+and dropped, or that you recover yourself.
+
+But a bridge exception is retried under `SEEK` until the bridge stops throwing, so a failure
+that retrying can't fix (a result for an order your database doesn't have) blocks the partition
+for good. Handle the permanent cases without letting them retry: if the bridge recognizes the
+case itself, log it and **return `null`** (the record is committed, nothing is published; in Kotlin
+declare the return type nullable). For an exception from deeper down, or to dead-letter it, throw
+a dedicated exception and decide it from a `KafkaIngestErrorDecider` (below). Everything else keeps
+being sought back. Decider reference:
+`OrderKafkaConsumer` + `WarehouseIngestPolicy` + `RejectedOrderDoesNotBlockPartitionIT` in
+[`tiko-examples/08_kafka_order_warehouse`](https://github.com/tomas-samek/tiko-di/tree/main/tiko-examples/08_kafka_order_warehouse).
 
 ### A record that fails ingest: the default blocks its partition, on purpose
 

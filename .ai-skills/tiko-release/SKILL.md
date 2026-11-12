@@ -263,6 +263,10 @@ version in all poms" step) — those need no manual bump. `tikoVersion` is set a
 release **and again** at the next-snapshot step, so it follows the reactor SNAPSHOT for
 the `kotlin-gradle` CI job.
 Unlike `.mcp.json`, it never stays pinned to the last release.
+The `tiko-mcp-<version>.jar` name in `tiko-examples/13_mcp_introspection/.mcp.json`
+follows the reactor version at both steps the same way. Example READMEs carry no
+version at all; `ExampleVersionsInSyncTest` fails the build if one names a
+`-SNAPSHOT` version or a versioned jar.
 The workflow does **not** touch the
 prose docs. These advertise the install coordinate as
 literal text and go stale silently — exactly what left the README saying
