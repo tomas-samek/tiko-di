@@ -22,9 +22,6 @@ dependencies {
     implementation("io.github.tomas-samek:tiko-config:$tikoVersion")
     ksp("io.github.tomas-samek:tiko-processor:$tikoVersion")
     kspTest("io.github.tomas-samek:tiko-processor:$tikoVersion")
-    // tiko-processor needs tiko-config on the processor path to compile @Configuration records.
-    ksp("io.github.tomas-samek:tiko-config:$tikoVersion")
-    kspTest("io.github.tomas-samek:tiko-config:$tikoVersion")
 
     implementation("io.ktor:ktor-server-core:$ktorVersion")
     implementation("io.ktor:ktor-server-cio:$ktorVersion")
