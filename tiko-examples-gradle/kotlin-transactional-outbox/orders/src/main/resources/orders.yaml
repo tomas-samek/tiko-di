@@ -1,0 +1,10 @@
+outbox:
+  dbUrl: ${ORDERS_DB_URL:jdbc:h2:file:./build/outbox-data/orders;WRITE_DELAY=0}
+  kafkaBootstrap: ${KAFKA_BOOTSTRAP:localhost:9092}
+  httpHost: ${ORDERS_HTTP_HOST:127.0.0.1}
+  httpPort: ${ORDERS_HTTP_PORT:8080}
+tiko:
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    consumer-group: kotlin-outbox-orders
+    auto-offset-reset: earliest
