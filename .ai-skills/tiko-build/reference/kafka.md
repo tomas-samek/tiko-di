@@ -30,7 +30,7 @@ public class OrderKafkaConsumer {
 @Component(scope = Scope.SINGLETON)
 public class WarehouseService {
     @EventHandler
-    public void on(OrderPlaced event) { /* the actual work — dispatched by type */ }
+    public void on(OrderPlaced event) { /* dispatched by type; a failure here is not redelivered (below) */ }
 }
 ```
 
@@ -55,6 +55,19 @@ Broker config binds to `tiko.kafka.*` with **kebab-case** keys
 (`bootstrap-servers`, not `bootstrapServers`) — they are `@Key`-declared;
 see the key table in [`reference/api-signatures.md`](api-signatures.md). Full contract, configuration, and
 the poison-record story: [`docs/cookbooks/kafka.md`](../../../docs/cookbooks/kafka.md).
+
+### The offset commits when the event reaches the bus, not when handlers succeed
+
+The bridge and the handlers of its event look like one flow, but only the bridge side is
+redelivered. Deserialize, the bridge method and the local publish fail onto the ingest-error
+path below (`SEEK` by default: redelivered). A sync `@EventHandler` that throws goes to the
+`ErrorHandler`, and the offset is committed anyway; the commit doesn't wait for an async handler.
+So moving a write from the bridge into a handler changes what happens when the write fails.
+
+Work that must be redelivered when it fails goes in the bridge method, before it returns:
+the write itself, or an outbox row that later work picks up. Make it idempotent, because a
+redelivered record runs the bridge again. Handlers get the work whose failure may be logged
+and dropped, or that you recover yourself.
 
 ### A record that fails ingest: the default blocks its partition, on purpose
 

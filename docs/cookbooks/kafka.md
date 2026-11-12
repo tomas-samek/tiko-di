@@ -89,6 +89,27 @@ public class ReferenceData {
 }
 ```
 
+### Which failures redeliver a record
+
+The bridge and the sync handlers of its event run in one unit of work, but they don't fail
+the same way. The offset acknowledges that the event reached the local bus, not what its
+handlers did with it:
+
+| What throws | What happens to the record |
+|---|---|
+| Deserialization, the bridge method, or the publish | It takes the ingest-error path ([section 5](#5-poison-messages-ingest-failures)). With the default `SEEK` it is redelivered. |
+| A sync `@EventHandler` of the emitted event, or a handler further down an `@EventTrigger` chain | The exception goes to the `ErrorHandler` and the offset is committed. The record is not redelivered. |
+| An async handler (`async = true`) | The commit doesn't wait for the handler. Its failure, or a crash while it runs, is not redelivered. |
+
+So moving a write from the bridge into a handler looks like an ordinary refactor, but it
+changes what happens when the write fails. In the example above, a failed
+`repository.upsert(u)` is logged and the update is lost.
+
+Put work that must be redelivered when it fails in the bridge method, before it returns: the
+write itself, or a record of the intent (an outbox row) that later work picks up. A redelivered
+record runs the bridge again, so make that work idempotent. Keep in handlers the work whose
+failure the `ErrorHandler` may log, or that you recover yourself.
+
 `@KafkaSource` elements: `topic` (required); `consumerGroup` (default `""` → falls back
 to `tiko.kafka.consumer-group`); `serializer` (default → `tiko.kafka.serializer`);
 `commitMode` (`PER_RECORD`; the MVP supports per-record commits only).
@@ -170,6 +191,10 @@ An unknown serializer name fails fast at container start, naming the missing ser
 YAML key.
 
 ## 5. Poison messages (ingest failures)
+
+A handler of the emitted event that throws is not an ingest failure: its record is committed
+and nothing in this section applies (see
+[Which failures redeliver a record](#which-failures-redeliver-a-record)).
 
 When a record fails to ingest — deserialize, bridge dispatch, or publish — the runner
 routes a `KafkaIngestError` to your `ErrorHandler`, then applies the configured
