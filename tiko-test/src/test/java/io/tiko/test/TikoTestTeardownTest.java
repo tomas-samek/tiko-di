@@ -25,6 +25,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import org.assertj.core.api.InstanceOfAssertFactories;
@@ -464,13 +465,17 @@ class TikoTestTeardownTest {
 
     /**
      * Saturates the caller-runs event executor, then publishes to a handler whose retry, scheduled
-     * after its backoff, gets stuck on the thread that re-submits it (#653).
+     * after its backoff, gets stuck on the thread that re-submits it (#653). The boot's async
+     * {@code ApplicationStartedEvent} dispatch drains first: a slot it still held while saturating
+     * would turn a filler away, then free up for the retry.
      */
     @TikoTest
     @EnabledIf("io.tiko.test.TikoTestTeardownTest#launchedByTeardownTest")
     static class StuckRetryFixture {
         @Test
-        void retriesOnASaturatedQueue(Container container, EventBus bus) throws InterruptedException {
+        void retriesOnASaturatedQueue(Container container, RecordingEventBus bus)
+                throws InterruptedException, TimeoutException {
+            bus.awaitAsyncDispatch(ENTER_TIMEOUT);
             saturate((ThreadPoolExecutor) container.getEventExecutor());
             bus.publish(new StuckRetryEvent());
             assertThat(StuckHandler.awaitEntered(ENTER_TIMEOUT)).isTrue();

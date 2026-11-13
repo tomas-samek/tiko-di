@@ -29,6 +29,9 @@ public final class ScriptedShutdownContainer implements Container {
     /** When set, the teardown hook waits for this latch, ignoring interrupts. */
     static volatile CountDownLatch stuckTeardownUntil;
 
+    /** Counted down once the teardown hook has started, before it waits for {@link #stuckTeardownUntil}. */
+    static volatile CountDownLatch teardownStarted = new CountDownLatch(1);
+
     /** When set, shutdown ends by rethrowing it as a {@code @PreDestroy} observer failure. */
     static volatile Throwable observerFailure;
 
@@ -40,6 +43,7 @@ public final class ScriptedShutdownContainer implements Container {
 
     static void reset() {
         stuckTeardownUntil = null;
+        teardownStarted = new CountDownLatch(1);
         observerFailure = null;
         shutdownFailure = null;
         startFailure = null;
@@ -74,9 +78,13 @@ public final class ScriptedShutdownContainer implements Container {
             return;
         }
         var stuck = stuckTeardownUntil;
+        var started = teardownStarted;
         if (stuck != null) {
             BoundedExecution.run(
-                    () -> awaitIgnoringInterrupts(stuck),
+                    () -> {
+                        started.countDown();
+                        awaitIgnoringInterrupts(stuck);
+                    },
                     teardownTimeout,
                     errorHandler,
                     cause -> new PreDestroyFailure(ScriptedShutdownContainer.class, cause));
