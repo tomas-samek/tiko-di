@@ -1,6 +1,7 @@
 package io.tiko.test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 
 import io.tiko.EventBus;
 import io.tiko.runtime.TikoOptions;
@@ -251,7 +252,7 @@ class TikoTestOptionsTest {
 
         @Test
         void neverRuns() {
-            throw new AssertionError("the container boot should have failed first");
+            fail("the container boot should have failed first");
         }
     }
 
@@ -265,7 +266,7 @@ class TikoTestOptionsTest {
 
         @Test
         void neverRuns() {
-            throw new AssertionError("the container boot should have failed first");
+            fail("the container boot should have failed first");
         }
     }
 
@@ -279,7 +280,7 @@ class TikoTestOptionsTest {
 
         @Test
         void neverRuns() {
-            throw new AssertionError("the container boot should have failed first");
+            fail("the container boot should have failed first");
         }
     }
 }
