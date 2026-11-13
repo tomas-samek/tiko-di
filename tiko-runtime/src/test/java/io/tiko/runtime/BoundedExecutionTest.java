@@ -28,9 +28,6 @@ class BoundedExecutionTest {
     private static final Function<Throwable, ErrorContext> AS_PREDESTROY =
             t -> new PreDestroyFailure(BoundedExecutionTest.class, t);
 
-    /** The longest bound a hook gets to start in before the test gives up on the machine. */
-    private static final Duration MAX_BOUND = Duration.ofMillis(6400);
-
     @Test
     void nullTimeoutRunsInlineAndSucceeds() {
         AtomicReference<ErrorContext> routed = new AtomicReference<>();
@@ -70,42 +67,34 @@ class BoundedExecutionTest {
         assertThat(routed.get()).isNull();
     }
 
-    /**
-     * A hook its bound cancels before the worker reaches it never runs, so there is nothing to
-     * interrupt. On a loaded machine the bound doubles until the hook starts within it; the attempt
-     * where it does asserts the interrupt.
-     */
     @Test
     void boundedSlowTaskTimesOutAndInterrupts() throws InterruptedException {
-        for (var bound = Duration.ofMillis(50); ; bound = bound.multipliedBy(2)) {
-            assertThat(bound).as("the hook starts within its bound").isLessThanOrEqualTo(MAX_BOUND);
-            AtomicReference<ErrorContext> routed = new AtomicReference<>();
-            CountDownLatch started = new CountDownLatch(1);
-            CountDownLatch interrupted = new CountDownLatch(1);
-            CountDownLatch neverReleased = new CountDownLatch(1);
+        AtomicReference<ErrorContext> routed = new AtomicReference<>();
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch interrupted = new CountDownLatch(1);
+        CountDownLatch neverReleased = new CountDownLatch(1);
 
-            BoundedExecution.CheckedRunnable hung = () -> {
-                started.countDown();
-                try {
-                    neverReleased.await(); // only the timeout's cancel(true) interrupt can wake this
-                } catch (InterruptedException e) {
-                    interrupted.countDown();
-                }
-            };
-
-            BoundedExecution.run(hung, bound, routed::set, AS_PREDESTROY);
-
-            assertThat(routed.get()).isInstanceOf(PreDestroyFailure.class);
-            assertThat(((PreDestroyFailure) routed.get()).cause())
-                    .as("an overrun routes a TimeoutException-caused failure")
-                    .isInstanceOf(TimeoutException.class);
-            if (started.await(100, TimeUnit.MILLISECONDS)) {
-                assertThat(interrupted.await(2, TimeUnit.SECONDS))
-                        .as("cancel(true) must interrupt the hung hook")
-                        .isTrue();
-                return;
+        BoundedExecution.CheckedRunnable hung = () -> {
+            started.countDown();
+            try {
+                neverReleased.await(); // only the timeout's cancel(true) interrupt can wake this
+            } catch (InterruptedException e) {
+                interrupted.countDown();
             }
-        }
+        };
+
+        BoundedExecution.run(hung, Duration.ofMillis(50), routed::set, AS_PREDESTROY);
+
+        assertThat(started.await(2, TimeUnit.SECONDS))
+                .as("hook must have started")
+                .isTrue();
+        assertThat(routed.get()).isInstanceOf(PreDestroyFailure.class);
+        assertThat(((PreDestroyFailure) routed.get()).cause())
+                .as("an overrun routes a TimeoutException-caused failure")
+                .isInstanceOf(TimeoutException.class);
+        assertThat(interrupted.await(2, TimeUnit.SECONDS))
+                .as("cancel(true) must interrupt the hung hook")
+                .isTrue();
     }
 
     @Test
@@ -147,6 +136,41 @@ class BoundedExecutionTest {
         assertThatThrownBy(() -> errors.rethrowIfFailed(false)).isSameAs(firstObserverFailure);
         assertThat(firstObserverFailure.getSuppressed()).containsExactly(firstHookFailure, secondHookFailure);
         assertThat(secondHookFailure.getSuppressed()).isEmpty();
+    }
+
+    /**
+     * The bound counts from the moment the hook starts (#699): even a zero bound runs the hook
+     * before it reports the timeout, so a hook is never reported as timed out without having run.
+     * Repeated because a hook its bound cancels before the worker reaches it would be skipped only
+     * sometimes.
+     */
+    @Test
+    void timeoutIsReportedOnlyForAHookThatStarted() throws InterruptedException {
+        for (var attempt = 0; attempt < 20; attempt++) {
+            AtomicReference<ErrorContext> routed = new AtomicReference<>();
+            CountDownLatch started = new CountDownLatch(1);
+            CountDownLatch interrupted = new CountDownLatch(1);
+            CountDownLatch neverReleased = new CountDownLatch(1);
+
+            BoundedExecution.CheckedRunnable hung = () -> {
+                started.countDown();
+                try {
+                    neverReleased.await();
+                } catch (InterruptedException e) {
+                    interrupted.countDown();
+                }
+            };
+
+            BoundedExecution.run(hung, Duration.ZERO, routed::set, AS_PREDESTROY);
+
+            assertThat(started.await(2, TimeUnit.SECONDS))
+                    .as("attempt %d: the timed-out hook ran", attempt)
+                    .isTrue();
+            assertThat(((PreDestroyFailure) routed.get()).cause()).isInstanceOf(TimeoutException.class);
+            assertThat(interrupted.await(2, TimeUnit.SECONDS))
+                    .as("attempt %d: the timed-out hook is interrupted", attempt)
+                    .isTrue();
+        }
     }
 
     @Test
