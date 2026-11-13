@@ -203,7 +203,7 @@ dependencies {
 
 **Implicit (default)** — the processor walks the test class's superclass chain
 looking for a `@Component`-annotated ancestor. If found, the test class shadows
-that ancestor:
+that ancestor and the interfaces it implements:
 
 ```java
 @Component(scope = Scope.SINGLETON)
@@ -214,8 +214,12 @@ public class FixedClock extends Clock { /* test impl */ }
 // FixedClock shadows Clock in the test container.
 ```
 
-**Explicit** — when the test class doesn't extend the production class (e.g.
-faking an interface), name the shadow target via `value`:
+A test class that extends no main component shadows each interface it implements that a
+main component implements, as `FixedClock implements Clock` above does. Lookups
+(`container.get(Clock.class)`) and main injection points both get the test class.
+Lifecycle markers such as `AutoCloseable` are never shadowed.
+
+**Explicit** — name the shadow target via `value`:
 
 ```java
 @TestComponent(value = PaymentGateway.class)
@@ -224,6 +228,10 @@ public class StubPaymentGateway implements PaymentGateway { /* ... */ }
 
 The annotated class must be assignable to `value` — the processor enforces this
 at compile time. Explicit `value` always wins over the implicit walk.
+
+**One shadow per type.** A test module has one test container, so two `@TestComponent`s
+that shadow the same type fail the build. Keep one, or give the others a `name` and look
+them up with `container.get(Clock.class, "name")`: a named test component shadows nothing.
 
 **Scope match required.** The `@TestComponent.scope` must match the shadowed
 `@Component.scope`, or the build fails with a clear diagnostic. Use
