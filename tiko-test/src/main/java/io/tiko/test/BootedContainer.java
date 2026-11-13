@@ -10,6 +10,8 @@ import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
+import org.junit.jupiter.api.extension.ExtensionConfigurationException;
 import org.junit.jupiter.api.extension.ExtensionContext;
 
 /**
@@ -56,7 +58,11 @@ final class BootedContainer implements ExtensionContext.Store.CloseableResource 
      * with the threads still running added to it as a suppressed leak report (#646).
      */
     @SuppressWarnings("java:S1181") // any boot failure, Error included, is rethrown unchanged after the cleanup
-    static BootedContainer boot(String owner) {
+    static BootedContainer boot(String owner, Consumer<TikoOptions.Builder> testOptions) {
+        // The test's own options first, before anything that would need releasing if they fail.
+        var builder = TikoOptions.builder();
+        testOptions.accept(builder);
+        rejectOwnedSettings(owner, builder.build());
         // Supply a CountingThreadPoolExecutor so awaitAsyncDispatch(Duration) detects drain
         // deterministically (#443). Because it is supplied, the container does not own it —
         // close() shuts it down.
@@ -64,8 +70,7 @@ final class BootedContainer implements ExtensionContext.Store.CloseableResource 
         // The handler only collects: close() turns the survivors into the test's failure itself.
         var reported = new CopyOnWriteArrayList<Thread>();
         // A @TikoTest container is a test container: apply @TestComponent wiring (#497).
-        var options = TikoOptions.builder()
-                .eventBusDecorator(RecordingEventBus::new)
+        var options = builder.eventBusDecorator(RecordingEventBus::new)
                 .eventExecutor(executor)
                 .testWiring(true)
                 .onThreadsOutlivingClose(reported::addAll)
@@ -81,6 +86,20 @@ final class BootedContainer implements ExtensionContext.Store.CloseableResource 
             throw bootFailure;
         }
         return new BootedContainer(owner, container, executor, reported);
+    }
+
+    /**
+     * Fails the boot when the test's {@link TikoTestOptions} set what {@code @TikoTest} relies on:
+     * its {@link RecordingEventBus} decorates the bus, and its executor feeds the leak report.
+     */
+    private static void rejectOwnedSettings(String owner, TikoOptions requested) {
+        if (requested.eventBusDecorator() != null || requested.eventExecutor() != null) {
+            throw new ExtensionConfigurationException(owner + ": @TikoTestOptions set "
+                    + (requested.eventBusDecorator() != null ? "eventBusDecorator" : "eventExecutor")
+                    + ", which @TikoTest owns: it installs the RecordingEventBus and the executor whose"
+                    + " threads it checks after the test. Remove the call; for a plain container, boot"
+                    + " one with Tiko.create(...) instead of @TikoTest.");
+        }
     }
 
     /**

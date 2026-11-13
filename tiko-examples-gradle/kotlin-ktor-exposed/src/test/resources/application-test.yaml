@@ -1,0 +1,9 @@
+# Configuration for the @TikoTest containers, passed by TicketApiTest's @TikoTestOptions method.
+# Without DB_CLOSE_DELAY the in-memory database lives as long as the container's pool, so each
+# test starts empty.
+db:
+  url: jdbc:h2:mem:tickets-test
+  user: sa
+  password: ""
+http:
+  port: 0

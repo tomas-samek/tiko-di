@@ -12,14 +12,23 @@ import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import io.tiko.Container
+import io.tiko.config.ConfigSources
+import io.tiko.runtime.TikoOptions
 import io.tiko.test.RecordingEventBus
 import io.tiko.test.TikoTest
+import io.tiko.test.TikoTestOptions
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 
 /** Drives the real routes in Ktor's test engine against a `@TikoTest` container. */
 @TikoTest
 class TicketApiTest {
+
+    /** The test configuration: a fresh in-memory database per test and an ephemeral port. */
+    @TikoTestOptions
+    fun options(options: TikoOptions.Builder) {
+        options.configSource(ConfigSources.classpath("application-test.yaml"))
+    }
 
     @Test
     fun openedTicketIsStoredAndAnnounced(

@@ -50,6 +50,9 @@ Builder onThreadsOutlivingClose(Consumer<List<Thread>> handler)
     // once; default: one WARNING on io.tiko.events naming each thread and its top frame
 TikoOptions build()
 
+// Test options (io.tiko.test): a method of a @TikoTest class, run before each boot
+@TikoTestOptions void options(TikoOptions.Builder options)   // static for lifecycle = PER_CLASS
+
 // Container-owned threads (io.tiko.Container)
 ThreadFactory threadFactory()   // threads the container starts and reports if they outlive
                                 // close(); transports create their threads here

@@ -19,6 +19,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
  * other parameter type is looked up via {@code container.get(type[, name])} — annotate with
  * {@link io.tiko.annotations.Named} to disambiguate.
  *
+ * <p>A {@link TikoTestOptions} method adds to the options the container boots with, such as a
+ * config source or a replaced transport.
+ *
  * <p>Use {@link #lifecycle()} {@link Lifecycle#PER_CLASS} to share one container across
  * every {@code @Test} method on the class (boot in {@code @BeforeAll}, teardown in
  * {@code @AfterAll}).
