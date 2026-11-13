@@ -178,6 +178,11 @@ public final class KspProgram implements AutoCloseable {
         return invokeContainer("get", new Class<?>[] {Class.class}, load(typeName));
     }
 
+    /** {@code container.get(type, name)} for the program's type with this name. */
+    public Object get(String typeName, String name) {
+        return invokeContainer("get", new Class<?>[] {Class.class, String.class}, load(typeName), name);
+    }
+
     /** {@code container.runInEventScope(work)}: one unit of work. */
     public void runInEventScope(Runnable work) {
         invokeContainer("runInEventScope", new Class<?>[] {Runnable.class}, work);

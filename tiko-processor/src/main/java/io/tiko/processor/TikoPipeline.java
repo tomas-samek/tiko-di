@@ -17,6 +17,7 @@ import io.tiko.processor.config.ConfigurationValidator;
 import io.tiko.processor.core.ProcessingEnv;
 import io.tiko.processor.core.StackTraces;
 import io.tiko.processor.core.model.DeclKind;
+import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.generator.ComponentFactoryGenerator;
 import io.tiko.processor.generator.ContainerGenerator;
 import io.tiko.processor.generator.EventRegistryGenerator;
@@ -41,7 +42,10 @@ import io.tiko.processor.validation.PickerValidator;
 import io.tiko.processor.validation.ProducesSignatureValidator;
 import io.tiko.processor.validation.ScopeValidator;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -251,7 +255,9 @@ public final class TikoPipeline {
             // components whose testExtraKeys point at classpath-main FQNs and marking them as
             // shadows directly. Same-round detection still goes through AmbiguityValidator —
             // this only adds cross-round (peer-compile) shadow registration.
-            markClasspathShadowedTestComponents();
+            if (!markClasspathShadowedTestComponents()) {
+                return false;
+            }
 
             // Stage 3: Generate code
             context.env().diagnostics().note(null, "Tiko DI: Starting code generation...");
@@ -308,34 +314,63 @@ public final class TikoPipeline {
      * visible) cannot fire. Single-round compiles still rely on the validator path; this
      * helper only adds shadow entries the validator could not have seen.
      */
-    private void markClasspathShadowedTestComponents() {
+    private boolean markClasspathShadowedTestComponents() {
         Set<String> mainFqns = MainModuleOnClasspath.read(context.env()).componentFqns();
         if (mainFqns.isEmpty()) {
-            return;
+            return true;
         }
+        var claims = new LinkedHashMap<String, List<ComponentModel>>();
         for (var component : context.getActiveComponents()) {
             if (!component.isTestComponent()) continue;
             for (String shadowedKey : classpathShadowedKeys(component, mainFqns)) {
-                context.markShadowedByTestOverride(shadowedKey, component);
+                claims.computeIfAbsent(shadowedKey, key -> new ArrayList<>()).add(component);
             }
         }
+        boolean valid = true;
+        for (var claim : claims.entrySet()) {
+            var testComponents = claim.getValue();
+            if (testComponents.size() > 1) {
+                // One test container serves the whole test module, so only one of them could win.
+                context.getErrorReporter()
+                        .testComponentsShadowSameKey(
+                                testComponents.get(0).getDecl().location(),
+                                claim.getKey(),
+                                testComponents.stream()
+                                        .map(ComponentModel::getQualifiedName)
+                                        .toList());
+                valid = false;
+                continue;
+            }
+            context.markShadowedByTestOverride(claim.getKey(), testComponents.get(0));
+        }
+        return valid;
     }
 
     /**
      * The keys of {@code component} that shadow a main component: those naming one, plus the
      * interfaces among the rest that a main component implements. The interface keys are an
-     * explicit {@code value()} on an interface, or the interfaces the implicit walk takes from the
-     * main superclass it names. Lifecycle markers ({@code AutoCloseable}) are no dispatch keys of
-     * the main container, so the implicit walk never shadows them.
+     * explicit {@code value()} on an interface, the interfaces the implicit walk takes from the
+     * main superclass it names, or, without either, the interfaces the test component implements
+     * itself (#672), as a same-round compile already shadows them. Lifecycle markers
+     * ({@code AutoCloseable}) are no dispatch keys of the main container, so the implicit walk
+     * never shadows them.
      */
     private List<String> classpathShadowedKeys(ComponentModel component, Set<String> mainFqns) {
         var extraKeys = component.getTestExtraKeys();
         var named = extraKeys.stream().filter(mainFqns::contains).toList();
-        return extraKeys.stream()
+        var keys = new LinkedHashSet<String>();
+        extraKeys.stream()
                 .filter(key -> mainFqns.contains(key)
                         || (named.isEmpty() || !TypeUtil.isLifecycleMarkerInterface(key))
                                 && isInterfaceOfAny(key, mainFqns))
-                .toList();
+                .forEach(keys::add);
+        if (extraKeys.isEmpty() && component.getName().isEmpty()) {
+            component.getDecl().interfaces().stream()
+                    .map(TypeRef::displayName)
+                    .filter(key -> !TypeUtil.isLifecycleMarkerInterface(key) && isInterfaceOfAny(key, mainFqns))
+                    .forEach(keys::add);
+        }
+        return List.copyOf(keys);
     }
 
     /** Whether {@code key} is an interface that at least one of the main components implements. */

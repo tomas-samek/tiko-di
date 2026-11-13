@@ -253,6 +253,89 @@ class KspTestCompileTest {
     }
 
     /**
+     * A {@code @TestComponent} with no {@code value()} that only implements an interface of a main
+     * component shadows that interface (#672): a lookup and a main injection point both get the test
+     * component, on both frontends. The lifecycle marker {@code AutoCloseable} stays unshadowed.
+     */
+    @Test
+    void interfaceOnlyTestComponentShadowsItsInterfaceAtLookupAndInjection(@TempDir Path dir) throws Exception {
+        var javacMain = javacCompile(
+                List.of(),
+                JavaFileObjects.forSourceLines("demo.Clock", "package demo;", "public interface Clock {}"),
+                JavaFileObjects.forSourceLines(
+                        "demo.SystemClock",
+                        "package demo;",
+                        "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
+                        "public class SystemClock implements Clock, AutoCloseable {",
+                        "    public void close() {}",
+                        "}"),
+                JavaFileObjects.forSourceLines(
+                        "demo.Scheduler",
+                        "package demo;",
+                        "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
+                        "public class Scheduler {",
+                        "    private final Clock clock;",
+                        "    public Scheduler(Clock clock) { this.clock = clock; }",
+                        "    public Clock getClock() { return clock; }",
+                        "}"));
+        var mainClasses = writeClassOutput(javacMain, dir.resolve("main"));
+        var javacTest = javacCompile(
+                List.of(mainClasses.toFile()),
+                JavaFileObjects.forSourceString("io.tiko.test.TestComponent", TEST_COMPONENT_ANNOTATION),
+                JavaFileObjects.forSourceLines(
+                        "demo.FixedClock",
+                        "package demo;",
+                        "@io.tiko.test.TestComponent",
+                        "public class FixedClock implements Clock, AutoCloseable {",
+                        "    public void close() {}",
+                        "}"));
+        var testClasses = writeClassOutput(javacTest, dir.resolve("test"));
+        assertThat(Files.readString(testClasses.resolve(TEST_SHADOWS)).lines())
+                .anyMatch(line -> line.startsWith("demo.Clock=") && line.endsWith("|demo.FixedClock"))
+                .noneMatch(line -> line.startsWith("java.lang.AutoCloseable="));
+        try (var program = KspProgram.bootTestWiring(programOver(testClasses, mainClasses))) {
+            assertThat(program.get("demo.Clock").getClass().getName()).isEqualTo("demo.FixedClock");
+            assertThat(clockOfScheduler(program)).isEqualTo("demo.FixedClock");
+        }
+
+        var main = compileMain(KspCompiler.kotlin("Clock.kt", """
+                package demo
+
+                import io.tiko.Scope
+                import io.tiko.annotations.Component
+
+                interface Clock
+
+                @Component(scope = Scope.SINGLETON)
+                class SystemClock : Clock, AutoCloseable {
+                    override fun close() {}
+                }
+
+                @Component(scope = Scope.SINGLETON)
+                class Scheduler(val clock: Clock)
+                """));
+        var test = compileTest(librariesOf(main), KspCompiler.kotlin("FixedClock.kt", """
+                        package demo
+
+                        import io.tiko.test.TestComponent
+
+                        @TestComponent
+                        class FixedClock : Clock, AutoCloseable {
+                            override fun close() {}
+                        }
+                        """));
+
+        assertThat(test.generatedResource(TEST_SHADOWS))
+                .hasValueSatisfying(shadows -> assertThat(shadows.lines())
+                        .anyMatch(line -> line.startsWith("demo.Clock=") && line.endsWith("|demo.FixedClock"))
+                        .noneMatch(line -> line.startsWith("java.lang.AutoCloseable=")));
+        try (var program = KspProgram.bootTestWiring(test)) {
+            assertThat(program.get("demo.Clock").getClass().getName()).isEqualTo("demo.FixedClock");
+            assertThat(clockOfScheduler(program)).isEqualTo("demo.FixedClock");
+        }
+    }
+
+    /**
      * An implicit {@code @TestComponent} extending a main component shadows the superclass's
      * interfaces too: a main component injecting one gets the test component on both frontends.
      * The lifecycle marker {@code AutoCloseable} is no dispatch key and stays unshadowed.
@@ -807,16 +890,21 @@ class KspTestCompileTest {
 
     /** A javac compile with the DI processor over {@code libraries} plus the test's classpath. */
     private static Compilation javacCompile(List<File> libraries, JavaFileObject... sources) {
+        var compilation = javacAttempt(libraries, sources);
+        CompilationSubject.assertThat(compilation).succeeded();
+        return compilation;
+    }
+
+    /** Compiles with javac against {@code libraries} without asserting the outcome. */
+    private static Compilation javacAttempt(List<File> libraries, JavaFileObject... sources) {
         var classpath = new ArrayList<>(libraries);
         for (var entry : System.getProperty("java.class.path").split(File.pathSeparator)) {
             classpath.add(new File(entry));
         }
-        var compilation = Compiler.javac()
+        return Compiler.javac()
                 .withProcessors(new TikoAnnotationProcessor())
                 .withClasspath(classpath)
                 .compile(sources);
-        CompilationSubject.assertThat(compilation).succeeded();
-        return compilation;
     }
 
     /** The fully qualified names of the Java sources the compile generated. */
@@ -856,5 +944,123 @@ class KspTestCompileTest {
     /** A result whose output roots are javac's test classes, then its main classes. */
     private static KspResult programOver(Path testClasses, Path mainClasses) {
         return new KspResult(KotlinCompilation.ExitCode.OK, "", Map.of(), Map.of(), List.of(testClasses, mainClasses));
+    }
+
+    /**
+     * Two {@code @TestComponent}s of one test module that shadow the same main interface fail the
+     * build on both frontends (#672): the test container can replace it with only one of them.
+     */
+    @Test
+    void twoTestComponentsShadowingOneInterfaceAreRejected(@TempDir Path dir) throws Exception {
+        var mainClasses = writeClassOutput(javacClockMain(), dir.resolve("main"));
+        var javacTest = javacAttempt(
+                List.of(mainClasses.toFile()),
+                JavaFileObjects.forSourceString("io.tiko.test.TestComponent", TEST_COMPONENT_ANNOTATION),
+                javacTestClock("FixedClock", ""),
+                javacTestClock("OtherClock", "(Clock.class)"));
+        assertThat(javacTest.status()).isEqualTo(Compilation.Status.FAILURE);
+        assertThat(javacTest.errors()).anyMatch(error -> error.getMessage(null).contains(DUPLICATE_SHADOW));
+
+        var main = compileMain(KspCompiler.kotlin("Clock.kt", KOTLIN_CLOCK_MAIN));
+        var result = KspCompiler.compile(
+                List.of(new TikoSymbolProcessorProvider()),
+                Map.of(),
+                withTestComponentAnnotation(librariesOf(main)),
+                KspCompiler.kotlin("Clocks.kt", """
+                        package demo
+
+                        import io.tiko.test.TestComponent
+
+                        @TestComponent
+                        class FixedClock : Clock
+
+                        @TestComponent(Clock::class)
+                        class OtherClock : Clock
+                        """));
+        assertThat(result.exitCode()).as(result.messages()).isEqualTo(KotlinCompilation.ExitCode.COMPILATION_ERROR);
+        assertThat(result.messages()).contains(DUPLICATE_SHADOW);
+    }
+
+    /**
+     * A named {@code @TestComponent} implementing the interface is an addition, not a second shadow:
+     * it is reachable by its name while the unnamed one replaces the main component.
+     */
+    @Test
+    void namedTestComponentBesideTheShadowIsReachableByName(@TempDir Path dir) throws Exception {
+        var mainClasses = writeClassOutput(javacClockMain(), dir.resolve("main"));
+        var javacTest = javacCompile(
+                List.of(mainClasses.toFile()),
+                JavaFileObjects.forSourceString("io.tiko.test.TestComponent", TEST_COMPONENT_ANNOTATION),
+                javacTestClock("FixedClock", ""),
+                javacTestClock("OtherClock", "(name = \"other\")"));
+        var testClasses = writeClassOutput(javacTest, dir.resolve("test"));
+        try (var program = KspProgram.bootTestWiring(programOver(testClasses, mainClasses))) {
+            assertThat(clockOfScheduler(program)).isEqualTo("demo.FixedClock");
+            assertThat(program.get("demo.Clock", "other").getClass().getName()).isEqualTo("demo.OtherClock");
+        }
+
+        var main = compileMain(KspCompiler.kotlin("Clock.kt", KOTLIN_CLOCK_MAIN));
+        var test = compileTest(librariesOf(main), KspCompiler.kotlin("Clocks.kt", """
+                        package demo
+
+                        import io.tiko.test.TestComponent
+
+                        @TestComponent
+                        class FixedClock : Clock
+
+                        @TestComponent(name = "other")
+                        class OtherClock : Clock
+                        """));
+        try (var program = KspProgram.bootTestWiring(test)) {
+            assertThat(clockOfScheduler(program)).isEqualTo("demo.FixedClock");
+            assertThat(program.get("demo.Clock", "other").getClass().getName()).isEqualTo("demo.OtherClock");
+        }
+    }
+
+    private static final String DUPLICATE_SHADOW =
+            "@TestComponents demo.FixedClock, demo.OtherClock all shadow demo.Clock";
+
+    private static final String KOTLIN_CLOCK_MAIN = """
+            package demo
+
+            import io.tiko.Scope
+            import io.tiko.annotations.Component
+
+            interface Clock
+
+            @Component(scope = Scope.SINGLETON)
+            class SystemClock : Clock
+
+            @Component(scope = Scope.SINGLETON)
+            class Scheduler(val clock: Clock)
+            """;
+
+    /** A main module with an interface, its one implementation, and a component injecting it. */
+    private static Compilation javacClockMain() {
+        return javacCompile(
+                List.of(),
+                JavaFileObjects.forSourceLines("demo.Clock", "package demo;", "public interface Clock {}"),
+                JavaFileObjects.forSourceLines(
+                        "demo.SystemClock",
+                        "package demo;",
+                        "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
+                        "public class SystemClock implements Clock {}"),
+                JavaFileObjects.forSourceLines(
+                        "demo.Scheduler",
+                        "package demo;",
+                        "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
+                        "public class Scheduler {",
+                        "    private final Clock clock;",
+                        "    public Scheduler(Clock clock) { this.clock = clock; }",
+                        "    public Clock getClock() { return clock; }",
+                        "}"));
+    }
+
+    private static JavaFileObject javacTestClock(String name, String attributes) {
+        return JavaFileObjects.forSourceLines(
+                "demo." + name,
+                "package demo;",
+                "@io.tiko.test.TestComponent" + attributes,
+                "public class " + name + " implements Clock {}");
     }
 }

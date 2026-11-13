@@ -239,6 +239,21 @@ public final class ErrorReporter {
                 "Point value() at a type that " + testClassFqn + " actually implements");
     }
 
+    /** Two or more {@code @TestComponent}s of one test module shadow the same main key (#672). */
+    public void testComponentsShadowSameKey(Location at, String key, java.util.List<String> testComponentFqns) {
+        String simpleName = key.substring(key.lastIndexOf('.') + 1);
+        reportError(
+                KIND_AMBIGUOUS_QUALIFIER,
+                at,
+                "@TestComponents " + String.join(", ", testComponentFqns) + " all shadow " + key
+                        + ". The module's test container can replace " + simpleName + " with only one of them, so"
+                        + " which one a test gets would depend on compile order.",
+                "Keep one @TestComponent for " + simpleName + " in this test module and make the others plain"
+                        + " classes",
+                "Give the others @TestComponent(name = \"...\") and look them up with container.get(" + simpleName
+                        + ".class, \"name\")");
+    }
+
     public void testComponentScopeMismatch(
             Location at, String testFqn, io.tiko.Scope testScope, String mainFqn, io.tiko.Scope mainScope) {
         reportError(
