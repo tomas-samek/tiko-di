@@ -164,20 +164,32 @@ decider that throws or returns `null` falls back to `SEEK`.
 
 Do NOT try to disable the transport by deleting `META-INF/services` files, hiding the SPI
 with classloader tricks, or hand-rebuilding `KafkaBootstrapSupport`. The supported seam is
-one option + one helper:
+one option + one helper. In a `@TikoTest`, set them in a `@TikoTestOptions` method, so the
+test keeps its `RecordingEventBus` and fails if a consumer thread outlives it:
 
 ```java
-FakeKafkaBroker broker = new FakeKafkaBroker();
-try (Container c = Tiko.create(TikoOptions.builder()
-        .testWiring(true) // a test container: apply @TestComponents too
-        .configSource(ConfigSources.classpath("application.yaml"))
-        .replaceTransport(KafkaTransport.class, t -> FakeKafkaTransport.over(t, broker))
-        .build())) {
-    broker.produce("orders", new JsonKafkaSerializer().serialize(event)); // drive @KafkaSource
-    c.getEventBus().publish(outboundEvent);                               // drive @KafkaSink
-    assertThat(broker.produced("notifications")).hasSize(1);
+@TikoTest
+class OrderFlowTest {
+    private final FakeKafkaBroker broker = new FakeKafkaBroker();
+
+    @TikoTestOptions
+    void options(TikoOptions.Builder options) {
+        options.configSource(ConfigSources.classpath("application.yaml"))
+                .replaceTransport(KafkaTransport.class, t -> FakeKafkaTransport.over(t, broker));
+    }
+
+    @Test
+    void notifies(EventBus bus) {
+        broker.produce("orders", new JsonKafkaSerializer().serialize(event)); // drive @KafkaSource
+        bus.publish(outboundEvent);                                           // drive @KafkaSink
+        await().atMost(Duration.ofSeconds(10))
+                .untilAsserted(() -> assertThat(broker.produced("notifications")).hasSize(1));
+    }
 }
 ```
+
+A test that boots its own container passes the same two settings, plus `testWiring(true)`, to
+`Tiko.create(TikoOptions.builder()...build())`.
 
 - `configSource(...)` is still required if the app declares any `@Configuration`
   (including `tiko-kafka`'s own) — set it exactly like the app's `Main` does, or

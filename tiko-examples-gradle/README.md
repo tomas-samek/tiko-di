@@ -34,7 +34,8 @@ and Tiko holding the components in between.
   EVENT-scoped `RequestId` is fresh per request. The service, a SINGLETON, reads it through a
   generated proxy.
 - `TicketApiTest` drives the routes in Ktor's `testApplication` against a `@TikoTest` container
-  and swaps the `Notifier` for a recording one with `@TestComponent(Notifier::class)`.
+  and swaps the `Notifier` for a recording one with `@TestComponent(Notifier::class)`. Its
+  `@TikoTestOptions` method points the container at `application-test.yaml`.
 
 ```
 cd tiko-examples-gradle/kotlin-ktor-exposed
@@ -61,7 +62,9 @@ A Kafka consumer: `payments` in, `receipts` out.
   by order.
 - Payloads are `@JvmRecord data class`es. A plain `data class` payload is a compile error under
   the default JSON serializer.
-- `PaymentFlowTest` runs the whole flow on the in-memory `FakeKafkaBroker`, without Docker.
+- `PaymentFlowTest` runs the whole flow on the in-memory `FakeKafkaBroker`, without Docker. It is
+  a `@TikoTest` whose `@TikoTestOptions` method replaces the Kafka transport with one over the
+  fake broker.
 
 ```
 cd tiko-examples-gradle/kotlin-kafka-consumer

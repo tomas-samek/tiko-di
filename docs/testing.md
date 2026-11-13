@@ -80,6 +80,42 @@ class PerClassLifecycleTest {
 
 Use `PER_CLASS` when boot cost matters (e.g. configuration parsing, schema work) and when test methods are not allowed to mutate singleton state.
 
+### Container options — `@TikoTestOptions`
+
+A method annotated `@TikoTestOptions` adds to the options the test's container boots with: a
+config source, overrides, a replaced transport. It returns `void`, takes a `TikoOptions.Builder`
+and runs before each boot.
+
+```java
+@TikoTest
+class PaymentFlowTest {
+    private final FakeKafkaBroker broker = new FakeKafkaBroker();
+
+    @TikoTestOptions
+    void options(TikoOptions.Builder options) {
+        options.configSource(ConfigSources.classpath("application-test.yaml"))
+                .replaceTransport(KafkaTransport.class, t -> FakeKafkaTransport.over(t, broker));
+    }
+
+    @Test
+    void paymentIsRecorded(RecordingEventBus bus) {
+        broker.produce("payments", payload);
+        // ...
+    }
+}
+```
+
+The test keeps everything `@TikoTest` gives it: the `RecordingEventBus`, `@TestComponent`
+wiring, and the leaked-thread failure, which covers the consumer threads of a replaced Kafka
+transport.
+
+- An instance method sees the test's fields. A `PER_CLASS` container boots before the test
+  instance exists, so its method must be `static` (or the class annotated
+  `@TestInstance(Lifecycle.PER_CLASS)`). In Kotlin, a member `fun` works with the default lifecycle.
+- Methods of superclasses, and of the classes enclosing a `@Nested` class, run first.
+- `@TikoTest` owns the event bus decorator, the event executor, test wiring and the handler for
+  threads outliving close. A method that sets the decorator or the executor fails the test.
+
 ### Leaked threads fail the test
 
 When a test's container closes, `@TikoTest` checks for threads that are still running. That covers the workers of the test's event executor and the threads the container started, such as Kafka consumers and anything created through `container.threadFactory()`. If any are left, the test that owned the container fails. With `PER_CLASS` the class fails. Other tests running at the same time are not blamed.
@@ -276,7 +312,9 @@ Override keys are matched by the *declared* type at the lookup site, not the con
 ## Faking the Kafka transport — `replaceTransport` + `FakeKafkaTransport`
 
 To integration-test a `@KafkaSource` / `@KafkaSink` app without a broker, replace the
-generated Kafka transport with one backed by the in-memory `FakeKafkaBroker`:
+generated Kafka transport with one backed by the in-memory `FakeKafkaBroker`. In a
+`@TikoTest`, do it in a [`@TikoTestOptions`](#container-options--tikotestoptions) method.
+A test that boots its own container passes the same options to `Tiko.create(...)`:
 
 ```java
 FakeKafkaBroker broker = new FakeKafkaBroker();

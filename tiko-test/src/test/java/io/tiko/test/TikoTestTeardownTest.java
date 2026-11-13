@@ -8,14 +8,13 @@ import static org.assertj.core.api.Assertions.fail;
 import io.tiko.Container;
 import io.tiko.EventBus;
 import io.tiko.test.fixtures.FailingTransport;
+import io.tiko.test.fixtures.FailingTransportLoader;
 import io.tiko.test.fixtures.ShutdownProbe;
 import io.tiko.test.fixtures.StuckEvent;
 import io.tiko.test.fixtures.StuckHandler;
 import io.tiko.test.fixtures.StuckRetryEvent;
 import java.io.IOException;
 import java.lang.reflect.Proxy;
-import java.net.URL;
-import java.net.URLClassLoader;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
@@ -433,24 +432,6 @@ class TikoTestTeardownTest {
         @Test
         void neverRuns() {
             fail("the container boot should have failed first");
-        }
-    }
-
-    /** Puts {@link FailingTransport} on the context class loader the extension boots with, and takes it off again. */
-    private static final class FailingTransportLoader {
-        private static ClassLoader previous;
-        private static URLClassLoader withFailingTransport;
-
-        static void install() {
-            URL root = FailingTransportLoader.class.getResource("/boot-failure/");
-            previous = Thread.currentThread().getContextClassLoader();
-            withFailingTransport = new URLClassLoader(new URL[] {root}, previous);
-            Thread.currentThread().setContextClassLoader(withFailingTransport);
-        }
-
-        static void restore() throws IOException {
-            Thread.currentThread().setContextClassLoader(previous);
-            withFailingTransport.close();
         }
     }
 

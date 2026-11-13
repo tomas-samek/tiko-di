@@ -3,12 +3,19 @@ package io.tiko.test;
 import io.tiko.Container;
 import io.tiko.EventBus;
 import io.tiko.annotations.Named;
+import io.tiko.runtime.TikoOptions;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.extension.AfterAllCallback;
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.BeforeEachCallback;
+import org.junit.jupiter.api.extension.ExtensionConfigurationException;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.ExtensionContext.Namespace;
 import org.junit.jupiter.api.extension.ExtensionContext.Store;
@@ -17,6 +24,9 @@ import org.junit.jupiter.api.extension.ParameterContext;
 import org.junit.jupiter.api.extension.ParameterResolutionException;
 import org.junit.jupiter.api.extension.ParameterResolver;
 import org.junit.jupiter.api.extension.ReflectiveInvocationContext;
+import org.junit.platform.commons.support.AnnotationSupport;
+import org.junit.platform.commons.support.HierarchyTraversalMode;
+import org.junit.platform.commons.support.ReflectionSupport;
 
 /**
  * JUnit 5 extension wired up by {@link TikoTest}.
@@ -158,7 +168,65 @@ public final class TikoTestExtension
 
     private void bootContainer(ExtensionContext ctx) {
         // Stored as a CloseableResource: JUnit closes it even if the matching after-callback never runs.
-        store(ctx).put(KEY_BOOT, BootedContainer.boot(owner(ctx)));
+        store(ctx).put(KEY_BOOT, BootedContainer.boot(owner(ctx), testOptions(ctx)));
+    }
+
+    /**
+     * Runs the {@link TikoTestOptions} methods of the test class: those of the classes enclosing a
+     * {@code @Nested} class first, and within a class, those of its superclasses first.
+     */
+    private static Consumer<TikoOptions.Builder> testOptions(ExtensionContext ctx) {
+        var methods = new ArrayList<Method>();
+        for (var type : enclosingFirst(ctx.getRequiredTestClass())) {
+            methods.addAll(AnnotationSupport.findAnnotatedMethods(
+                    type, TikoTestOptions.class, HierarchyTraversalMode.TOP_DOWN));
+        }
+        var calls = new ArrayList<Consumer<TikoOptions.Builder>>();
+        for (var method : methods) {
+            checkSignature(method);
+            var target = target(ctx, method);
+            calls.add(builder -> ReflectionSupport.invokeMethod(method, target, builder));
+        }
+        return builder -> calls.forEach(call -> call.accept(builder));
+    }
+
+    /** The test class, preceded by the classes enclosing it when it is {@code @Nested}, outermost first. */
+    private static List<Class<?>> enclosingFirst(Class<?> testClass) {
+        var types = new ArrayDeque<Class<?>>();
+        for (Class<?> type = testClass; type != null; type = type.getEnclosingClass()) {
+            types.addFirst(type);
+            if (!type.isAnnotationPresent(Nested.class)) {
+                break;
+            }
+        }
+        return List.copyOf(types);
+    }
+
+    private static void checkSignature(Method method) {
+        if (method.getReturnType() != void.class
+                || method.getParameterCount() != 1
+                || method.getParameterTypes()[0] != TikoOptions.Builder.class) {
+            throw new ExtensionConfigurationException("@TikoTestOptions method " + describe(method)
+                    + " must return void and take one TikoOptions.Builder, for example:"
+                    + " @TikoTestOptions void options(TikoOptions.Builder options) { ... }");
+        }
+    }
+
+    /** {@code null} for a static method, else the test instance that declares it. */
+    private static Object target(ExtensionContext ctx, Method method) {
+        if (Modifier.isStatic(method.getModifiers())) {
+            return null;
+        }
+        return ctx.getTestInstances()
+                .flatMap(instances -> instances.findInstance(method.getDeclaringClass()))
+                .orElseThrow(() -> new ExtensionConfigurationException("@TikoTestOptions method "
+                        + describe(method) + " is an instance method, but this container boots before the"
+                        + " test instance exists (Lifecycle.PER_CLASS). Make the method static, or annotate"
+                        + " the class with @TestInstance(TestInstance.Lifecycle.PER_CLASS)."));
+    }
+
+    private static String describe(Method method) {
+        return method.getDeclaringClass().getSimpleName() + "." + method.getName();
     }
 
     /**
