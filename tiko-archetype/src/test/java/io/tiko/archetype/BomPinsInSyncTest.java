@@ -31,10 +31,8 @@ class BomPinsInSyncTest {
         repeated.keySet().retainAll(root.keySet());
 
         assertThat(repeated)
-                .as("the BOM repeats version properties of the root pom")
-                .isNotEmpty();
-        assertThat(repeated)
                 .as("version properties tiko-bom repeats from the root pom")
+                .isNotEmpty()
                 .containsExactlyInAnyOrderEntriesOf(matching(root, repeated));
     }
 
