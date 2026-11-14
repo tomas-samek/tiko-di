@@ -37,4 +37,28 @@ class GeneratedProjectDotfilesIT {
                 .as("no undotted %s left behind", name)
                 .doesNotExist();
     }
+
+    static Stream<Arguments> agentFiles() {
+        return Stream.of(
+                Arguments.of("CLAUDE.md"),
+                Arguments.of("AGENTS.md"),
+                Arguments.of(".cursor/rules/tiko.md"),
+                Arguments.of(".github/copilot-instructions.md"),
+                Arguments.of(".junie/guidelines.md"));
+    }
+
+    /**
+     * Guards #702: a Markdown file run through the archetype's Velocity filter loses every line that
+     * starts with {@code ##}, which Velocity reads as a comment, so its headings disappear.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("agentFiles")
+    void generatedProjectHoldsTheAgentFileVerbatim(String name) throws IOException {
+        var generated = GENERATED.resolve(name);
+
+        assertThat(generated).as("%s in the generated project", name).isRegularFile();
+        assertThat(Files.readString(generated))
+                .as("%s in the generated project, against its template", name)
+                .isEqualTo(Files.readString(TEMPLATE.resolve(name)));
+    }
 }
