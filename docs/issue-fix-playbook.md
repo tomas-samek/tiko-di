@@ -30,7 +30,7 @@ the affected material or behaviour directly.
 - Read the issue and relevant comments with `gh issue view <number> --comments`. Check prior design decisions and related issues against the current source. Use local project notes when available.
 - Resolve `gh` and `mvn` from PATH or known local installations, and verify the tools and JDK before running builds. Report any missing prerequisite and the checks it affects.
 - For a fix, fetch `origin/main` and branch from it using `<type>/issue-<number>-<slug>`. Use a conventional type such as `fix`, `test`, or `docs`, and a short kebab-case slug. Use a separate worktree when the existing checkout has unrelated changes or when working on issues in parallel.
-- Pause for a material design decision, a conflict with an explicit scope decision, or a proposed fix that spans multiple independent issues. Report the decision needed or the suggested split.
+- Pause for a material design decision, a conflict with an explicit scope decision, or a proposed fix that spans multiple independent issues. Report the decision needed or the suggested split. Several small issues of the same kind in the same area are not independent in this sense: one PR may close them together (see "Group similar findings" in [`CLAUDE.md`](../CLAUDE.md#issue-writing)).
 
 ## The four phases
 
