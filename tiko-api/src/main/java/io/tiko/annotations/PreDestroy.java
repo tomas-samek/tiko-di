@@ -42,8 +42,7 @@ import java.lang.annotation.Target;
  *
  * <p>Example:</p>
  * <pre>{@code
- * @Component
- * @Singleton
+ * @Component(scope = Scope.SINGLETON)
  * public class DatabaseConnection {
  *     @PreDestroy
  *     public void cleanup() {

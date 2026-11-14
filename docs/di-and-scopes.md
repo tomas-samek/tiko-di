@@ -200,8 +200,8 @@ public class DataService {
 When the disambiguator is a *class* — not a string — `@Pick(SomeImpl.class)` is the compile-time alternative to `@Named`. Typos become compile errors, IDE rename refactors update every usage, and the choice of implementation is visible in the constructor signature.
 
 ```java
-@Component class MySqlDatabase    implements Database { ... }
-@Component class PostgresDatabase implements Database { ... }
+@Component public class MySqlDatabase    implements Database { ... }
+@Component public class PostgresDatabase implements Database { ... }
 
 @Component(scope = Scope.SINGLETON)
 public class DataService {
@@ -216,12 +216,13 @@ public class DataService {
 
 ### `@Pick(Class) @Named("...")` together — narrow then select
 
-When several `@Produces` methods return the same concrete subtype with different names: `@Pick` pins the impl, `@Named` selects which producer.
+When several `@Produces` methods return the same concrete subtype with different names: `@Pick` pins the impl, `@Named` selects which producer. The producer states its name with `@Produces(name = ...)`; `@Named` goes on the injection point only.
 
 ```java
-@Component class DataSourceFactories {
-    @Produces @Named("primary") HikariDataSource primary() { ... }
-    @Produces @Named("backup")  HikariDataSource backup()  { ... }
+@Component
+public class DataSourceFactories {
+    @Produces(name = "primary") public HikariDataSource primary() { ... }
+    @Produces(name = "backup")  public HikariDataSource backup()  { ... }
 }
 
 @Component
