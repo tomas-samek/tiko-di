@@ -57,10 +57,10 @@ Lookup-table answer to "does tiko support X?":
 | Kafka | `@KafkaSource` / `@KafkaSink` — tiko-native module with compile-time validation | `tiko-kafka`, example `08_kafka_order_warehouse` |
 | In-process cache | `@Produces Cache<K,V>` (Caffeine) | `tiko-build` skill |
 | Templates | `@Produces freemarker.template.Configuration` (or Pebble, Mustache) | `tiko-build` skill |
-| Security | Javalin `before` handler + `Context` attributes (open-design caveat in skill §6) | `tiko-build` skill §6 |
-| Scheduling | `@EventHandler` on a `Tick` event published by a small scheduler thread | `tiko-build` skill §4.2 |
-| Async work | `@EventHandler(async = true)` for event-shaped work; `CompletableFuture` / virtual threads for ad-hoc | `tiko-build` skill §4.3 |
-| Retry | Small utility wrapper — visible code, no AOP | `tiko-build` skill §4.4 |
+| Security | Javalin `before` handler + `Context` attributes (open-design caveat in the model doc §6) | [`docs/orchestrator-model.md`](./docs/orchestrator-model.md) §6 |
+| Scheduling | `@EventHandler` on a `Tick` event published by a small scheduler thread | [`docs/orchestrator-model.md`](./docs/orchestrator-model.md) §4.2 |
+| Async work | `@EventHandler(async = true)` for event-shaped work; `CompletableFuture` / virtual threads for ad-hoc | [`docs/orchestrator-model.md`](./docs/orchestrator-model.md) §4.3 |
+| Retry | Small utility wrapper — visible code, no AOP | [`docs/orchestrator-model.md`](./docs/orchestrator-model.md) §4.4 |
 | Configuration | Typed `@Configuration` records | `tiko-config`, example `02_config` |
 | Metrics / tracing | Plug in your library; expose via routes on your HTTP layer | — |
 
@@ -221,7 +221,7 @@ on open with no setup beyond installing jbang.
 | `@EventHandler(async, eventType)`   | Subscribe to events (sync by default, opt-in async)                      | [events.md](./docs/events.md) |
 | `@EventTrigger(eventName, ...)`     | Declarative event chains — return-as-payload, guards, spread, async      | [events.md](./docs/events.md#event-chains-with-eventtrigger) |
 
-Scopes: `SINGLETON` > `EVENT` > `PROTOTYPE` (longest to shortest lifetime). Shorter-lived beans injected into longer-lived scopes are automatically proxied — see [docs/di-and-scopes.md](./docs/di-and-scopes.md#cross-scope-injection).
+Scopes: `SINGLETON` > `EVENT` > `PROTOTYPE` (longest to shortest lifetime). An `EVENT` bean injected into a `SINGLETON` is proxied automatically; every other combination is injected directly — see [docs/di-and-scopes.md](./docs/di-and-scopes.md#cross-scope-injection).
 
 ## Runnable examples
 

@@ -7,7 +7,7 @@
 `tiko-config` binds YAML to `@Configuration` records by the **exact component
 name** — no kebab-case/snake_case normalization, no Spring-style relaxation.
 `poolSize` binds from `poolSize`, never `pool-size` or `pool_size`. A wrong key
-fails the build with a `ConfigValidationException` naming the bad path and (for
+fails at `Tiko.create(...)` with a `ConfigValidationException` naming the bad path and (for
 a near-miss) suggesting the right key (`Did you mean 'db.poolSize'?`). Write the
 config to match the record and it binds on the first attempt.
 

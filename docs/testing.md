@@ -12,10 +12,11 @@ For a runnable example, see [`tiko-examples/12_testing`](../tiko-examples/12_tes
 <dependency>
     <groupId>io.github.tomas-samek</groupId>
     <artifactId>tiko-test</artifactId>
-    <version>0.1.0</version>
     <scope>test</scope>
 </dependency>
 ```
+
+The version comes from the `tiko-bom` import shown in the [README installation section](../README.md#installation), which manages `tiko-test` with the other modules.
 
 ## Classpath layout
 
@@ -341,9 +342,10 @@ try (Container c = Tiko.create(TikoOptions.builder()
   (`.replaceTransport(TransportBootstrap.class, t -> null)` disables all transports).
 - A key that matches no discovered transport fails fast at `Tiko.create(...)` — if you hit
   that in a unit-test module, the generated transport isn't on the test classpath.
-- `configSource(...)` is still required if the app declares any `@Configuration` (including
-  `tiko-kafka`'s own config) — set it exactly like the app's `Main` does, or `Tiko.create`
-  fails config validation before the transport substitution ever runs.
+- `configSource(...)` is needed only for values that no module `defaults.yaml` and no `@Default`
+  covers (`tiko-kafka` ships defaults for its own keys). When the app's `Main` passes a source for
+  such values, pass the same one here, or `Tiko.create` fails config validation before the
+  transport substitution ever runs.
 - If the module packages a shaded/fat runnable jar, point `maven-failsafe-plugin` at
   `<classesDirectory>${project.build.outputDirectory}</classesDirectory>` — otherwise
   failsafe defaults to running ITs against the packaged jar, which puts bundled
