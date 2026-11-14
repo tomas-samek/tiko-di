@@ -1017,6 +1017,53 @@ class KspTestCompileTest {
         }
     }
 
+    /**
+     * A named {@code @TestComponent} shadows nothing even when it states a {@code value} (#707): next
+     * to an unnamed shadow it is no duplicate, and on its own it leaves the main component in place.
+     */
+    @Test
+    void namedTestComponentWithAValueShadowsNothing(@TempDir Path dir) throws Exception {
+        var mainClasses = writeClassOutput(javacClockMain(), dir.resolve("main"));
+        var namedWithValue = "(value = Clock.class, name = \"other\")";
+        var beside = writeClassOutput(
+                javacCompile(
+                        List.of(mainClasses.toFile()),
+                        JavaFileObjects.forSourceString("io.tiko.test.TestComponent", TEST_COMPONENT_ANNOTATION),
+                        javacTestClock("FixedClock", ""),
+                        javacTestClock("OtherClock", namedWithValue)),
+                dir.resolve("beside"));
+        try (var program = KspProgram.bootTestWiring(programOver(beside, mainClasses))) {
+            assertThat(clockOfScheduler(program)).isEqualTo("demo.FixedClock");
+            assertThat(program.get("demo.Clock", "other").getClass().getName()).isEqualTo("demo.OtherClock");
+        }
+        var alone = writeClassOutput(
+                javacCompile(
+                        List.of(mainClasses.toFile()),
+                        JavaFileObjects.forSourceString("io.tiko.test.TestComponent", TEST_COMPONENT_ANNOTATION),
+                        javacTestClock("OtherClock", namedWithValue)),
+                dir.resolve("alone"));
+        try (var program = KspProgram.bootTestWiring(programOver(alone, mainClasses))) {
+            assertThat(clockOfScheduler(program)).isEqualTo("demo.SystemClock");
+        }
+
+        var main = compileMain(KspCompiler.kotlin("Clock.kt", KOTLIN_CLOCK_MAIN));
+        var test = compileTest(librariesOf(main), KspCompiler.kotlin("Clocks.kt", """
+                        package demo
+
+                        import io.tiko.test.TestComponent
+
+                        @TestComponent
+                        class FixedClock : Clock
+
+                        @TestComponent(value = Clock::class, name = "other")
+                        class OtherClock : Clock
+                        """));
+        try (var program = KspProgram.bootTestWiring(test)) {
+            assertThat(clockOfScheduler(program)).isEqualTo("demo.FixedClock");
+            assertThat(program.get("demo.Clock", "other").getClass().getName()).isEqualTo("demo.OtherClock");
+        }
+    }
+
     private static final String DUPLICATE_SHADOW =
             "@TestComponents demo.FixedClock, demo.OtherClock all shadow demo.Clock";
 
