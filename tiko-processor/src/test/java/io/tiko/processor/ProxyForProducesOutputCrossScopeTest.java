@@ -99,4 +99,71 @@ class ProxyForProducesOutputCrossScopeTest {
         assertThat(consumerFactoryBody).contains("new GreetingFactory_greetingProxy(container)");
         assertThat(consumerFactoryBody).doesNotContain("container.produce_GreetingFactory_greeting()");
     }
+
+    private static final JavaFileObject GREETING = JavaFileObjects.forSourceLines(
+            "io.example.Greeting", "package io.example;", "public interface Greeting {", "  String hello();", "}");
+
+    private static String containerSourceFor(String... greetingFactoryMethods) throws IOException {
+        var lines = new java.util.ArrayList<String>(java.util.List.of(
+                "package io.example;",
+                "import io.tiko.Provider;",
+                "import io.tiko.Scope;",
+                "import io.tiko.annotations.Component;",
+                "import io.tiko.annotations.Produces;",
+                "@Component(scope = Scope.SINGLETON)",
+                "public class GreetingFactory {",
+                "  @Produces(scope = Scope.EVENT)",
+                "  public Greeting greeting() { return () -> \"hi\"; }"));
+        lines.addAll(java.util.List.of(greetingFactoryMethods));
+        lines.add("}");
+        Compilation c = Compiler.javac()
+                .withProcessors(new TikoAnnotationProcessor())
+                .compile(GREETING, JavaFileObjects.forSourceLines("io.example.GreetingFactory", lines));
+        CompilationSubject.assertThat(c).succeeded();
+        JavaFileObject container = c.generatedSourceFiles().stream()
+                .filter(f -> f.getName().contains("TikoContainerImpl"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("TikoContainerImpl not generated"));
+        return new String(container.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
+    }
+
+    /**
+     * #725: a SINGLETON {@code @Produces} method is a longer-lived consumer too. Its EVENT-scoped
+     * {@code @Produces} parameter must be the proxy, as a SINGLETON constructor parameter is; the value
+     * itself would be the first unit's instance in every later unit.
+     */
+    @Test
+    void singletonProducesMethodReceivesTheProxyOfAnEventScopedProducesParameter() throws IOException {
+        String container = containerSourceFor(
+                "  @Produces(scope = Scope.SINGLETON)", "  public String shout(Greeting g) { return g.hello(); }");
+
+        assertThat(container)
+                .contains("getGreetingFactory().shout(new GreetingFactory_greetingProxy(this))")
+                .doesNotContain("shout(produce_GreetingFactory_greeting())");
+    }
+
+    @Test
+    void sameOrShorterLivedProducesMethodReceivesTheEventScopedValueItself() throws IOException {
+        String container = containerSourceFor(
+                "  @Produces(scope = Scope.EVENT)",
+                "  public String perUnit(Greeting g) { return g.hello(); }",
+                "  @Produces",
+                "  public Integer perUse(Greeting g) { return 1; }");
+
+        assertThat(container)
+                .contains("perUnit(produce_GreetingFactory_greeting())")
+                .contains("perUse(produce_GreetingFactory_greeting())")
+                .doesNotContain("new GreetingFactory_greetingProxy(this)");
+    }
+
+    @Test
+    void singletonProducesMethodTakingAProviderResolvesTheValueOnEachCall() throws IOException {
+        String container = containerSourceFor(
+                "  @Produces(scope = Scope.SINGLETON)",
+                "  public String lazy(Provider<Greeting> g) { return \"lazy\"; }");
+
+        assertThat(container)
+                .contains("lazy(() -> produce_GreetingFactory_greeting())")
+                .doesNotContain("new GreetingFactory_greetingProxy(this)");
+    }
 }
