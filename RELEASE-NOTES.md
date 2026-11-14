@@ -1,5 +1,7 @@
 # Release Notes
 
+> **This file is the record up to 0.1.0 and is no longer updated.** Release notes for every later version are on [GitHub Releases](https://github.com/tomas-samek/tiko-di/releases). The `[Unreleased]` section below is the state of this file when it was last edited; what it lists shipped in later releases.
+
 All notable changes to **tiko-di** are documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it leaves alpha.
 
 ## [Unreleased]

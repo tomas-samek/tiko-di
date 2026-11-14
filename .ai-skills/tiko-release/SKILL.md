@@ -288,8 +288,13 @@ Spots to bump to `<X.Y.Z>`:
 - `README.md` — `-DarchetypeVersion=<ver>` in the archetype scaffold
   command.
 - `docs/jdk-23-setup.md` — the Maven `<version>`, the three Gradle
-  coordinates, and the plain-`javac` jar names (still explicit pins, not
-  BOM-managed).
+  coordinates, and the `V=<ver>` line of the plain-`javac` recipe (still
+  explicit pins, not BOM-managed). The SnakeYAML and JavaPoet jar names in
+  that recipe follow `snakeyaml.version` / `javapoet.version` in the root
+  POM; `JavacRecipeInSyncTest` (tiko-archetype) fails the build if they
+  disagree.
+- `docs/testing.md` — nothing to bump: its `tiko-test` snippet carries no
+  version (BOM-managed). Don't re-add one.
 - `site/index.html` — the `tiko-bom` version between the
   `<!-- sync:bom-version -->` markers in the Install snippet.
   `SiteInSyncTest` fails the build if it disagrees with the README.

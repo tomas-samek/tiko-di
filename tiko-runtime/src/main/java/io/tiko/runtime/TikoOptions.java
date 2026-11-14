@@ -21,9 +21,10 @@ import java.util.Objects;
  * }</pre>
  *
  * <p>All knobs are optional. When omitted, the framework supplies sensible defaults:
- * configuration binding is skipped (and fails fast at startup if any
- * {@code @Configuration} record is declared); the default error handler logs at WARN
- * via slf4j.
+ * with {@code tiko-config} on the classpath, {@code @Configuration} records still bind, from
+ * each module's {@code META-INF/tiko/defaults.yaml} and from {@code @Default} values, and a
+ * value none of them covers fails {@code Tiko.create}; the default error handler logs at
+ * {@code WARNING} through {@link System.Logger}.
  */
 public final class TikoOptions {
 

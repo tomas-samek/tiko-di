@@ -63,7 +63,9 @@ mvn compile -pl tiko-api             # one module
 ```
 tiko/
 ├── tiko-api/              # Core annotations & interfaces (~30KB target)
-├── tiko-processor/        # Compile-time annotation processor
+├── tiko-processor/        # Compile-time annotation processor (javac and KSP entry points)
+├── tiko-processor-core/   # Frontend-neutral processor model, its javac and KSP frontends,
+│                          # generator helpers — shared by both processors
 ├── tiko-runtime/          # Runtime container — `Tiko` bootstrap, `TikoContainerImpl`,
 │                          # `AggregatingContainer`, `LocalEventBus`, `DefaultErrorHandler`
 ├── tiko-config/           # YAML-backed @Configuration injection (optional)
@@ -87,7 +89,8 @@ in **tiko-api**; the in-memory implementation is in `tiko-runtime`. There is no 
 
 ```
 tiko-api            (no dependencies)
-├── tiko-processor  (tiko-api, javapoet, auto-service) — on the annotation-processor path
+├── tiko-processor  (tiko-api, tiko-processor-core, tiko-config, javapoet, auto-service) — on the
+│                    annotation-processor path; tiko-processor-core (javapoet) is the shared model
 ├── tiko-config     (tiko-api, snakeyaml)
 └── tiko-runtime    (tiko-api; tiko-config as an OPTIONAL dependency — present only when the
                      app uses @Configuration or tiko.* YAML keys)

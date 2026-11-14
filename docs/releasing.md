@@ -113,7 +113,10 @@ release → next-snapshot dance — you only supply two version strings.
    workflow run finished some seconds after the staging upload; it does not block on
    your Publish click.
 5. Create a GitHub Release at the tag the workflow pushed (`v<release_version>`).
-   `RELEASE-NOTES.md`'s `[Unreleased]` section is the canonical source for the body.
+   Draft the body from the release milestone and publish it with `gh release create --notes-file`
+   — Step 7 of the [release skill](../.ai-skills/tiko-release/SKILL.md). Release notes live on
+   [GitHub Releases](https://github.com/tomas-samek/tiko-di/releases); `RELEASE-NOTES.md` is the
+   record up to 0.1.0 and is no longer updated.
 
 If `deploy` fails, the workflow aborts before pushing the release commit or tag, so
 `main` is unchanged. Recovery is to fix the failure (e.g. transient SonarCloud API

@@ -191,9 +191,10 @@ class OrderFlowTest {
 A test that boots its own container passes the same two settings, plus `testWiring(true)`, to
 `Tiko.create(TikoOptions.builder()...build())`.
 
-- `configSource(...)` is still required if the app declares any `@Configuration`
-  (including `tiko-kafka`'s own) — set it exactly like the app's `Main` does, or
-  `Tiko.create` fails config validation before the transport substitution runs.
+- `configSource(...)` is needed only for values that no module `defaults.yaml` and no
+  `@Default` covers (`tiko-kafka` ships defaults for its own keys). When the app's `Main`
+  passes a source for such values, pass the same one here, or `Tiko.create` fails config
+  validation before the transport substitution runs.
 
 Inbound consumption is asynchronous (background poll thread): assert with Awaitility
 (`await().atMost(...)`), never `Thread.sleep`. Reference ITs:
