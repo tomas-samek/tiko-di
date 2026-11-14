@@ -281,6 +281,9 @@ public final class ContainerGenerator {
                 .addStatement("__shutdown(null)")
                 .build());
         containerBuilder.addMethod(createShutdownMethod());
+        if (hasComponentDestroyHook()) {
+            containerBuilder.addMethod(createInTeardownMethod());
+        }
         containerBuilder.addMethod(createIsStoppedMethod());
 
         // Add Provider methods
@@ -2260,20 +2263,52 @@ public final class ContainerGenerator {
     }
 
     /**
-     * The teardown task lambdas of one SINGLETON component: {@code () -> bean.close()} for an
-     * AutoCloseable-only component, else one {@code () -> bean.preDestroy()} per {@code @PreDestroy}
-     * method, in declaration order.
+     * The teardown task lambdas of one SINGLETON component: {@code bean.close()} for an
+     * AutoCloseable-only component, else one {@code bean.preDestroy()} per {@code @PreDestroy}
+     * method, in declaration order, each run through {@code __inTeardown}.
      */
     private List<CodeBlock> componentDestroyTasks(
             ComponentModel component, String variableName, boolean isAutoCloseOnly) {
         if (isAutoCloseOnly) {
-            return List.of(CodeBlock.of("() -> $L.close()", variableName));
+            return List.of(CodeBlock.of("() -> __inTeardown(() -> $L.close())", variableName));
         }
         var tasks = new ArrayList<CodeBlock>();
         for (var preDestroy : component.getPreDestroyMethods()) {
-            tasks.add(CodeBlock.of("() -> $L.$L()", variableName, preDestroy.jvmName()));
+            tasks.add(CodeBlock.of("() -> __inTeardown(() -> $L.$L())", variableName, preDestroy.jvmName()));
         }
         return tasks;
+    }
+
+    /** Whether shutdown tears any SINGLETON component down, so the container needs {@code __inTeardown}. */
+    private boolean hasComponentDestroyHook() {
+        return topoSortShutdownTargets().stream()
+                .anyMatch(target ->
+                        target instanceof ShutdownTarget.Component(var component) && component.hasDestroyHook());
+    }
+
+    /**
+     * Creates {@code __inTeardown(hook)}, which runs one component teardown hook with the lookup
+     * bypass on for the thread it runs on (#710). Under a {@code teardownTimeout} that is a
+     * {@code tiko-teardown} thread, where the bypass the shutdown thread set is not visible;
+     * without one it is the shutdown thread itself, whose bypass is left as it was.
+     */
+    private MethodSpec createInTeardownMethod() {
+        return MethodSpec.methodBuilder("__inTeardown")
+                .addModifiers(Modifier.PRIVATE)
+                .addParameter(BOUNDED_EXECUTION.nestedClass("CheckedRunnable"), "hook")
+                .addException(Exception.class)
+                .addStatement("boolean __bypassed = inShutdownThread.get()")
+                .beginControlFlow("if (!__bypassed)")
+                .addStatement("inShutdownThread.set($T.TRUE)", Boolean.class)
+                .endControlFlow()
+                .beginControlFlow("try")
+                .addStatement("hook.run()")
+                .nextControlFlow("finally")
+                .beginControlFlow("if (!__bypassed)")
+                .addStatement("inShutdownThread.remove()")
+                .endControlFlow()
+                .endControlFlow()
+                .build();
     }
 
     /**

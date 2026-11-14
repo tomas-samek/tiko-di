@@ -105,7 +105,43 @@ class ContainerBloatEmissionTest {
         assertThat(source)
                 .as("without SINGLETON destroy hooks, shutdown() skips the bypass set and its try/finally")
                 .doesNotContain("inShutdownThread.set(Boolean.TRUE)")
-                .doesNotContain("inShutdownThread.remove()");
+                .doesNotContain("inShutdownThread.remove()")
+                .doesNotContain("__inTeardown");
+    }
+
+    /**
+     * #710: each component teardown hook runs through {@code __inTeardown}, which turns the lookup
+     * bypass on for whichever thread runs the hook: the shutdown thread, or a teardown thread
+     * under a {@code teardownTimeout}.
+     */
+    @Test
+    void singletonDestroyHooksRunThroughTheTeardownBypass() throws IOException {
+        String source = generateContainerSource(
+                JavaFileObjects.forSourceLines(
+                        "demo.Flusher",
+                        "package demo;",
+                        "import io.tiko.Scope;",
+                        "import io.tiko.annotations.Component;",
+                        "import io.tiko.annotations.PreDestroy;",
+                        "@Component(scope = Scope.SINGLETON)",
+                        "public class Flusher {",
+                        "  @PreDestroy public void flush() {}",
+                        "}"),
+                JavaFileObjects.forSourceLines(
+                        "demo.Pool",
+                        "package demo;",
+                        "import io.tiko.Scope;",
+                        "import io.tiko.annotations.Component;",
+                        "@Component(scope = Scope.SINGLETON)",
+                        "public class Pool implements AutoCloseable {",
+                        "  @Override public void close() {}",
+                        "}"));
+
+        assertThat(source)
+                .contains("() -> __inTeardown(() -> flusher.flush())")
+                .contains("() -> __inTeardown(() -> pool.close())")
+                .contains("private void __inTeardown(BoundedExecution.CheckedRunnable hook) throws Exception");
+        assertThat(countOccurrences(source, "private void __inTeardown(")).isEqualTo(1);
     }
 
     private String generateContainerSource(JavaFileObject... sources) throws IOException {
