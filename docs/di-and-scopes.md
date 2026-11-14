@@ -52,6 +52,11 @@ An EVENT-scoped bean injected into a SINGLETON is wired through an **auto-genera
 | `EVENT`                   | direct    | direct    | direct    |
 | `PROTOTYPE`               | direct    | direct    | direct    |
 
+A SINGLETON keeps a PROTOTYPE it injects for its own lifetime, so the rule reaches through it: whatever that PROTOTYPE injects directly must be safe for the SINGLETON too. Two shapes are compile errors:
+
+- **A SINGLETON that injects a PROTOTYPE which injects an EVENT bean as the instance itself**: a concrete EVENT component, or an EVENT `@Produces` value (a PROTOTYPE receives the value, not its proxy). The SINGLETON would keep one unit's instance in every later unit. Take the PROTOTYPE, or the EVENT dependency inside it, as a `Provider<T>` and call `get()` on each use. An EVENT component that implements an interface is fine: every consumer receives its proxy.
+- **An instance `@Produces(scope = Scope.SINGLETON)` method on an EVENT component**: calling it needs an instance that exists only inside a unit. Make the method `static`, or declare it on a SINGLETON or PROTOTYPE component.
+
 Resources bind to the current unit only; sharing one across units is a non-goal.
 
 ### Unit of work in practice

@@ -154,6 +154,67 @@ public final class ErrorReporter {
                 "Make " + className + " implement an existing interface");
     }
 
+    /**
+     * {@link #missingInterface} for a bean the consumer reaches through PROTOTYPEs it holds (#723):
+     * besides an interface, taking the first PROTOTYPE as a {@code Provider} also ends the capture.
+     */
+    public void missingInterfaceThroughPrototype(
+            Location at, String className, String reason, String heldPrototype, String consumerName) {
+        reportError(
+                KIND_SCOPE_VIOLATION,
+                at,
+                className + " must implement an interface. " + reason,
+                "Extract an interface from " + className + " and inject that",
+                "Inject " + heldPrototype + " into " + consumerName + " as a Provider and call get() on each use,"
+                        + " so every use builds it inside the current unit");
+    }
+
+    /**
+     * A longer-lived consumer reaches a shorter-lived {@code @Produces} value through PROTOTYPEs it
+     * holds (#723). A PROTOTYPE receives the produced value itself, never its proxy, so the consumer
+     * would keep one unit's value for its own lifetime.
+     */
+    public void producedValueCapturedThroughPrototype(
+            Location at,
+            String consumerScope,
+            String consumerName,
+            String valueScope,
+            String valueType,
+            String through,
+            String holder) {
+        reportError(
+                KIND_SCOPE_VIOLATION,
+                at,
+                "Scope violation: " + consumerScope + "-scoped '" + consumerName + "' would keep one unit's '"
+                        + valueType + "'. It reaches this " + valueScope + "-scoped @Produces value through "
+                        + through + ", and " + holder + " receives the value itself, not a proxy.",
+                "Inject Provider<" + valueType + "> into " + holder + " and call get() on each use",
+                "Inject the PROTOTYPE into " + consumerName + " as a Provider and call get() on each use, so"
+                        + " every use builds it inside the current unit");
+    }
+
+    /**
+     * An instance {@code @Produces} method outlives the EVENT component it is called on (#723).
+     */
+    public void producesOutlivesDeclaringComponent(
+            Location at,
+            String producesScope,
+            String producesName,
+            String methodName,
+            String componentScope,
+            String componentName) {
+        reportError(
+                KIND_SCOPE_VIOLATION,
+                at,
+                producesScope + " @Produces method '" + producesName + "' is declared on " + componentScope
+                        + "-scoped component '" + componentName + "'. Calling it needs an instance of '"
+                        + componentName + "', which exists only inside a unit of work, and the produced value"
+                        + " would outlive that unit.",
+                "Make '" + methodName + "' static if it does not use the instance",
+                "Declare '" + methodName + "' on a SINGLETON or PROTOTYPE component",
+                "Change the scope of '" + methodName + "' to " + componentScope + " or PROTOTYPE");
+    }
+
     public void rawWrapperInjection(Location parameter, Location owner, String wrapperName) {
         // Prefer the parameter for location; fall back to the owner when the
         // parameter location is unavailable (defensive — collection always sets it today).
