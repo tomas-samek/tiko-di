@@ -2247,34 +2247,33 @@ public final class ContainerGenerator {
         // Teardown runs under options.teardownTimeout() (#106): unset → inline on the shutdown
         // thread (today's behavior, zero overhead), set → bounded with TimeoutException-caused
         // routing. Either way failures route solely through ErrorHandler (#116) — no catch-site log.
-        method.addStatement(
-                "$T.run($L, this.options.teardownTimeout(), __teardownErrors, __t -> new $T($T.class, __t))",
-                BOUNDED_EXECUTION,
-                componentDestroyTask(component, variableName, isAutoCloseOnly),
-                failureType,
-                componentType);
+        // One bounded call per hook (#712): a hook that fails or overruns does not skip the next.
+        for (var task : componentDestroyTasks(component, variableName, isAutoCloseOnly)) {
+            method.addStatement(
+                    "$T.run($L, this.options.teardownTimeout(), __teardownErrors, __t -> new $T($T.class, __t))",
+                    BOUNDED_EXECUTION,
+                    task,
+                    failureType,
+                    componentType);
+        }
         method.endControlFlow(); // if non-null
     }
 
     /**
-     * Builds the teardown task lambda for one SINGLETON component: {@code () -> bean.close()} for an
-     * AutoCloseable-only component, {@code () -> bean.preDestroy()} for a single {@code @PreDestroy},
-     * or a block lambda invoking each {@code @PreDestroy} in turn.
+     * The teardown task lambdas of one SINGLETON component: {@code () -> bean.close()} for an
+     * AutoCloseable-only component, else one {@code () -> bean.preDestroy()} per {@code @PreDestroy}
+     * method, in declaration order.
      */
-    private CodeBlock componentDestroyTask(ComponentModel component, String variableName, boolean isAutoCloseOnly) {
+    private List<CodeBlock> componentDestroyTasks(
+            ComponentModel component, String variableName, boolean isAutoCloseOnly) {
         if (isAutoCloseOnly) {
-            return CodeBlock.of("() -> $L.close()", variableName);
+            return List.of(CodeBlock.of("() -> $L.close()", variableName));
         }
-        var preDestroys = component.getPreDestroyMethods();
-        if (preDestroys.size() == 1) {
-            return CodeBlock.of(
-                    "() -> $L.$L()", variableName, preDestroys.get(0).jvmName());
+        var tasks = new ArrayList<CodeBlock>();
+        for (var preDestroy : component.getPreDestroyMethods()) {
+            tasks.add(CodeBlock.of("() -> $L.$L()", variableName, preDestroy.jvmName()));
         }
-        CodeBlock.Builder body = CodeBlock.builder().add("() -> {\n").indent();
-        for (var preDestroy : preDestroys) {
-            body.addStatement("$L.$L()", variableName, preDestroy.jvmName());
-        }
-        return body.unindent().add("}").build();
+        return tasks;
     }
 
     /**
