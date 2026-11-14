@@ -218,11 +218,11 @@ credibility comes from naming them.
   `CALLER_RUNS` policy runs the invocation inline, while `BLOCK` waits for
   queue space. Custom executors apply their own rejection policy.
 
-- **Transactional semantics — event-scope buffering built in, outbox
-  recommended, no implicit phase coupling between transactions and event
-  delivery.** Events published inside `runInEventScope` are buffered and
-  only released when the scope exits successfully; on failure they are
-  dropped. The `@TransactionalEventListener` reflex is replaced by an
+- **Transactional semantics — no buffering, outbox recommended, no
+  implicit phase coupling between transactions and event delivery.**
+  `publish` delivers at once, inside `runInEventScope` as well as outside
+  it; a unit that publishes and then fails has already delivered the
+  event. The `@TransactionalEventListener` reflex is replaced by an
   explicit `eventBus.publish(...)` after the write completes — see the
   redirect in [`docs/orchestrator-model.md` §4.1](./orchestrator-model.md).
   Persistence-backed outbox (for crash safety across the JVM boundary) is
