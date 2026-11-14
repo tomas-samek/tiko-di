@@ -191,13 +191,18 @@ public final class ComponentFactoryGenerator {
         Optional<MethodDecl> staticFactory = component.getStaticFactoryMethod();
         String params = String.join(", ", parameterNames);
         if (staticFactory.isPresent()) {
-            String factoryMethodName = staticFactory.get().jvmName();
-            methodBuilder.addStatement(
-                    "$T instance = $T.$L($L)", componentClass, componentClass, factoryMethodName, params);
-        } else if (parameterNames.isEmpty()) {
-            methodBuilder.addStatement("$T instance = new $T()", componentClass, componentClass);
-        } else {
+            addSelfFactoryCall(methodBuilder, componentClass, staticFactory.get(), params);
+        } else if (component.getConstructor().thrownTypes().isEmpty()) {
             methodBuilder.addStatement("$T instance = new $T($L)", componentClass, componentClass, params);
+        } else {
+            // The constructor declares exceptions (#713): pass them on unchanged, as an unchecked
+            // constructor failure already is. No ErrorContext describes a constructor.
+            methodBuilder.addStatement("$T instance", componentClass);
+            methodBuilder.beginControlFlow("try");
+            methodBuilder.addStatement("instance = new $T($L)", componentClass, params);
+            methodBuilder.nextControlFlow("catch ($T __t)", Exception.class);
+            addSneakyRethrow(methodBuilder);
+            methodBuilder.endControlFlow();
         }
 
         // Call @PostConstruct methods. Failures route through ErrorHandler before re-throwing
@@ -318,5 +323,30 @@ public final class ComponentFactoryGenerator {
     private String getSimpleClassName(String qualifiedName) {
         int lastDot = qualifiedName.lastIndexOf('.');
         return lastDot >= 0 ? qualifiedName.substring(lastDot + 1) : qualifiedName;
+    }
+
+    /**
+     * Calls the component's self-returning static {@code @Produces} factory. A failure is routed as
+     * a {@code ProduceFailure} and rethrown unchanged, as for every other {@code @Produces} method,
+     * which also lets the factory declare checked exceptions (#713).
+     */
+    private static void addSelfFactoryCall(
+            MethodSpec.Builder method, ClassName componentClass, MethodDecl factory, String params) {
+        method.addStatement("$T instance", componentClass);
+        method.beginControlFlow("try");
+        method.addStatement("instance = $T.$L($L)", componentClass, factory.jvmName(), params);
+        method.nextControlFlow("catch ($T __t)", Exception.class);
+        method.addStatement(
+                "container.getErrorHandler().onError(new $T($T.class, $S, __t))",
+                ClassName.get("io.tiko", "ProduceFailure"),
+                componentClass,
+                factory.jvmName());
+        addSneakyRethrow(method);
+        method.endControlFlow();
+    }
+
+    private static void addSneakyRethrow(MethodSpec.Builder method) {
+        method.addStatement(
+                "throw $T.<$T>sneakyThrow(__t)", ClassName.get("io.tiko.runtime", "Unchecked"), RuntimeException.class);
     }
 }
