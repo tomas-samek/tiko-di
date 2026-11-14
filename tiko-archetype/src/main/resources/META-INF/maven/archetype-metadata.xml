@@ -23,19 +23,22 @@
                 <include>**/*.md</include>
             </includes>
         </fileSet>
-        <fileSet filtered="true" encoding="UTF-8">
+        <!-- The other assistants' rule files and the top-level CLAUDE.md / AGENTS.md below are NOT
+             filtered either: Velocity reads a line that starts with ## as a comment, so filtering
+             drops every Markdown heading (#702). They use no archetype properties. -->
+        <fileSet filtered="false" encoding="UTF-8">
             <directory>.cursor</directory>
             <includes>
                 <include>**/*.md</include>
             </includes>
         </fileSet>
-        <fileSet filtered="true" encoding="UTF-8">
+        <fileSet filtered="false" encoding="UTF-8">
             <directory>.github</directory>
             <includes>
                 <include>**/*.md</include>
             </includes>
         </fileSet>
-        <fileSet filtered="true" encoding="UTF-8">
+        <fileSet filtered="false" encoding="UTF-8">
             <directory>.junie</directory>
             <includes>
                 <include>**/*.md</include>
@@ -49,6 +52,11 @@
             <includes>
                 <include>.gitignore</include>
                 <include>.mcp.json</include>
+            </includes>
+        </fileSet>
+        <fileSet filtered="false" encoding="UTF-8">
+            <directory></directory>
+            <includes>
                 <include>CLAUDE.md</include>
                 <include>AGENTS.md</include>
             </includes>
