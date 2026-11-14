@@ -29,7 +29,9 @@ non-JDK / non-`io.tiko` type in `tiko-api/src/main`.
 
 **Statement.** Annotations the processor reads are `RetentionPolicy.SOURCE`. The only
 documented RUNTIME exceptions are `@PostConstruct` and `@PreDestroy`, because the container
-invokes them via generated code at runtime.
+invokes them via generated code at runtime, and `@Named`, because `@TikoTest` reads it on
+test-method parameters to look the named component up (#715). The container never reads
+`@Named`: wiring by name is still generated at compile time.
 
 **Rationale.** Compile-time concerns must not leak into runtime bytecode; SOURCE retention is
 a code-level invariant, not a version-pinning bet.
@@ -37,7 +39,8 @@ a code-level invariant, not a version-pinning bet.
 **Anchor.** `.claude/rules/api-surface.md` "Annotation Retention".
 
 **Violation looks like.** A new framework annotation with `@Retention(RUNTIME)` whose
-bytecode is never read by the container or generated code at runtime.
+bytecode is never read at runtime by the container, generated code or the test extension;
+or the container starting to read `@Named` (or any annotation) reflectively.
 
 ---
 

@@ -26,9 +26,12 @@ import java.lang.annotation.Target;
  *     }
  * }
  * }</pre>
+ *
+ * <p>Retained at run time: {@code @TikoTest} reads it on test-method parameters to look the named
+ * component up (#715). The container itself never reads it; wiring is generated at compile time.
  */
 @Target({ElementType.PARAMETER})
-@Retention(RetentionPolicy.SOURCE)
+@Retention(RetentionPolicy.RUNTIME)
 public @interface Named {
     /**
      * The name used to distinguish this component from others of the same type.

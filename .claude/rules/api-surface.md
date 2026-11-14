@@ -13,6 +13,8 @@ paths:
   reason for a compile-time concern to leak into runtime bytecode.
 - `@PostConstruct` and `@PreDestroy` are `RUNTIME` because the container invokes
   them via generated code at runtime — that is the bar for keeping `RUNTIME`.
+- `@Named` is `RUNTIME` because `@TikoTest` reads it on test-method parameters (#715).
+  The container never reads it; do not add reflective lookups on it.
 - When adding a new annotation, audit it: if the bytecode doesn't read it, it must
   be `SOURCE`.
 
