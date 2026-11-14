@@ -387,7 +387,7 @@ public class TickScheduler {
     private final EventBus bus;
 
     @Inject
-    public TickScheduler(Container container) { this.bus = container.getEventBus(); }
+    public TickScheduler(EventBus bus) { this.bus = bus; }
 
     @PostConstruct
     public void start() {

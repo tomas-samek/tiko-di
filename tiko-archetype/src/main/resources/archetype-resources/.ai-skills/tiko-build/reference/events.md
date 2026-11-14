@@ -18,9 +18,10 @@ public class OrderApi {
 
 `Container` itself is **not** injectable (injecting it is service location). If you
 genuinely need the container — e.g. plain route handlers that aren't components — pass
-it into a hand-constructed class after bootstrap, as `ThingRoutes` does in the
-bootstrap pattern in [`SKILL.md`](../SKILL.md). Prefer injecting `EventBus` (or the
-specific collaborators) over reaching for `Container`.
+it into a hand-constructed class after bootstrap, as `OrderHttpRoutes` does in
+[`tiko-examples/10_persistence_jdbc`](https://github.com/tomas-samek/tiko-di/tree/main/tiko-examples/10_persistence_jdbc)
+(`HttpEntry` builds it with `new OrderHttpRoutes(container)`). Prefer injecting
+`EventBus` (or the specific collaborators) over reaching for `Container`.
 
 ## Subscribing with `@EventHandler`
 
