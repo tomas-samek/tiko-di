@@ -247,6 +247,21 @@ public final class KotlinConstructRules {
     }
 
     /**
+     * A {@code suspend} member of a proxied interface: the generated proxy overrides it as a plain
+     * Java method, but on the JVM it takes a {@code Continuation} (#705).
+     */
+    public static Optional<Violation> suspendInProxiedInterface(MethodDecl method, Caller caller) {
+        if (!method.isSuspend()) {
+            return Optional.empty();
+        }
+        return Optional.of(new Violation(
+                method.location(),
+                "Proxied interface member '" + qualifiedMethodName(method) + "' is a suspend fun, which is not"
+                        + " supported: " + caller.generated() + " calls it directly, outside any coroutine.",
+                DROP_SUSPEND + ", or wait for coroutine support (K2)"));
+    }
+
+    /**
      * An abstract member of a proxied interface (a method or a property accessor) returning or
      * taking a value class, or whose JVM name is mangled: the generated proxy overrides it by
      * its JVM signature, so it can't be written in Java.

@@ -117,9 +117,10 @@ public final class KotlinConstructValidator {
     }
 
     /**
-     * Reports the abstract members of each proxied interface that name a value class or a mangled
-     * JVM name: the generated proxy would override them by JVM signature, which Java source can't
-     * write. It runs before proxy generation, so no proxy is written for a rejected interface.
+     * Reports the abstract members of each proxied interface that are {@code suspend}, or that name
+     * a value class or a mangled JVM name: the generated proxy would override them by JVM
+     * signature, which Java source can't write. It runs before proxy generation, so no proxy is
+     * written for a rejected interface.
      */
     private boolean validateProxiedInterfaces() {
         var interfaces = new LinkedHashMap<String, ClassDecl>();
@@ -144,7 +145,8 @@ public final class KotlinConstructValidator {
         var valid = true;
         for (var decl : interfaces.values()) {
             for (var method : AbstractInterfaceMethods.collect(decl)) {
-                var violation = KotlinConstructRules.valueClassInProxiedInterface(method, PROXY);
+                var violation = KotlinConstructRules.suspendInProxiedInterface(method, PROXY)
+                        .or(() -> KotlinConstructRules.valueClassInProxiedInterface(method, PROXY));
                 if (violation.isPresent()) {
                     report(violation.get());
                     valid = false;

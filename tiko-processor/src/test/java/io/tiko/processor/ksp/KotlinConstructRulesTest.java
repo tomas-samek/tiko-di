@@ -349,6 +349,20 @@ class KotlinConstructRulesTest {
                         "Proxied interface member 'Ctx.use' takes the Kotlin value class app.TenantId (parameter 'id')",
                         "Use a regular class"),
                 rejected(
+                        "suspendMemberInProxiedInterfaceRejected",
+                        """
+                        interface Ctx { fun id(): String; suspend fun load(): String }
+                        @Component(scope = Scope.EVENT) class CtxImpl : Ctx {
+                            override fun id(): String = "a"
+                            override suspend fun load(): String = "b"
+                        }
+                        @Component(scope = Scope.SINGLETON) class Holder(val ctx: Ctx)
+                        """,
+                        ErrorReporter.KOTLIN_UNSUPPORTED,
+                        "Proxied interface member 'Ctx.load' is a suspend fun",
+                        "the generated proxy calls it directly, outside any coroutine",
+                        "Drop the suspend modifier"),
+                rejected(
                         "javaKeywordJvmNameRejected",
                         """
                         @Component(scope = Scope.SINGLETON) class Factories {
