@@ -20,7 +20,7 @@ EVENT-scoped beans only resolve while a unit of work is open. Resolving one outs
 
 ### When singletons are constructed
 
-When the container starts (`Tiko.create(...)`, `Tiko.daemon(...)`), it constructs every SINGLETON `@Component`, and with it everything those constructors take. Everything else is constructed on first use:
+A **single-module container** is the usual application: one module runs the processor. When it starts (`Tiko.create(...)`, `Tiko.daemon(...)`), it constructs every SINGLETON `@Component`, and with it everything those constructors take. Everything else is constructed on first use:
 
 - **A SINGLETON value from a `@Produces` method** is built the first time something resolves it: a constructor that takes it, a `container.get(...)`, or `Provider.get()`. Constructing the `@Component` that declares the method does not call the method.
 - **A dependency taken as `Provider<T>`** is not resolved until `get()` is called.
@@ -28,7 +28,14 @@ When the container starts (`Tiko.create(...)`, `Tiko.daemon(...)`), it construct
 
 A failure while the container starts fails `Tiko.create(...)` or `Tiko.daemon(...)`, and the container shuts down what it already started. A produced value that is first resolved later fails at that later call instead.
 
-So a produced resource that starts its own work, such as a relay, a scheduler or a pool you want to fail fast, does nothing until something asks for it. To start it at boot, take it as a constructor parameter of a SINGLETON `@Component`:
+**Two kinds of container construct no SINGLETON when they start.** There a SINGLETON `@Component` is built on first use, like a produced value:
+
+- **A multi-module container**: more than one module on the classpath ran the processor, as in [`tiko-examples/05_multi_module`](../tiko-examples/05_multi_module).
+- **A test-wiring container**: a `@TikoTest` container (or one created with `testWiring(true)`) whose test tree declares components of its own, `@Component` or `@TestComponent`, on top of the main module's.
+
+In both, a failing constructor or `@PostConstruct` surfaces at the first use and does not fail `Tiko.create(...)`.
+
+So a produced resource that starts its own work, such as a relay, a scheduler or a pool you want to fail fast, does nothing until something asks for it. To start it at boot in a single-module container, take it as a constructor parameter of a SINGLETON `@Component`:
 
 ```java
 @Component(scope = Scope.SINGLETON)
@@ -41,6 +48,26 @@ public class OutboxStartup {
 ```
 
 If the class is yours, making it a SINGLETON `@Component` instead of producing it does the same.
+
+In a multi-module or test-wiring container `OutboxStartup` itself waits for its first use. Two ways start it at boot in every kind of container:
+
+- **Resolve it yourself** right after the container is created: `container.get(OutboxRelay.class)`. A failure then fails your `main`. [`tiko-examples/17_transactional_outbox`](../tiko-examples/17_transactional_outbox) does this.
+- **Handle `ApplicationStartedEvent` in the SINGLETON.** The container delivers that event when it starts, and delivering it constructs the component:
+
+  ```java
+  @Component(scope = Scope.SINGLETON)
+  public class OutboxStartup {
+      @Inject
+      public OutboxStartup(OutboxRelay relay) {}
+
+      @EventHandler
+      public void onStarted(ApplicationStartedEvent started) {
+          // Handling the event is what gets this component, and the relay, built at start.
+      }
+  }
+  ```
+
+  In a multi-module or test-wiring container, a failure while the event constructs it is logged at `WARNING` and does not fail `Tiko.create(...)`.
 
 ### Cross-scope injection
 

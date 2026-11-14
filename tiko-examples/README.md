@@ -53,6 +53,8 @@ Run `mvn -pl tiko-examples/04_api_impl/app dependency:tree` to confirm `module-i
 
 Two domain modules (`module-a`, `module-b`) each run the annotation processor and emit their own `TikoContainerImpl_<hash>`. The runtime's `AggregatingContainer` finds them via `META-INF/tiko/container.properties` and federates lookups across both — no special wiring code in the app.
 
+A multi-module container constructs no SINGLETON when it starts: the output prints each constructor line at the first `get()`, after "INITIALIZING AGGREGATED CONTAINER". See [When singletons are constructed](../docs/di-and-scopes.md#when-singletons-are-constructed).
+
 ```
 mvn -pl tiko-examples/05_multi_module/app exec:java \
     -Dexec.mainClass=io.tiko.examples.multimodule.app.Main
