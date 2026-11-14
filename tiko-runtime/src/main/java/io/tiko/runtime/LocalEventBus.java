@@ -2,6 +2,7 @@ package io.tiko.runtime;
 
 import io.tiko.EventBus;
 import io.tiko.EventCallback;
+import io.tiko.EventQueueOverflowException;
 import io.tiko.Subscription;
 import java.util.List;
 import java.util.Map;
@@ -47,11 +48,17 @@ public final class LocalEventBus implements EventBus {
             return;
         }
 
+        EventQueueOverflowException overflow = null;
         for (EventCallback<?> callback : callbacks) {
             @SuppressWarnings("unchecked")
             EventCallback<T> typedCallback = (EventCallback<T>) callback;
             try {
                 typedCallback.handle(event);
+            } catch (EventQueueOverflowException e) {
+                // OverflowPolicy.THROW (#714): the publisher asked to be told that the async queue
+                // is full. The remaining callbacks still get the event; then the publisher gets
+                // the exception.
+                overflow = retainOverflow(overflow, e);
             } catch (Exception e) {
                 // Defense-in-depth: the generated dispatcher already catches and reports
                 // its own throws via the ErrorHandler with a rich EventHandlerInfo. This
@@ -68,6 +75,20 @@ public final class LocalEventBus implements EventBus {
                         e);
             }
         }
+        if (overflow != null) {
+            throw overflow;
+        }
+    }
+
+    private static EventQueueOverflowException retainOverflow(
+            EventQueueOverflowException first, EventQueueOverflowException next) {
+        if (first == null) {
+            return next;
+        }
+        if (first != next) {
+            first.addSuppressed(next);
+        }
+        return first;
     }
 
     @Override
