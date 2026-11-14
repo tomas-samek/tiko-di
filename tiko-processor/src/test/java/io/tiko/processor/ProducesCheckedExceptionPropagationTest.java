@@ -67,4 +67,76 @@ class ProducesCheckedExceptionPropagationTest {
         // rather than the user method directly.
         assertThat(body).contains("produce_PoolFactory_dataSource");
     }
+
+    /** #713: a constructor that declares exceptions gets a try/catch that rethrows them unchanged. */
+    @Test
+    void constructorDeclaringCheckedExceptionCompilesAndRethrowsUnrouted() throws IOException {
+        JavaFileObject component = JavaFileObjects.forSourceLines(
+                "io.example.Connection",
+                "package io.example;",
+                "import io.tiko.annotations.Component;",
+                "import io.tiko.annotations.Inject;",
+                "import java.sql.SQLException;",
+                "@Component",
+                "public class Connection {",
+                "  @Inject public Connection() throws SQLException {}",
+                "}");
+
+        var factory = generatedFactory(component, "ConnectionFactory");
+
+        assertThat(factory)
+                .contains("instance = new Connection()")
+                .contains("catch (Exception __t)")
+                .contains("sneakyThrow(__t)")
+                .doesNotContain("ProduceFailure");
+    }
+
+    /** #713: a self-returning static factory is routed as {@code ProduceFailure}, like any {@code @Produces}. */
+    @Test
+    void selfReturningStaticFactoryDeclaringCheckedExceptionCompilesAndIsRouted() throws IOException {
+        JavaFileObject component = JavaFileObjects.forSourceLines(
+                "io.example.Database",
+                "package io.example;",
+                "import io.tiko.annotations.Component;",
+                "import io.tiko.annotations.Produces;",
+                "import java.io.IOException;",
+                "@Component",
+                "public class Database {",
+                "  private Database() {}",
+                "  @Produces public static Database open() throws IOException { return new Database(); }",
+                "}");
+
+        var factory = generatedFactory(component, "DatabaseFactory");
+
+        assertThat(factory)
+                .contains("instance = Database.open()")
+                .contains("new ProduceFailure(Database.class, \"open\", __t)")
+                .contains("sneakyThrow(__t)");
+    }
+
+    /** A constructor that declares nothing keeps the plain one-line construction. */
+    @Test
+    void constructorDeclaringNoExceptionIsConstructedWithoutATryBlock() throws IOException {
+        JavaFileObject component = JavaFileObjects.forSourceLines(
+                "io.example.Plain",
+                "package io.example;",
+                "import io.tiko.annotations.Component;",
+                "@Component",
+                "public class Plain {}");
+
+        assertThat(generatedFactory(component, "PlainFactory"))
+                .contains("Plain instance = new Plain()")
+                .doesNotContain("sneakyThrow");
+    }
+
+    private static String generatedFactory(JavaFileObject component, String factoryName) throws IOException {
+        Compilation c =
+                Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(component);
+        CompilationSubject.assertThat(c).succeeded();
+        JavaFileObject source = c.generatedSourceFiles().stream()
+                .filter(f -> f.getName().endsWith(factoryName + ".java"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(factoryName + " was not generated"));
+        return new String(source.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
+    }
 }

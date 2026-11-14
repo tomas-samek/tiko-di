@@ -36,6 +36,10 @@ import javax.lang.model.element.Modifier;
 public final class ComponentFactoryGenerator {
 
     private static final String GENERATED_PACKAGE = "io.tiko.generated";
+    private static final String RUNTIME_PACKAGE = "io.tiko.runtime";
+    private static final ClassName UNCHECKED = ClassName.get(RUNTIME_PACKAGE, "Unchecked");
+    /** Opens the catch block of generated code that routes or rethrows a failure named {@code __t}. */
+    private static final String CATCH_FAILURE = "catch ($T __t)";
 
     private final ProcessorContext context;
 
@@ -157,7 +161,7 @@ public final class ComponentFactoryGenerator {
                         "$T $L = new $T<>(container, $T.class)",
                         dependency.getType().javaPoet(),
                         paramName,
-                        ClassName.get("io.tiko.runtime", "ContainerPicker"),
+                        ClassName.get(RUNTIME_PACKAGE, "ContainerPicker"),
                         baseType);
             } else {
                 // Direct dependency resolution. Wrap with an override-aware lookup so a
@@ -200,7 +204,7 @@ public final class ComponentFactoryGenerator {
             methodBuilder.addStatement("$T instance", componentClass);
             methodBuilder.beginControlFlow("try");
             methodBuilder.addStatement("instance = new $T($L)", componentClass, params);
-            methodBuilder.nextControlFlow("catch ($T __t)", Exception.class);
+            methodBuilder.nextControlFlow(CATCH_FAILURE, Exception.class);
             addSneakyRethrow(methodBuilder);
             methodBuilder.endControlFlow();
         }
@@ -211,15 +215,12 @@ public final class ComponentFactoryGenerator {
         for (MethodDecl postConstruct : component.getPostConstructMethods()) {
             methodBuilder.beginControlFlow("try");
             methodBuilder.addStatement("instance.$L()", postConstruct.jvmName());
-            methodBuilder.nextControlFlow("catch ($T __t)", Exception.class);
+            methodBuilder.nextControlFlow(CATCH_FAILURE, Exception.class);
             methodBuilder.addStatement(
                     "container.getErrorHandler().onError(new $T($T.class, __t))",
                     ClassName.get("io.tiko", "PostConstructFailure"),
                     componentClass);
-            methodBuilder.addStatement(
-                    "throw $T.<$T>sneakyThrow(__t)",
-                    ClassName.get("io.tiko.runtime", "Unchecked"),
-                    RuntimeException.class);
+            addSneakyRethrow(methodBuilder);
             methodBuilder.endControlFlow();
         }
 
@@ -335,7 +336,7 @@ public final class ComponentFactoryGenerator {
         method.addStatement("$T instance", componentClass);
         method.beginControlFlow("try");
         method.addStatement("instance = $T.$L($L)", componentClass, factory.jvmName(), params);
-        method.nextControlFlow("catch ($T __t)", Exception.class);
+        method.nextControlFlow(CATCH_FAILURE, Exception.class);
         method.addStatement(
                 "container.getErrorHandler().onError(new $T($T.class, $S, __t))",
                 ClassName.get("io.tiko", "ProduceFailure"),
@@ -346,7 +347,6 @@ public final class ComponentFactoryGenerator {
     }
 
     private static void addSneakyRethrow(MethodSpec.Builder method) {
-        method.addStatement(
-                "throw $T.<$T>sneakyThrow(__t)", ClassName.get("io.tiko.runtime", "Unchecked"), RuntimeException.class);
+        method.addStatement("throw $T.<$T>sneakyThrow(__t)", UNCHECKED, RuntimeException.class);
     }
 }
