@@ -113,20 +113,22 @@ final class KspAnnotationRef implements AnnotationRef {
         return found;
     }
 
-    /** The annotations of one type; only those with a matching short name are resolved. */
+    /**
+     * The annotations of one type. Each annotation is matched by the type it resolves to, not by
+     * the short name it was written with: an import alias ({@code import ...Component as Comp})
+     * changes the written name only (#706).
+     */
     private static List<AnnotationRef> named(
             KspRef<? extends KSAnnotated> annotated,
             String annotationFqn,
             String ownerKey,
             String enclosingClass,
             KspModel model) {
-        var shortName = annotationFqn.substring(annotationFqn.lastIndexOf('.') + 1);
         var annotations = SequencesKt.toList(annotated.get().getAnnotations());
         var refs = new ArrayList<AnnotationRef>();
         for (var i = 0; i < annotations.size(); i++) {
             var annotation = annotations.get(i);
-            if (annotation.getShortName().asString().equals(shortName)
-                    && annotationName(annotation, model).equals(annotationFqn)) {
+            if (annotationName(annotation, model).equals(annotationFqn)) {
                 refs.add(at(annotated, i, annotation, ownerKey, enclosingClass, model));
             }
         }
