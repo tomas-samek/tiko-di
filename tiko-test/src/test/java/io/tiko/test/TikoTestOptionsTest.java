@@ -95,6 +95,15 @@ class TikoTestOptionsTest {
         assertThat(ORDER).containsExactly("enclosing", "base", "own");
     }
 
+    /** #711: a method both an outer class and its {@code @Nested} class inherit runs once per boot. */
+    @Test
+    void optionsMethodSharedByOuterAndNestedClassRunsOnce() {
+        var results = run(SharedBaseFixture.class);
+
+        assertThat(results.testEvents().failed().count()).isZero();
+        assertThat(ORDER).containsExactly("shared on Inner");
+    }
+
     @Test
     void optionsMethodWithTheWrongSignatureFailsTheTest() {
         assertFailsWith(WrongSignatureFixture.class, "must return void and take one TikoOptions.Builder");
@@ -217,6 +226,25 @@ class TikoTestOptionsTest {
         @TikoTestOptions
         void baseOptions(TikoOptions.Builder options) {
             ORDER.add("base");
+        }
+    }
+
+    abstract static class SharedBase {
+        @TikoTestOptions
+        void sharedOptions(TikoOptions.Builder options) {
+            ORDER.add("shared on " + getClass().getSimpleName());
+        }
+    }
+
+    @TikoTest
+    @EnabledIf("io.tiko.test.TikoTestOptionsTest#launchedByOptionsTest")
+    static class SharedBaseFixture extends SharedBase {
+        @Nested
+        class Inner extends SharedBase {
+            @Test
+            void boots() {
+                assertThat(ORDER).isNotEmpty();
+            }
         }
     }
 

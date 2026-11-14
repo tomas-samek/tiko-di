@@ -8,6 +8,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.Nested;
@@ -173,10 +174,11 @@ public final class TikoTestExtension
 
     /**
      * Runs the {@link TikoTestOptions} methods of the test class: those of the classes enclosing a
-     * {@code @Nested} class first, and within a class, those of its superclasses first.
+     * {@code @Nested} class first, and within a class, those of its superclasses first. A method an
+     * enclosing class and the nested class both inherit runs once (#711).
      */
     private static Consumer<TikoOptions.Builder> testOptions(ExtensionContext ctx) {
-        var methods = new ArrayList<Method>();
+        var methods = new LinkedHashSet<Method>();
         for (var type : enclosingFirst(ctx.getRequiredTestClass())) {
             methods.addAll(AnnotationSupport.findAnnotatedMethods(
                     type, TikoTestOptions.class, HierarchyTraversalMode.TOP_DOWN));

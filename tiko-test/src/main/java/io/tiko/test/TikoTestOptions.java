@@ -27,11 +27,12 @@ import java.lang.annotation.Target;
  * runs before each boot. An instance method sees the test's fields and needs the test instance, so
  * with {@link TikoTest.Lifecycle#PER_CLASS} and JUnit's default instance per method it must be
  * {@code static}. Methods of superclasses, and of the classes enclosing a {@code @Nested} class,
- * run before the class's own.
+ * run before the class's own; each method runs once per boot.
  *
- * <p>{@link TikoTest} owns four settings and rejects a method that sets one: the event bus
- * decorator (the {@link RecordingEventBus}), the event executor, test wiring (always on) and the
- * handler for threads outliving close (the leaked-thread failure).
+ * <p>{@link TikoTest} owns four settings. A method that sets the event bus decorator (the
+ * {@link RecordingEventBus}) or the event executor fails the test. Test wiring is always on and
+ * the handler for threads outliving close is always the leaked-thread failure: a value the method
+ * sets for either is replaced.
  */
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
