@@ -2,8 +2,10 @@ package io.tiko.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.tiko.EventBus;
+import io.tiko.EventQueueOverflowException;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -60,5 +62,21 @@ class LocalEventBusErrorIsolationTest {
                     assertThat(record.message()).contains("java.lang.String");
                     assertThat(record.message()).contains("logged");
                 });
+    }
+
+    /** #714: the THROW overflow policy's exception is for the publisher; the other callbacks run first. */
+    @Test
+    void queueOverflowReachesThePublisherAfterTheOtherCallbacksRan() {
+        EventBus bus = new LocalEventBus();
+        AtomicInteger laterCallbackInvocations = new AtomicInteger();
+        var overflow = new EventQueueOverflowException("queue full");
+
+        bus.subscribe(String.class, e -> {
+            throw overflow;
+        });
+        bus.subscribe(String.class, e -> laterCallbackInvocations.incrementAndGet());
+
+        assertThatThrownBy(() -> bus.publish("hello")).isSameAs(overflow);
+        assertThat(laterCallbackInvocations).hasValue(1);
     }
 }
