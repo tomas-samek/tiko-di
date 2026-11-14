@@ -356,6 +356,11 @@ public final class TikoPipeline {
      * never shadows them.
      */
     private List<String> classpathShadowedKeys(ComponentModel component, Set<String> mainFqns) {
+        if (component.getName().isPresent()) {
+            // A named test component is an addition reached by its name; it shadows nothing,
+            // whether or not it states a value (#707), as in a single-round compile.
+            return List.of();
+        }
         var extraKeys = component.getTestExtraKeys();
         var named = extraKeys.stream().filter(mainFqns::contains).toList();
         var keys = new LinkedHashSet<String>();
@@ -364,7 +369,7 @@ public final class TikoPipeline {
                         || (named.isEmpty() || !TypeUtil.isLifecycleMarkerInterface(key))
                                 && isInterfaceOfAny(key, mainFqns))
                 .forEach(keys::add);
-        if (extraKeys.isEmpty() && component.getName().isEmpty()) {
+        if (extraKeys.isEmpty()) {
             component.getDecl().interfaces().stream()
                     .map(TypeRef::displayName)
                     .filter(key -> !TypeUtil.isLifecycleMarkerInterface(key) && isInterfaceOfAny(key, mainFqns))
