@@ -374,7 +374,8 @@ starts with its own executor. Threads created through Tiko's own factories
 (`DefaultEventExecutorFactory.create(...)`, `BoundedExecution.run(...)`) during construction,
 `start()` (SINGLETON components with their `@PostConstruct`, the `@Produces` singletons those
 components take, synchronous `ApplicationStartedEvent` handlers) or shutdown are tracked. A
-`@Produces` singleton nothing takes is built later, on first use (see
+`@Produces` singleton nothing takes is built later, on first use, and so is every SINGLETON of a
+multi-module or test-wiring container, which constructs none in `start()` (see
 [When singletons are constructed](di-and-scopes.md#when-singletons-are-constructed)). So is the `tiko-event-retry-N`
 thread, with the default executor or one you supply: a retry that runs on it when your
 executor's queue is full is reported like any other container thread.
