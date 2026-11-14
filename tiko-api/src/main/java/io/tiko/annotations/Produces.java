@@ -83,6 +83,9 @@ import java.lang.annotation.Target;
  *     }
  * }
  * }</pre>
+ * <p>The component and its self-returning static factory are one component, so its scope and
+ * profiles may be stated on either annotation: here {@code Database} is a SINGLETON. Stating two
+ * different scopes, or two different profile lists, on the two annotations is a compile error.</p>
  *
  * <h2>Factory Method Requirements</h2>
  * <ul>

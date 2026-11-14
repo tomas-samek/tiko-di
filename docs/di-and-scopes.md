@@ -376,6 +376,10 @@ public class Database {
 }
 ```
 
+`Database` and its `create` factory are one component, so its scope and profiles may be stated on
+either annotation: here `Database` is a SINGLETON. Two different scopes, or two different profile
+lists, stated on the two annotations are a compile error.
+
 ## `Provider<T>` — lazy resolution
 
 When a bean shouldn't be eagerly constructed at injection time — circular references, optional dependencies, deferred-until-first-use components — inject a `Provider<T>` instead of the bean itself. `provider.get()` resolves the current-scope instance every call.
