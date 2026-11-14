@@ -79,4 +79,25 @@ class LocalEventBusErrorIsolationTest {
         assertThatThrownBy(() -> bus.publish("hello")).isSameAs(overflow);
         assertThat(laterCallbackInvocations).hasValue(1);
     }
+
+    /** Several callbacks overflowing on one publish: the first is thrown, the others ride along as suppressed. */
+    @Test
+    void laterQueueOverflowsAreSuppressedOnTheFirst() {
+        EventBus bus = new LocalEventBus();
+        var first = new EventQueueOverflowException("first queue full");
+        var second = new EventQueueOverflowException("second queue full");
+        bus.subscribe(String.class, e -> {
+            throw first;
+        });
+        bus.subscribe(String.class, e -> {
+            throw second;
+        });
+        bus.subscribe(String.class, e -> {
+            throw first;
+        });
+
+        assertThatThrownBy(() -> bus.publish("hello"))
+                .isSameAs(first)
+                .satisfies(thrown -> assertThat(thrown.getSuppressed()).containsExactly(second));
+    }
 }
