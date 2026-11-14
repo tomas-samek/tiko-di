@@ -46,6 +46,10 @@ public final class ComponentCollector {
     private static final String PRE_DESTROY = PreDestroy.class.getCanonicalName();
     /** The {@code @TestComponent} member naming the shadowed type. */
     private static final String VALUE = "value";
+    /** The {@code scope} member of {@code @Component}, {@code @TestComponent} and {@code @Produces}. */
+    private static final String SCOPE = "scope";
+    /** The {@code profiles} member of {@code @Component} and {@code @Produces}. */
+    private static final String PROFILES = "profiles";
 
     private final ProcessingEnv env;
     private final ProcessorContext context;
@@ -129,9 +133,9 @@ public final class ComponentCollector {
         return buildComponentModel(
                 decl,
                 new ComponentAttributes(
-                        Scope.valueOf(annotation.enumName("scope")),
+                        Scope.valueOf(annotation.enumName(SCOPE)),
                         annotation.string("name"),
-                        annotation.strings("profiles"),
+                        annotation.strings(PROFILES),
                         annotation.types("expose"),
                         annotation.bool("exposeSelf"),
                         false,
@@ -167,7 +171,7 @@ public final class ComponentCollector {
 
     /** The {@code scope} member as a {@link Scope}; empty when absent or not a known constant. */
     private static Optional<Scope> readScope(AnnotationRef annotation) {
-        if (!(annotation.value("scope").orElse(null) instanceof String constant)) {
+        if (!(annotation.value(SCOPE).orElse(null) instanceof String constant)) {
             return Optional.empty();
         }
         try {
@@ -259,11 +263,18 @@ public final class ComponentCollector {
      * constructor / static-factory selection, lifecycle method discovery, proxy
      * decision, and builder population.
      */
-    private ComponentModel buildComponentModel(ClassDecl decl, ComponentAttributes attributes) {
+    private ComponentModel buildComponentModel(ClassDecl decl, ComponentAttributes declared) {
         // Detect a self-@Produces method: a static @Produces method on this class
         // returning this class with the same qualifier name. When present, it acts
         // as the bean's instantiation strategy (replaces the constructor call).
-        var staticFactoryMethod = findSelfStaticFactory(decl, attributes.name());
+        var staticFactoryMethod = findSelfStaticFactory(decl, declared.name());
+        var merged = staticFactoryMethod == null
+                ? Optional.of(declared)
+                : withSelfFactoryAttributes(decl, declared, staticFactoryMethod);
+        if (merged.isEmpty()) {
+            return null; // conflicting scopes or profiles were reported
+        }
+        var attributes = merged.get();
 
         MethodDecl constructor;
         Optional<List<DependencyModel>> dependencies;
@@ -418,6 +429,50 @@ public final class ComponentCollector {
                 && Objects.equals(produces.get().string("name"), componentName);
     }
 
+    /**
+     * The component's attributes with what its self-returning static {@code @Produces} factory
+     * states (#716). The two annotations describe one component, so a scope or profile list stated
+     * on either one applies; stated differently on both, it is an error. An attribute at its
+     * default ({@code PROTOTYPE}, no profiles) counts as not stated.
+     */
+    private Optional<ComponentAttributes> withSelfFactoryAttributes(
+            ClassDecl decl, ComponentAttributes declared, MethodDecl factory) {
+        var produces = factory.annotation(PRODUCES).orElseThrow();
+        var factoryScope = Scope.valueOf(produces.enumName(SCOPE));
+        var factoryProfiles = produces.strings(PROFILES);
+        var scopeConflict = declared.scope() != factoryScope
+                && declared.scope() != Scope.PROTOTYPE
+                && factoryScope != Scope.PROTOTYPE;
+        if (scopeConflict) {
+            errors.error(
+                    factory.location(),
+                    decl.qualifiedName() + " states scope " + declared.scope() + " on "
+                            + declared.annotationLabel() + " and scope " + factoryScope
+                            + " on its @Produces factory '" + factory.name() + "'. The two annotations describe"
+                            + " one component, which has one scope.",
+                    "State the scope once, on " + declared.annotationLabel() + " or on the @Produces factory",
+                    "State the same scope on both");
+            return Optional.empty();
+        }
+        var profileConflict = !declared.profiles().isEmpty()
+                && !factoryProfiles.isEmpty()
+                && !Set.copyOf(declared.profiles()).equals(Set.copyOf(factoryProfiles));
+        if (profileConflict) {
+            errors.error(
+                    factory.location(),
+                    decl.qualifiedName() + " states profiles " + declared.profiles() + " on "
+                            + declared.annotationLabel() + " and profiles " + factoryProfiles
+                            + " on its @Produces factory '" + factory.name() + "'. The two annotations describe"
+                            + " one component, which is active under one set of profiles.",
+                    "State the profiles once, on " + declared.annotationLabel() + " or on the @Produces factory",
+                    "State the same profiles on both");
+            return Optional.empty();
+        }
+        return Optional.of(declared.with(
+                declared.scope() == Scope.PROTOTYPE ? factoryScope : declared.scope(),
+                declared.profiles().isEmpty() ? factoryProfiles : declared.profiles()));
+    }
+
     /** What the component annotation contributes to the model. */
     private record ComponentAttributes(
             Scope scope,
@@ -427,5 +482,18 @@ public final class ComponentCollector {
             boolean exposeSelf,
             boolean testComponent,
             String annotationLabel,
-            Set<String> testExtraKeys) {}
+            Set<String> testExtraKeys) {
+
+        ComponentAttributes with(Scope newScope, List<String> newProfiles) {
+            return new ComponentAttributes(
+                    newScope,
+                    name,
+                    newProfiles,
+                    exposeTypes,
+                    exposeSelf,
+                    testComponent,
+                    annotationLabel,
+                    testExtraKeys);
+        }
+    }
 }
