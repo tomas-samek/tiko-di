@@ -46,6 +46,10 @@ public final class ComponentCollector {
     private static final String PRE_DESTROY = PreDestroy.class.getCanonicalName();
     /** The {@code @TestComponent} member naming the shadowed type. */
     private static final String VALUE = "value";
+    /** The {@code scope} member of {@code @Component}, {@code @TestComponent} and {@code @Produces}. */
+    private static final String SCOPE = "scope";
+    /** The {@code profiles} member of {@code @Component} and {@code @Produces}. */
+    private static final String PROFILES = "profiles";
 
     private final ProcessingEnv env;
     private final ProcessorContext context;
@@ -129,9 +133,9 @@ public final class ComponentCollector {
         return buildComponentModel(
                 decl,
                 new ComponentAttributes(
-                        Scope.valueOf(annotation.enumName("scope")),
+                        Scope.valueOf(annotation.enumName(SCOPE)),
                         annotation.string("name"),
-                        annotation.strings("profiles"),
+                        annotation.strings(PROFILES),
                         annotation.types("expose"),
                         annotation.bool("exposeSelf"),
                         false,
@@ -167,7 +171,7 @@ public final class ComponentCollector {
 
     /** The {@code scope} member as a {@link Scope}; empty when absent or not a known constant. */
     private static Optional<Scope> readScope(AnnotationRef annotation) {
-        if (!(annotation.value("scope").orElse(null) instanceof String constant)) {
+        if (!(annotation.value(SCOPE).orElse(null) instanceof String constant)) {
             return Optional.empty();
         }
         try {
@@ -434,8 +438,8 @@ public final class ComponentCollector {
     private Optional<ComponentAttributes> withSelfFactoryAttributes(
             ClassDecl decl, ComponentAttributes declared, MethodDecl factory) {
         var produces = factory.annotation(PRODUCES).orElseThrow();
-        var factoryScope = Scope.valueOf(produces.enumName("scope"));
-        var factoryProfiles = produces.strings("profiles");
+        var factoryScope = Scope.valueOf(produces.enumName(SCOPE));
+        var factoryProfiles = produces.strings(PROFILES);
         var scopeConflict = declared.scope() != factoryScope
                 && declared.scope() != Scope.PROTOTYPE
                 && factoryScope != Scope.PROTOTYPE;
