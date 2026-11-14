@@ -8,18 +8,21 @@ import java.lang.annotation.Target;
 /**
  * Qualifier annotation used to disambiguate between multiple implementations of the same type.
  *
+ * <p>It goes on the injection point only. A component states its name with
+ * {@code @Component(name = ...)}, a factory method with {@code @Produces(name = ...)}.
+ *
  * <p>Example:</p>
  * <pre>{@code
- * @Component
- * @Named("primary")
+ * @Component(name = "primary")
  * public class PrimaryDatabase implements Database { }
  *
- * @Component
- * @Named("cache")
+ * @Component(name = "cache")
  * public class CacheDatabase implements Database { }
  *
  * @Component
  * public class UserService {
+ *     private final Database database;
+ *
  *     @Inject
  *     public UserService(@Named("primary") Database database) {
  *         this.database = database;

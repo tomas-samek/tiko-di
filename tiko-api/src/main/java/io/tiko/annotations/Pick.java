@@ -17,8 +17,8 @@ import java.lang.annotation.Target;
  *
  * <h2>Example</h2>
  * <pre>{@code
- * @Component class MySqlDataSource    implements DataSource { ... }
- * @Component class PostgresDataSource implements DataSource { ... }
+ * @Component public class MySqlDataSource    implements DataSource { ... }
+ * @Component public class PostgresDataSource implements DataSource { ... }
  *
  * @Component
  * public class OrderService {
@@ -42,14 +42,17 @@ import java.lang.annotation.Target;
  *   <li><b>{@code @Pick} + {@link Named} together</b> — narrows by impl class first,
  *       then by name. The composition is the right choice when several
  *       {@code @Produces} methods return the same picked type with different names:
- *       {@code @Pick} pins the impl, {@link Named} selects which producer.</li>
+ *       {@code @Pick} pins the impl, {@link Named} selects which producer. The producer
+ *       states its name with {@code @Produces(name = ...)}; {@link Named} goes on the
+ *       injection point only.</li>
  * </ul>
  *
  * <h2>Composition example</h2>
  * <pre>{@code
- * @Component class DataSourceFactories {
- *     @Produces @Named("primary") HikariDataSource primary() { ... }
- *     @Produces @Named("backup")  HikariDataSource backup()  { ... }
+ * @Component
+ * public class DataSourceFactories {
+ *     @Produces(name = "primary") public HikariDataSource primary() { ... }
+ *     @Produces(name = "backup")  public HikariDataSource backup()  { ... }
  * }
  *
  * @Component

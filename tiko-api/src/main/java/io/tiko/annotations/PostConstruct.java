@@ -24,8 +24,7 @@ import java.lang.annotation.Target;
  *
  * <p>Example:</p>
  * <pre>{@code
- * @Component
- * @Singleton
+ * @Component(scope = Scope.SINGLETON)
  * public class DatabaseConnection {
  *     @PostConstruct
  *     public void initialize() {
