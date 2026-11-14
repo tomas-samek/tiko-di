@@ -22,7 +22,7 @@ Each pass follows the same three-step pattern:
 
 1. **Audit.** Map existing test/example coverage of the documented features for this surface. Use the `Explore` subagent for breadth; ask for a coverage table. See "Subagent prompt template" appendix.
 2. **Probe.** For anything flagged as untested or unclear, verify directly — either via a small scratch test or by running the example. Don't trust the absence of bugs; check.
-3. **File.** Report findings; file issues following the project style (scope + concrete files + acceptance criteria + out-of-scope). One issue per substantive finding; small related items can batch into a tracker.
+3. **File.** Report findings; file issues following the project style (scope + concrete files + acceptance criteria + out-of-scope). One issue per substantive finding; small findings of the same kind in the same area go into one issue as a checklist (see "Group similar findings" in [`CLAUDE.md`](../CLAUDE.md#issue-writing)).
 
 ### Before you start
 
