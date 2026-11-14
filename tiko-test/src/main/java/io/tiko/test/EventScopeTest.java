@@ -6,8 +6,10 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Method-level marker that wraps a {@code @Test} invocation in
- * {@link io.tiko.Container#runInEventScope(Runnable)}.
+ * Method-level marker that wraps a test invocation in
+ * {@link io.tiko.Container#runInEventScope(Runnable)}: a {@code @Test}, each invocation of a
+ * {@code @RepeatedTest} or {@code @ParameterizedTest}, and each dynamic test of a
+ * {@code @TestFactory}.
  *
  * <p>Useful when the test body needs an EVENT-scoped bean to be resolvable.
  */

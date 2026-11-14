@@ -2,6 +2,7 @@ package io.tiko.test;
 
 import io.tiko.Container;
 import io.tiko.EventBus;
+import io.tiko.NoSuchComponentException;
 import io.tiko.annotations.Named;
 import io.tiko.runtime.TikoOptions;
 import java.lang.reflect.Method;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.extension.AfterAllCallback;
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.BeforeEachCallback;
+import org.junit.jupiter.api.extension.DynamicTestInvocationContext;
 import org.junit.jupiter.api.extension.ExtensionConfigurationException;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.ExtensionContext.Namespace;
@@ -28,6 +30,7 @@ import org.junit.jupiter.api.extension.ReflectiveInvocationContext;
 import org.junit.platform.commons.support.AnnotationSupport;
 import org.junit.platform.commons.support.HierarchyTraversalMode;
 import org.junit.platform.commons.support.ReflectionSupport;
+import org.junit.platform.commons.support.SearchOption;
 
 /**
  * JUnit 5 extension wired up by {@link TikoTest}.
@@ -39,7 +42,11 @@ import org.junit.platform.commons.support.ReflectionSupport;
  *       {@link TikoTest.Lifecycle} boundary and stash it in the extension store.</li>
  *   <li>Resolve test-method / lifecycle-method parameters from that container:
  *       {@link Container}, {@link EventBus}, and {@link RecordingEventBus} come from the
- *       store; every other type is resolved via {@code container.get(type[, name])}.</li>
+ *       store; every other type the container provides is resolved via
+ *       {@code container.get(type[, name])}. A type it does not provide is left to JUnit and to
+ *       other extensions (#758).</li>
+ *   <li>Run a method marked {@link EventScopeTest} inside a unit of work, whichever kind of test
+ *       method it is (#764).</li>
  *   <li>Shut the container down at the end of the matching lifecycle boundary, release its event
  *       executor on every path, and fail the test whose container left threads running (#637).</li>
  * </ul>
@@ -92,9 +99,43 @@ public final class TikoTestExtension
         }
         // Yield to JUnit's built-in resolvers — claiming a parameter they also support throws
         // "Discovered multiple competing ParameterResolvers" before the test body runs (#351).
-        // Everything else is a container-wired dependency; container.get(...) inside
-        // resolveParameter throws a clear error if the type is not actually wireable.
-        return !isJUnitManaged(pCtx);
+        if (isJUnitManaged(pCtx)) {
+            return false;
+        }
+        BootedContainer boot = store(eCtx).get(KEY_BOOT, BootedContainer.class);
+        // Without a container, claim the parameter: resolveParameter explains why there is none.
+        return boot == null || containerProvides(pCtx, eCtx, boot.container());
+    }
+
+    /** What {@link #containerProvides} looked up, kept for {@link #resolveParameter}. */
+    private record Resolved(Object value) {}
+
+    /**
+     * Whether the container has a component for this parameter. Only a lookup can tell, so its
+     * result is kept and handed out by {@link #resolveParameter}; the parameter is resolved once.
+     * A type the container does not know is declined, which leaves a {@code @ParameterizedTest}
+     * argument to JUnit and another extension's parameter to that extension (#758). Any other
+     * failure is the container's to report, so the parameter is claimed and
+     * {@link #resolveParameter} repeats the lookup.
+     */
+    private static boolean containerProvides(ParameterContext pCtx, ExtensionContext eCtx, Container container) {
+        try {
+            store(eCtx).put(pCtx.getParameter(), new Resolved(lookUp(pCtx, container)));
+            return true;
+        } catch (NoSuchComponentException e) {
+            return false;
+        } catch (RuntimeException e) {
+            return true;
+        }
+    }
+
+    private static Object lookUp(ParameterContext pCtx, Container container) {
+        Class<?> type = pCtx.getParameter().getType();
+        Named named = pCtx.getParameter().getAnnotation(Named.class);
+        if (named != null && !named.value().isEmpty()) {
+            return container.get(type, named.value());
+        }
+        return container.get(type);
     }
 
     /**
@@ -129,25 +170,55 @@ public final class TikoTestExtension
         if (type == EventBus.class) return bus;
         if (type == RecordingEventBus.class) return bus;
 
-        Named named = pCtx.getParameter().getAnnotation(Named.class);
-        if (named != null && !named.value().isEmpty()) {
-            return container.get(type, named.value());
-        }
-        return container.get(type);
+        Resolved resolved = store(eCtx).remove(pCtx.getParameter(), Resolved.class);
+        return resolved != null ? resolved.value() : lookUp(pCtx, container);
     }
 
     @Override
     public void interceptTestMethod(
             Invocation<Void> invocation, ReflectiveInvocationContext<Method> invocationContext, ExtensionContext eCtx)
             throws Throwable {
-        Container container = store(eCtx).get(KEY_BOOT, BootedContainer.class).container();
-        Method method = invocationContext.getExecutable();
-        boolean evt = method.isAnnotationPresent(EventScopeTest.class);
+        proceedInEventScopeIfMarked(invocation, invocationContext.getExecutable(), eCtx);
+    }
 
-        if (!evt) {
+    /** {@code @RepeatedTest}, {@code @ParameterizedTest} and every other test template (#764). */
+    @Override
+    public void interceptTestTemplateMethod(
+            Invocation<Void> invocation, ReflectiveInvocationContext<Method> invocationContext, ExtensionContext eCtx)
+            throws Throwable {
+        proceedInEventScopeIfMarked(invocation, invocationContext.getExecutable(), eCtx);
+    }
+
+    /** Each dynamic test of a {@code @TestFactory} method marked {@link EventScopeTest} gets its own unit (#764). */
+    @Override
+    public void interceptDynamicTest(
+            Invocation<Void> invocation, DynamicTestInvocationContext invocationContext, ExtensionContext eCtx)
+            throws Throwable {
+        var factoryMethod = testFactoryMethod(eCtx);
+        if (factoryMethod == null) {
             invocation.proceed();
             return;
         }
+        proceedInEventScopeIfMarked(invocation, factoryMethod, eCtx);
+    }
+
+    /** A dynamic test's own context names no method; the {@code @TestFactory} method is on an enclosing one. */
+    private static Method testFactoryMethod(ExtensionContext ctx) {
+        for (var current = ctx; current != null; current = current.getParent().orElse(null)) {
+            if (current.getTestMethod().isPresent()) {
+                return current.getTestMethod().get();
+            }
+        }
+        return null;
+    }
+
+    private static void proceedInEventScopeIfMarked(Invocation<Void> invocation, Method method, ExtensionContext eCtx)
+            throws Throwable {
+        if (!method.isAnnotationPresent(EventScopeTest.class)) {
+            invocation.proceed();
+            return;
+        }
+        Container container = store(eCtx).get(KEY_BOOT, BootedContainer.class).container();
 
         // Capture the proceed() call so we can rethrow its Throwable unchanged after
         // unwinding the Runnable-based scope helpers (which can't propagate checked exceptions).
@@ -267,8 +338,14 @@ public final class TikoTestExtension
         return ctx.getStore(NS);
     }
 
+    /**
+     * The lifecycle stated by the nearest {@link TikoTest}: on the test class or a superclass, else
+     * on a class enclosing a {@code @Nested} class (#760).
+     */
     private static TikoTest.Lifecycle lifecycle(ExtensionContext ctx) {
-        TikoTest ann = ctx.getRequiredTestClass().getAnnotation(TikoTest.class);
-        return ann != null ? ann.lifecycle() : TikoTest.Lifecycle.PER_METHOD;
+        return AnnotationSupport.findAnnotation(
+                        ctx.getRequiredTestClass(), TikoTest.class, SearchOption.INCLUDE_ENCLOSING_CLASSES)
+                .map(TikoTest::lifecycle)
+                .orElse(TikoTest.Lifecycle.PER_METHOD);
     }
 }

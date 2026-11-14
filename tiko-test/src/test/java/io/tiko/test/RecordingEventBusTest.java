@@ -253,6 +253,27 @@ class RecordingEventBusTest {
         }
     }
 
+    /**
+     * #757: a {@code @KafkaSource} bridge that returns {@code null} consumes its record without
+     * publishing. The {@code null} is not an event, so it is not captured, and a failing assertion
+     * still lists what was.
+     */
+    @Test
+    void publishingNullRecordsNothingAndAFailingAssertionStillListsTheCapturedEvents() {
+        var rec = newRec();
+
+        rec.publish(new FooEvent("a"));
+        rec.publish(null);
+
+        assertThat(rec.events()).containsExactly(new FooEvent("a"));
+        assertThatThrownBy(() -> rec.assertPublished(BarEvent.class))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("FooEvent");
+        assertThatThrownBy(() -> rec.assertPublishedExactly(2, FooEvent.class))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("FooEvent");
+    }
+
     private static void awaitQuietly(CountDownLatch latch) {
         try {
             latch.await();
