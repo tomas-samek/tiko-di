@@ -197,6 +197,11 @@ final class KspAccessorDecl implements MethodDecl {
         return property().getExtensionReceiver() != null;
     }
 
+    @Override
+    public boolean hasKotlinJvmSignature() {
+        return !KspModel.isJava(property());
+    }
+
     /** The accessor's own visibility when it narrows the property's ({@code protected set}). */
     @Override
     public Visibility visibility() {

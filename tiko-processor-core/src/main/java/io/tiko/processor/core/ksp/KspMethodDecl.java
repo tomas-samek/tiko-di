@@ -116,6 +116,11 @@ final class KspMethodDecl implements MethodDecl {
     }
 
     @Override
+    public boolean hasKotlinJvmSignature() {
+        return !KspModel.isJava(function());
+    }
+
+    @Override
     public Visibility visibility() {
         return KspModel.visibility(function());
     }

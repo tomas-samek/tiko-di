@@ -37,6 +37,15 @@ public interface MethodDecl {
     /** A Kotlin extension function: it declares a receiver type ({@code fun Config.clock()}); always false for Java. */
     boolean isExtension();
 
+    /**
+     * A Kotlin function or property accessor whose JVM parameter types kotlinc chooses: a parameter
+     * with declaration-site variance becomes a wildcard type ({@code List<Item>} compiles to
+     * {@code List<? extends Item>}), so {@link #parameters()} may not show the JVM signature. True
+     * for Kotlin declarations read by KSP, from source or from a library; always false on javac,
+     * which reads the JVM signature itself.
+     */
+    boolean hasKotlinJvmSignature();
+
     Visibility visibility();
 
     TypeRef returnType();

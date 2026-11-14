@@ -173,13 +173,21 @@ public final class ProxyGenerator {
      * factory proxy.
      */
     private MethodSpec createDelegatingMethod(MethodDecl method, String delegateCall) {
+        boolean byErasure = overridesByErasure(method);
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder(method.jvmName())
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
-                .returns(method.returnType().javaPoet());
+                .returns(signatureType(method.returnType(), byErasure));
 
-        // Carry over type parameters (e.g. `<T> T unwrap(Class<T>)` from java.sql.Wrapper).
-        methodBuilder.addTypeVariables(method.typeVariables());
+        if (byErasure) {
+            // The delegate call passes raw arguments to the member's generic parameters.
+            methodBuilder.addAnnotation(AnnotationSpec.builder(SuppressWarnings.class)
+                    .addMember("value", "{$S, $S}", "rawtypes", "unchecked")
+                    .build());
+        } else {
+            // Carry over type parameters (e.g. `<T> T unwrap(Class<T>)` from java.sql.Wrapper).
+            methodBuilder.addTypeVariables(method.typeVariables());
+        }
 
         // Forward declared exceptions so the proxy preserves the interface's `throws` contract
         // (e.g. java.sql.Connection's checked SQLException).
@@ -191,7 +199,7 @@ public final class ProxyGenerator {
         method.parameters().forEach(param -> {
             String paramName = param.name();
             paramNames.add(paramName);
-            methodBuilder.addParameter(param.type().javaPoet(), paramName);
+            methodBuilder.addParameter(signatureType(param.type(), byErasure), paramName);
         });
 
         String params = String.join(", ", paramNames);
@@ -203,6 +211,32 @@ public final class ProxyGenerator {
         }
 
         return methodBuilder.build();
+    }
+
+    /**
+     * Whether the proxy overrides {@code method} by its erasure (#704). kotlinc compiles a
+     * parameter with declaration-site variance into a wildcard type the model does not show, so a
+     * Kotlin member with a generic parameter is overridden by the erased signature, which Java
+     * accepts as an override of any generic signature with that erasure.
+     */
+    private static boolean overridesByErasure(MethodDecl method) {
+        return method.hasKotlinJvmSignature()
+                && method.parameters().stream()
+                        .anyMatch(parameter -> isGeneric(parameter.type().javaPoet()));
+    }
+
+    private static boolean isGeneric(TypeName type) {
+        if (type instanceof ArrayTypeName array) {
+            return isGeneric(array.componentType());
+        }
+        return type instanceof ParameterizedTypeName
+                || type instanceof TypeVariableName
+                || type instanceof WildcardTypeName;
+    }
+
+    /** The type as the override declares it: erased throughout when the member is overridden by erasure. */
+    private TypeName signatureType(TypeRef type, boolean byErasure) {
+        return byErasure ? context.env().types().erasure(type).javaPoet() : type.javaPoet();
     }
 
     /**

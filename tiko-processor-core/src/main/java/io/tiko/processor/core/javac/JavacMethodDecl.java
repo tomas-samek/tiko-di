@@ -65,6 +65,12 @@ record JavacMethodDecl(ExecutableElement element, JavacModel model) implements M
         return false;
     }
 
+    /** javac reads the JVM signature, whatever language the method was written in. */
+    @Override
+    public boolean hasKotlinJvmSignature() {
+        return false;
+    }
+
     @Override
     public Visibility visibility() {
         return JavacModel.visibility(element.getModifiers());
