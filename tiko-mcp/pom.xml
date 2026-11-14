@@ -75,6 +75,10 @@
                                 <transformer
                                     implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer">
                                     <projectName>Tiko MCP Server</projectName>
+                                    <!-- Without these the transformer credits the Apache Software Foundation (#703). -->
+                                    <organizationName>Tomas Samek</organizationName>
+                                    <organizationURL>https://github.com/tomas-samek/tiko-di</organizationURL>
+                                    <inceptionYear>2025</inceptionYear>
                                 </transformer>
                             </transformers>
                         </configuration>

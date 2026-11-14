@@ -14,6 +14,11 @@
     <name>Tiko Annotation Processor</name>
     <description>Compile-time annotation processor for Tiko DI</description>
 
+    <properties>
+        <!-- The shared test-support sources live in tiko-processor-core and are analysed there. -->
+        <sonar.tests>src/test/java</sonar.tests>
+    </properties>
+
     <dependencies>
         <!-- Tiko API -->
         <dependency>
@@ -90,14 +95,7 @@
             <artifactId>jackson-databind</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- KSP2 tests: KspCompiler from the core test-jar, over kctfork. -->
-        <dependency>
-            <groupId>io.github.tomas-samek</groupId>
-            <artifactId>tiko-processor-core</artifactId>
-            <version>${project.version}</version>
-            <type>test-jar</type>
-            <scope>test</scope>
-        </dependency>
+        <!-- KSP2 tests: KspCompiler from tiko-processor-core's test-support sources, over kctfork. -->
         <dependency>
             <groupId>dev.zacsweers.kctfork</groupId>
             <artifactId>core</artifactId>
@@ -112,6 +110,27 @@
 
     <build>
         <plugins>
+            <!-- Compiles the KSP test helpers (KspCompiler, KspProgram, RecordingCodeGenerator, RoundWatcher) of tiko-processor-core into this
+                 module's tests. They are shared as sources, not as a test-jar: a test-jar is an attached
+                 artifact, and a release publishes every attached artifact (#703). -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>add-ksp-test-support</id>
+                        <phase>generate-test-sources</phase>
+                        <goals>
+                            <goal>add-test-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>${project.basedir}/../tiko-processor-core/src/test-support/java</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <!-- Writes the processor's runtime dependency closure for ProcessorPathTest, which runs
                  javac with only that closure on the processor path, as annotationProcessorPaths and
                  ksp(...) do (#670). -->

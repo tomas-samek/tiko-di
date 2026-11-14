@@ -221,7 +221,9 @@ On the Portal Deployments page, the user should verify:
   should be ~2 KB with merged Tiko + Jackson + FastDoubleParser
   attribution. If it's ~738 B, the
   `ApacheNoticeResourceTransformer` wasn't applied. Same check for
-  `tiko-kafka`.
+  `tiko-kafka`. The file's copyright line names this project's
+  holder, not the Apache Software Foundation (#703).
+- **No `-tests.jar`** among the staged files (#703).
 
 Then **Publish**. The `autoPublish=false` setting in the workflow is
 deliberate — this is the human verification gate.
