@@ -173,6 +173,98 @@ class BoundedExecutionTest {
         }
     }
 
+    /**
+     * #709: a closing thread that arrives interrupted (a worker stopped by {@code shutdownNow()}
+     * whose {@code finally} closes the container) still runs the bounded hook, and keeps its flag.
+     */
+    @Test
+    void boundedHookRunsWhenTheCallerArrivesInterrupted() {
+        AtomicReference<ErrorContext> routed = new AtomicReference<>();
+        AtomicBoolean ran = new AtomicBoolean();
+
+        Thread.currentThread().interrupt();
+        boolean stillInterrupted;
+        try {
+            BoundedExecution.run(() -> ran.set(true), Duration.ofSeconds(5), routed::set, AS_PREDESTROY);
+        } finally {
+            stillInterrupted = Thread.interrupted();
+        }
+
+        assertThat(ran).as("the hook ran").isTrue();
+        assertThat(routed.get()).isNull();
+        assertThat(stillInterrupted).as("the caller's interrupt flag is kept").isTrue();
+    }
+
+    /** #709: an interrupt that arrives while the hook runs does not cut the hook short either. */
+    @Test
+    void boundedHookFinishesWhenTheCallerIsInterruptedWhileWaiting() throws InterruptedException {
+        AtomicReference<ErrorContext> routed = new AtomicReference<>();
+        AtomicBoolean finished = new AtomicBoolean();
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        var caller = Thread.currentThread();
+        var interrupter = Thread.ofPlatform().daemon().start(() -> {
+            try {
+                entered.await();
+                caller.interrupt();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                release.countDown();
+            }
+        });
+
+        boolean stillInterrupted;
+        try {
+            BoundedExecution.run(
+                    () -> {
+                        entered.countDown();
+                        release.await();
+                        finished.set(true);
+                    },
+                    Duration.ofSeconds(5),
+                    routed::set,
+                    AS_PREDESTROY);
+        } finally {
+            stillInterrupted = Thread.interrupted();
+        }
+        interrupter.join(Duration.ofSeconds(5));
+
+        assertThat(finished).as("the hook ran to its end").isTrue();
+        assertThat(routed.get()).isNull();
+        assertThat(stillInterrupted).as("the caller's interrupt flag is kept").isTrue();
+    }
+
+    /** #709: the bound still applies to a hook an interrupted caller runs, and its overrun is routed. */
+    @Test
+    void boundedHungHookTimesOutWhenTheCallerArrivesInterrupted() throws InterruptedException {
+        AtomicReference<ErrorContext> routed = new AtomicReference<>();
+        CountDownLatch hookInterrupted = new CountDownLatch(1);
+        CountDownLatch neverReleased = new CountDownLatch(1);
+        BoundedExecution.CheckedRunnable hung = () -> {
+            try {
+                neverReleased.await();
+            } catch (InterruptedException e) {
+                hookInterrupted.countDown();
+            }
+        };
+
+        Thread.currentThread().interrupt();
+        boolean stillInterrupted;
+        try {
+            BoundedExecution.run(hung, Duration.ofMillis(50), routed::set, AS_PREDESTROY);
+        } finally {
+            stillInterrupted = Thread.interrupted();
+        }
+
+        assertThat(routed.get()).isInstanceOf(PreDestroyFailure.class);
+        assertThat(((PreDestroyFailure) routed.get()).cause()).isInstanceOf(TimeoutException.class);
+        assertThat(hookInterrupted.await(2, TimeUnit.SECONDS))
+                .as("the overrunning hook is interrupted")
+                .isTrue();
+        assertThat(stillInterrupted).as("the caller's interrupt flag is kept").isTrue();
+    }
+
     @Test
     void zeroTimeoutRoutesTimeoutForAHookThatCannotFinishInstantly() throws InterruptedException {
         AtomicReference<ErrorContext> routed = new AtomicReference<>();

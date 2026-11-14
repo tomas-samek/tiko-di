@@ -76,22 +76,54 @@ public final class BoundedExecution {
                 return null;
             });
             try {
-                // The bound is the hook's own time (#699): on a busy machine the dedicated thread
-                // can start late, and a bound counted from submit would cancel the hook unrun.
-                started.await();
-                future.get(timeout.toNanos(), TimeUnit.NANOSECONDS);
+                awaitHook(started, future, timeout.toNanos());
             } catch (TimeoutException te) {
                 future.cancel(true);
                 errorHandler.onError(failure.apply(te));
             } catch (ExecutionException ee) {
                 Throwable cause = ee.getCause() != null ? ee.getCause() : ee;
                 errorHandler.onError(failure.apply(cause));
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-                future.cancel(true);
             }
         } finally {
             executor.shutdownNow();
+        }
+    }
+
+    /**
+     * Waits for the hook to start and then to finish within {@code timeoutNanos}.
+     *
+     * <p>The bound is the hook's own time (#699): on a busy machine the dedicated thread can start
+     * late, and a bound counted from submit would cancel the hook unrun.
+     *
+     * <p>An interrupt of the calling thread does not end the wait (#709): a thread that closes the
+     * container while interrupted, such as a worker stopped by {@code shutdownNow()}, still tears
+     * every component down, each under its bound. The flag is cleared for the wait and set again
+     * before this method returns or throws.
+     */
+    private static void awaitHook(CountDownLatch started, Future<?> future, long timeoutNanos)
+            throws TimeoutException, ExecutionException {
+        boolean interrupted = Thread.interrupted();
+        try {
+            long startNanos = 0;
+            boolean running = false;
+            while (true) {
+                try {
+                    if (!running) {
+                        started.await();
+                        startNanos = System.nanoTime();
+                        running = true;
+                    }
+                    long remaining = timeoutNanos - (System.nanoTime() - startNanos);
+                    future.get(Math.max(0, remaining), TimeUnit.NANOSECONDS);
+                    return;
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                }
+            }
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 
