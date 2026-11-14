@@ -3,6 +3,7 @@ package io.tiko.runtime;
 import io.tiko.ErrorContext;
 import io.tiko.ErrorHandler;
 import java.time.Duration;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -33,11 +34,12 @@ public final class BoundedExecution {
      * <ul>
      *   <li>{@code timeout == null} → run inline on the calling thread (today's behavior, zero
      *       overhead); a thrown {@link Throwable} is routed.</li>
-     *   <li>otherwise → run on a single-use daemon thread bounded by {@code timeout}. On overrun the
-     *       worker is interrupted via {@link Future#cancel(boolean)} and a
+     *   <li>otherwise → run on a single-use daemon thread bounded by {@code timeout}, counted from
+     *       the moment the hook starts, so a hook always runs before a timeout is reported (#699).
+     *       On overrun the worker is interrupted via {@link Future#cancel(boolean)} and a
      *       {@link TimeoutException}-caused failure is routed; a thrown {@link Throwable} is routed
      *       with its original cause (unwrapped from {@link ExecutionException}). {@link Duration#ZERO}
-     *       gives the hook no time and routes a timeout immediately unless it completes instantly.</li>
+     *       starts the hook, then interrupts it and routes a timeout unless it completed instantly.</li>
      * </ul>
      *
      * @param task the hook to run; may throw a checked exception (e.g. {@link AutoCloseable#close()})
@@ -67,11 +69,16 @@ public final class BoundedExecution {
 
         ExecutorService executor = Executors.newSingleThreadExecutor(BoundedExecution::daemonThread);
         try {
+            var started = new CountDownLatch(1);
             Future<?> future = executor.submit(() -> {
+                started.countDown();
                 task.run();
                 return null;
             });
             try {
+                // The bound is the hook's own time (#699): on a busy machine the dedicated thread
+                // can start late, and a bound counted from submit would cancel the hook unrun.
+                started.await();
                 future.get(timeout.toNanos(), TimeUnit.NANOSECONDS);
             } catch (TimeoutException te) {
                 future.cancel(true);

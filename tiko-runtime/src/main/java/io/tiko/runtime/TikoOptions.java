@@ -351,7 +351,9 @@ public final class TikoOptions {
          * unset preserves today's behavior exactly: hooks run inline on the shutdown thread with
          * no time limit, so a hook that hangs blocks shutdown forever.
          *
-         * <p>When set, an overrunning hook is interrupted ({@code Future.cancel(true)}) and its
+         * <p>The bound starts when the hook does, so a hook always runs, however late a busy
+         * machine starts its teardown thread (#699). When set, an overrunning hook is interrupted
+         * ({@code Future.cancel(true)}) and its
          * failure is routed as a {@code PreDestroyFailure} / {@code AutoCloseFailure} whose cause
          * is a {@link java.util.concurrent.TimeoutException}, via the {@link ErrorHandler}; shutdown
          * then continues. A hook that ignores interrupts cannot be forcibly killed — the same JVM
@@ -360,8 +362,8 @@ public final class TikoOptions {
          * <p>Scope: SINGLETON container shutdown only. EVENT scope-exit teardown is
          * unaffected.
          *
-         * @param timeout non-negative duration; {@link Duration#ZERO} gives the hook no time and
-         *                routes a timeout immediately
+         * @param timeout non-negative duration; {@link Duration#ZERO} gives the hook no time: it
+         *                starts, is interrupted and routes a timeout unless it completed instantly
          * @throws IllegalArgumentException if {@code timeout} is negative
          * @throws NullPointerException if {@code timeout} is null
          */

@@ -42,9 +42,6 @@ class ThreadsOutlivingCloseScriptedTest {
      */
     private static final Duration ROLLBACK_TEARDOWN_TIMEOUT = Duration.ofMillis(500);
 
-    /** The longest teardown bound a hook gets to start in before the test gives up on the machine. */
-    private static final Duration MAX_TEARDOWN_BOUND = Duration.ofMillis(6400);
-
     private final List<List<Thread>> reports = new CopyOnWriteArrayList<>();
     private final CountDownLatch release = new CountDownLatch(1);
 
@@ -71,36 +68,19 @@ class ThreadsOutlivingCloseScriptedTest {
         Thread.currentThread().setContextClassLoader(previousLoader);
     }
 
-    /**
-     * A hook its bound cancels before the teardown thread reaches it never runs, so that thread
-     * exits and there is nothing to report. On a loaded machine the bound doubles until the hook
-     * starts within it; the attempt where it does asserts the report.
-     */
     @ParameterizedTest
     @EnumSource(Shape.class)
     void teardownStuckPastTheTeardownTimeoutIsReported(Shape shape) {
-        for (var bound = Duration.ofMillis(50); ; bound = bound.multipliedBy(2)) {
-            assertThat(bound)
-                    .as("the teardown thread reaches its hook within its bound")
-                    .isLessThanOrEqualTo(MAX_TEARDOWN_BOUND);
-            reports.clear();
-            var started = new CountDownLatch(1);
-            ScriptedShutdownContainer.teardownStarted = started;
-            ScriptedShutdownContainer.stuckTeardownUntil = release;
-            var container = boot(shape, TikoOptions.builder().teardownTimeout(bound));
+        ScriptedShutdownContainer.stuckTeardownUntil = release;
+        var container = boot(shape, TikoOptions.builder().teardownTimeout(Duration.ofMillis(50)));
 
-            container.close();
+        container.close();
 
-            // Read after the report: a hook that started never returns, so its thread was alive for it.
-            if (started.getCount() == 0) {
-                assertThat(reports)
+        assertThat(reports)
+                .singleElement()
+                .satisfies(threads -> assertThat(threads)
                         .singleElement()
-                        .satisfies(threads -> assertThat(threads)
-                                .singleElement()
-                                .satisfies(t -> assertThat(t.getName()).isEqualTo("tiko-teardown")));
-                return;
-            }
-        }
+                        .satisfies(t -> assertThat(t.getName()).isEqualTo("tiko-teardown")));
     }
 
     @ParameterizedTest

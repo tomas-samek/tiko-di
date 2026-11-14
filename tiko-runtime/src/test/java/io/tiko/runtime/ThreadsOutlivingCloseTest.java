@@ -37,9 +37,6 @@ class ThreadsOutlivingCloseTest {
     /** Shorter than the 1 s exit grace, so a stuck worker outlives the executor drain quickly. */
     private static final Duration SHUTDOWN_TIMEOUT = Duration.ofMillis(50);
 
-    /** The longest teardown bound a hook gets to start in before the test gives up on the machine. */
-    private static final Duration MAX_TEARDOWN_BOUND = Duration.ofMillis(6400);
-
     private final List<List<Thread>> reports = new CopyOnWriteArrayList<>();
     private final CountDownLatch release = new CountDownLatch(1);
 
@@ -218,40 +215,24 @@ class ThreadsOutlivingCloseTest {
         }
     }
 
-    /**
-     * A hook its bound cancels before the teardown thread reaches it never runs, so that thread
-     * exits and there is nothing to track. On a loaded machine the bound doubles until the hook
-     * starts within it; the attempt where it does asserts the tracking.
-     */
     @Test
     void teardownThreadsStartedWhileBoundToAnOwnerAreTracked() {
-        for (var bound = Duration.ofMillis(50); ; bound = bound.multipliedBy(2)) {
-            assertThat(bound)
-                    .as("the teardown thread reaches its hook within its bound")
-                    .isLessThanOrEqualTo(MAX_TEARDOWN_BOUND);
-            var timeout = bound;
-            var owner = new OwnedThreads();
-            var started = new CountDownLatch(1);
-            List<ErrorContext> routed = new CopyOnWriteArrayList<>();
+        var owner = new OwnedThreads();
+        var started = new CountDownLatch(1);
+        List<ErrorContext> routed = new CopyOnWriteArrayList<>();
 
-            OwnedThreads.runBound(
-                    owner,
-                    () -> BoundedExecution.run(
-                            () -> ignoringInterrupts(started).run(),
-                            timeout,
-                            routed::add,
-                            cause -> new PreDestroyFailure(ThreadsOutlivingCloseTest.class, cause)));
+        OwnedThreads.runBound(
+                owner,
+                () -> BoundedExecution.run(
+                        () -> ignoringInterrupts(started).run(),
+                        Duration.ofMillis(50),
+                        routed::add,
+                        cause -> new PreDestroyFailure(ThreadsOutlivingCloseTest.class, cause)));
 
-            assertThat(routed).hasSize(1);
-            var survivors = owner.stillAlive(Duration.ofMillis(50));
-            // Read after the survivors: a hook that started never returns, so its thread was alive for them.
-            if (started.getCount() == 0) {
-                assertThat(survivors)
-                        .singleElement()
-                        .satisfies(t -> assertThat(t.getName()).isEqualTo("tiko-teardown"));
-                return;
-            }
-        }
+        assertThat(routed).hasSize(1);
+        assertThat(owner.stillAlive(Duration.ofMillis(50)))
+                .singleElement()
+                .satisfies(t -> assertThat(t.getName()).isEqualTo("tiko-teardown"));
     }
 
     private TikoOptions.Builder reportingOptions() {
