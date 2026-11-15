@@ -183,9 +183,6 @@ public final class EventRegistryGenerator {
         method.addStatement("$T<$T> __wrapper = $T.wrap(event)", Event.class, eventClass, CHAIN_CONTEXT);
         method.addStatement("$T<?> __previous = $T.enter(__wrapper)", Event.class, CHAIN_CONTEXT);
         method.beginControlFlow("try");
-        if (!detachedUnit) {
-            method.addStatement("$T __handler = container.$L()", declaringClass, getterName);
-        }
 
         DispatchPlan plan = new DispatchPlan(
                 detachedUnit,
@@ -255,6 +252,17 @@ public final class EventRegistryGenerator {
 
         method.addStatement("$T __exec = container.getEventExecutor()", executorServiceClass);
         method.addStatement("$T __err = container.getErrorHandler()", errorHandler);
+        if (!plan.detachedUnit()) {
+            // The handler is resolved here, on the publishing thread. A component that cannot be
+            // resolved is a failed delivery: route it like a failure inside the handler (#731).
+            method.addStatement("final $T __handler", plan.declaringClass());
+            method.beginControlFlow("try");
+            method.addStatement("__handler = container.$L()", plan.getterName());
+            method.nextControlFlow("catch ($T __t)", Exception.class);
+            emitRouteToErrorHandler(method, "__err", index);
+            method.addStatement("return");
+            method.endControlFlow();
+        }
         method.addStatement("final $T<?> __asyncWrapper = __wrapper", Event.class);
 
         // Build the runAsync body
@@ -338,10 +346,12 @@ public final class EventRegistryGenerator {
      */
     private void emitSyncDispatch(MethodSpec.Builder method, EventHandlerModel handler, int index, DispatchPlan plan) {
         ClassName errorHandler = ClassName.get("io.tiko", "ErrorHandler");
-        ClassName eventHandlerError = ClassName.get("io.tiko", "EventHandlerError");
         TypeRef returnType = handler.getMethod().returnType();
 
         method.beginControlFlow("try");
+        // Inside the try: a component that cannot be resolved (an EVENT bean outside a unit of work,
+        // a constructor that throws) is a failed delivery and goes to the ErrorHandler too (#731).
+        method.addStatement("$T __handler = container.$L()", plan.declaringClass(), plan.getterName());
         if (plan.captureResult()) {
             method.addStatement("$T __result = $L", returnType.javaPoet(), plan.invocation());
             for (EventTriggerModel trigger : handler.getEventTriggers()) {
@@ -352,11 +362,23 @@ public final class EventRegistryGenerator {
         }
         method.nextControlFlow("catch ($T __t)", Exception.class);
         method.addStatement("$T __err = container.getErrorHandler()", errorHandler);
+        emitRouteToErrorHandler(method, "__err", index);
+        method.endControlFlow();
+    }
+
+    /**
+     * Routes the caught {@code __t} to the {@code ErrorHandler} as this handler's
+     * {@code EventHandlerError}; an ErrorHandler that itself throws is logged.
+     */
+    private static void emitRouteToErrorHandler(MethodSpec.Builder method, String errorHandlerVariable, int index) {
         method.beginControlFlow("try");
-        method.addStatement("__err.onError(new $T(HANDLER_INFO_$L, event, __t))", eventHandlerError, index);
+        method.addStatement(
+                "$L.onError(new $T(HANDLER_INFO_$L, event, __t))",
+                errorHandlerVariable,
+                ClassName.get("io.tiko", "EventHandlerError"),
+                index);
         method.nextControlFlow("catch ($T __inner)", Exception.class);
         method.addStatement("$T.logErrorHandlerFailure(__inner)", CHAIN_CONTEXT);
-        method.endControlFlow();
         method.endControlFlow();
     }
 

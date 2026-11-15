@@ -76,6 +76,62 @@ class EventChainContextTimeoutTest {
                 .isTrue();
     }
 
+    /**
+     * #728: the budget is for a handler that runs too long. Time an event spends waiting in the queue
+     * is not handler time, so a handler that starts late and finishes within its budget is no timeout.
+     */
+    @Test
+    void timeSpentWaitingInTheQueueDoesNotCountAgainstTheBudget() throws Exception {
+        List<ErrorContext> errors = new CopyOnWriteArrayList<>();
+        CountDownLatch workerBusy = new CountDownLatch(1);
+        CountDownLatch releaseWorker = new CountDownLatch(1);
+        CountDownLatch ran = new CountDownLatch(1);
+        executor.execute(() -> {
+            workerBusy.countDown();
+            awaitQuietly(releaseWorker);
+        });
+        assertThat(workerBusy.await(5, TimeUnit.SECONDS)).isTrue();
+
+        EventChainContext.runAsyncWithTimeout(
+                ran::countDown, Duration.ofMillis(150).toNanos(), executor, errors::add, INFO, "evt");
+        // Longer than the budget, all of it in the queue behind the busy worker.
+        await().pollDelay(Duration.ofMillis(400)).atMost(Duration.ofSeconds(2)).until(() -> true);
+        releaseWorker.countDown();
+
+        assertThat(ran.await(5, TimeUnit.SECONDS)).as("the handler ran").isTrue();
+        await().pollDelay(Duration.ofMillis(300)).atMost(Duration.ofSeconds(2)).until(() -> true);
+        assertThat(errors).as("no timeout for a handler that never overran").isEmpty();
+    }
+
+    /** #728: an event that never reaches a worker is not a handler that overran. */
+    @Test
+    void eventStillQueuedWhenTheExecutorStopsIsNotReportedAsATimeout() throws Exception {
+        List<ErrorContext> errors = new CopyOnWriteArrayList<>();
+        CountDownLatch workerBusy = new CountDownLatch(1);
+        CountDownLatch releaseWorker = new CountDownLatch(1);
+        executor.execute(() -> {
+            workerBusy.countDown();
+            awaitQuietly(releaseWorker);
+        });
+        assertThat(workerBusy.await(5, TimeUnit.SECONDS)).isTrue();
+
+        EventChainContext.runAsyncWithTimeout(
+                () -> {}, Duration.ofMillis(150).toNanos(), executor, errors::add, INFO, "evt");
+        executor.shutdownNow(); // the queued handler is discarded, never run
+        releaseWorker.countDown();
+
+        await().pollDelay(Duration.ofMillis(500)).atMost(Duration.ofSeconds(2)).until(() -> true);
+        assertThat(errors).isEmpty();
+    }
+
+    private static void awaitQuietly(CountDownLatch latch) {
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     @Test
     void bodyWithinBudgetRoutesNothing() {
         List<ErrorContext> errors = new CopyOnWriteArrayList<>();

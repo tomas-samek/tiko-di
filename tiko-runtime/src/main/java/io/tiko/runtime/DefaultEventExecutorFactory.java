@@ -92,15 +92,18 @@ public final class DefaultEventExecutorFactory {
         long keepAliveMs =
                 keepAlive == null ? TimeUnit.SECONDS.toMillis(DEFAULT_KEEP_ALIVE_SECONDS) : keepAlive.toMillis();
 
+        var rejectionHandler = rejectionHandlerFor(overflowPolicy);
         var counter = new AtomicInteger();
         ThreadFactory threadFactory = r -> {
-            Thread t = threads.newThread(r);
+            // An OverflowRejectionHandler needs to know its pool's workers: under BLOCK one of them
+            // must not wait for queue space (#727).
+            Thread t = threads.newThread(
+                    rejectionHandler instanceof OverflowRejectionHandler overflow ? overflow.asWorker(r) : r);
             t.setName("tiko-event-async-" + counter.incrementAndGet());
             t.setDaemon(true);
             return t;
         };
 
-        var rejectionHandler = rejectionHandlerFor(overflowPolicy);
         if (threads instanceof OwnedThreads owner) {
             return new TrackedEventExecutor(
                     corePoolSize, maxPoolSize, keepAliveMs, queueCapacity, threadFactory, rejectionHandler, owner);

@@ -59,7 +59,7 @@ These are explicit, not accidents of implementation. A handler that depends on d
 
 ## Error handling
 
-If an `@EventHandler` method throws, the exception is routed to the configured `ErrorHandler` (default: logs at `WARNING` via `java.lang.System.Logger`). It does not propagate to the publisher and does not prevent other handlers from running.
+If an `@EventHandler` method throws, the exception is routed to the configured `ErrorHandler` (default: logs at `WARNING` via `java.lang.System.Logger`). It does not propagate to the publisher and does not prevent other handlers from running. The same holds when the event cannot be delivered because the handler's component cannot be resolved, for example an EVENT-scoped handler when the event is published outside a unit of work, or a component whose constructor throws: the `ErrorHandler` receives an `EventHandlerError` naming that handler.
 
 The same isolation defines the transport boundary. Kafka commits the offset after a successful publish to the bus. Handler exceptions go to the `ErrorHandler` and do not trigger redelivery. An async handler can start before the commit, and with `CALLER_RUNS` an inline handler completes before publish returns. Failures in deserialization, bridge dispatch, or publish can seek back and replay the record. Recovery for failed handler executions is the dead-letter direction tracked for the resiliency milestone. If a handler must never lose its input, do its critical work synchronously in the bridge path or persist intent before returning.
 
@@ -132,7 +132,7 @@ TikoOptions opts = TikoOptions.builder()
 | `OverflowPolicy` | Behaviour when the queue is full                                                  |
 |------------------|-----------------------------------------------------------------------------------|
 | `CALLER_RUNS`    | Default. The overflowing task runs on the publisher's thread — natural backpressure, no work dropped. |
-| `BLOCK`          | The publisher blocks until the queue has space. Strongest backpressure; can stall the producer. |
+| `BLOCK`          | The publisher blocks until the queue has space. Strongest backpressure; can stall the producer. A handler that publishes from one of the executor's own threads does not wait: that thread runs the new handler itself, because queue space opens only when a worker takes a task. |
 | `DROP`           | The overflowing event is dropped and a `WARNING` is logged. Favours liveness over delivery. |
 | `THROW`          | `publish(...)` throws `io.tiko.EventQueueOverflowException` on the publisher's thread. |
 | `ROUTE_TO_DLQ`   | The overflowing event is routed to your `ErrorHandler` as an `EventDispatchRejected` dead-letter context — persist, log, or replay it there. See [Dead-letter handling](#dead-letter-handling). |
@@ -190,6 +190,7 @@ public void onSlowOperation(SlowEvent event) {
 If the handler runs longer than the budget, its worker thread is interrupted, the executor slot is freed, and the overrun is routed to the `ErrorHandler` as an `EventHandlerError` whose `cause()` is a `java.util.concurrent.TimeoutException`. Subsequent events keep flowing.
 
 - **Opt-in:** the default is no timeout.
+- **Counts running time:** the budget starts when a worker starts the handler. Time an event waits in the queue does not count, and an event that never reaches a worker (dropped by the overflow policy or at shutdown) is logged as dropped, not reported as a timeout.
 - **Async-only:** `timeout` requires `async = true`. A timeout on a synchronous handler is a **compile-time error**. An invocation that the executor runs inline under `CALLER_RUNS` also runs to completion before the timeout can take effect.
 - **Best-effort:** interruption can only stop a handler that respects `Thread.interrupt()` (e.g. is blocked on I/O or checks the flag). A handler running a tight uninterruptible loop will keep going — the timeout is reported, but Java cannot force-stop the thread.
 

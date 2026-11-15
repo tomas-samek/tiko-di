@@ -365,6 +365,11 @@ public final class EventChainContext {
      * {@link CompletableFuture#runAsync} captures every {@link Throwable} (so a handler {@link Error}
      * is never lost on the executor thread). When {@code timeoutNanos > 0}, the future is completed
      * with a {@link TimeoutException} on breach and the worker thread interrupted to free the slot.
+     *
+     * <p>The budget is the handler's running time: the clock starts when a worker picks the body
+     * up, not when it is submitted (#728). An event that waits in the queue, or never leaves it
+     * because it was dropped by overflow or by shutdown, is no handler that overran; its future
+     * simply never completes.
      */
     private static CompletableFuture<Void> runOnce(Runnable body, long timeoutNanos, ExecutorService executor) {
         if (timeoutNanos <= 0) {
@@ -373,15 +378,23 @@ public final class EventChainContext {
         // The worker thread is captured so a breached timeout can interrupt it directly (orTimeout
         // has no handle on it).
         AtomicReference<Thread> worker = new AtomicReference<>();
-        CompletableFuture<Void> work = CompletableFuture.runAsync(
-                () -> {
-                    worker.set(Thread.currentThread());
-                    body.run();
-                },
-                executor);
-        // orTimeout returns the same future, completing it with TimeoutException only if the body
-        // has not completed it first. The whenComplete propagates that outcome to the caller.
-        return work.orTimeout(timeoutNanos, TimeUnit.NANOSECONDS).whenComplete((ignored, throwable) -> {
+        CompletableFuture<Void> outcome = new CompletableFuture<>();
+        CompletableFuture.runAsync(
+                        () -> {
+                            worker.set(Thread.currentThread());
+                            // Completes outcome with TimeoutException unless the body gets there first.
+                            outcome.orTimeout(timeoutNanos, TimeUnit.NANOSECONDS);
+                            body.run();
+                        },
+                        executor)
+                .whenComplete((ignored, throwable) -> {
+                    if (throwable == null) {
+                        outcome.complete(null);
+                    } else {
+                        outcome.completeExceptionally(unwrapCompletion(throwable));
+                    }
+                });
+        return outcome.whenComplete((ignored, throwable) -> {
             if (throwable != null && unwrapCompletion(throwable) instanceof TimeoutException) {
                 interruptWorker(worker.get());
             }
