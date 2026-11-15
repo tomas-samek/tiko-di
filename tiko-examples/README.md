@@ -55,6 +55,8 @@ Two domain modules (`module-a`, `module-b`) each run the annotation processor an
 
 A multi-module container constructs no SINGLETON when it starts: the output prints each constructor line at the first `get()`, after "INITIALIZING AGGREGATED CONTAINER". See [When singletons are constructed](../docs/di-and-scopes.md#when-singletons-are-constructed).
 
+Each module also has one `Channel` and one component with a `Picker<Channel>` (`ChannelCatalog`, `ChannelReport`): both pickers list the channels of both modules.
+
 ```
 mvn -pl tiko-examples/05_multi_module/app exec:java \
     -Dexec.mainClass=io.tiko.examples.multimodule.app.Main

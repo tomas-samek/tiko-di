@@ -170,7 +170,8 @@ public final class ComponentFactoryGenerator {
                 // one runtime class services every Picker injection point regardless of T.
                 TypeName baseType = dependency.getUnwrappedType().orElseThrow().javaPoet();
                 methodBuilder.addStatement(
-                        "$T $L = new $T<>(container, $T.class)",
+                        // The options name the application's container, which the picker asks (#732).
+                        "$T $L = new $T<>(container, container.options(), $T.class)",
                         dependency.getType().javaPoet(),
                         paramName,
                         ClassName.get(RUNTIME_PACKAGE, "ContainerPicker"),

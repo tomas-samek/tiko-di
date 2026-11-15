@@ -302,7 +302,7 @@ public interface Picker<T> {
 }
 ```
 
-Cross-module pickers work for free — the underlying `Container.get(Class)` / `getAll(Class)` route through the aggregator when multiple modules are linked, so `Picker<T>.list()` returns the union of impls from every module on the classpath.
+A picker answers for the whole application. In a multi-module application an injected `Picker<T>` asks the container that aggregates the modules, so `list()` returns the impls of every module on the classpath: what `container.getAll(T)` returns, whichever module the component holding the picker is in. `byName` and `byImplClass` look across the modules the same way. A module compiled with Tiko before 0.7.0 keeps a picker that sees only that module until it is recompiled.
 
 ### Decision tree
 

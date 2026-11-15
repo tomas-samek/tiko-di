@@ -864,10 +864,11 @@ public final class ContainerGenerator {
      */
     private String generateContainerGetCall(DependencyModel dependency, Scope consumerScope) {
         // Picker<T> is constructed inline via the generic ContainerPicker — no provider
-        // lookup. Inside the container we pass `this` (we ARE the container).
+        // lookup. Inside the container we pass `this` (we ARE the container) and our options,
+        // which name the application's container that the picker asks (#732).
         if (dependency.isPicker()) {
             String baseType = dependency.getUnwrappedType().orElseThrow().displayName();
-            return "new io.tiko.runtime.ContainerPicker<>(this, " + baseType + ".class)";
+            return "new io.tiko.runtime.ContainerPicker<>(this, options, " + baseType + ".class)";
         }
 
         // EventBus is a built-in, container-provided dependency (#314). We ARE the container,

@@ -173,6 +173,8 @@ public final class AggregatingContainer implements Container {
                 ownsEventExecutor ? eventExecutor : new RetrySchedulingExecutor(eventExecutor, ownedThreads);
         this.shutdownTimeout = shutdownTimeout;
         this.options = options.forOneContainer();
+        // Before the modules are built: their pickers look the application up through these options (#732).
+        this.options.applicationContainer(this);
         this.descriptorName = descriptorName;
         this.moduleContainers = new ArrayList<>();
         this.componentToContainerMap = new ConcurrentHashMap<>();

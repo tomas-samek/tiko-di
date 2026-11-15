@@ -89,6 +89,24 @@ public final class TikoOptions {
     }
 
     /**
+     * The container that aggregates the application's modules, set by it on its own copy of the
+     * options ({@link #forOneContainer()}), which every module's container receives. {@code null}
+     * for a single-module application, whose one container is the application. Not copied: it
+     * belongs to one boot.
+     */
+    private final java.util.concurrent.atomic.AtomicReference<io.tiko.Container> applicationContainer =
+            new java.util.concurrent.atomic.AtomicReference<>();
+
+    /** The container of the whole application when it has several modules (#732), else {@code null}. */
+    io.tiko.Container applicationContainer() {
+        return applicationContainer.get();
+    }
+
+    void applicationContainer(io.tiko.Container application) {
+        applicationContainer.set(application);
+    }
+
+    /**
      * The options one container works on: equal to these, but shadow overrides the container adds
      * ({@link #internalAddOverrideIfAbsent}) land in the copy. The caller's object stays as built,
      * so it can boot another container (#734).
