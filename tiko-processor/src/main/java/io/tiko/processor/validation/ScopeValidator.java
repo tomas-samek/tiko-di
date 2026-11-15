@@ -3,6 +3,7 @@ package io.tiko.processor.validation;
 import io.tiko.Scope;
 import io.tiko.processor.core.model.DeclKind;
 import io.tiko.processor.core.model.Location;
+import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
@@ -284,10 +285,13 @@ public final class ScopeValidator {
      */
     private boolean validateProxiedConcreteInjection(Location consumerLocation, DependencyModel dependency) {
         String depKey = dependency.getDependencyKey();
-        String typePart = depKey.contains("#") ? depKey.substring(0, depKey.indexOf('#')) : depKey;
+        // The type the injection point is declared with, not the provider @Pick names: a picked
+        // EVENT implementation received through its interface gets the proxy like any other (#745).
+        String declaredType =
+                dependency.getUnwrappedType().map(TypeRef::displayName).orElse(dependency.getTypeName());
         if (context.findComponentOrFactory(depKey).orElse(null) instanceof ComponentModel component
                 && component.requiresProxy()
-                && component.getQualifiedName().equals(typePart)) {
+                && component.getQualifiedName().equals(declaredType)) {
             context.getErrorReporter()
                     .proxiedConcreteInjection(
                             consumerLocation,

@@ -902,7 +902,24 @@ public final class ContainerGenerator {
             return dependency.isProvider() ? "() -> " + pickedCall : pickedCall;
         }
 
-        return resolveProviderCall(dependency, typeName, consumerScope);
+        return overridable(dependency, typeName, resolveProviderCall(dependency, typeName, consumerScope));
+    }
+
+    /**
+     * Wraps the resolution of a {@code @Produces} parameter so a {@code TikoOptions.override(...)}
+     * on its declared type, or a {@code @TestComponent} shadow of it, wins, exactly as
+     * {@link ComponentFactoryGenerator} does for a constructor parameter (#738). The key is the
+     * declared type, with the name of a {@code @Named} parameter; {@code Provider<T>} consults the
+     * override on each call.
+     */
+    private static String overridable(DependencyModel dependency, String typeName, String call) {
+        String lazy = dependency.isProvider() ? "() -> " : "";
+        String resolution = dependency.isProvider() ? call.substring(lazy.length()) : call;
+        String name = dependency
+                .getQualifier()
+                .map(qualifier -> "\"" + CodeLiterals.javaString(qualifier) + "\", ")
+                .orElse("");
+        return lazy + "options.resolveOverride(" + typeName + ".class, " + name + "() -> " + resolution + ")";
     }
 
     /**
@@ -942,6 +959,27 @@ public final class ContainerGenerator {
         }
 
         return dependency.isProvider() ? "() -> " + call : call;
+    }
+
+    /**
+     * The getter that serves a lookup of {@code component} under {@code key}. A proxied EVENT
+     * component's {@code getX()} returns its proxy, which implements the interface only: its own
+     * class is served by {@code getCurrentX()}, the current unit's instance itself (#740).
+     */
+    private static String getterFor(ComponentModel component, TypeName key) {
+        boolean ownClassOfProxied =
+                component.requiresProxy() && key.equals(component.getDecl().className());
+        return (ownClassOfProxied ? "getCurrent" : "get") + component.getClassName();
+    }
+
+    /** The routable {@code keys} of {@code component}, grouped by the getter that serves them. */
+    private static Map<String, List<TypeName>> keysByGetter(ComponentModel component, List<TypeName> keys) {
+        var byGetter = new LinkedHashMap<String, List<TypeName>>();
+        for (TypeName key : keys) {
+            byGetter.computeIfAbsent(getterFor(component, key), getter -> new ArrayList<>())
+                    .add(key);
+        }
+        return byGetter;
     }
 
     private static String factoryGetterName(FactoryMethodModel factory) {
@@ -1744,7 +1782,6 @@ public final class ContainerGenerator {
         boolean first = true;
         for (ComponentModel component : activeComponents()) {
             TypeName componentType = component.getDecl().className();
-            String getterName = "get" + component.getClassName();
             List<TypeName> keys;
             if (component.getName().isPresent()) {
                 keys = component.isExposeSelf() ? List.of(componentType) : List.of();
@@ -1753,15 +1790,17 @@ public final class ContainerGenerator {
             }
             if (keys.isEmpty()) continue;
 
-            String predicate = renderTypeOrPredicate("type", keys);
-            Object[] args = keys.toArray();
-            if (first) {
-                method.beginControlFlow("if (" + predicate + ")", args);
-            } else {
-                method.nextControlFlow("else if (" + predicate + ")", args);
+            for (var served : keysByGetter(component, keys).entrySet()) {
+                String predicate = renderTypeOrPredicate("type", served.getValue());
+                Object[] args = served.getValue().toArray();
+                if (first) {
+                    method.beginControlFlow("if (" + predicate + ")", args);
+                } else {
+                    method.nextControlFlow("else if (" + predicate + ")", args);
+                }
+                first = false;
+                method.addStatement("return (T) $L()", served.getKey());
             }
-            first = false;
-            method.addStatement("return (T) $L()", getterName);
         }
 
         // Unnamed factory-produced components (named ones are only reachable via get(Class, String))
@@ -1828,7 +1867,6 @@ public final class ContainerGenerator {
 
         boolean first = true;
         for (ComponentModel component : named) {
-            String getterName = "get" + component.getClassName();
             String componentName = component.getName().orElseThrow();
             List<TypeName> keys = effectiveRoutableTypes(component);
             if (keys.isEmpty()) continue;
@@ -1854,7 +1892,7 @@ public final class ContainerGenerator {
                 method.beginControlFlow("if (__namedOverride != null)");
                 method.addStatement("return type.cast(__namedOverride.get())");
                 method.endControlFlow();
-                method.addStatement("return (T) $L()", getterName);
+                method.addStatement("return (T) $L()", getterFor(component, key));
             }
         }
 
@@ -1920,14 +1958,15 @@ public final class ContainerGenerator {
         // getAll(OtherInterfaceItImplements). For permissive default beans this matches
         // every directly-implemented interface plus the class itself.
         for (ComponentModel component : activeComponents()) {
-            String getterName = "get" + component.getClassName();
             List<TypeName> keys = effectiveRoutableTypes(component);
             if (keys.isEmpty()) continue;
-            String predicate = renderTypeOrPredicate("type", keys);
-            Object[] args = keys.toArray();
-            method.beginControlFlow("if (" + predicate + ")", args);
-            method.addStatement("__result.add(type.cast($L()))", getterName);
-            method.endControlFlow();
+            for (var served : keysByGetter(component, keys).entrySet()) {
+                String predicate = renderTypeOrPredicate("type", served.getValue());
+                Object[] args = served.getValue().toArray();
+                method.beginControlFlow("if (" + predicate + ")", args);
+                method.addStatement("__result.add(type.cast($L()))", served.getKey());
+                method.endControlFlow();
+            }
         }
 
         // Same for factory-produced beans — both named and unnamed are visible to getAll.
