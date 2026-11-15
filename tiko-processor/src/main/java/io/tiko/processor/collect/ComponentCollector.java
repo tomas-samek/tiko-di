@@ -260,12 +260,59 @@ public final class ComponentCollector {
     }
 
     /**
+     * The generated factory and container sit in {@code io.tiko.generated} and hold a component
+     * under its class (#746). So the class is visible from another package, is in a named
+     * package, and declares no type parameters; each of these used to fail as a javac error in
+     * generated code. Checked before the constructor, whose own error would point elsewhere: the
+     * default constructor of a package-private class is package-private too.
+     */
+    private boolean hasSupportedClassShape(ClassDecl decl, String label) {
+        String component = label + " " + decl.qualifiedName();
+        if (decl.className().packageName().isEmpty()) {
+            errors.error(
+                    decl.location(),
+                    component + " is in the unnamed package: generated code, in the package io.tiko.generated,"
+                            + " cannot import a class from it",
+                    "Move " + decl.className().simpleName() + " into a named package");
+            return false;
+        }
+        for (Optional<ClassDecl> current = Optional.of(decl);
+                current.isPresent();
+                current = current.get().enclosingClass()) {
+            var checked = current.get();
+            if (!TypeUtil.isCallableFromGeneratedCode(checked.visibility())) {
+                String nested =
+                        checked == decl ? "" : ", and so must " + checked.qualifiedName() + ", which it is nested in";
+                errors.error(
+                        decl.location(),
+                        component + " must be public" + nested
+                                + "; the generated code refers to it from the io.tiko.generated package",
+                        "Add the public modifier to " + checked.qualifiedName());
+                return false;
+            }
+        }
+        if (!decl.asType().typeArguments().isEmpty()) {
+            errors.error(
+                    decl.location(),
+                    component + " declares type parameters: the container holds a component under its class,"
+                            + " which carries no type arguments",
+                    "Remove the type parameters and name the types in the class",
+                    "Produce each parameterization from a @Produces method that returns a named type");
+            return false;
+        }
+        return true;
+    }
+
+    /**
      * Shared model assembly for both {@code @Component} and the test-classpath shadow
      * annotation. Caller supplies annotation-derived attributes; this method handles
      * constructor / static-factory selection, lifecycle method discovery, proxy
      * decision, and builder population.
      */
     private ComponentModel buildComponentModel(ClassDecl decl, ComponentAttributes declared) {
+        if (!hasSupportedClassShape(decl, declared.annotationLabel())) {
+            return null;
+        }
         // Detect a self-@Produces method: a static @Produces method on this class
         // returning this class with the same qualifier name. When present, it acts
         // as the bean's instantiation strategy (replaces the constructor call).

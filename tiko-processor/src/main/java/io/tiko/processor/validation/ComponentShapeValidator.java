@@ -4,6 +4,7 @@ import io.tiko.annotations.Inject;
 import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.Location;
 import io.tiko.processor.core.model.MethodDecl;
+import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.EventHandlerModel;
@@ -39,6 +40,12 @@ public final class ComponentShapeValidator {
 
     private static final String INJECT = Inject.class.getCanonicalName();
 
+    private static final String UNRESOLVED = "does not resolve when Tiko reads the class. A type that another"
+            + " annotation processor generates in this build does not exist yet at that point";
+    private static final String GENERATE_EARLIER =
+            "Generate the type in a module that is compiled before this one, or write it by hand";
+    private static final String CHECK_THE_NAME = "Check the type's name and its import";
+
     private final ProcessorContext context;
     private final TypeUtil typeUtil;
 
@@ -54,13 +61,30 @@ public final class ComponentShapeValidator {
         for (ComponentModel component : context.getComponents().values()) {
             valid &= validateInstantiable(component);
             valid &= validatePublicMembers(component);
-            valid &= validateDependencies(component.getDecl().location(), component.getDependencies());
+            valid &= validateRoutableTypes(component);
+            valid &= validateDependencies(
+                    component.getDecl().location(), component.getClassName(), component.getDependencies());
             bySimpleName
                     .computeIfAbsent(component.getClassName(), k -> new java.util.ArrayList<>())
                     .add(component);
         }
+        Map<String, FactoryMethodModel> factoriesById = new LinkedHashMap<>();
         for (FactoryMethodModel factory : context.getFactoryMethods()) {
-            valid &= validateDependencies(factory.getMethod().location(), factory.getDependencies());
+            valid &= validateDependencies(
+                    factory.getMethod().location(), factory.getFactoryIdentifier(), factory.getDependencies());
+            // The generated container names a factory's accessors after its class and method, so
+            // two overloads would be declared twice (#746).
+            if (factoriesById.putIfAbsent(factory.getFactoryIdentifier(), factory) != null) {
+                context.getErrorReporter()
+                        .error(
+                                factory.getMethod().location(),
+                                "Two @Produces methods named '" + factory.getMethodName() + "' in "
+                                        + factory.getDeclaringClass().qualifiedName()
+                                        + ": the generated container names a factory's accessors after its"
+                                        + " method, so the name must be unique in the class",
+                                "Rename one of the methods");
+                valid = false;
+            }
         }
 
         for (Map.Entry<String, List<ComponentModel>> entry : bySimpleName.entrySet()) {
@@ -159,9 +183,82 @@ public final class ComponentShapeValidator {
         return true;
     }
 
-    private boolean validateDependencies(Location owner, List<DependencyModel> dependencies) {
+    /**
+     * The generated container names every type a component is routable as (#746): each is
+     * visible from {@code io.tiko.generated}, and each resolves. A type another annotation
+     * processor generates in the same build does not exist yet when Tiko reads the class.
+     */
+    private boolean validateRoutableTypes(ComponentModel component) {
+        boolean valid = true;
+        boolean restricted = component.isExposeRestricted();
+        for (TypeRef type :
+                restricted ? component.getExposeTypes() : component.getDecl().interfaces()) {
+            if (type.isError()) {
+                context.getErrorReporter()
+                        .error(
+                                component.getDecl().location(),
+                                component.getQualifiedName() + " implements " + type.displayName() + ", which "
+                                        + UNRESOLVED,
+                                GENERATE_EARLIER,
+                                CHECK_THE_NAME);
+                valid = false;
+                continue;
+            }
+            // A JDK lifecycle marker is not routed under the permissive default (#301).
+            if (!restricted && TypeUtil.isLifecycleMarkerInterface(type.erasedName())) {
+                continue;
+            }
+            var hidden = type.declaration().flatMap(ComponentShapeValidator::firstHidden);
+            if (hidden.isPresent()) {
+                String name = hidden.get().qualifiedName();
+                var fixes = new java.util.ArrayList<String>();
+                fixes.add("Make " + name + " public");
+                if (!restricted) {
+                    fixes.add("Route " + component.getClassName() + " only as public types: list them in @Component("
+                            + "expose = {...}), or expose = {" + component.getClassName() + ".class} for its own"
+                            + " class alone");
+                }
+                context.getErrorReporter()
+                        .error(
+                                component.getDecl().location(),
+                                component.getQualifiedName() + " is routed as " + type.erasedName()
+                                        + ", which is not public; the generated container names it from the"
+                                        + " io.tiko.generated package",
+                                fixes.toArray(String[]::new));
+                valid = false;
+            }
+        }
+        return valid;
+    }
+
+    /** The class itself or the first class it is nested in that another package cannot name. */
+    private static java.util.Optional<ClassDecl> firstHidden(ClassDecl decl) {
+        for (var current = java.util.Optional.of(decl);
+                current.isPresent();
+                current = current.get().enclosingClass()) {
+            if (!TypeUtil.isCallableFromGeneratedCode(current.get().visibility())) {
+                return current;
+            }
+        }
+        return java.util.Optional.empty();
+    }
+
+    private boolean validateDependencies(Location owner, String ownerName, List<DependencyModel> dependencies) {
         boolean valid = true;
         for (DependencyModel dep : dependencies) {
+            TypeRef injected = dep.getUnwrappedType().orElse(dep.getType());
+            if (dep.getType().isError() || injected.isError()) {
+                Location parameter = dep.getParameter().location();
+                context.getErrorReporter()
+                        .error(
+                                parameter != null ? parameter : owner,
+                                ownerName + ": the type of parameter '" + dep.getParameterName() + "', "
+                                        + injected.displayName() + ", " + UNRESOLVED,
+                                GENERATE_EARLIER,
+                                CHECK_THE_NAME);
+                valid = false;
+                continue;
+            }
             boolean rawWrapper = (dep.isProvider() || dep.isPicker())
                     && dep.getUnwrappedType().isEmpty();
             if (rawWrapper) {

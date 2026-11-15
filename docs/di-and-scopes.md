@@ -145,6 +145,12 @@ public class OrderService {
 
 Tiko deliberately does **not** support field or setter injection.
 
+The generated wiring lives in the package `io.tiko.generated` and holds a component under its class, which shapes what a component class may be. Each of these is a compile error that names the fix:
+
+- The class is public, and so is every class it is nested in (Kotlin: `public` or `internal`). It is in a named package and declares no type parameters.
+- Every type it is routable as is public: the interfaces it implements, or the ones listed in `expose`. Keep a non-public interface out of routing with `@Component(expose = {...})`.
+- A type it implements or injects resolves when Tiko reads the class. A type that another annotation processor generates in the same build does not exist yet at that point: generate it in a module compiled earlier.
+
 ## Lifecycle hooks
 
 The recommended cleanup pattern is `AutoCloseable`. A component (or `@Produces`-returned type) that implements `AutoCloseable` and declares no explicit `@PreDestroy` gets `close()` called automatically at scope teardown — no annotation required. This lets `@Produces` factories return third-party closeables (data sources, HTTP clients, Kafka producers) without writing a wrapper.
@@ -343,6 +349,8 @@ Greeter french = container.pick(Greeter.class)
 For cases where a component cannot be constructed by a plain `@Inject` constructor — validation logic, complex initialization, third-party classes, private constructors.
 
 Two forms: instance methods (separate factory component, may itself have `@Inject` dependencies) and static methods (same class — typically used with a private constructor for forced factory construction).
+
+A `@Produces` method is public, declares no type parameters, and has a name of its own in its class: the generated container names a factory's accessors after the method, so two overloads are a compile error.
 
 ```java
 // Instance factory with injected dependencies
