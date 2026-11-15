@@ -899,7 +899,7 @@ public final class ContainerGenerator {
             } else {
                 pickedCall = "get" + simpleClassName(pickedFqn) + "()";
             }
-            return dependency.isProvider() ? "() -> " + pickedCall : pickedCall;
+            return dependency.isProvider() ? LAZY + pickedCall : pickedCall;
         }
 
         return overridable(dependency, typeName, resolveProviderCall(dependency, typeName, consumerScope));
@@ -913,13 +913,13 @@ public final class ContainerGenerator {
      * override on each call.
      */
     private static String overridable(DependencyModel dependency, String typeName, String call) {
-        String lazy = dependency.isProvider() ? "() -> " : "";
+        String lazy = dependency.isProvider() ? LAZY : "";
         String resolution = dependency.isProvider() ? call.substring(lazy.length()) : call;
         String name = dependency
                 .getQualifier()
                 .map(qualifier -> "\"" + CodeLiterals.javaString(qualifier) + "\", ")
                 .orElse("");
-        return lazy + "options.resolveOverride(" + typeName + ".class, " + name + "() -> " + resolution + ")";
+        return lazy + "options.resolveOverride(" + typeName + ".class, " + name + LAZY + resolution + ")";
     }
 
     /**
@@ -958,7 +958,7 @@ public final class ContainerGenerator {
                     .orElse("get" + simpleClassName(typeName) + "()");
         }
 
-        return dependency.isProvider() ? "() -> " + call : call;
+        return dependency.isProvider() ? LAZY + call : call;
     }
 
     /**
@@ -1153,6 +1153,12 @@ public final class ContainerGenerator {
     private static final ClassName BOUNDED_EXECUTION = ClassName.get("io.tiko.runtime", "BoundedExecution");
     private static final ClassName CONTAINER_SHUT_DOWN = ClassName.get(TIKO_PACKAGE, "ContainerShutDownException");
     /** Shared get-or-create statement fragments (S1192) — used by scoped and singleton emission. */
+    /** The lambda head that makes a resolution lazy: a {@code Provider} and an override fallback. */
+    private static final String LAZY = "() -> ";
+
+    /** Returns what a getter serves, cast to the type the lookup asked for. */
+    private static final String RETURN_GETTER = "return (T) $L()";
+
     private static final String IF_EXISTING_NULL = "if (__existing == null)";
 
     private static final String ASSIGN_EXISTING = "__existing = $L";
@@ -1799,7 +1805,7 @@ public final class ContainerGenerator {
                     method.nextControlFlow("else if (" + predicate + ")", args);
                 }
                 first = false;
-                method.addStatement("return (T) $L()", served.getKey());
+                method.addStatement(RETURN_GETTER, served.getKey());
             }
         }
 
@@ -1814,7 +1820,7 @@ public final class ContainerGenerator {
             } else {
                 method.nextControlFlow("else if (type == $T.class)", producedType);
             }
-            method.addStatement("return (T) $L()", factoryGetterName(factory));
+            method.addStatement(RETURN_GETTER, factoryGetterName(factory));
         }
 
         if (!first) {
@@ -1892,7 +1898,7 @@ public final class ContainerGenerator {
                 method.beginControlFlow("if (__namedOverride != null)");
                 method.addStatement("return type.cast(__namedOverride.get())");
                 method.endControlFlow();
-                method.addStatement("return (T) $L()", getterFor(component, key));
+                method.addStatement(RETURN_GETTER, getterFor(component, key));
             }
         }
 
@@ -1913,7 +1919,7 @@ public final class ContainerGenerator {
             } else {
                 method.nextControlFlow("else if ($S.equals(name) && type == $T.class)", factoryName, producedType);
             }
-            method.addStatement("return (T) $L()", factoryGetterName(factory));
+            method.addStatement(RETURN_GETTER, factoryGetterName(factory));
         }
 
         if (!first) {
