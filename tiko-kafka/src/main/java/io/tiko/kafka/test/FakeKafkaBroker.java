@@ -222,7 +222,8 @@ public final class FakeKafkaBroker {
                     try {
                         TimeUnit.NANOSECONDS.timedWait(broker, remaining);
                     } catch (InterruptedException interrupted) {
-                        // What the real consumer throws; its constructor restores the interrupt flag.
+                        // Keep the interrupt for the caller and throw what the real consumer throws.
+                        Thread.currentThread().interrupt();
                         throw new org.apache.kafka.common.errors.InterruptException(interrupted);
                     }
                 }
