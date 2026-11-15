@@ -1,10 +1,16 @@
 package io.tiko.processor.validation;
 
+import io.tiko.processor.core.model.Location;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
 import io.tiko.processor.util.ProcessorContext;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * Detects circular dependencies in the component graph.
@@ -14,6 +20,11 @@ import java.util.*;
  * - A -> B -> C -> A
  *
  * Provider<T> breaks cycles (lazy resolution).
+ *
+ * <p>The walk runs over the providers the build's profiles select — the {@link ComponentModel} or
+ * {@link FactoryMethodModel} each dependency resolves to — so two {@code @Produces} variants of one
+ * key under different profiles are told apart (#722). An instance {@code @Produces} method also
+ * depends on its declaring component, whose instance it is called on (#722).
  */
 public final class CircularDependencyDetector {
 
@@ -30,119 +41,108 @@ public final class CircularDependencyDetector {
     public boolean validate() {
         boolean valid = true;
 
-        // Check each component
         for (ComponentModel component : context.getActiveComponents()) {
-            List<String> cycle = findCycle(component.getComponentKey(), new HashSet<>(), new ArrayList<>());
-            if (!cycle.isEmpty()) {
-                reportCycle(component, cycle);
-                valid = false;
-            }
+            valid = reportCycleFrom(component, component.getDecl().location()) && valid;
         }
-
-        // Check each factory method
         for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
-            List<String> cycle = findCycle(factory.getComponentKey(), new HashSet<>(), new ArrayList<>());
-            if (!cycle.isEmpty()) {
-                reportCycleForFactory(factory, cycle);
-                valid = false;
-            }
+            valid = reportCycleFrom(factory, factory.getMethod().location()) && valid;
         }
 
         return valid;
     }
 
+    /** Reports the cycle reachable from {@code provider}, if any. Returns true when there is none. */
+    private boolean reportCycleFrom(Object provider, Location at) {
+        List<Object> cycle = findCycle(provider, Collections.newSetFromMap(new IdentityHashMap<>()), new ArrayList<>());
+        if (cycle.isEmpty()) {
+            return true;
+        }
+        context.getErrorReporter()
+                .circularDependency(
+                        at,
+                        String.join(
+                                " -> ",
+                                cycle.stream()
+                                        .map(CircularDependencyDetector::keyOf)
+                                        .toList()));
+        return false;
+    }
+
     /**
      * Depth-first search returning the full cycle path (e.g. {@code [A, B, A]}) when a cycle is
-     * reachable from {@code key}, or an empty list otherwise. Uses a single {@code visiting} set
+     * reachable from {@code provider}, or an empty list otherwise. Uses a single {@code visiting} set
      * and {@code path} list with backtracking, so the detected path propagates back to the caller
-     * intact — the earlier copy-on-recurse logic discarded it and surfaced only the root node.
+     * intact.
      */
-    private List<String> findCycle(String key, Set<String> visiting, List<String> path) {
-        // Resolve interface- or qualifier-typed edges to the provider's own key so they land on
-        // the same node as direct edges — an exact-key walk dead-ends at the alias (#329).
-        String canonical = resolveToProviderKey(key);
-        if (canonical == null) {
-            return List.of();
-        }
-
+    private List<Object> findCycle(Object provider, Set<Object> visiting, List<Object> path) {
         // Back-edge to a node already on the current path: close the cycle from its first
         // occurrence to the end, then repeat the node so the rendered path reads A -> B -> A.
-        if (visiting.contains(canonical)) {
-            List<String> cycle = new ArrayList<>(path.subList(path.indexOf(canonical), path.size()));
-            cycle.add(canonical);
+        if (visiting.contains(provider)) {
+            List<Object> cycle = new ArrayList<>(path.subList(path.indexOf(provider), path.size()));
+            cycle.add(provider);
             return cycle;
         }
 
-        visiting.add(canonical);
-        path.add(canonical);
+        visiting.add(provider);
+        path.add(provider);
 
-        for (DependencyModel dependency : getDependencies(canonical)) {
-            // Provider<T> breaks cycles - skip
-            if (dependency.isProvider()) {
-                continue;
-            }
-            List<String> cycle = findCycle(dependency.getDependencyKey(), visiting, path);
+        for (Object next : providersNeededBy(provider)) {
+            List<Object> cycle = findCycle(next, visiting, path);
             if (!cycle.isEmpty()) {
                 return cycle;
             }
         }
 
-        visiting.remove(canonical);
-        path.remove(path.size() - 1);
+        visiting.remove(provider);
+        path.removeLast();
         return List.of();
     }
 
     /**
-     * Resolves a dependency key to the providing component's or factory's own registration key.
-     * Returns {@code null} for a missing dependency (reported by DependencyGraphValidator, not
-     * here) and for runtime-bound {@code @Configuration} records — leaves for cycle purposes.
+     * The providers {@code provider} needs before it can be built: what its injection points resolve
+     * to, and for an instance {@code @Produces} method the component it is declared on.
+     * {@code Provider<T>} injection points resolve lazily and are left out.
      */
-    private String resolveToProviderKey(String key) {
-        Object provider = context.findComponentOrFactory(key).orElse(null);
-        if (provider instanceof ComponentModel component) {
-            return component.getComponentKey();
+    private List<Object> providersNeededBy(Object provider) {
+        var needed = new ArrayList<Object>();
+        for (DependencyModel dependency : dependenciesOf(provider)) {
+            if (!dependency.isProvider()) {
+                resolve(dependency.getDependencyKey()).ifPresent(needed::add);
+            }
         }
-        if (provider instanceof FactoryMethodModel factory) {
-            return factory.getComponentKey();
+        if (provider instanceof FactoryMethodModel factory && !factory.isStatic()) {
+            declaringComponentOf(factory).ifPresent(needed::add);
         }
-        return null;
+        return needed;
     }
 
     /**
-     * Gets dependencies for a component or factory by key. When two {@code @Produces}
-     * methods register at the same key under disjoint profiles (#275), this picks the
-     * first registered variant — cycle topology is structural and shared shape is the
-     * common case; profile-specific cycles get caught when the relevant build runs.
+     * Resolves a dependency key to the active component or factory method that provides it, so
+     * interface- and qualifier-typed edges land on the same node as direct ones (#329). Empty for
+     * a missing dependency (reported by DependencyGraphValidator, not here) and for runtime-bound
+     * {@code @Configuration} records — leaves for cycle purposes.
      */
-    private List<DependencyModel> getDependencies(String componentKey) {
-        // Check components first
-        ComponentModel component = context.getComponents().get(componentKey);
-        if (component != null) {
-            return component.getDependencies();
-        }
-
-        // Check factory methods
-        List<FactoryMethodModel> factories = context.getFactoryMethodsByKey(componentKey);
-        if (!factories.isEmpty()) {
-            return factories.get(0).getDependencies();
-        }
-
-        return List.of();
+    private Optional<Object> resolve(String key) {
+        return context.findComponentOrFactory(key)
+                .filter(provider -> provider instanceof ComponentModel || provider instanceof FactoryMethodModel);
     }
 
-    /**
-     * Reports a circular dependency for a component.
-     */
-    private void reportCycle(ComponentModel component, List<String> path) {
-        String cycle = String.join(" -> ", path);
-        context.getErrorReporter().circularDependency(component.getDecl().location(), cycle);
+    private Optional<ComponentModel> declaringComponentOf(FactoryMethodModel factory) {
+        String declaringClass = factory.getDeclaringClass().qualifiedName();
+        return context.getActiveComponents().stream()
+                .filter(component -> component.getQualifiedName().equals(declaringClass))
+                .findFirst();
     }
 
-    /**
-     * Reports a circular dependency for a factory method.
-     */
-    private void reportCycleForFactory(FactoryMethodModel factory, List<String> path) {
-        String cycle = String.join(" -> ", path);
-        context.getErrorReporter().circularDependency(factory.getMethod().location(), cycle);
+    private static List<DependencyModel> dependenciesOf(Object provider) {
+        return provider instanceof ComponentModel component
+                ? component.getDependencies()
+                : ((FactoryMethodModel) provider).getDependencies();
+    }
+
+    private static String keyOf(Object provider) {
+        return provider instanceof ComponentModel component
+                ? component.getComponentKey()
+                : ((FactoryMethodModel) provider).getComponentKey();
     }
 }
