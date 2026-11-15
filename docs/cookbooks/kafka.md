@@ -102,6 +102,8 @@ handlers did with it:
 |---|---|
 | Deserialization, the bridge method, or the publish | It takes the ingest-error path ([section 5](#5-poison-messages-ingest-failures)). With the default `SEEK` it is redelivered. |
 | Nothing throws, but the bridge returns `null` | The offset is committed and nothing is published. The record is not redelivered. |
+| The record has no value (a tombstone) | The bridge is not called. The offset is committed and nothing is published. |
+| The bridge or a sync handler throws an `Error` (`NoClassDefFoundError`, `AssertionError`, Kotlin's `TODO()`) | It is reported once as a `KafkaIngestError` whose `cause()` is the `Error`. The record stays uncommitted and this topic's consumer stops, as after a `FAIL` decision; no policy and no decider is asked. |
 | A sync `@EventHandler` of the emitted event, or a handler further down an `@EventTrigger` chain | The exception goes to the `ErrorHandler` and the offset is committed. The record is not redelivered. |
 | An async handler (`async = true`) | The commit doesn't wait for the handler. Its failure, or a crash while it runs, is not redelivered. |
 
@@ -153,6 +155,8 @@ the **return value**, and sends it to the topic.
   is the exclusive hook; adding `@EventHandler` double-fires the method.
 - `partitionKey` names a record-component accessor (or zero-arg public method) on the
   return type whose value becomes the Kafka message key; empty → null key (round-robin).
+- A `null` return sends nothing, with or without `partitionKey`. Use it to forward only some
+  of the events. In Kotlin, declare the return type nullable.
 
 ```java
 @Component(scope = Scope.SINGLETON)
@@ -213,6 +217,11 @@ In `deserialize`, throw `io.tiko.UndecodablePayloadException` for input that can
 decoded (malformed bytes, a type mismatch), and any other exception for a failure that may
 pass on retry (the schema registry is unreachable). Error policies rely on that split. Keep
 payload values out of both: error handlers log the message and the whole cause chain.
+
+The consumer never calls `deserialize` with `null`: a record without a value is consumed
+before decoding ([section 2](#which-failures-redeliver-a-record)). Called directly, the bundled
+`JsonKafkaSerializer` reports `null` as an `UndecodablePayloadException`, like other input it
+can never decode.
 
 An unknown serializer name fails fast at container start, naming the missing serializer and the
 YAML key.
@@ -326,6 +335,10 @@ TikoOptions.builder().errorHandler(ctx -> {
 
 A decider that throws falls back to `SEEK` (no data loss) and logs a warning; it
 never kills the consumer thread.
+
+The decider sees exceptions only. An `Error` stops the topic's consumer without asking it: the
+`ErrorHandler` gets a `KafkaIngestError` whose `cause()` is the `Error`, and the record stays
+uncommitted.
 
 ## Trade-offs (MVP)
 

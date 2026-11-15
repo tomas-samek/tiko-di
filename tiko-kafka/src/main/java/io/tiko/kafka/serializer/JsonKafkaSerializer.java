@@ -38,6 +38,12 @@ public final class JsonKafkaSerializer implements KafkaSerializer {
 
     @Override
     public <T> T deserialize(byte[] bytes, Class<T> type) {
+        if (bytes == null) {
+            // Nothing to decode, now and on every redelivery, so it is typed like other undecodable
+            // input (#751). The consumer loop never gets here: it consumes a record without a value.
+            throw new UndecodablePayloadException(
+                    type, "failed to deserialize " + type.getSimpleName() + " from JSON: the record has no value");
+        }
         try {
             return MAPPER.readValue(bytes, type);
         } catch (IOException e) {

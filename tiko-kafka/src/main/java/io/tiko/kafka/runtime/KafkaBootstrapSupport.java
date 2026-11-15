@@ -62,7 +62,21 @@ public final class KafkaBootstrapSupport {
         this.producerFactory = producerFactory;
     }
 
+    /**
+     * Starts the producer and one consumer per source. A start that fails stops and closes what it
+     * had already started before it throws (#752), so a failed boot leaves no consumer running.
+     */
+    @SuppressWarnings("java:S1181") // rethrown; caught only to close what the failed start opened
     public void start() {
+        try {
+            startClients();
+        } catch (RuntimeException | Error startFailure) {
+            shutdown();
+            throw startFailure;
+        }
+    }
+
+    private void startClients() {
         KafkaConfig config = container.get(KafkaConfig.class);
         EventBus eventBus = container.getEventBus();
         ErrorHandler errorHandler = resolveErrorHandler(container);
@@ -83,10 +97,32 @@ public final class KafkaBootstrapSupport {
             String group = source.consumerGroup().isEmpty() ? config.consumerGroup() : source.consumerGroup();
             KafkaSerializer serializer = resolveSerializer(source.serializerClass(), config, named);
             KafkaConsumerClient client = consumerFactory.apply(config, group);
-            KafkaConsumerRunner runner = new ThreadPerTopicRunner(
-                    source, client, container, eventBus, errorHandler, serializer, config, decider);
+            KafkaConsumerRunner runner = newRunner(source, client, eventBus, errorHandler, serializer, config, decider);
             runners.add(runner);
             runner.start();
+        }
+    }
+
+    /** Builds the runner that owns {@code client}; a runner that cannot be built closes the client (#752). */
+    @SuppressWarnings("java:S1181") // rethrown; caught only to close the client nobody owns yet
+    private KafkaConsumerRunner newRunner(
+            GeneratedSourceDescriptor source,
+            KafkaConsumerClient client,
+            EventBus eventBus,
+            ErrorHandler errorHandler,
+            KafkaSerializer serializer,
+            KafkaConfig config,
+            KafkaIngestErrorDecider decider) {
+        try {
+            return new ThreadPerTopicRunner(
+                    source, client, container, eventBus, errorHandler, serializer, config, decider);
+        } catch (RuntimeException | Error invalid) {
+            try {
+                client.close();
+            } catch (RuntimeException closeFailure) {
+                invalid.addSuppressed(closeFailure);
+            }
+            throw invalid;
         }
     }
 
@@ -116,6 +152,10 @@ public final class KafkaBootstrapSupport {
         return (T event) -> {
             try {
                 Object payload = sink.dispatcher().dispatch(container, event);
+                if (payload == null) {
+                    // Nothing to send, the mirror of a source bridge that returns null (#754).
+                    return;
+                }
                 byte[] bytes = serializer.serialize(payload);
                 String key = sink.keyExtractor().extract(payload);
                 // The send callback surfaces broker-side failures (record-too-large, topic

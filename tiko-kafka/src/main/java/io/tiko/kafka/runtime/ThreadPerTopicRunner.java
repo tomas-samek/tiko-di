@@ -189,12 +189,16 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
         }
     }
 
+    @SuppressWarnings("java:S1181") // an Error ends the thread; it must not end it unreported (#749)
     private void run() {
         while (running.get()) {
             try {
                 resumeDuePartitions();
                 ConsumerRecords<String, byte[]> records = consumer.poll(config.pollTimeout());
                 for (TopicPartition tp : records.partitions()) {
+                    // A FAIL decision, an Error or stop() ended this runner mid-batch: what is left
+                    // of the batch stays uncommitted and is redelivered (#749).
+                    if (!running.get()) break;
                     processPartition(tp, records.records(tp));
                 }
             } catch (WakeupException wakeup) {
@@ -210,6 +214,8 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
                         "Kafka consumer loop failure on topic '" + source.topic() + "'; retrying",
                         infrastructureFailure);
                 LockSupport.parkNanos(config.pollTimeout().toNanos());
+            } catch (Error fatal) {
+                stopOn(new KafkaIngestError(source.topic(), -1, -1L, new RecordHeaders(), fatal));
             }
         }
         // runAndClose() closes the consumer on this same thread, exactly once
@@ -221,28 +227,64 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
      * partitions in the same batch keep flowing (#340; the old whole-batch break left
      * their already-advanced positions unprocessed and uncommitted for the live session).
      */
+    @SuppressWarnings("java:S1181") // an Error ends the thread; it must not end it unreported (#749)
     private void processPartition(TopicPartition tp, List<ConsumerRecord<String, byte[]>> partitionRecords) {
         for (ConsumerRecord<String, byte[]> r : partitionRecords) {
             try {
-                Object payload = serializer.deserialize(r.value(), source.payloadType());
-                KafkaContext ctx = new KafkaContext(
-                        r.topic(), r.partition(), r.offset(), Instant.ofEpochMilli(r.timestamp()), r.headers());
-                // Each consumed message is one unit of work (#347): open a fresh EVENT scope so
-                // EVENT-scoped beans resolve and tear down per message and unit lifecycle events
-                // publish. The scope closes (teardown runs) BEFORE commit, so per-unit resources
-                // flush before the offset is acknowledged. Sync handlers run in this frame; async
-                // handlers detach to the executor with their own scope (#220).
-                container.runInEventScope(() -> {
-                    Object event = source.dispatcher().dispatch(container, payload, ctx);
-                    eventBus.publish(event);
-                });
+                // A record without a value (a tombstone) has no payload to hand to the bridge: it
+                // is consumed and publishes nothing, like a bridge that returns null (#751).
+                if (r.value() != null) {
+                    publish(r);
+                }
                 consumer.commitSync(Map.of(tp, new OffsetAndMetadata(r.offset() + 1)));
                 attempts.remove(tp);
             } catch (WakeupException wakeup) {
                 throw wakeup; // orderly shutdown — handled by run()
             } catch (Exception ex) {
                 if (!handleIngestFailure(tp, r, ex)) return;
+            } catch (Error fatal) {
+                stopOn(new KafkaIngestError(r.topic(), r.partition(), r.offset(), r.headers(), fatal));
+                return;
             }
+        }
+    }
+
+    /** Decodes one record, runs its bridge and publishes the bridge's event, all in one unit of work. */
+    private void publish(ConsumerRecord<String, byte[]> r) {
+        Object payload = serializer.deserialize(r.value(), source.payloadType());
+        KafkaContext ctx = new KafkaContext(
+                r.topic(), r.partition(), r.offset(), Instant.ofEpochMilli(r.timestamp()), r.headers());
+        // Each consumed message is one unit of work (#347): open a fresh EVENT scope so
+        // EVENT-scoped beans resolve and tear down per message and unit lifecycle events
+        // publish. The scope closes (teardown runs) BEFORE commit, so per-unit resources
+        // flush before the offset is acknowledged. Sync handlers run in this frame; async
+        // handlers detach to the executor with their own scope (#220).
+        container.runInEventScope(() -> {
+            Object event = source.dispatcher().dispatch(container, payload, ctx);
+            eventBus.publish(event);
+        });
+    }
+
+    /**
+     * Ends this runner on an {@link Error} from a bridge, a sync handler or the client (#749). An
+     * {@code Error} is not a record failure to retry or skip, so no policy and no decider is asked:
+     * the error is reported with the record it came from, that record stays uncommitted, and this
+     * topic's consumer stops, as after a {@code FAIL} decision.
+     */
+    @SuppressWarnings("java:S1181") // a handler that fails here must not hide the reported Error
+    private void stopOn(KafkaIngestError error) {
+        running.set(false);
+        LoggerHolder.LOG.log(
+                System.Logger.Level.ERROR,
+                "Kafka consumer for topic '" + source.topic() + "' stopped on " + error.cause()
+                        + "; the record is left uncommitted");
+        try {
+            errorHandler.onError(error);
+        } catch (Exception | Error handlerFailure) {
+            LoggerHolder.LOG.log(
+                    System.Logger.Level.WARNING,
+                    "ErrorHandler threw while handling the Error that stopped a Kafka consumer",
+                    handlerFailure);
         }
     }
 
