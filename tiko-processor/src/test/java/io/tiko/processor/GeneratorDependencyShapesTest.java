@@ -62,4 +62,50 @@ class GeneratorDependencyShapesTest {
                 .extracting(javax.tools.JavaFileObject::getName)
                 .anyMatch(name -> name.contains("/io/tiko/generated/ConsumerFactory_"));
     }
+
+    /**
+     * #732: a picker is handed the container's options, through which it finds the application's
+     * container. Built over the module's own container alone, it lists only that module.
+     */
+    @Test
+    void pickerIsBuiltWithTheContainersOptions() throws java.io.IOException {
+        JavaFileObject iface = JavaFileObjects.forSourceLines(
+                "demo.Greeter", "package demo;", "public interface Greeter { String greet(); }");
+        JavaFileObject consumer = JavaFileObjects.forSourceLines(
+                "demo.Consumer",
+                "package demo;",
+                "import io.tiko.Picker;",
+                "import io.tiko.Scope;",
+                "import io.tiko.annotations.Component;",
+                "import io.tiko.annotations.Inject;",
+                "@Component(scope = Scope.SINGLETON)",
+                "public class Consumer {",
+                "    @Inject public Consumer(Picker<Greeter> picker) {}",
+                "}");
+        JavaFileObject producer = JavaFileObjects.forSourceLines(
+                "demo.Producer",
+                "package demo;",
+                "import io.tiko.Picker;",
+                "import io.tiko.Scope;",
+                "import io.tiko.annotations.Component;",
+                "import io.tiko.annotations.Produces;",
+                "@Component(scope = Scope.SINGLETON)",
+                "public class Producer {",
+                "    @Produces public StringBuilder names(Picker<Greeter> picker) { return new StringBuilder(); }",
+                "}");
+
+        Compilation c =
+                Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(iface, consumer, producer);
+
+        assertThat(c).succeeded();
+        var generated = new StringBuilder();
+        for (JavaFileObject file : c.generatedSourceFiles()) {
+            generated.append(file.getCharContent(true).toString().replaceAll("\\s+", " "));
+        }
+        org.assertj.core.api.Assertions.assertThat(generated.toString())
+                .as("the factory builds the constructor's picker")
+                .contains("ContainerPicker<>(container, container.options(), Greeter.class)")
+                .as("the container builds the @Produces parameter's picker")
+                .contains("ContainerPicker<>(this, options, demo.Greeter.class)");
+    }
 }
