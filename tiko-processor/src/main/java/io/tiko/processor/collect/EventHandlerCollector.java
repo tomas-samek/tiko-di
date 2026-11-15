@@ -1,11 +1,14 @@
 package io.tiko.processor.collect;
 
+import com.palantir.javapoet.ClassName;
+import com.palantir.javapoet.ParameterizedTypeName;
 import io.tiko.EventTriggerGuard;
 import io.tiko.annotations.BackoffStrategy;
 import io.tiko.annotations.EventHandler;
 import io.tiko.annotations.EventTrigger;
 import io.tiko.processor.core.ProcessingEnv;
 import io.tiko.processor.core.model.AnnotationRef;
+import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.MethodDecl;
 import io.tiko.processor.model.EventHandlerModel;
 import io.tiko.processor.model.EventTriggerModel;
@@ -27,6 +30,7 @@ public final class EventHandlerCollector {
     private static final String EVENT_HANDLER = EventHandler.class.getCanonicalName();
     private static final String EVENT_TRIGGER = EventTrigger.class.getCanonicalName();
     private static final String ASYNC = "async";
+    private static final String EVENT_WRAPPER = "io.tiko.Event";
     private static final String ALWAYS_ALLOW = EventTriggerGuard.AlwaysAllow.class.getCanonicalName();
 
     private EventHandlerCollector() {}
@@ -66,7 +70,11 @@ public final class EventHandlerCollector {
 
         // Check if second parameter is Event<?> wrapper
         boolean hasEventWrapper = parameters.size() > 1
-                && TypeRefs.qualifiedName(parameters.get(1).type()).equals("io.tiko.Event");
+                && TypeRefs.qualifiedName(parameters.get(1).type()).equals(EVENT_WRAPPER);
+
+        if (!hasSupportedParameters(method, owner, hasEventWrapper, errors)) {
+            return null; // a parameter the generated registry cannot pass was reported
+        }
 
         var eventTriggers = collectEventTriggers(method, errors);
 
@@ -98,6 +106,48 @@ public final class EventHandlerCollector {
                 .backoffStrategy(BackoffStrategy.valueOf(annotation.enumName("backoffStrategy")))
                 .eventTriggers(eventTriggers)
                 .build();
+    }
+
+    /**
+     * A handler takes the event and, optionally, its {@code Event<?>} wrapper; the event is routed
+     * by its class, so it is a class, a record or an interface (#746). Anything else used to crash
+     * the generator or fail as a javac error in the generated registry.
+     */
+    private static boolean hasSupportedParameters(
+            MethodDecl method, ClassDecl owner, boolean hasEventWrapper, ErrorReporter errors) {
+        var parameters = method.parameters();
+        var label = "@EventHandler '" + owner.className().simpleName() + "." + method.name() + "'";
+        var eventType = parameters.get(0).type();
+        // Judged on the Java type the generated registry names, so that a Kotlin Int or Array<T>
+        // is seen as the primitive or array it compiles to.
+        var javaType = eventType.javaPoet();
+        if (!(javaType instanceof ClassName || javaType instanceof ParameterizedTypeName)) {
+            errors.error(
+                    method.location(),
+                    label + " takes " + eventType.displayName() + ", which is not an event type: an event is routed"
+                            + " by its class, so the parameter is a class, a record or an interface",
+                    "Declare an event class that holds the value (a record with one component) and take that");
+            return false;
+        }
+        if (parameters.size() > 2) {
+            errors.error(
+                    method.location(),
+                    label + " takes at most two parameters: the event and, optionally, its " + EVENT_WRAPPER
+                            + "<?> wrapper",
+                    "Inject what the handler needs through the component's constructor");
+            return false;
+        }
+        if (parameters.size() == 2 && !hasEventWrapper) {
+            errors.error(
+                    method.location(),
+                    label + " has a second parameter of type "
+                            + parameters.get(1).type().displayName() + "; the only second parameter a handler takes"
+                            + " is the delivery's " + EVENT_WRAPPER + "<?> wrapper",
+                    "Handle each event type in a method of its own",
+                    "Inject what the handler needs through the component's constructor");
+            return false;
+        }
+        return true;
     }
 
     /**

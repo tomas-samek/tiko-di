@@ -33,7 +33,8 @@ public final class EventRegistryGenerator {
 
     private static final String GENERATED_PACKAGE = "io.tiko.generated";
 
-    private static final ClassName CHAIN_CONTEXT = ClassName.get("io.tiko.runtime", "EventChainContext");
+    private static final String RUNTIME_PACKAGE = "io.tiko.runtime";
+    private static final ClassName CHAIN_CONTEXT = ClassName.get(RUNTIME_PACKAGE, "EventChainContext");
 
     private final ProcessorContext context;
 
@@ -72,8 +73,8 @@ public final class EventRegistryGenerator {
         // Emit one HANDLER_INFO_<n> static constant per handler
         for (int i = 0; i < eventHandlers.size(); i++) {
             EventHandlerModel handler = eventHandlers.get(i);
-            ClassName declaring = ClassName.bestGuess(handler.getOwner().qualifiedName());
-            ClassName eventClass = ClassName.bestGuess(handler.getEventTypeName());
+            ClassName declaring = handler.getOwner().className();
+            ClassName eventClass = eventClassOf(handler);
 
             FieldSpec info = FieldSpec.builder(
                             eventHandlerInfo, "HANDLER_INFO_" + i, Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
@@ -116,7 +117,7 @@ public final class EventRegistryGenerator {
 
         for (int i = 0; i < eventHandlers.size(); i++) {
             EventHandlerModel handler = eventHandlers.get(i);
-            ClassName eventClass = ClassName.bestGuess(handler.getEventTypeName());
+            ClassName eventClass = eventClassOf(handler);
             method.addStatement(
                     "eventBus.subscribe($T.class, event -> $L(eventBus, container, event))",
                     eventClass,
@@ -145,8 +146,8 @@ public final class EventRegistryGenerator {
      */
     private MethodSpec createDispatcherMethod(EventHandlerModel handler, int index) {
         ClassName containerClass = ClassName.get(GENERATED_PACKAGE, context.getContainerClassName());
-        ClassName eventClass = ClassName.bestGuess(handler.getEventTypeName());
-        ClassName declaringClass = ClassName.bestGuess(handler.getOwner().qualifiedName());
+        ClassName eventClass = eventClassOf(handler);
+        ClassName declaringClass = handler.getOwner().className();
         // Proxied EVENT components: the plain getter returns the interface-typed proxy, which
         // cannot be assigned to the concrete handler variable — resolve the current unit's
         // instance via the concrete-typed getCurrentXxx delegate instead (#331).
@@ -204,6 +205,16 @@ public final class EventRegistryGenerator {
         method.endControlFlow();
 
         return method.build();
+    }
+
+    /**
+     * The class the handler is subscribed to, from its type. Guessing it from the qualified name
+     * fails for a lowercase class name and misreads an uppercase package segment (#746). The
+     * collector has rejected every event type that is not a class.
+     */
+    private static ClassName eventClassOf(EventHandlerModel handler) {
+        TypeName type = handler.getEventType().javaPoet();
+        return type instanceof ParameterizedTypeName parameterized ? parameterized.rawType() : (ClassName) type;
     }
 
     /**
@@ -280,6 +291,15 @@ public final class EventRegistryGenerator {
         } else {
             runBody.addStatement("$L", plan.invocation());
         }
+        if (!handler.getMethod().thrownTypes().isEmpty()) {
+            // The body runs as a Runnable, which declares no checked exception: pass the handler's
+            // on as itself, so the ErrorHandler gets it unwrapped (#746).
+            runBody.nextControlFlow("catch ($T __checked)", Exception.class);
+            runBody.addStatement(
+                    "throw $T.<$T>sneakyThrow(__checked)",
+                    ClassName.get(RUNTIME_PACKAGE, "Unchecked"),
+                    RuntimeException.class);
+        }
         runBody.nextControlFlow("finally");
         runBody.addStatement("$T.exit(__asyncPrev)", CHAIN_CONTEXT);
         runBody.endControlFlow();
@@ -300,7 +320,7 @@ public final class EventRegistryGenerator {
                             "$T.runAsyncWithRetry(() -> {\n$L}, new $T($L, $LL, $T.$L, $LL), __exec, __err, HANDLER_INFO_$L, event);\n",
                             CHAIN_CONTEXT,
                             asyncBody,
-                            ClassName.get("io.tiko.runtime", "RetryPolicy"),
+                            ClassName.get(RUNTIME_PACKAGE, "RetryPolicy"),
                             handler.getRetries(),
                             handler.getBackoffNanos(),
                             ClassName.get("io.tiko.annotations", "BackoffStrategy"),
