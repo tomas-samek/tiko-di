@@ -71,6 +71,14 @@ reported as `… but found: TOPSECRT`, up to eight characters; `\Q` as `found un
 character Q(81)`). `YamlLoader` now cuts that text and keeps the kind of problem;
 `ConfigValuesStayOutOfMessagesTest` covers `\U`, `\u`, `\x` and an unknown escape.
 
+The 0.7.0 review found the same class for tags, fixed in #763: an unquoted value starting with
+`!` parses as a tag, and SnakeYAML named it (`password: !!Sup3rSecretPw` was reported as `Global
+tag is not allowed: tag:yaml.org,2002:Sup3rSecretPw`, `!Sup3r!SecretPw` as `found undefined tag
+handle !Sup3r!`). `YamlLoader` now keeps `Global tag is not allowed` and `found undefined tag
+handle` and cuts the name. A character YAML does not allow (a control character inside a value)
+is reported by its code point and position, never with the text around it (#765). The same
+test covers both tag forms.
+
 **Violation looks like.** A log call or exception message that concatenates a resolved
 configuration value.
 

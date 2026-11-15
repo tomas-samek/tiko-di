@@ -84,6 +84,46 @@ class KotlinConfigurationTest {
     }
 
     /**
+     * #759: a key written without a value binds like a missing one for a Kotlin {@code @JvmRecord}
+     * too: reported for a required component, absent for a nullable {@code Optional}, never a
+     * {@code NullPointerException} from the generated binder.
+     */
+    @Test
+    void keysWithoutAValueFailBootWithConfigReportNotANullPointerException(@TempDir Path dir) throws Exception {
+        var source = KspCompiler.kotlin(
+                "App.kt",
+                "package app",
+                "",
+                "import io.tiko.Scope",
+                "import io.tiko.annotations.Component",
+                "import io.tiko.annotations.Configuration",
+                "import java.util.Optional",
+                "",
+                "@Configuration(prefix = \"db\")",
+                "@JvmRecord",
+                "data class DbConfig(val url: String, val user: Optional<String>, val hosts: List<String>)",
+                "",
+                "@Component(scope = Scope.SINGLETON)",
+                "class Server(val db: DbConfig)");
+        var yaml = dir.resolve("app.yaml");
+        Files.writeString(
+                yaml,
+                String.join("\n", "db:", "  url:", "  user: ~", "  hosts:", "    - a", "    -"),
+                StandardCharsets.UTF_8);
+
+        var result = KspCompiler.compile(new TikoSymbolProcessorProvider(), source);
+
+        assertThat(result.exitCode()).as(result.messages()).isEqualTo(KotlinCompilation.ExitCode.OK);
+        assertThatThrownBy(() -> KspProgram.boot(result, yaml).close())
+                .cause()
+                .satisfies(cause ->
+                        assertThat(cause.getClass().getName()).isEqualTo("io.tiko.config.ConfigValidationException"))
+                .hasMessageContaining("2 problem(s)")
+                .hasMessageContaining("db.url is required but has no value")
+                .hasMessageContaining("db.hosts element at index 1 has no value");
+    }
+
+    /**
      * Required keys the configuration does not supply fail the boot with the config report naming
      * every one of them, across records and for each kind of field, not with the Kotlin
      * constructor's null check on the first (#671).

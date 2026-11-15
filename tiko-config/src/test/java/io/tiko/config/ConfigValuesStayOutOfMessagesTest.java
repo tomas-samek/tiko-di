@@ -88,6 +88,25 @@ class ConfigValuesStayOutOfMessagesTest {
         assertThat(e.getMessage()).contains("app.yaml:2:13", "undefined alias").doesNotContain(SECRET);
     }
 
+    /** An unquoted value starting with {@code !} parses as a YAML tag; the error must not echo it (#763). */
+    static Stream<Arguments> valuesReadAsTags() {
+        return Stream.of(
+                Arguments.of("global tag", "!!Sup3rSecretPw", "Sup3rSecretPw", "tag"),
+                Arguments.of("tag handle", "!Sup3r!SecretPw", "Sup3r", "tag handle"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("valuesReadAsTags")
+    void valueReadAsATagIsNotEchoed(String kind, String value, String echoed, String problem) {
+        var yaml = "app:\n  password: " + value + "\n";
+
+        var e = catchThrowableOfType(
+                ConfigValidationException.class,
+                () -> YamlLoader.load(new ByteArrayInputStream(yaml.getBytes(StandardCharsets.UTF_8)), "app.yaml"));
+
+        assertThat(e.getMessage()).contains("app.yaml:2:", problem).doesNotContain(echoed);
+    }
+
     /** The value text a malformed escape is followed by, which SnakeYAML's scanner quotes back (#541). */
     static Stream<Arguments> malformedEscapes() {
         return Stream.of(

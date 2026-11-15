@@ -191,6 +191,11 @@ public final class BindContext {
             return fallback;
         }
         Object raw = node.remove(key);
+        if (raw == null) {
+            // The key is written without a value ("url:" or "url: ~"): nothing to bind (#759).
+            reportAtPath(ConfigIssueCode.MISSING_KEY, fullPath, fullPath + " is required but has no value");
+            return fallback;
+        }
         try {
             return coercer.coerce(raw);
         } catch (CoercionException e) {
@@ -208,6 +213,7 @@ public final class BindContext {
             Map<String, Object> node, String key, String fullPath, TypeCoercer<T> coercer, T defaultValue) {
         if (!node.containsKey(key)) return defaultValue;
         Object raw = node.remove(key);
+        if (raw == null) return defaultValue; // a key without a value is absent (#759)
         try {
             return coercer.coerce(raw);
         } catch (CoercionException e) {
@@ -224,6 +230,7 @@ public final class BindContext {
             Map<String, Object> node, String key, String fullPath, TypeCoercer<T> coercer) {
         if (!node.containsKey(key)) return Optional.empty();
         Object raw = node.remove(key);
+        if (raw == null) return Optional.empty(); // a key without a value is absent (#759)
         try {
             return Optional.of(coercer.coerce(raw));
         } catch (CoercionException e) {

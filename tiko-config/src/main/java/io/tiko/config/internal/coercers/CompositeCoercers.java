@@ -28,7 +28,9 @@ public final class CompositeCoercers {
                         + (v == null ? "null" : v.getClass().getSimpleName()));
             }
             List<X> out = new ArrayList<>(raw.size());
-            for (Object e : raw) out.add(elementCoercer.coerce(e));
+            for (int i = 0; i < raw.size(); i++) {
+                out.add(elementCoercer.coerce(present(raw.get(i), i)));
+            }
             return List.copyOf(out);
         };
     }
@@ -55,7 +57,7 @@ public final class CompositeCoercers {
             }
             Set<X> out = new LinkedHashSet<>(raw.size());
             for (int i = 0; i < raw.size(); i++) {
-                if (!out.add(elementCoercer.coerce(raw.get(i)))) {
+                if (!out.add(elementCoercer.coerce(present(raw.get(i), i)))) {
                     // The index, never the element: configuration values may be secrets (SEC-2, #474).
                     int index = i;
                     LoggerHolder.LOG.log(
@@ -77,10 +79,21 @@ public final class CompositeCoercers {
             }
             Map<String, X> out = new LinkedHashMap<>(raw.size());
             for (Map.Entry<?, ?> entry : raw.entrySet()) {
+                if (entry.getValue() == null) {
+                    throw new CoercionException("entry '" + entry.getKey() + "' has no value");
+                }
                 out.put(entry.getKey().toString(), valueCoercer.coerce(entry.getValue()));
             }
             return Map.copyOf(out);
         };
+    }
+
+    /** An element written without a value ("- " or "- ~") is an error of the list, not a null in it (#759). */
+    private static Object present(Object element, int index) {
+        if (element == null) {
+            throw new CoercionException("element at index " + index + " has no value");
+        }
+        return element;
     }
 
     public static <X> TypeCoercer<Optional<X>> optional(TypeCoercer<X> innerCoercer) {

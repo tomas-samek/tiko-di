@@ -114,15 +114,31 @@ class YamlLoaderTest {
         assertThat(feature).containsEntry("enabled", null);
     }
 
+    /** #765: every reading failure is a config error that names the file, this one included. */
     @Test
-    void nonMappingRootThrowsIllegalArgumentException() {
+    void nonMappingRootIsAConfigErrorNamingTheFile() {
         // A bare scalar at the root — YAML accepts it but YamlLoader requires a top-level mapping.
         String scalarRoot = "just-a-string\n";
         var in = new ByteArrayInputStream(scalarRoot.getBytes(StandardCharsets.UTF_8));
 
         assertThatThrownBy(() -> YamlLoader.load(in, "scalar.yaml"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("YAML root must be a mapping");
+                .isInstanceOf(io.tiko.config.ConfigValidationException.class)
+                .hasMessageContaining("scalar.yaml:1:1")
+                .hasMessageContaining("the document must be a mapping of keys to values");
+    }
+
+    /** #765: SnakeYAML's reader rejects control characters with an exception that has no mark. */
+    @Test
+    void controlCharacterIsAConfigErrorNamingTheFileAndNotTheText() {
+        String yaml = "db:\n  password: \"Hunter\u0007Two\"\n";
+        var in = new ByteArrayInputStream(yaml.getBytes(StandardCharsets.UTF_8));
+
+        assertThatThrownBy(() -> YamlLoader.load(in, "control.yaml"))
+                .isInstanceOf(io.tiko.config.ConfigValidationException.class)
+                .hasMessageContaining("control.yaml")
+                .hasMessageContaining("U+0007")
+                .satisfies(
+                        e -> assertThat(e.getMessage()).doesNotContain("Hunter").doesNotContain("Two"));
     }
 
     @Test

@@ -21,6 +21,7 @@ import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
 import org.yaml.snakeyaml.error.Mark;
 import org.yaml.snakeyaml.error.MarkedYAMLException;
+import org.yaml.snakeyaml.error.YAMLException;
 import org.yaml.snakeyaml.nodes.MappingNode;
 import org.yaml.snakeyaml.nodes.Node;
 import org.yaml.snakeyaml.nodes.NodeTuple;
@@ -59,13 +60,15 @@ public final class YamlLoader {
             // raw SnakeYAML exception. Re-shape it as a Tiko config error anchored at the source's
             // file:line:col so a malformed file reads like every other config failure at boot.
             throw malformedYaml(sourceLabel, e);
+        } catch (YAMLException e) {
+            // SnakeYAML's reader fails without a mark, on a character YAML does not allow (#765).
+            throw unreadableYaml(sourceLabel, e);
         }
         if (root == null) {
             return new LoadedYaml(new LinkedHashMap<>(), new LinkedHashMap<>());
         }
         if (!(root instanceof MappingNode rootMapping)) {
-            throw new IllegalArgumentException(
-                    "YAML root must be a mapping; got " + root.getClass().getSimpleName());
+            throw new Walker(sourceLabel).invalid(root, "the document must be a mapping of keys to values");
         }
 
         Map<String, Object> data = new LinkedHashMap<>();
@@ -197,7 +200,7 @@ public final class YamlLoader {
                     || text.equals("NULL");
         }
 
-        private ConfigValidationException invalid(Node at, String problem) {
+        ConfigValidationException invalid(Node at, String problem) {
             SourceLocation loc = locationOf(at);
             String anchor = loc.line() > 0 ? sourceLabel + ":" + loc.line() + ":" + loc.column() : sourceLabel;
             return new ConfigValidationException(
@@ -215,11 +218,27 @@ public final class YamlLoader {
     }
 
     /**
-     * SnakeYAML problems that repeat an alias or anchor name from the input. An unquoted value
-     * starting with {@code *} (a password, say) parses as an alias, so the name can be a secret
-     * (SEC-2, #493).
+     * The reader's failure names the file and the code point it refused, never the text around it:
+     * the character sits inside a value, which may be a secret (SEC-2).
      */
-    private static final Pattern ECHOED_NAME = Pattern.compile("^(found (?:undefined alias|duplicate anchor))\\b.*");
+    private static ConfigValidationException unreadableYaml(String sourceLabel, YAMLException e) {
+        String problem = e instanceof org.yaml.snakeyaml.reader.ReaderException reader
+                ? String.format(
+                        "character U+%04X at position %d is not allowed in YAML",
+                        reader.getCodePoint(), reader.getPosition())
+                : "the file could not be read as YAML";
+        return new ConfigValidationException(
+                sourceLabel, List.of(new ConfigIssue(ConfigIssueCode.INVALID_VALUE, sourceLabel + ": " + problem)));
+    }
+
+    /**
+     * SnakeYAML problems that repeat a name from the input: an alias or anchor name, or a tag. An
+     * unquoted value starting with {@code *} or {@code !} (a password, say) parses as an alias or a
+     * tag, so the name can be a secret (SEC-2, #493, #763).
+     */
+    private static final Pattern ECHOED_NAME = Pattern.compile(
+            "^(found (?:undefined alias|duplicate anchor|undefined tag handle)|Global tag is not allowed)\\b.*",
+            Pattern.DOTALL);
 
     /**
      * Scanner problems that quote the characters met inside a value: "expected escape sequence of 8
