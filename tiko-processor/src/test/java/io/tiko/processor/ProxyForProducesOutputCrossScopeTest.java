@@ -139,8 +139,9 @@ class ProxyForProducesOutputCrossScopeTest {
 
         assertThat(container)
                 .containsPattern(
-                        "getGreetingFactory\\(\\)\\.shout\\(new GreetingFactory_greetingProxy_\\w+\\(this\\)\\)")
-                .doesNotContain("shout(produce_GreetingFactory_greeting())");
+                        "getGreetingFactory\\(\\)\\.shout\\(options\\.resolveOverride\\(io\\.example\\.Greeting\\.class,"
+                                + " \\(\\) -> new GreetingFactory_greetingProxy_\\w+\\(this\\)\\)\\)")
+                .doesNotContain("() -> produce_GreetingFactory_greeting()");
     }
 
     @Test
@@ -152,8 +153,10 @@ class ProxyForProducesOutputCrossScopeTest {
                 "  public Integer perUse(Greeting g) { return 1; }");
 
         assertThat(container)
-                .contains("perUnit(produce_GreetingFactory_greeting())")
-                .contains("perUse(produce_GreetingFactory_greeting())")
+                .contains("perUnit(options.resolveOverride(io.example.Greeting.class,"
+                        + " () -> produce_GreetingFactory_greeting()))")
+                .contains("perUse(options.resolveOverride(io.example.Greeting.class,"
+                        + " () -> produce_GreetingFactory_greeting()))")
                 .doesNotContain("GreetingFactory_greetingProxy");
     }
 
@@ -164,7 +167,8 @@ class ProxyForProducesOutputCrossScopeTest {
                 "  public String lazy(Provider<Greeting> g) { return \"lazy\"; }");
 
         assertThat(container)
-                .contains("lazy(() -> produce_GreetingFactory_greeting())")
+                .contains("lazy(() -> options.resolveOverride(io.example.Greeting.class,"
+                        + " () -> produce_GreetingFactory_greeting()))")
                 .doesNotContain("GreetingFactory_greetingProxy");
     }
 }
