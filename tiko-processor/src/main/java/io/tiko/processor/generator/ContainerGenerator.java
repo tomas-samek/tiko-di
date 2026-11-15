@@ -811,7 +811,9 @@ public final class ContainerGenerator {
         String methodName = factory.getMethod().jvmName();
 
         if (factory.isStatic()) {
-            return String.format("%s.%s(%s)", declaringClassName, methodName, argList);
+            // By the canonical name: the simple name of a nested class is not in scope here (#746).
+            String declaringClass = factory.getDeclaringClass().className().canonicalName();
+            return String.format("%s.%s(%s)", declaringClass, methodName, argList);
         } else {
             return String.format("get%s().%s(%s)", declaringClassName, methodName, argList);
         }

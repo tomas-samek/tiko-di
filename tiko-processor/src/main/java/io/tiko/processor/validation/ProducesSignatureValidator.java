@@ -95,6 +95,15 @@ public final class ProducesSignatureValidator {
                     "If you only need a single value, return its element type directly instead of a collection");
             return false;
         }
+        if (!method.typeVariables().isEmpty()) {
+            report(
+                    method,
+                    "@Produces method '" + fqn + "' declares type parameters: the container calls it without type"
+                            + " arguments and keeps its value under one type.",
+                    "Return a named type and drop the type parameters",
+                    "Write one @Produces method per type to produce");
+            return false;
+        }
         if (method.isAbstract()) {
             report(
                     method,
