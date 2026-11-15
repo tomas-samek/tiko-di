@@ -38,9 +38,10 @@
             <artifactId>tiko-processor</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Test-only: the engine, plus junit-jupiter-params for the @ParameterizedTest cases (#758). -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-engine</artifactId>
+            <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
         <!-- Test-only: runs the @TikoTest fixture classes and asserts on how they finish (#637). -->

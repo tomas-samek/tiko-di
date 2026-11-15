@@ -53,7 +53,10 @@ public final class RecordingEventBus implements EventBus {
 
     @Override
     public <T> void publish(T event) {
-        captured.add(event);
+        // A null-returning bridge publishes nothing (#757): there is no event to record.
+        if (event != null) {
+            captured.add(event);
+        }
         delegate.publish(event);
     }
 

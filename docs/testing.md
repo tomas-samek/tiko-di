@@ -55,7 +55,17 @@ The extension is a JUnit 5 `ParameterResolver`. Declare what you need on the tes
 | `Container`           | the per-test container instance                                              |
 | `EventBus`            | the `RecordingEventBus` decorator wrapping the in-memory bus                 |
 | `RecordingEventBus`   | the same decorator, typed as the recorder                                    |
-| any other type        | `container.get(type)` — annotate with `@Named("...")` to disambiguate        |
+| any other type the container provides | `container.get(type)` — annotate with `@Named("...")` to disambiguate |
+
+A type the container does not provide is left alone, so the extension shares a parameter list with JUnit and with other extensions: the arguments of a `@ParameterizedTest` come from JUnit, `TestInfo` and `@TempDir` from JUnit's own resolvers, and a parameter another registered extension resolves from that extension. A parameter nobody provides fails with JUnit's "No ParameterResolver registered".
+
+```java
+@ParameterizedTest
+@ValueSource(strings = {"EUR", "USD"})
+void pricesInEveryCurrency(String currency, PriceService prices) {   // JUnit, then the container
+    assertThat(prices.quote(currency)).isPositive();
+}
+```
 
 There is no `@Inject` field injection in tests. JUnit 5 already owns the lifecycle of the test instance, so dependencies arrive as method parameters where the extension is allowed to participate.
 
@@ -78,6 +88,8 @@ class PerClassLifecycleTest {
     }
 }
 ```
+
+A subclass uses the lifecycle its superclass states, and a `@Nested` class the one of its enclosing class, unless it carries `@TikoTest` itself. Under `PER_CLASS` a `@Nested` class is a test class of its own: it gets its own container, shared by its own test methods.
 
 Use `PER_CLASS` when boot cost matters (e.g. configuration parsing, schema work) and when test methods are not allowed to mutate singleton state.
 
@@ -182,7 +194,7 @@ The extension wires the container's executor into the recorder during boot, so t
 
 ## `@EventScopeTest` — scope helper
 
-When a test needs an `EVENT`-scoped bean to be resolvable in the test body, annotate the `@Test` method:
+When a test needs an `EVENT`-scoped bean to be resolvable in the test body, annotate the test method. It works on a `@Test`, on each invocation of a `@RepeatedTest` or `@ParameterizedTest`, and on a `@TestFactory`, where each dynamic test runs in its own unit:
 
 ```java
 @TikoTest
