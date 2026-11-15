@@ -107,6 +107,28 @@ public final class ErrorReporter {
                 "Check if the dependency has the correct qualifier (@Named)");
     }
 
+    /**
+     * An injection point of a primitive type (#748). No provider can exist for it, so the fix is a
+     * type that holds the value; a Kotlin declaration is told so in Kotlin's own terms.
+     */
+    public void primitiveInjection(Location at, String primitive, String parameterName, boolean kotlin) {
+        String kotlinType = PrimitiveNames.kotlin(primitive);
+        String problem = kotlin
+                ? "Cannot inject Kotlin '" + kotlinType + "', which compiles to the primitive '" + primitive + "'"
+                : "Cannot inject the primitive '" + primitive + "'";
+        reportError(
+                KIND_MISSING_DEPENDENCY,
+                at,
+                problem + " (parameter '" + parameterName + "'): dependency injection resolves object types.",
+                kotlin
+                        ? PrimitiveNames.holderFix(kotlinType, parameterName) + " and inject that"
+                        : "Inject a small type that holds the value, or the boxed type if a @Produces method"
+                                + " returns it",
+                kotlin
+                        ? "For settings, inject a @Configuration @JvmRecord data class"
+                        : "For settings, inject a @Configuration record");
+    }
+
     public void missingDependencyHiddenByExpose(
             Location at, String dependencyKey, String injectingClass, String hidingComponent) {
         reportError(

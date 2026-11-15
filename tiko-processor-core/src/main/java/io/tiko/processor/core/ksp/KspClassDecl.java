@@ -8,6 +8,7 @@ import com.google.devtools.ksp.symbol.KSDeclaration;
 import com.google.devtools.ksp.symbol.KSFunctionDeclaration;
 import com.google.devtools.ksp.symbol.KSPropertyDeclaration;
 import com.google.devtools.ksp.symbol.KSType;
+import com.google.devtools.ksp.symbol.KSTypeAlias;
 import com.google.devtools.ksp.symbol.KSTypeReference;
 import com.google.devtools.ksp.symbol.Modifier;
 import com.google.devtools.ksp.symbol.Origin;
@@ -466,7 +467,21 @@ final class KspClassDecl implements ClassDecl {
     private static List<KSType> superTypes(KSClassDeclaration declaration) {
         return SequencesKt.toList(declaration.getSuperTypes()).stream()
                 .map(KSTypeReference::resolve)
+                .map(KspClassDecl::withoutAliases)
                 .toList();
+    }
+
+    /**
+     * The type a {@code typealias} stands for, through any chain of aliases; any other type as it
+     * is. A supertype read by its alias declaration is neither class nor interface (#747). As in
+     * {@link KspTypeNames}, the arguments of a generic alias are those of its definition.
+     */
+    private static KSType withoutAliases(KSType type) {
+        var expanded = type;
+        while (!expanded.isError() && expanded.getDeclaration() instanceof KSTypeAlias alias) {
+            expanded = alias.getType().resolve();
+        }
+        return expanded;
     }
 
     private static boolean isInterface(KSType type) {

@@ -1,6 +1,7 @@
 package io.tiko.processor.validation;
 
 import io.tiko.processor.core.model.Location;
+import io.tiko.processor.core.model.SourceLanguage;
 import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
@@ -73,7 +74,11 @@ public final class DependencyGraphValidator {
                 continue;
             }
             if (!isResolved(dependency)) {
-                reportUnresolved(component.getDecl().location(), dependency, component.getClassName());
+                reportUnresolved(
+                        component.getDecl().location(),
+                        dependency,
+                        component.getClassName(),
+                        component.getDecl().language());
                 valid = false;
             }
         }
@@ -118,7 +123,11 @@ public final class DependencyGraphValidator {
                 continue;
             }
             if (!isResolved(dependency)) {
-                reportUnresolved(factory.getMethod().location(), dependency, factory.getFactoryIdentifier());
+                reportUnresolved(
+                        factory.getMethod().location(),
+                        dependency,
+                        factory.getFactoryIdentifier(),
+                        factory.getDeclaringClass().language());
                 valid = false;
             }
         }
@@ -140,9 +149,21 @@ public final class DependencyGraphValidator {
      * {@code @Component(expose = {...})}, emit the targeted diagnostic instead of the generic
      * "cannot resolve" message.
      */
-    private void reportUnresolved(Location location, DependencyModel dependency, String injectingIdentifier) {
+    private void reportUnresolved(
+            Location location, DependencyModel dependency, String injectingIdentifier, SourceLanguage language) {
         if (providedByRejectedComponent(dependency)) {
             return; // the rejection was reported; this absence only follows from it
+        }
+        if (dependency.getType().isPrimitive()) {
+            // Nothing can provide a primitive (a @Produces method may not return one), so say that
+            // instead of "cannot resolve", in terms the language can write (#748).
+            context.getErrorReporter()
+                    .primitiveInjection(
+                            location,
+                            dependency.getTypeName(),
+                            dependency.getParameterName(),
+                            language == SourceLanguage.KOTLIN);
+            return;
         }
         String depKey = dependency.getDependencyKey();
         ComponentModel hider = findComponentHidingType(depKey);
