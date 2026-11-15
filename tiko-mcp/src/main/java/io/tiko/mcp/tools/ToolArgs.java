@@ -1,5 +1,6 @@
 package io.tiko.mcp.tools;
 
+import java.math.BigDecimal;
 import java.util.Map;
 
 /**
@@ -23,6 +24,31 @@ final class ToolArgs {
             throw new IllegalArgumentException("Missing required argument: " + key);
         }
         return v.toString();
+    }
+
+    /**
+     * The optional depth limit {@code key}, or {@code defaultDepth} when the argument is absent.
+     * A JSON number reaches a tool as an {@code Integer}, a {@code Long} or a {@code Double},
+     * depending on its text and the client's JSON library (#762), so any whole number of 0 or
+     * more counts; anything else is the caller's mistake and is named.
+     */
+    static long depth(Map<String, Object> args, String key, long defaultDepth) {
+        var value = args.get(key);
+        if (value == null) {
+            return defaultDepth;
+        }
+        if (value instanceof Number number) {
+            try {
+                // Exact: a fraction (1.5), an overflow and NaN all fail here.
+                long depth = new BigDecimal(number.toString()).longValueExact();
+                if (depth >= 0) {
+                    return depth;
+                }
+            } catch (ArithmeticException | NumberFormatException notAWholeNumber) {
+                // reported below, with the other values that are no depth
+            }
+        }
+        throw new IllegalArgumentException("Argument " + key + " must be a whole number, 0 or more; got: " + value);
     }
 
     /**

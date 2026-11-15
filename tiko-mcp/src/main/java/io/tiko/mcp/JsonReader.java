@@ -62,7 +62,7 @@ public final class JsonReader {
             var value = readValue();
             map.put(key, value);
             skipWhitespace();
-            char c = src.charAt(pos);
+            char c = current();
             if (c == ',') {
                 pos++;
                 continue;
@@ -87,7 +87,7 @@ public final class JsonReader {
             var value = readValue();
             list.add(value);
             skipWhitespace();
-            char c = src.charAt(pos);
+            char c = current();
             if (c == ',') {
                 pos++;
                 continue;
@@ -157,10 +157,14 @@ public final class JsonReader {
         if (peek() == '-') pos++;
         while (pos < src.length() && isNumberChar(src.charAt(pos))) pos++;
         var num = src.substring(start, pos);
-        if (num.contains(".") || num.contains("e") || num.contains("E")) {
-            return Double.parseDouble(num);
+        try {
+            if (num.contains(".") || num.contains("e") || num.contains("E")) {
+                return Double.parseDouble(num);
+            }
+            return Long.parseLong(num);
+        } catch (NumberFormatException notANumber) {
+            throw new IllegalArgumentException("Expected a value at offset " + start, notANumber);
         }
-        return Long.parseLong(num);
     }
 
     private static boolean isNumberChar(char c) {
@@ -177,6 +181,14 @@ public final class JsonReader {
             throw new IllegalArgumentException("Expected '" + c + "' at offset " + pos);
         }
         pos++;
+    }
+
+    /** The character at the position; a document that ends here is truncated (#762). */
+    private char current() {
+        if (pos >= src.length()) {
+            throw new IllegalArgumentException("Unexpected end of input");
+        }
+        return src.charAt(pos);
     }
 
     private char peek() {

@@ -49,12 +49,15 @@ class TikoMcpServerSubprocessIT {
     void serverListsToolsAndPassesCallArgumentsThrough(@TempDir Path projectDir) throws Exception {
         var jar = shadedJar();
 
-        // Minimal fixture so TopologyStore.loadFrom() finds one SINGLETON component.
+        // Minimal fixture so TopologyStore.loadFrom() finds a SINGLETON component and its dependency.
         var topology = projectDir.resolve("m/target/classes/META-INF/tiko/topology.json");
         Files.createDirectories(topology.getParent());
         Files.writeString(topology, """
                 {"schemaVersion":1,"module":"m",
-                 "components":[{"qualifiedName":"io.example.X","scope":"SINGLETON","interfaces":[]}],
+                 "components":[
+                   {"qualifiedName":"io.example.X","scope":"SINGLETON","interfaces":[],
+                    "constructorDependencies":[{"type":"io.example.Y","qualifier":null,"kind":"DIRECT","pickedType":null}]},
+                   {"qualifiedName":"io.example.Y","scope":"SINGLETON","interfaces":[],"constructorDependencies":[]}],
                  "factoryMethods":[],"eventHandlers":[],"eventTriggers":[],"configurations":[]}
                 """, StandardCharsets.UTF_8);
 
@@ -106,6 +109,13 @@ class TikoMcpServerSubprocessIT {
                         4,
                         "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\","
                                 + "\"params\":{\"name\":\"list_components\",\"arguments\":{\"scope\":\"SINGLETON\"}}}");
+                exchange(
+                        stdin,
+                        stdout,
+                        byId,
+                        5,
+                        "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{\"name\":\"explain_wiring\","
+                                + "\"arguments\":{\"componentFqn\":\"io.example.X\",\"maxDepth\":0}}}");
                 return null;
             });
 
@@ -123,7 +133,17 @@ class TikoMcpServerSubprocessIT {
             assertThat(byId.get(4))
                     .as("list_components with scope=SINGLETON returns the fixture")
                     .contains("io.example.X");
+            // #762: the server names its own artifact version, and a JSON integer limits the walk.
+            assertThat(byId.get(1)).as("initialize").contains("\"version\":\"" + versionOf(jar) + "\"");
+            assertThat(byId.get(5))
+                    .as("explain_wiring with maxDepth=0 stops at the root")
+                    .contains("\\\"depth\\\":0")
+                    .doesNotContain("\\\"depth\\\":1");
 
+            stdin.close();
+            assertThat(proc.waitFor(10, TimeUnit.SECONDS))
+                    .as("the server exits when its stdin closes")
+                    .isTrue();
         } finally {
             proc.destroyForcibly().waitFor(5, TimeUnit.SECONDS);
             reader.shutdownNow();
@@ -148,6 +168,13 @@ class TikoMcpServerSubprocessIT {
                     .isPresent();
             return jar.get();
         }
+    }
+
+    /** The version in the jar's file name: {@code tiko-mcp-<version>.jar}, or with a {@code -shaded} classifier. */
+    private static String versionOf(Path jar) {
+        var name = jar.getFileName().toString();
+        var version = name.substring("tiko-mcp-".length(), name.length() - ".jar".length());
+        return version.endsWith("-shaded") ? version.substring(0, version.length() - "-shaded".length()) : version;
     }
 
     /** Sends one request and reads stdout until the response with the same id arrives. */

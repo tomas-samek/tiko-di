@@ -230,6 +230,12 @@ public final class TopologyStore {
             return (Map<String, Object>) parsed;
         } catch (IOException e) {
             throw new UncheckedIOException(e);
+        } catch (IllegalArgumentException notJson) {
+            // A file read while the build is writing it is cut short (#762): name it and the way out.
+            throw new IllegalStateException(
+                    "Cannot read " + path + ": " + notJson.getMessage()
+                            + ". The file is incomplete or not JSON; rebuild the module (mvn compile) and reload.",
+                    notJson);
         }
     }
 
