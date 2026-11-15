@@ -364,16 +364,18 @@ public final class ProcessorContext {
      * provider the container itself won't include (see #272).
      */
     public Optional<Object> findComponentOrFactory(String key) {
-        // First try exact match — but only if the matched provider is active under the
-        // current profile set. A profile-inactive component reached via exact-key lookup
+        String typeName = key.contains("#") ? key.substring(0, key.indexOf("#")) : key;
+        String qualifier = key.contains("#") ? key.substring(key.indexOf("#") + 1) : "";
+
+        // First the component asked for by its own class, if it is routable that way (#724).
+        Optional<Object> byOwnClass = routingComponent(typeName, qualifier, true);
+        if (byOwnClass.isPresent()) {
+            return byOwnClass;
+        }
+        // An exact factory match — but only if the matched provider is active under the
+        // current profile set. A profile-inactive provider reached via exact-key lookup
         // would still emit a getXxx() call in the generated factory that the container
         // never declares.
-        if (components.containsKey(key)) {
-            ComponentModel exact = components.get(key);
-            if (isProfileActive(exact.getProfiles())) {
-                return Optional.of(exact);
-            }
-        }
         if (factoryMethods.containsKey(key)) {
             for (FactoryMethodModel exact : factoryMethods.get(key)) {
                 if (isActive(exact)) {
@@ -384,21 +386,26 @@ public final class ProcessorContext {
 
         // @Configuration records are bound by the runtime and registered as SINGLETON beans;
         // treat them as resolvable so that DependencyGraphValidator doesn't reject them.
-        String typeName = key.contains("#") ? key.substring(0, key.indexOf("#")) : key;
         for (io.tiko.processor.config.ConfigurationModel cfg : configurations) {
             if (cfg.qualifiedName().equals(typeName)) {
                 return Optional.of(cfg);
             }
         }
 
-        // Try to find by interface implementation
-        // Extract qualifier
-        String qualifier = key.contains("#") ? key.substring(key.indexOf("#") + 1) : "";
+        // Then a component that is routable as the requested type: any interface it is exposed
+        // as, not only the first one it implements (#724).
+        return routingComponent(typeName, qualifier, false);
+    }
 
-        // Look for a component that implements this interface. Prefer non-test components
-        // so that main-container wiring never resolves a dependency to a @TestComponent;
-        // the test container performs its own shadow swap downstream via the carve-out in
-        // AmbiguityValidator + getActiveTestContainerComponents().
+    /**
+     * The active component a request for {@code typeName} under {@code qualifier} reaches
+     * ({@link ComponentModel#routes}), among the components whose own class is the requested type
+     * ({@code ownClass}) or among the others. Non-test components come first, so that
+     * main-container wiring never resolves a dependency to a {@code @TestComponent}; the test
+     * container performs its own shadow swap downstream via the carve-out in AmbiguityValidator +
+     * getActiveTestContainerComponents().
+     */
+    private Optional<Object> routingComponent(String typeName, String qualifier, boolean ownClass) {
         ComponentModel testFallback = null;
         for (ComponentModel component : components.values()) {
             // Skip components whose declared profile is not active — otherwise a build with
@@ -406,27 +413,17 @@ public final class ProcessorContext {
             if (!isProfileActive(component.getProfiles())) {
                 continue;
             }
-            // Check if component implements the requested interface
-            if (component.getImplementedInterface().isPresent()) {
-                String interfaceName =
-                        component.getImplementedInterface().orElseThrow().displayName();
-                if (interfaceName.equals(typeName)) {
-                    // Check qualifier matches if present
-                    if (qualifier.isEmpty()
-                            || qualifier.equals(component.getName().orElse(""))) {
-                        if (!component.isTestComponent()) {
-                            return Optional.of(component);
-                        }
-                        if (testFallback == null) testFallback = component;
-                    }
-                }
+            if (component.getQualifiedName().equals(typeName) != ownClass || !component.routes(typeName, qualifier)) {
+                continue;
+            }
+            if (!component.isTestComponent()) {
+                return Optional.of(component);
+            }
+            if (testFallback == null) {
+                testFallback = component;
             }
         }
-        if (testFallback != null) {
-            return Optional.of(testFallback);
-        }
-
-        return Optional.empty();
+        return Optional.ofNullable(testFallback);
     }
 
     /**

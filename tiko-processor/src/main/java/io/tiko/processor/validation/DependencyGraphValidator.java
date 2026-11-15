@@ -8,6 +8,8 @@ import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
 import io.tiko.processor.util.ProcessorContext;
 import io.tiko.processor.util.TypeUtil;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Validates the complete dependency graph.
@@ -80,6 +82,8 @@ public final class DependencyGraphValidator {
                         component.getClassName(),
                         component.getDecl().language());
                 valid = false;
+            } else if (!hasMatchingTypeArguments(component.getDecl().location(), dependency)) {
+                valid = false;
             }
         }
 
@@ -129,10 +133,33 @@ public final class DependencyGraphValidator {
                         factory.getFactoryIdentifier(),
                         factory.getDeclaringClass().language());
                 valid = false;
+            } else if (!hasMatchingTypeArguments(factory.getMethod().location(), dependency)) {
+                valid = false;
             }
         }
 
         return valid;
+    }
+
+    /**
+     * A component routes as the raw type of a parameterized interface, so a request for
+     * {@code Repo<String>} reaches the one component that implements {@code Repo<Integer>} (#724).
+     * The generated factory could not pass it; say so here instead.
+     */
+    private boolean hasMatchingTypeArguments(Location location, DependencyModel dependency) {
+        TypeRef requested = dependency.getUnwrappedType().orElse(dependency.getType());
+        if (dependency.isPicked() || requested.typeArguments().isEmpty()) {
+            return true;
+        }
+        if (context.findComponentOrFactory(dependency.getDependencyKey()).orElse(null)
+                        instanceof ComponentModel component
+                && !typeUtil.isAssignable(component.getDecl().asType(), requested)) {
+            context.getErrorReporter()
+                    .typeArgumentMismatch(
+                            location, requested.displayName(), component.getQualifiedName(), dependency.getTypeName());
+            return false;
+        }
+        return true;
     }
 
     private boolean isResolved(DependencyModel dependency) {
@@ -167,12 +194,48 @@ public final class DependencyGraphValidator {
         }
         String depKey = dependency.getDependencyKey();
         ComponentModel hider = findComponentHidingType(depKey);
+        if (hider != null && hider.getQualifiedName().equals(depKey)) {
+            context.getErrorReporter()
+                    .ownClassNotExposed(location, depKey, injectingIdentifier, hider.getRoutableTypeNames());
+            return;
+        }
         if (hider != null) {
             context.getErrorReporter()
                     .missingDependencyHiddenByExpose(location, depKey, injectingIdentifier, hider.getQualifiedName());
             return;
         }
+        List<String> named = namedProvidersOf(dependency);
+        if (!named.isEmpty()) {
+            context.getErrorReporter().onlyNamedProviders(location, depKey, named);
+            return;
+        }
         context.getErrorReporter().missingDependency(location, depKey);
+    }
+
+    /**
+     * For an unqualified request: the named providers of its type, each as {@code "name" (provider)}.
+     * A named provider answers only a request that names it, so with nothing but named providers
+     * the request has no answer (#724).
+     */
+    private List<String> namedProvidersOf(DependencyModel dependency) {
+        if (dependency.isPicked() || dependency.getQualifier().isPresent()) {
+            return List.of();
+        }
+        String typeName = dependency.getDependencyKey();
+        var named = new ArrayList<String>();
+        for (ComponentModel component : context.getActiveComponents()) {
+            if (component.getName().isPresent()
+                    && component.getRoutableTypeNames().contains(typeName)) {
+                named.add("\"" + component.getName().orElseThrow() + "\" (" + component.getQualifiedName() + ")");
+            }
+        }
+        for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
+            String name = factory.getName();
+            if (name != null && !name.isEmpty() && factory.getReturnTypeName().equals(typeName)) {
+                named.add("\"" + name + "\" (" + factory.getFactoryIdentifier() + ")");
+            }
+        }
+        return named;
     }
 
     /**

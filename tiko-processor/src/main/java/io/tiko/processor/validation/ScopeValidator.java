@@ -289,14 +289,19 @@ public final class ScopeValidator {
         // EVENT implementation received through its interface gets the proxy like any other (#745).
         String declaredType =
                 dependency.getUnwrappedType().map(TypeRef::displayName).orElse(dependency.getTypeName());
-        if (context.findComponentOrFactory(depKey).orElse(null) instanceof ComponentModel component
-                && component.requiresProxy()
-                && component.getQualifiedName().equals(declaredType)) {
+        if (!(context.findComponentOrFactory(depKey).orElse(null) instanceof ComponentModel component)
+                || !component.requiresProxy()) {
+            return true;
+        }
+        String proxied = component.getImplementedInterface().orElseThrow().displayName();
+        if (component.getQualifiedName().equals(declaredType)) {
+            context.getErrorReporter().proxiedConcreteInjection(consumerLocation, component.getClassName(), proxied);
+            return false;
+        }
+        if (!proxied.equals(declaredType)) {
+            // Routable as another interface too, but the proxy implements the first one only (#724).
             context.getErrorReporter()
-                    .proxiedConcreteInjection(
-                            consumerLocation,
-                            component.getClassName(),
-                            component.getImplementedInterface().orElseThrow().displayName());
+                    .proxiedOtherInterfaceInjection(consumerLocation, component.getClassName(), proxied, declaredType);
             return false;
         }
         return true;

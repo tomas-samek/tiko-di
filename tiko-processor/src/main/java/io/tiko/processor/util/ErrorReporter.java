@@ -3,6 +3,8 @@ package io.tiko.processor.util;
 import io.tiko.processor.core.Diagnostics;
 import io.tiko.processor.core.model.Location;
 import io.tiko.processor.model.WiringError;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
 
@@ -141,6 +143,53 @@ public final class ErrorReporter {
                 "Drop the expose attribute on " + hidingComponent
                         + " to fall back to the permissive default (expose every implemented interface)",
                 "Inject a different type that " + hidingComponent + " does expose");
+    }
+
+    /**
+     * An injection point typed by a component's own class, when the component is declared with
+     * {@code exposeSelf = false} (#724): {@code container.get(Impl.class)} does not answer either.
+     */
+    public void ownClassNotExposed(
+            Location at, String componentName, String injectingClass, List<String> routableTypes) {
+        var fixes = new ArrayList<String>();
+        if (!routableTypes.isEmpty()) {
+            fixes.add("Inject " + String.join(" or ", routableTypes) + ", which " + componentName + " is exposed as");
+        }
+        fixes.add("Remove exposeSelf = false from " + componentName + "'s @Component to inject it by its own class");
+        reportError(
+                KIND_MISSING_DEPENDENCY,
+                at,
+                componentName + " is declared with exposeSelf = false, so it cannot be injected by its own class"
+                        + " (used by " + injectingClass + ")",
+                fixes.toArray(String[]::new));
+    }
+
+    /** An unqualified injection point whose type has only named providers (#724). */
+    public void onlyNamedProviders(Location at, String dependencyKey, List<String> namedProviders) {
+        String firstName =
+                namedProviders.get(0).substring(0, namedProviders.get(0).indexOf(' '));
+        reportError(
+                KIND_MISSING_DEPENDENCY,
+                at,
+                "Cannot resolve dependency: " + dependencyKey + ". It has only named providers, and a named provider"
+                        + " answers only an injection point that names it: " + String.join(", ", namedProviders),
+                "Name the one to inject on the parameter: @Named(" + firstName + ")",
+                "Leave one provider of " + dependencyKey + " unnamed, as the default");
+    }
+
+    /**
+     * A parameterized injection point reached a component that implements the same interface with
+     * other type arguments (#724): routing is by the raw type.
+     */
+    public void typeArgumentMismatch(Location at, String requested, String componentName, String rawType) {
+        reportError(
+                KIND_MISSING_DEPENDENCY,
+                at,
+                "Cannot inject " + requested + ": " + componentName + " is the component routed as " + rawType
+                        + ", and it is not a " + requested,
+                "Add a component that implements " + requested + "; with more than one implementation of " + rawType
+                        + ", name them and inject with @Named",
+                "Change the parameter to the type " + componentName + " implements");
     }
 
     public void circularDependency(Location at, String cycle) {
@@ -287,6 +336,21 @@ public final class ErrorReporter {
                         + "' is not registered as a component.",
                 "Annotate " + className + " with @Component",
                 "Move the handler method to a @Component class");
+    }
+
+    /**
+     * A proxied EVENT component injected by an interface other than the one its proxy implements
+     * (#724): the proxy implements the first interface only.
+     */
+    public void proxiedOtherInterfaceInjection(
+            Location at, String concreteName, String proxiedInterface, String requestedInterface) {
+        reportError(
+                KIND_SCOPE_VIOLATION,
+                at,
+                concreteName + " is EVENT-scoped and proxied; the generated proxy implements " + proxiedInterface
+                        + " only, so this injection point cannot be typed by " + requestedInterface + ".",
+                "Inject " + proxiedInterface + " instead of " + requestedInterface,
+                "Make an interface that extends both the first interface " + concreteName + " implements");
     }
 
     public void proxiedConcreteInjection(Location at, String concreteName, String interfaceName) {

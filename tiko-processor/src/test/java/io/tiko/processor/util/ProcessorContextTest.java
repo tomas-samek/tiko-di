@@ -403,8 +403,11 @@ class ProcessorContextTest {
                         .types()
                         .findClass("java.lang.Runnable")
                         .orElseThrow();
+                // A declaration that does implement Runnable: routing reads the declared interfaces (#724).
+                ClassDecl runnableImpl =
+                        ctxFallback.env().types().findClass("java.lang.Thread").orElseThrow();
                 ComponentModel testImpl = ComponentModel.builder()
-                        .decl(main)
+                        .decl(runnableImpl)
                         .qualifiedName("demo.TestRunnableImpl")
                         .className("TestRunnableImpl")
                         .packageName("demo")
