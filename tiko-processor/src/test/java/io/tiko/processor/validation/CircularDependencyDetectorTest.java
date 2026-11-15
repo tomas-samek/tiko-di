@@ -46,6 +46,137 @@ class CircularDependencyDetectorTest {
                 "}");
     }
 
+    /** A source in package {@code demo} with the Tiko imports a {@code @Produces} fixture needs. */
+    private static JavaFileObject source(String name, String... lines) {
+        var all = new String[lines.length + 2];
+        all[0] = "package demo;";
+        all[1] = "import io.tiko.Scope; import io.tiko.Provider; import io.tiko.annotations.*;";
+        System.arraycopy(lines, 0, all, 2, lines.length);
+        return JavaFileObjects.forSourceLines("demo." + name, all);
+    }
+
+    private static final JavaFileObject THING = source("Thing", "public class Thing {}");
+
+    /** #722: an instance {@code @Produces} method needs an instance of its declaring component. */
+    @Test
+    void componentInjectingWhatItsOwnInstanceProducesMethodProducesFailsWithFullPath() {
+        Compilation c = compile(
+                THING,
+                source(
+                        "Cfg",
+                        "@Component(scope = Scope.SINGLETON)",
+                        "public class Cfg {",
+                        "  @Inject public Cfg(Thing thing) {}",
+                        "  @Produces(scope = Scope.SINGLETON) public Thing thing() { return new Thing(); }",
+                        "}"));
+
+        CompilationSubject.assertThat(c).failed();
+        CompilationSubject.assertThat(c).hadErrorContaining("demo.Cfg -> demo.Thing -> demo.Cfg");
+    }
+
+    @Test
+    void cycleThroughAnInstanceProducesMethodsDeclaringComponentFailsWithFullPath() {
+        Compilation c = compile(
+                THING,
+                bean("User", "Thing thing"),
+                source(
+                        "Cfg",
+                        "@Component(scope = Scope.SINGLETON)",
+                        "public class Cfg {",
+                        "  @Inject public Cfg(User user) {}",
+                        "  @Produces(scope = Scope.SINGLETON) public Thing thing() { return new Thing(); }",
+                        "}"));
+
+        CompilationSubject.assertThat(c).failed();
+        CompilationSubject.assertThat(c).hadErrorContaining("demo.Cfg -> demo.User -> demo.Thing -> demo.Cfg");
+    }
+
+    @Test
+    void staticProducesMethodOnAComponentThatInjectsItsProductCompiles() {
+        Compilation c = compile(
+                THING,
+                source(
+                        "Cfg",
+                        "@Component(scope = Scope.SINGLETON)",
+                        "public class Cfg {",
+                        "  @Inject public Cfg(Thing thing) {}",
+                        "  @Produces(scope = Scope.SINGLETON) public static Thing thing() { return new Thing(); }",
+                        "}"));
+
+        CompilationSubject.assertThat(c).succeeded();
+    }
+
+    @Test
+    void componentTakingItsOwnProductAsAProviderCompiles() {
+        Compilation c = compile(
+                THING,
+                source(
+                        "Cfg",
+                        "@Component(scope = Scope.SINGLETON)",
+                        "public class Cfg {",
+                        "  @Inject public Cfg(Provider<Thing> thing) {}",
+                        "  @Produces(scope = Scope.SINGLETON) public Thing thing() { return new Thing(); }",
+                        "}"));
+
+        CompilationSubject.assertThat(c).succeeded();
+    }
+
+    @Test
+    void instanceProducesMethodsFeedingEachOtherOnOneComponentCompile() {
+        Compilation c = compile(
+                THING,
+                source("Other", "public class Other {}"),
+                source(
+                        "Cfg",
+                        "@Component",
+                        "public class Cfg {",
+                        "  @Produces(scope = Scope.SINGLETON) public Thing thing() { return new Thing(); }",
+                        "  @Produces(scope = Scope.SINGLETON) public Other other(Thing thing) { return new Other(); }",
+                        "}"),
+                bean("User", "Other other, Thing thing"));
+
+        CompilationSubject.assertThat(c).succeeded();
+    }
+
+    /** Two profile variants of one {@code @Produces} key; only the {@code prod} one closes a cycle. */
+    private static JavaFileObject[] profileVariantsWhereOnlyProdCycles() {
+        return new JavaFileObject[] {
+            THING,
+            bean("User", "Thing thing"),
+            source(
+                    "Things",
+                    "@Component",
+                    "public class Things {",
+                    "  @Produces(scope = Scope.SINGLETON, profiles = {\"dev\"})",
+                    "  public static Thing devThing() { return new Thing(); }",
+                    "  @Produces(scope = Scope.SINGLETON, profiles = {\"prod\"})",
+                    "  public static Thing prodThing(User user) { return new Thing(); }",
+                    "}")
+        };
+    }
+
+    /** #722: the cycle walk follows the variant the build's profiles select, not the first one declared. */
+    @Test
+    void cycleThroughTheActiveProfileVariantFailsWithFullPath() {
+        Compilation c = Compiler.javac()
+                .withProcessors(new TikoAnnotationProcessor())
+                .withOptions("-Atiko.profiles=prod")
+                .compile(profileVariantsWhereOnlyProdCycles());
+
+        CompilationSubject.assertThat(c).failed();
+        CompilationSubject.assertThat(c).hadErrorContaining("demo.User -> demo.Thing -> demo.User");
+    }
+
+    @Test
+    void cycleOnlyInAnInactiveProfileVariantCompiles() {
+        Compilation c = Compiler.javac()
+                .withProcessors(new TikoAnnotationProcessor())
+                .withOptions("-Atiko.profiles=dev")
+                .compile(profileVariantsWhereOnlyProdCycles());
+
+        CompilationSubject.assertThat(c).succeeded();
+    }
+
     @Test
     void twoDeepCycleFailsWithFullPath() {
         Compilation c = compile(bean("A", "B b"), bean("B", "A a"));

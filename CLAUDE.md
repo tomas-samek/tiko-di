@@ -213,6 +213,12 @@ when you read or edit a matching file. Read the file first when you start new co
 
 Issue bodies: scope + concrete file list + acceptance + out-of-scope. Rationale lives in linked predecessor issues, not duplicated. **No "## Probable cause" or "## Suggested fix" sections** — symptoms and observable facts only. Speculation in the body biases whoever picks the issue up; let them analyse the evidence with a clean head. Acceptance describes the user-visible outcome, not the proposed mechanism.
 
+**Group similar findings.** The issue and PR text around a small fix must not outweigh the fix.
+
+- **Filing:** findings of the same kind in the same area (doc drift, Javadoc, small fixes of one shape) go into one issue as a checklist, one line per finding: the file and what is observed. A finding gets its own issue only when it needs its own design decision or its own test strategy.
+- **Fixing:** one PR may close several small issues that touch the same files or the same area (`Closes #a`, `Closes #b`, each on its own line). Do not mix a behaviour change with a pure documentation fix in one PR.
+- **Partial work:** when only part of a grouped issue gets done, merge that part and file the rest as a follow-up issue. Do not hold the finished part back, and do not split up front for the sake of re-planning.
+
 - Use the [QA playbook](./docs/qa-playbook.md) to find, verify, and report defects.
 - Use the [issue-fix playbook](./docs/issue-fix-playbook.md) when investigating,
   fixing, or publishing work on a filed issue. It defines the deliverables for

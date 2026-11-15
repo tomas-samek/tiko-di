@@ -801,7 +801,7 @@ public final class ContainerGenerator {
     private String buildRawUserMethodCall(FactoryMethodModel factory) {
         List<String> args = new ArrayList<>();
         for (DependencyModel dep : factory.getDependencies()) {
-            args.add(generateContainerGetCall(dep));
+            args.add(generateContainerGetCall(dep, factory.getScope()));
         }
         String argList = String.join(", ", args);
         String declaringClassName = factory.getDeclaringClass().className().simpleName();
@@ -851,8 +851,9 @@ public final class ContainerGenerator {
      * Resolves a dependency to an inline expression callable from within the container class.
      * Mirrors {@link ComponentFactoryGenerator#generateContainerGetCall} but emits unqualified
      * calls (no "container." prefix) since we are inside the container itself.
+     * {@code consumerScope} is the scope of the {@code @Produces} method whose parameter this is.
      */
-    private String generateContainerGetCall(DependencyModel dependency) {
+    private String generateContainerGetCall(DependencyModel dependency, Scope consumerScope) {
         // Picker<T> is constructed inline via the generic ContainerPicker — no provider
         // lookup. Inside the container we pass `this` (we ARE the container).
         if (dependency.isPicker()) {
@@ -892,7 +893,7 @@ public final class ContainerGenerator {
             return dependency.isProvider() ? "() -> " + pickedCall : pickedCall;
         }
 
-        return resolveProviderCall(dependency, typeName);
+        return resolveProviderCall(dependency, typeName, consumerScope);
     }
 
     /**
@@ -901,13 +902,19 @@ public final class ContainerGenerator {
      * or a qualified {@code get(Class, name)}), wrapping in a lazy lambda for {@code Provider<T>}.
      * Extracted from {@link #generateContainerGetCall} to keep that method's branching in check.
      */
-    private String resolveProviderCall(DependencyModel dependency, String typeName) {
+    private String resolveProviderCall(DependencyModel dependency, String typeName, Scope consumerScope) {
         Object provider =
                 context.findComponentOrFactory(dependency.getDependencyKey()).orElse(null);
 
         String call;
         if (provider instanceof FactoryMethodModel factoryDep) {
-            call = factoryGetterName(factoryDep) + "()";
+            // A @Produces method that outlives the produced value takes its proxy, as a
+            // constructor parameter does (ComponentFactoryGenerator): the value itself would be
+            // the first unit's instance in every later unit (#725). Provider<T> resolves on each
+            // call and needs none.
+            call = !dependency.isProvider() && factoryDep.isProxiedFor(consumerScope)
+                    ? "new " + factoryDep.getFactoryIdentifier() + "Proxy(this)"
+                    : factoryGetterName(factoryDep) + "()";
         } else if (provider instanceof ComponentModel component) {
             // Named lookup routes through the typed get(Class, name) dispatcher; per-class getters
             // are no-arg and cannot take a qualifier (#242).
