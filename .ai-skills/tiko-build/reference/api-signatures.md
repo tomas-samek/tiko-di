@@ -103,6 +103,8 @@ enum IngestDecision { SEEK, SKIP, DEAD_LETTER, FAIL }
 @Produces(Scope scope = Scope.PROTOTYPE, String name = "", String[] profiles = {})
 @EventHandler(boolean async = false, Class<?> eventType = Object.class, String timeout = "",
               int retries = 0, String backoff = "", BackoffStrategy backoffStrategy = BackoffStrategy.FIXED)
+              // events route by EXACT class; eventType = Sub.class subscribes a supertype-typed handler
+              // to Sub; an interface / abstract event type is a compile error (never invoked)
 @EventTrigger(String eventName = "", boolean async = false, boolean spread = false,
               Class<? extends EventTriggerGuard>[] guard = EventTriggerGuard.AlwaysAllow.class)
 @Configuration(String prefix)            // required

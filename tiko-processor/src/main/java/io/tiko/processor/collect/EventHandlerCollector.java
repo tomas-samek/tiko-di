@@ -2,14 +2,18 @@ package io.tiko.processor.collect;
 
 import com.palantir.javapoet.ClassName;
 import com.palantir.javapoet.ParameterizedTypeName;
+import com.palantir.javapoet.WildcardTypeName;
 import io.tiko.EventTriggerGuard;
 import io.tiko.annotations.BackoffStrategy;
 import io.tiko.annotations.EventHandler;
 import io.tiko.annotations.EventTrigger;
 import io.tiko.processor.core.ProcessingEnv;
+import io.tiko.processor.core.TypeOracle;
 import io.tiko.processor.core.model.AnnotationRef;
 import io.tiko.processor.core.model.ClassDecl;
+import io.tiko.processor.core.model.DeclKind;
 import io.tiko.processor.core.model.MethodDecl;
+import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.model.EventHandlerModel;
 import io.tiko.processor.model.EventTriggerModel;
 import io.tiko.processor.util.ErrorReporter;
@@ -19,6 +23,7 @@ import java.time.Duration;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Builds an {@link EventHandlerModel} for every {@code @EventHandler} method of the round and
@@ -31,6 +36,10 @@ public final class EventHandlerCollector {
     private static final String EVENT_TRIGGER = EventTrigger.class.getCanonicalName();
     private static final String ASYNC = "async";
     private static final String EVENT_WRAPPER = "io.tiko.Event";
+    private static final String EVENT_TYPE = "eventType";
+    /** The annotation's "not stated" default for {@code eventType}. */
+    private static final String OBJECT = "java.lang.Object";
+
     private static final String ALWAYS_ALLOW = EventTriggerGuard.AlwaysAllow.class.getCanonicalName();
 
     private EventHandlerCollector() {}
@@ -43,7 +52,7 @@ public final class EventHandlerCollector {
             }
             // A handler on a rejected component is still checked, but not registered: there is no
             // component to call it on, and the component's own error already says why (#589).
-            var handler = buildEventHandlerModel(method, ctx.getErrorReporter());
+            var handler = buildEventHandlerModel(method, env.types(), ctx.getErrorReporter());
             if (handler != null && !ctx.isRejected(handler.getOwner())) {
                 ctx.registerEventHandler(handler);
             }
@@ -51,7 +60,7 @@ public final class EventHandlerCollector {
     }
 
     /** The handler's model, or {@code null} when a validation error was reported for it. */
-    private static EventHandlerModel buildEventHandlerModel(MethodDecl method, ErrorReporter errors) {
+    private static EventHandlerModel buildEventHandlerModel(MethodDecl method, TypeOracle types, ErrorReporter errors) {
         var annotation = method.annotation(EVENT_HANDLER).orElseThrow();
         var owner = method.owner().orElseThrow();
 
@@ -64,10 +73,6 @@ public final class EventHandlerCollector {
             return null;
         }
 
-        // First parameter is the event type
-        var eventType = parameters.get(0).type();
-        var eventTypeName = TypeRefs.qualifiedName(eventType);
-
         // Check if second parameter is Event<?> wrapper
         boolean hasEventWrapper = parameters.size() > 1
                 && TypeRefs.qualifiedName(parameters.get(1).type()).equals(EVENT_WRAPPER);
@@ -75,6 +80,14 @@ public final class EventHandlerCollector {
         if (!hasSupportedParameters(method, owner, hasEventWrapper, errors)) {
             return null; // a parameter the generated registry cannot pass was reported
         }
+
+        // The class the handler subscribes to: eventType when stated, else the parameter's type (#729).
+        var subscribed = subscribedType(method, owner, annotation, types, errors);
+        if (subscribed.isEmpty()) {
+            return null; // an event type no event can have, or one the handler cannot take, was reported
+        }
+        var eventType = subscribed.get();
+        var eventTypeName = TypeRefs.qualifiedName(eventType);
 
         var eventTriggers = collectEventTriggers(method, errors);
 
@@ -148,6 +161,68 @@ public final class EventHandlerCollector {
             return false;
         }
         return true;
+    }
+
+    /**
+     * The class the handler subscribes to (#729). An event is routed by its exact class, so:
+     * {@code eventType}, when stated, names that class and must be something the parameter can
+     * take; and the class is one an event can have. An interface or an abstract class is not: a
+     * handler subscribed to one would compile and never be invoked.
+     *
+     * @return the type to subscribe to; empty when an error was reported
+     */
+    private static Optional<TypeRef> subscribedType(
+            MethodDecl method, ClassDecl owner, AnnotationRef annotation, TypeOracle types, ErrorReporter errors) {
+        var label = "@EventHandler '" + owner.className().simpleName() + "." + method.name() + "'";
+        var parameters = method.parameters();
+        var parameterType = parameters.get(0).type();
+        if (annotation.isUnresolved(EVENT_TYPE)) {
+            errors.error(
+                    method.location(),
+                    label + ": its eventType does not resolve when Tiko reads the class",
+                    "Check the class literal's name and its import");
+            return Optional.empty();
+        }
+        var stated = annotation.type(EVENT_TYPE).filter(type -> !OBJECT.equals(type.erasedName()));
+        if (stated.isPresent() && !types.isAssignable(stated.get(), parameterType)) {
+            errors.error(
+                    method.location(),
+                    label + " states eventType " + stated.get().displayName() + ", which is not a "
+                            + parameterType.displayName() + ": the handler could not take the event it subscribes to",
+                    "Name a class the parameter can take: " + parameterType.displayName() + " or a subtype of it",
+                    "Change the parameter's type to " + stated.get().displayName());
+            return Optional.empty();
+        }
+        var subscribed = stated.orElse(parameterType);
+        var declaration = subscribed.declaration();
+        boolean isInterface =
+                declaration.filter(decl -> decl.kind() == DeclKind.INTERFACE).isPresent();
+        if (isInterface || declaration.filter(ClassDecl::isAbstract).isPresent()) {
+            errors.error(
+                    method.location(),
+                    label + " would never be invoked: an event is routed by its exact class, and "
+                            + subscribed.displayName() + " is " + (isInterface ? "an interface" : "an abstract class")
+                            + ", so no event has that class",
+                    "Name the class to handle: @EventHandler(eventType = <a concrete class>.class); the parameter"
+                            + " may stay " + parameterType.displayName(),
+                    "Take the concrete event class as the parameter, in one handler per class");
+            return Optional.empty();
+        }
+        if (parameters.size() == 2) {
+            var wrapper = parameters.get(1).type();
+            var wrapped = wrapper.typeArguments();
+            if (!wrapped.isEmpty()
+                    && !(wrapped.get(0).javaPoet() instanceof WildcardTypeName)
+                    && !wrapped.get(0).erasedName().equals(subscribed.erasedName())) {
+                errors.error(
+                        method.location(),
+                        label + " takes its wrapper as " + wrapper.displayName() + ", but it subscribes to "
+                                + subscribed.displayName() + " and is handed that event's wrapper",
+                        "Declare the wrapper parameter as Event<?>");
+                return Optional.empty();
+            }
+        }
+        return Optional.of(subscribed);
     }
 
     /**

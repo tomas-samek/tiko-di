@@ -46,6 +46,8 @@ public class AnalyticsService {
 
 A handler method is public and takes the event, optionally followed by its `Event<?>` wrapper ([origin tracking](#origin-tracking-with-event)). An event is routed by its class, so the event parameter is a class, a record or an interface: a primitive, an array or a type variable is a compile error, as is any other second parameter. A handler may declare checked exceptions, sync or async; what it throws reaches the `ErrorHandler` as thrown.
 
+An event is routed by its exact class: `publish(new Circle())` reaches the handlers subscribed to `Circle`, and no handler subscribed to a supertype such as `Shape`. A handler subscribes to its parameter's type, or to the class named in `@EventHandler(eventType = Circle.class)` when the parameter is a supertype. A handler whose event type is an interface or an abstract class could never be invoked, so it is a compile error; to handle several classes, write one handler method per class.
+
 The same handler code works against any `EventBus` implementation. The in-memory bus (`LocalEventBus` in `tiko-runtime`) ships in core. The Kafka transport (`tiko-kafka` + `tiko-kafka-processor`) is a separate module that bridges via `@KafkaSource` / `@KafkaSink` — see [`tiko-examples/08_kafka_order_warehouse`](../tiko-examples/08_kafka_order_warehouse) for a runnable cross-JVM demo. The universal transport-adapter pattern documented in [`docs/superpowers/specs/2026-05-12-kafka-event-bus-design.md`](./superpowers/specs/2026-05-12-kafka-event-bus-design.md) generalises to HTTP / scheduler / file / gRPC.
 
 ## Trade-off positions
@@ -578,6 +580,8 @@ public void onOrderShipped(ShipmentResult shipment, Event<?> eventWrapper) {
 ```
 
 The `Event<?>` parameter is optional — most handlers don't need it. When present it must come after the payload parameter.
+
+An event holds itself and at most its 64 most recent ancestors. Chains up to that length are kept whole. In a longer one, typically a handler that publishes the event it handles over and over, the oldest ancestors drop off, so a long-running loop keeps a bounded history; `getOriginChain()` and `getRoot()` then start at the oldest ancestor still held.
 
 ### Why chains instead of `bus.publish` calls?
 

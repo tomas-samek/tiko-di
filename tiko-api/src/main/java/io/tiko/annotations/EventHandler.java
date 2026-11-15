@@ -106,13 +106,24 @@ public @interface EventHandler {
     boolean async() default false;
 
     /**
-     * Optional event type to handle (for disambiguation).
+     * The class of event to handle, when it is not the parameter's own type.
      *
-     * <p>Normally the event type is inferred from the method parameter.
-     * Use this when you need to handle a specific subtype or when using
-     * generic event wrappers.</p>
+     * <p>An event is routed by its exact class: {@code publish(new Circle())} reaches the handlers
+     * subscribed to {@code Circle}, and no handler subscribed to a supertype. Normally a handler
+     * subscribes to its parameter's type. State {@code eventType} to subscribe to a subtype
+     * while the parameter stays a supertype:</p>
      *
-     * <p>Default: {@code Object.class} (inferred from parameter)</p>
+     * <pre>{@code
+     * @EventHandler(eventType = Circle.class)
+     * public void onCircle(Shape shape) { ... }
+     * }</pre>
+     *
+     * <p>The stated class must be one the parameter can take. The class a handler subscribes to
+     * must be one an event can have: an interface or an abstract class is a compile error, since
+     * such a handler would never be invoked. To handle several classes, write one handler method
+     * per class.</p>
+     *
+     * <p>Default: {@code Object.class}, which means "the parameter's type".</p>
      *
      * @return the event class to handle
      */
