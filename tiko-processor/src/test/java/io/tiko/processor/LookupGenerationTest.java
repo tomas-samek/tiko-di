@@ -44,10 +44,13 @@ class LookupGenerationTest {
                         "  @Produces public Long lazy(Provider<Gateway> gateway) { return 1L; }",
                         "}"));
 
-        assertThat(container)
-                .contains("direct(options.resolveOverride(demo.Gateway.class, () -> getGatewayImpl()))")
-                .contains("named(options.resolveOverride(demo.Gateway.class, \"backup\", () -> ")
-                .contains("lazy(() -> options.resolveOverride(demo.Gateway.class, () -> getGatewayImpl()))");
+        assertThat(FactoryInvocation.of(container, "Things_direct"))
+                .contains("__arg0 = options.resolveOverride(demo.Gateway.class, () -> getGatewayImpl());")
+                .contains("return __declaring.direct(__arg0);");
+        assertThat(FactoryInvocation.of(container, "Things_named"))
+                .contains("__arg0 = options.resolveOverride(demo.Gateway.class, \"backup\", () -> ");
+        assertThat(FactoryInvocation.of(container, "Things_lazy"))
+                .contains("__arg0 = () -> options.resolveOverride(demo.Gateway.class, () -> getGatewayImpl());");
     }
 
     private static final JavaFileObject CTX = source("Ctx", "public interface Ctx {}");

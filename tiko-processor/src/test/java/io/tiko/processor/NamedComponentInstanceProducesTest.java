@@ -43,6 +43,8 @@ class NamedComponentInstanceProducesTest {
                 .findFirst()
                 .orElseThrow();
         var content = new String(container.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        assertThat(content).contains("return getProducers().widget()");
+        assertThat(FactoryInvocation.of(content, "Producers_widget"))
+                .contains("__declaring = getProducers();")
+                .contains("return __declaring.widget();");
     }
 }
