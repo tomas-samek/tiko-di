@@ -33,7 +33,8 @@ public final class EventRegistryGenerator {
 
     private static final String GENERATED_PACKAGE = "io.tiko.generated";
 
-    private static final ClassName CHAIN_CONTEXT = ClassName.get("io.tiko.runtime", "EventChainContext");
+    private static final String RUNTIME_PACKAGE = "io.tiko.runtime";
+    private static final ClassName CHAIN_CONTEXT = ClassName.get(RUNTIME_PACKAGE, "EventChainContext");
 
     private final ProcessorContext context;
 
@@ -296,7 +297,7 @@ public final class EventRegistryGenerator {
             runBody.nextControlFlow("catch ($T __checked)", Exception.class);
             runBody.addStatement(
                     "throw $T.<$T>sneakyThrow(__checked)",
-                    ClassName.get("io.tiko.runtime", "Unchecked"),
+                    ClassName.get(RUNTIME_PACKAGE, "Unchecked"),
                     RuntimeException.class);
         }
         runBody.nextControlFlow("finally");
@@ -319,7 +320,7 @@ public final class EventRegistryGenerator {
                             "$T.runAsyncWithRetry(() -> {\n$L}, new $T($L, $LL, $T.$L, $LL), __exec, __err, HANDLER_INFO_$L, event);\n",
                             CHAIN_CONTEXT,
                             asyncBody,
-                            ClassName.get("io.tiko.runtime", "RetryPolicy"),
+                            ClassName.get(RUNTIME_PACKAGE, "RetryPolicy"),
                             handler.getRetries(),
                             handler.getBackoffNanos(),
                             ClassName.get("io.tiko.annotations", "BackoffStrategy"),
