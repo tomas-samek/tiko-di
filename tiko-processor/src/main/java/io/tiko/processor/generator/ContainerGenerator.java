@@ -1152,13 +1152,13 @@ public final class ContainerGenerator {
     private static final ClassName APP_ENDING = ClassName.get(EVENTS_PACKAGE, "ApplicationEndingEvent");
     private static final ClassName BOUNDED_EXECUTION = ClassName.get("io.tiko.runtime", "BoundedExecution");
     private static final ClassName CONTAINER_SHUT_DOWN = ClassName.get(TIKO_PACKAGE, "ContainerShutDownException");
-    /** Shared get-or-create statement fragments (S1192) — used by scoped and singleton emission. */
     /** The lambda head that makes a resolution lazy: a {@code Provider} and an override fallback. */
     private static final String LAZY = "() -> ";
 
     /** Returns what a getter serves, cast to the type the lookup asked for. */
     private static final String RETURN_GETTER = "return (T) $L()";
 
+    /** Shared get-or-create statement fragments (S1192) — used by scoped and singleton emission. */
     private static final String IF_EXISTING_NULL = "if (__existing == null)";
 
     private static final String ASSIGN_EXISTING = "__existing = $L";
