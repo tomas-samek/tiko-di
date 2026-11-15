@@ -1,0 +1,15 @@
+# Fixture for NullValuesBindingTest: keys written without a value.
+db:
+  url:
+  connectTimeout: ~
+
+app:
+  name: nulls
+  logLevel:
+  server:
+    host:
+
+allow:
+  hosts:
+    - alpha
+    -

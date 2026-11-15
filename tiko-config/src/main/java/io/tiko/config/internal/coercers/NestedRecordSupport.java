@@ -45,6 +45,10 @@ public final class NestedRecordSupport {
             throw new CoercionException(recordName + " missing required field '" + fieldName + "'");
         }
         Object raw = node.remove(fieldName);
+        if (raw == null) {
+            // Written without a value ("host:" or "host: ~"): nothing to bind (#759).
+            throw new CoercionException(recordName + "." + fieldName + " is required but has no value");
+        }
         try {
             return coercer.coerce(raw);
         } catch (CoercionException e) {
@@ -62,6 +66,9 @@ public final class NestedRecordSupport {
             return defaultValue;
         }
         Object raw = node.remove(fieldName);
+        if (raw == null) {
+            return defaultValue; // a key without a value is absent (#759)
+        }
         try {
             return coercer.coerce(raw);
         } catch (CoercionException e) {
@@ -79,6 +86,9 @@ public final class NestedRecordSupport {
             return Optional.empty();
         }
         Object raw = node.remove(fieldName);
+        if (raw == null) {
+            return Optional.empty(); // a key without a value is absent (#759)
+        }
         try {
             return Optional.of(coercer.coerce(raw));
         } catch (CoercionException e) {

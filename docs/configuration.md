@@ -60,6 +60,8 @@ app/src/main/resources/application.yaml                       # user override (o
 
 **Resolution order, per field:** user override → any module's `defaults.yaml` → `@Default(value=...)` annotation → bind error.
 
+**A key written without a value says nothing.** `url:`, `url: ~` and a section header whose keys are all commented out are YAML nulls. In a higher layer they leave the lower layer's value in place. After the layers are merged, a key that still has no value binds like a missing one: an `Optional` is empty, a `@Default` applies, and a required key is reported as `db.url is required but has no value` with the file, line and column of the key. An empty element of a list (`- `) or map is reported the same way. To set an empty string, quote it: `url: ""`.
+
 Two modules cannot independently claim the same `@Configuration(prefix="...")` — the runtime fails fast with a clear collision error. See `tiko-examples/06_config_multi_module/` for an end-to-end sample.
 
 ## The `tiko:` reserved namespace
