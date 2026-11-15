@@ -129,7 +129,30 @@
                                     <shadedPattern>${jackson.relocate.target}</shadedPattern>
                                 </relocation>
                             </relocations>
+                            <filters>
+                                <!-- The shaded jar is not a multi-release jar, so Jackson's per-release
+                                     copies and its module descriptor would sit in it unused and
+                                     unrelocated, under Jackson's own names (#766). -->
+                                <filter>
+                                    <artifact>com.fasterxml.jackson.core:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/versions/**</exclude>
+                                    </excludes>
+                                </filter>
+                                <filter>
+                                    <artifact>com.fasterxml.jackson.datatype:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/versions/**</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
                             <transformers>
+                                <!-- Renames Jackson's META-INF/services files to the relocated names and
+                                     relocates the providers they list. Left under Jackson's own names they
+                                     point an application's own ObjectMapper.findAndRegisterModules() at
+                                     classes this jar no longer has under those names (#766). -->
+                                <transformer
+                                    implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                                 <!-- Concatenates every bundled dep's META-INF/NOTICE so attribution
                                      requirements from each Apache 2.0 dep survive the shading.
                                      Without this, only the last-shaded NOTICE survives the file
