@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.tiko.Container;
 import io.tiko.ErrorContext;
+import io.tiko.EventHandlerError;
 import io.tiko.PostConstructFailure;
 import io.tiko.ProduceFailure;
 import io.tiko.runtime.Tiko;
@@ -11,6 +12,8 @@ import io.tiko.runtime.TikoOptions;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -135,5 +138,33 @@ class CheckedExceptionPropagationTest {
                 assertThat(container.get(ThrowingCheckedSelfFactoryBean.class)).isNotNull();
             });
         }
+    }
+
+    /** #746: an async handler may declare a checked exception; the ErrorHandler gets it as thrown. */
+    @Test
+    void asyncHandlerCheckedThrowReachesTheErrorHandlerUnwrapped() throws InterruptedException {
+        IOException original = new IOException("async-handler-checked-identity");
+        var recorded = new CopyOnWriteArrayList<ErrorContext>();
+        var routed = new CountDownLatch(1);
+        var opts = TikoOptions.builder()
+                .errorHandler(context -> {
+                    recorded.add(context);
+                    routed.countDown();
+                })
+                .build();
+
+        try (Container container = Tiko.create(opts)) {
+            container.getEventBus().publish(new CheckedAsyncPing(original));
+
+            assertThat(routed.await(5, TimeUnit.SECONDS))
+                    .as("the handler's failure reached the ErrorHandler")
+                    .isTrue();
+        }
+
+        assertThat(recorded)
+                .singleElement()
+                .isInstanceOfSatisfying(
+                        EventHandlerError.class,
+                        error -> assertThat(error.cause()).isSameAs(original));
     }
 }

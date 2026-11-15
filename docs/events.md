@@ -44,6 +44,8 @@ public class AnalyticsService {
 }
 ```
 
+A handler method is public and takes the event, optionally followed by its `Event<?>` wrapper ([origin tracking](#origin-tracking-with-event)). An event is routed by its class, so the event parameter is a class, a record or an interface: a primitive, an array or a type variable is a compile error, as is any other second parameter. A handler may declare checked exceptions, sync or async; what it throws reaches the `ErrorHandler` as thrown.
+
 The same handler code works against any `EventBus` implementation. The in-memory bus (`LocalEventBus` in `tiko-runtime`) ships in core. The Kafka transport (`tiko-kafka` + `tiko-kafka-processor`) is a separate module that bridges via `@KafkaSource` / `@KafkaSink` — see [`tiko-examples/08_kafka_order_warehouse`](../tiko-examples/08_kafka_order_warehouse) for a runnable cross-JVM demo. The universal transport-adapter pattern documented in [`docs/superpowers/specs/2026-05-12-kafka-event-bus-design.md`](./superpowers/specs/2026-05-12-kafka-event-bus-design.md) generalises to HTTP / scheduler / file / gRPC.
 
 ## Trade-off positions
