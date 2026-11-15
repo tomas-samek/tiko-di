@@ -35,7 +35,7 @@ public class WarehouseService {
 }
 ```
 
-Outbound is the mirror: a `@KafkaSink` is subscribed by the runtime to its
+Outbound is the mirror, in the service that produces the event: a `@KafkaSink` is subscribed by the runtime to its
 parameter type — when that event is published locally, the return value is
 serialized to the topic. Same `SINGLETON` rule; **do not** also add
 `@EventHandler` (that double-fires). `partitionKey` names an accessor on the
@@ -51,6 +51,13 @@ public class OrderKafkaPublisher {
     }
 }
 ```
+
+These two examples are two services (order and warehouse in example 08), not one. In one module, a
+sink that takes the event type a source returns from the same topic is a compile error: each
+record read would be sent to the topic again, without end. So are two sources on one topic in one
+consumer group (a broker would give each only a part of the records; set `consumerGroup` on one),
+a bridge class, bridge method or payload type that isn't public, and a parameterized payload type
+(`List<Order>`: wrap it in a record).
 
 Broker config binds to `tiko.kafka.*` with **kebab-case** keys
 (`bootstrap-servers`, not `bootstrapServers`) — they are `@Key`-declared;

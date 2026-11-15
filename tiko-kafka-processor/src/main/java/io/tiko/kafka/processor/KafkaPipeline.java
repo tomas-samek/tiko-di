@@ -7,12 +7,14 @@ import io.tiko.kafka.processor.generator.KafkaTopologyWriter;
 import io.tiko.kafka.processor.generator.KafkaTransportBootstrapGenerator;
 import io.tiko.kafka.processor.model.KafkaSinkDescriptor;
 import io.tiko.kafka.processor.model.KafkaSourceDescriptor;
+import io.tiko.kafka.processor.validation.BridgeAccessValidator;
 import io.tiko.kafka.processor.validation.BridgeMethodShapeValidator;
 import io.tiko.kafka.processor.validation.KotlinBridgeValidator;
 import io.tiko.kafka.processor.validation.KotlinDataClassPayloadValidator;
 import io.tiko.kafka.processor.validation.PartitionKeyValidator;
 import io.tiko.kafka.processor.validation.RequiredSiblingValidator;
 import io.tiko.kafka.processor.validation.SingletonBridgeValidator;
+import io.tiko.kafka.processor.validation.TopicConflictValidator;
 import io.tiko.processor.core.Diagnostics;
 import io.tiko.processor.core.ProcessingEnv;
 import io.tiko.processor.core.model.AnnotationRef;
@@ -100,6 +102,8 @@ public final class KafkaPipeline {
             ok &= SingletonBridgeValidator.validate(diagnostics, roundSources, roundSinks);
             ok &= RequiredSiblingValidator.validate(diagnostics, roundSources, roundSinks);
             ok &= BridgeMethodShapeValidator.validate(diagnostics, roundSources, roundSinks);
+            ok &= BridgeAccessValidator.validate(diagnostics, roundSources, roundSinks);
+            ok &= TopicConflictValidator.validate(diagnostics, sources, sinks, roundSources, roundSinks);
             ok &= PartitionKeyValidator.validate(diagnostics, roundSinks);
             ok &= KotlinDataClassPayloadValidator.validate(diagnostics, roundSources, roundSinks);
         }

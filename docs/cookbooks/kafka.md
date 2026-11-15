@@ -68,6 +68,15 @@ and still commits the record (see [below](#which-failures-redeliver-a-record)).
   outside any unit of work).
 - The method must be **non-void** and carry a sibling **`@EventTrigger`**.
 - Signature: `(Payload payload)` or `(Payload payload, KafkaContext ctx)`.
+- The bridge class, the bridge method and the payload type are public, and the payload type is
+  not parameterized (`List<Order>`): the generated bootstrap sits in another package and hands
+  the serializer a `Class`. Wrap a parameterized payload in a record of your own. The same holds
+  for a `@KafkaSink` and its event type.
+- Two `@KafkaSource` methods on one topic need different `consumerGroup`s. A broker gives each
+  partition to one consumer of a group, so two bridges in one group would each see a part of the
+  records. The check compares what the annotations state, within one module: a `consumerGroup`
+  that equals `tiko.kafka.consumer-group` only at run time, or a second bridge in another
+  module, is not seen.
 
 ```java
 @Component(scope = Scope.SINGLETON)
@@ -153,6 +162,10 @@ the **return value**, and sends it to the topic.
 - Enclosing class is `@Component(scope = Scope.SINGLETON)`.
 - **Do NOT also annotate with `@EventHandler`** — the runtime's `EventBus.subscribe()`
   is the exclusive hook; adding `@EventHandler` double-fires the method.
+- A sink must not take the event type that a `@KafkaSource` of the same module returns from the
+  same topic: every record read would be published, picked up by the sink and sent to the topic
+  again. It is a compile error. A source and a sink are the two sides of a topic and usually live
+  in two services; to read a topic the service also writes, give the sink a different event type.
 - `partitionKey` names a record-component accessor (or zero-arg public method) on the
   return type whose value becomes the Kafka message key; empty → null key (round-robin).
 - A `null` return sends nothing, with or without `partitionKey`. Use it to forward only some
