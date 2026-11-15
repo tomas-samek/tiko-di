@@ -408,18 +408,15 @@ public final class ProcessorContext {
     private Optional<Object> routingComponent(String typeName, String qualifier, boolean ownClass) {
         ComponentModel testFallback = null;
         for (ComponentModel component : components.values()) {
-            // Skip components whose declared profile is not active — otherwise a build with
+            // Only components whose declared profile is active — otherwise a build with
             // -Atiko.profiles=dev would pick a ProdGreeter that the container then excludes.
-            if (!isProfileActive(component.getProfiles())) {
-                continue;
-            }
-            if (component.getQualifiedName().equals(typeName) != ownClass || !component.routes(typeName, qualifier)) {
-                continue;
-            }
-            if (!component.isTestComponent()) {
+            boolean reached = isProfileActive(component.getProfiles())
+                    && component.getQualifiedName().equals(typeName) == ownClass
+                    && component.routes(typeName, qualifier);
+            if (reached && !component.isTestComponent()) {
                 return Optional.of(component);
             }
-            if (testFallback == null) {
+            if (reached && testFallback == null) {
                 testFallback = component;
             }
         }

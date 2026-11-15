@@ -30,6 +30,10 @@ public final class ErrorReporter {
     public static final String KIND_SCOPE_VIOLATION = "SCOPE_VIOLATION";
     public static final String KIND_AMBIGUOUS_QUALIFIER = "AMBIGUOUS_QUALIFIER";
     public static final String KIND_BAD_PRODUCES = "BAD_PRODUCES";
+
+    /** The start of a fix that names what to inject instead. */
+    private static final String INJECT = "Inject ";
+
     /** A Kotlin construct Tiko rejects because it would add DI semantics Java has no counterpart for. */
     public static final String KOTLIN_UNSUPPORTED = io.tiko.processor.core.KotlinConstructRules.KIND;
     /** A provider's nullability differs from its injection point's (they must match exactly). */
@@ -153,7 +157,7 @@ public final class ErrorReporter {
             Location at, String componentName, String injectingClass, List<String> routableTypes) {
         var fixes = new ArrayList<String>();
         if (!routableTypes.isEmpty()) {
-            fixes.add("Inject " + String.join(" or ", routableTypes) + ", which " + componentName + " is exposed as");
+            fixes.add(INJECT + String.join(" or ", routableTypes) + ", which " + componentName + " is exposed as");
         }
         fixes.add("Remove exposeSelf = false from " + componentName + "'s @Component to inject it by its own class");
         reportError(
@@ -236,7 +240,7 @@ public final class ErrorReporter {
                 at,
                 className + " must implement an interface. " + reason,
                 "Extract an interface from " + className + " and inject that",
-                "Inject " + heldPrototype + " into " + consumerName + " as a Provider and call get() on each use,"
+                INJECT + heldPrototype + " into " + consumerName + " as a Provider and call get() on each use,"
                         + " so every use builds it inside the current unit");
     }
 
@@ -349,7 +353,7 @@ public final class ErrorReporter {
                 at,
                 concreteName + " is EVENT-scoped and proxied; the generated proxy implements " + proxiedInterface
                         + " only, so this injection point cannot be typed by " + requestedInterface + ".",
-                "Inject " + proxiedInterface + " instead of " + requestedInterface,
+                INJECT + proxiedInterface + " instead of " + requestedInterface,
                 "Make an interface that extends both the first interface " + concreteName + " implements");
     }
 
@@ -361,7 +365,7 @@ public final class ErrorReporter {
                 at,
                 concreteName + " is EVENT-scoped and proxied; the generated proxy implements " + interfaceName
                         + ", so this injection point cannot be typed by the concrete class.",
-                "Inject " + interfaceName + " instead of " + concreteName,
+                INJECT + interfaceName + " instead of " + concreteName,
                 "Use Provider<" + interfaceName + "> for lazy per-call resolution");
     }
 
