@@ -15,8 +15,10 @@ import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.util.ErrorReporter;
 import io.tiko.processor.util.ProcessorContext;
+import io.tiko.processor.util.TypeRefs;
 import io.tiko.processor.util.TypeUtil;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -304,8 +306,9 @@ public final class ComponentCollector {
             return null; // an unresolved @Pick was reported
         }
 
-        var postConstructMethods = annotatedMethods(decl, POST_CONSTRUCT, context);
-        var preDestroyMethods = annotatedMethods(decl, PRE_DESTROY, context);
+        var postConstructMethods =
+                lifecycleMethods(decl, POST_CONSTRUCT, context).reversed();
+        var preDestroyMethods = lifecycleMethods(decl, PRE_DESTROY, context);
 
         // Implicit AutoCloseable cleanup: when the component implements AutoCloseable and
         // the user did not declare an explicit @PreDestroy, the container codegen calls
@@ -399,12 +402,33 @@ public final class ComponentCollector {
                 > 1;
     }
 
-    /** The methods declared on {@code decl} that carry the annotation and were not rejected, in declaration order. */
-    private static List<MethodDecl> annotatedMethods(ClassDecl decl, String annotationFqn, ProcessorContext context) {
-        return decl.methods().stream()
-                .filter(method -> method.annotation(annotationFqn).isPresent())
-                .filter(method -> !context.isRejected(method))
-                .toList();
+    /**
+     * The lifecycle hooks of {@code decl}: those it declares, then those of each superclass in turn
+     * (#742). That is the order {@code @PreDestroy} runs in; {@code @PostConstruct} runs in the
+     * reverse, superclass first. A hook a subclass overrides appears once, as the override, and only
+     * when the override carries the annotation itself.
+     */
+    private static List<MethodDecl> lifecycleMethods(ClassDecl decl, String annotationFqn, ProcessorContext context) {
+        var hooks = new ArrayList<MethodDecl>();
+        var declaredBelow = new HashSet<String>();
+        for (var type = Optional.of(decl); type.isPresent(); type = superclassOf(type.get())) {
+            for (MethodDecl method : type.get().methods()) {
+                if (!method.parameters().isEmpty() || !declaredBelow.add(method.name())) {
+                    continue;
+                }
+                if (method.annotation(annotationFqn).isPresent() && !context.isRejected(method)) {
+                    hooks.add(method);
+                }
+            }
+        }
+        return hooks;
+    }
+
+    /** The superclass a lifecycle hook can be inherited from; empty at {@code java.lang.Object}. */
+    private static Optional<ClassDecl> superclassOf(ClassDecl decl) {
+        return decl.superclass()
+                .flatMap(TypeRefs::declared)
+                .filter(superclass -> !superclass.qualifiedName().equals(Object.class.getName()));
     }
 
     /**

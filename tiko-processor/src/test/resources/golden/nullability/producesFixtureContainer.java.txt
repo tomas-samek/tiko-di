@@ -121,7 +121,11 @@ public final class TikoContainerImpl_4ae99f55 implements Container {
     try {
       return getProducers().clock();
     } catch (Exception __t) {
-      getErrorHandler().onError(new ProduceFailure(Producers.class, "clock", __t));
+      try {
+        getErrorHandler().onError(new ProduceFailure(Producers.class, "clock", __t));
+      } catch (RuntimeException __handlerFailure) {
+        __t.addSuppressed(__handlerFailure);
+      }
       throw Unchecked.<RuntimeException>sneakyThrow(__t);
     }
   }
@@ -134,7 +138,11 @@ public final class TikoContainerImpl_4ae99f55 implements Container {
     try {
       return getProducers().requestId();
     } catch (Exception __t) {
-      getErrorHandler().onError(new ProduceFailure(Producers.class, "requestId", __t));
+      try {
+        getErrorHandler().onError(new ProduceFailure(Producers.class, "requestId", __t));
+      } catch (RuntimeException __handlerFailure) {
+        __t.addSuppressed(__handlerFailure);
+      }
       throw Unchecked.<RuntimeException>sneakyThrow(__t);
     }
   }

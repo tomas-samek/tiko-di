@@ -6,12 +6,14 @@ import io.tiko.EventBus;
 import io.tiko.Scope;
 import io.tiko.processor.core.CodeLiterals;
 import io.tiko.processor.core.GeneratorAnnotations;
+import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.Nullability;
 import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
 import io.tiko.processor.util.ProcessorContext;
+import io.tiko.processor.util.TypeRefs;
 import io.tiko.processor.util.TypeUtil;
 import java.io.IOException;
 import java.time.Duration;
@@ -834,11 +836,17 @@ public final class ContainerGenerator {
                 .beginControlFlow("try")
                 .addStatement("return $L", userCallExpr)
                 .nextControlFlow("catch ($T __t)", Exception.class)
+                // What a throwing ErrorHandler throws is suppressed on the failure, not thrown in
+                // its place (#736).
+                .beginControlFlow("try")
                 .addStatement(
                         "getErrorHandler().onError(new $T($T.class, $S, __t))",
                         ClassName.get(TIKO_PACKAGE, "ProduceFailure"),
                         factory.getDeclaringClass().className(),
                         factory.getMethodName())
+                .nextControlFlow("catch ($T __handlerFailure)", RuntimeException.class)
+                .addStatement("__t.addSuppressed(__handlerFailure)")
+                .endControlFlow()
                 .addStatement(
                         "throw $T.<$T>sneakyThrow(__t)",
                         ClassName.get("io.tiko.runtime", "Unchecked"),
@@ -1379,6 +1387,17 @@ public final class ContainerGenerator {
         method.endControlFlow();
     }
 
+    /** How many superclasses {@code decl} has; a subclass always has more than its superclass. */
+    private static int superclassCount(ClassDecl decl) {
+        int count = 0;
+        for (var type = decl.superclass().flatMap(TypeRefs::declared);
+                type.isPresent();
+                type = type.get().superclass().flatMap(TypeRefs::declared)) {
+            count++;
+        }
+        return count;
+    }
+
     /**
      * Emits the destroy-hook walk for an EVENT scope teardown. Iterates the
      * scope map's values in reverse insertion order (= reverse-creation, LIFO),
@@ -1408,6 +1427,10 @@ public final class ContainerGenerator {
             }
         }
         if (withHooks.isEmpty() && !hasFactoryAutoCloseable) return;
+        // The dispatch below is an instanceof chain: a component that extends another must be
+        // tested first, or its instances would run the superclass component's hooks only (#742).
+        withHooks.sort(Comparator.comparingInt((ComponentModel c) -> superclassCount(c.getDecl()))
+                .reversed());
 
         method.addStatement(
                 "$T<$T> __toDestroy = new $T<>($L.values())",
@@ -2193,7 +2216,9 @@ public final class ContainerGenerator {
      * {@link #createShutdownMethod} then destroys dependents first, matching the documented
      * LIFO destruction contract (#151, #189).
      *
-     * <p>Edges followed: SINGLETON→SINGLETON, across both Component and Factory providers.
+     * <p>Edges followed: SINGLETON→SINGLETON, across both Component and Factory providers, and
+     * through any PROTOTYPE between them: a SINGLETON holds the PROTOTYPE it injects, and with it
+     * whatever SINGLETON that PROTOTYPE holds (#739).
      * EVENT deps inject via proxies and impose no construction-order constraint.
      * Cycles cannot occur (caught at compile-time by CircularDependencyDetector); the
      * {@code visited} guard is defensive.
@@ -2221,18 +2246,33 @@ public final class ContainerGenerator {
 
     private void visitShutdownTarget(ShutdownTarget target, Set<String> visited, List<ShutdownTarget> sorted) {
         if (!visited.add(target.key())) return;
-        for (DependencyModel dep : target.dependencies()) {
-            String depKey = dep.getDependencyKey();
-            var resolved = context.findComponentOrFactory(depKey).orElse(null);
-            ShutdownTarget child = null;
-            if (resolved instanceof ComponentModel c && c.getScope() == Scope.SINGLETON && !c.requiresProxy()) {
-                child = new ShutdownTarget.Component(c);
-            } else if (resolved instanceof FactoryMethodModel f && f.getScope() == Scope.SINGLETON) {
-                child = new ShutdownTarget.Factory(f);
-            }
-            if (child != null) visitShutdownTarget(child, visited, sorted);
-        }
+        visitShutdownDependencies(target.dependencies(), visited, sorted);
         sorted.add(target);
+    }
+
+    /**
+     * Visits the SINGLETONs {@code dependencies} resolve to, looking through PROTOTYPEs (#739).
+     * {@code visited} also ends the walk on a PROTOTYPE seen before: what it reaches is sorted already.
+     */
+    private void visitShutdownDependencies(
+            List<DependencyModel> dependencies, Set<String> visited, List<ShutdownTarget> sorted) {
+        for (DependencyModel dep : dependencies) {
+            var resolved =
+                    context.findComponentOrFactory(dep.getDependencyKey()).orElse(null);
+            if (resolved instanceof ComponentModel c) {
+                if (c.getScope() == Scope.SINGLETON && !c.requiresProxy()) {
+                    visitShutdownTarget(new ShutdownTarget.Component(c), visited, sorted);
+                } else if (c.getScope() == Scope.PROTOTYPE && visited.add(c.getComponentKey())) {
+                    visitShutdownDependencies(c.getDependencies(), visited, sorted);
+                }
+            } else if (resolved instanceof FactoryMethodModel f) {
+                if (f.getScope() == Scope.SINGLETON) {
+                    visitShutdownTarget(new ShutdownTarget.Factory(f), visited, sorted);
+                } else if (f.getScope() == Scope.PROTOTYPE && visited.add(f.getComponentKey())) {
+                    visitShutdownDependencies(f.getDependencies(), visited, sorted);
+                }
+            }
+        }
     }
 
     /**

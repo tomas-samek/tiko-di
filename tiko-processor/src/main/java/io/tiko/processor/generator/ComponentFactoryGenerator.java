@@ -216,10 +216,10 @@ public final class ComponentFactoryGenerator {
             methodBuilder.beginControlFlow("try");
             methodBuilder.addStatement("instance.$L()", postConstruct.jvmName());
             methodBuilder.nextControlFlow(CATCH_FAILURE, Exception.class);
-            methodBuilder.addStatement(
-                    "container.getErrorHandler().onError(new $T($T.class, __t))",
-                    ClassName.get("io.tiko", "PostConstructFailure"),
-                    componentClass);
+            addFailureReport(
+                    methodBuilder,
+                    CodeBlock.of(
+                            "new $T($T.class, __t)", ClassName.get("io.tiko", "PostConstructFailure"), componentClass));
             addSneakyRethrow(methodBuilder);
             methodBuilder.endControlFlow();
         }
@@ -337,12 +337,27 @@ public final class ComponentFactoryGenerator {
         method.beginControlFlow("try");
         method.addStatement("instance = $T.$L($L)", componentClass, factory.jvmName(), params);
         method.nextControlFlow(CATCH_FAILURE, Exception.class);
-        method.addStatement(
-                "container.getErrorHandler().onError(new $T($T.class, $S, __t))",
-                ClassName.get("io.tiko", "ProduceFailure"),
-                componentClass,
-                factory.jvmName());
+        addFailureReport(
+                method,
+                CodeBlock.of(
+                        "new $T($T.class, $S, __t)",
+                        ClassName.get("io.tiko", "ProduceFailure"),
+                        componentClass,
+                        factory.jvmName()));
         addSneakyRethrow(method);
+        method.endControlFlow();
+    }
+
+    /**
+     * Tells the {@code ErrorHandler} about the failure {@code __t} that is about to be rethrown. What
+     * the handler itself throws is suppressed on {@code __t}, so the caller still gets the failure
+     * that happened, not the handler's (#736).
+     */
+    private static void addFailureReport(MethodSpec.Builder method, CodeBlock errorContext) {
+        method.beginControlFlow("try");
+        method.addStatement("container.getErrorHandler().onError($L)", errorContext);
+        method.nextControlFlow("catch ($T __handlerFailure)", RuntimeException.class);
+        method.addStatement("__t.addSuppressed(__handlerFailure)");
         method.endControlFlow();
     }
 

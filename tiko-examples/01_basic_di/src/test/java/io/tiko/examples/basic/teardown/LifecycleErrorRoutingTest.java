@@ -53,6 +53,62 @@ class LifecycleErrorRoutingTest {
         });
     }
 
+    private static TikoOptions optionsWithAThrowingErrorHandler() {
+        return TikoOptions.builder()
+                .errorHandler(ctx -> {
+                    throw new UnsupportedOperationException("handler bug");
+                })
+                .build();
+    }
+
+    /**
+     * #736: an {@code ErrorHandler} that throws while it is told about a failure does not replace
+     * that failure. The caller still gets the original, with what the handler threw suppressed on it.
+     */
+    @Test
+    void throwingErrorHandlerDoesNotReplaceThePostConstructFailure() {
+        try (Container container = Tiko.create(optionsWithAThrowingErrorHandler())) {
+            assertThatThrownBy(
+                            () -> container.runInEventScope(() -> container.get(ThrowingPostConstructEventBean.class)))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessage("intentional-postconstruct")
+                    .satisfies(failure -> assertThat(failure.getSuppressed())
+                            .singleElement()
+                            .isInstanceOf(UnsupportedOperationException.class));
+        }
+    }
+
+    @Test
+    void throwingErrorHandlerDoesNotReplaceTheProducesFailure() {
+        var failure = new java.sql.SQLException("pool could not connect");
+        ThrowingCheckedProducesFactory.thrownInstance = failure;
+
+        try (Container container = Tiko.create(optionsWithAThrowingErrorHandler())) {
+            assertThatThrownBy(() -> container.runInEventScope(() -> container.get(CheckedProducesOutput.class)))
+                    .isSameAs(failure)
+                    .satisfies(thrown -> assertThat(thrown.getSuppressed())
+                            .singleElement()
+                            .isInstanceOf(UnsupportedOperationException.class));
+        }
+    }
+
+    @Test
+    void throwingErrorHandlerDoesNotReplaceTheSelfFactoryFailure() {
+        var failure = new java.io.IOException("file is locked");
+        ThrowingCheckedSelfFactoryBean.thrownInstance = failure;
+
+        try (Container container = Tiko.create(optionsWithAThrowingErrorHandler())) {
+            assertThatThrownBy(
+                            () -> container.runInEventScope(() -> container.get(ThrowingCheckedSelfFactoryBean.class)))
+                    .isSameAs(failure)
+                    .satisfies(thrown -> assertThat(thrown.getSuppressed())
+                            .singleElement()
+                            .isInstanceOf(UnsupportedOperationException.class));
+        } finally {
+            ThrowingCheckedSelfFactoryBean.thrownInstance = null;
+        }
+    }
+
     @Test
     void throwingPreDestroyEmitsPreDestroyFailureAndContinuesTeardown() {
         var recorded = new CopyOnWriteArrayList<ErrorContext>();
