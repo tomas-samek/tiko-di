@@ -361,6 +361,8 @@ Two forms: instance methods (separate factory component, may itself have `@Injec
 
 A `@Produces` method is public, declares no type parameters, and has a name of its own in its class: the generated container names a factory's accessors after the method, so two overloads are a compile error.
 
+A `@Produces` method may declare checked exceptions. What it throws reaches the caller of `container.get(...)` unchanged and is reported to the `ErrorHandler` once, as a `ProduceFailure` that names the method that threw. A method whose parameter comes from a failing `@Produces` method is not entered, and is not reported.
+
 ```java
 // Instance factory with injected dependencies
 @Component(scope = Scope.SINGLETON)

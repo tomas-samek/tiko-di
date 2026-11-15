@@ -167,4 +167,32 @@ class CheckedExceptionPropagationTest {
                         EventHandlerError.class,
                         error -> assertThat(error.cause()).isSameAs(original));
     }
+
+    /**
+     * #746: a {@code @Produces} method whose parameter comes from a failing {@code @Produces} method
+     * did not fail itself. The failure is routed once, for the method that threw.
+     */
+    @Test
+    void failureOfAProducedParameterIsRoutedOnceForTheMethodThatThrew() {
+        SQLException original = new SQLException("chained-produces-identity");
+        ThrowingCheckedProducesFactory.thrownInstance = original;
+
+        var recorded = new CopyOnWriteArrayList<ErrorContext>();
+        var opts = TikoOptions.builder().errorHandler(recorded::add).build();
+
+        Throwable thrown = null;
+        try (Container container = Tiko.create(opts)) {
+            try {
+                container.runInEventScope(() -> container.get(ChainedProducesOutput.class));
+            } catch (Throwable t) {
+                thrown = t;
+            }
+        }
+
+        assertThat(thrown).isSameAs(original);
+        assertThat(recorded).singleElement().isInstanceOfSatisfying(ProduceFailure.class, f -> {
+            assertThat(f.declaringClass()).isEqualTo(ThrowingCheckedProducesFactory.class);
+            assertThat(f.methodName()).isEqualTo("failingResource");
+        });
+    }
 }

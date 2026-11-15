@@ -797,26 +797,35 @@ public final class ContainerGenerator {
     }
 
     /**
-     * Builds the raw user-method invocation expression: instance methods are called on
-     * the declaring {@code @Component} singleton; static methods are called directly.
-     * Used inside {@link #createFactoryInvocationHelper} only.
+     * Declares, in {@code helper}, what the user's {@code @Produces} method is called on and
+     * with, and returns the call itself: instance methods are called on the declaring
+     * {@code @Component}, static methods directly. Used inside
+     * {@link #createFactoryInvocationHelper} only.
+     *
+     * <p>The declaring component and the arguments are resolved in statements of their own, so
+     * that the caller's {@code try} holds the user's method alone. Resolved inside it, the failure
+     * of a parameter that comes from another {@code @Produces} method was routed a second time,
+     * as a failure of this method, which was never entered (#746).
      */
-    private String buildRawUserMethodCall(FactoryMethodModel factory) {
+    private String buildRawUserMethodCall(MethodSpec.Builder helper, FactoryMethodModel factory) {
+        // A static factory by the canonical name: the simple name of a nested class is not in scope here (#746).
+        String target = factory.getDeclaringClass().className().canonicalName();
+        if (!factory.isStatic()) {
+            target = "__declaring";
+            helper.addStatement(
+                    "$T $L = get$L()",
+                    factory.getDeclaringClass().className(),
+                    target,
+                    factory.getDeclaringClass().className().simpleName());
+        }
         List<String> args = new ArrayList<>();
         for (DependencyModel dep : factory.getDependencies()) {
-            args.add(generateContainerGetCall(dep, factory.getScope()));
+            String arg = "__arg" + args.size();
+            helper.addStatement(
+                    "$T $L = $L", dep.getType().javaPoet(), arg, generateContainerGetCall(dep, factory.getScope()));
+            args.add(arg);
         }
-        String argList = String.join(", ", args);
-        String declaringClassName = factory.getDeclaringClass().className().simpleName();
-        String methodName = factory.getMethod().jvmName();
-
-        if (factory.isStatic()) {
-            // By the canonical name: the simple name of a nested class is not in scope here (#746).
-            String declaringClass = factory.getDeclaringClass().className().canonicalName();
-            return String.format("%s.%s(%s)", declaringClass, methodName, argList);
-        } else {
-            return String.format("get%s().%s(%s)", declaringClassName, methodName, argList);
-        }
+        return String.format("%s.%s(%s)", target, factory.getMethod().jvmName(), String.join(", ", args));
     }
 
     /**
@@ -831,12 +840,12 @@ public final class ContainerGenerator {
     private MethodSpec createFactoryInvocationHelper(FactoryMethodModel factory) {
         TypeName returnType = factory.getReturnType().javaPoet();
         String helperName = "invokeFactory_" + factory.getFactoryIdentifier();
-        String userCallExpr = buildRawUserMethodCall(factory);
-
-        return MethodSpec.methodBuilder(helperName)
+        MethodSpec.Builder helper = MethodSpec.methodBuilder(helperName)
                 .addModifiers(Modifier.PRIVATE)
-                .returns(returnType)
-                .beginControlFlow("try")
+                .returns(returnType);
+        String userCallExpr = buildRawUserMethodCall(helper, factory);
+
+        return helper.beginControlFlow("try")
                 .addStatement("return $L", userCallExpr)
                 .nextControlFlow("catch ($T __t)", Exception.class)
                 // What a throwing ErrorHandler throws is suppressed on the failure, not thrown in

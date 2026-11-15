@@ -137,11 +137,11 @@ class ProxyForProducesOutputCrossScopeTest {
         String container = containerSourceFor(
                 "  @Produces(scope = Scope.SINGLETON)", "  public String shout(Greeting g) { return g.hello(); }");
 
-        assertThat(container)
-                .containsPattern(
-                        "getGreetingFactory\\(\\)\\.shout\\(options\\.resolveOverride\\(io\\.example\\.Greeting\\.class,"
-                                + " \\(\\) -> new GreetingFactory_greetingProxy_\\w+\\(this\\)\\)\\)")
-                .doesNotContain("() -> produce_GreetingFactory_greeting()");
+        assertThat(FactoryInvocation.of(container, "GreetingFactory_shout"))
+                .containsPattern("__arg0 = options\\.resolveOverride\\(io\\.example\\.Greeting\\.class,"
+                        + " \\(\\) -> new GreetingFactory_greetingProxy_\\w+\\(this\\)\\);")
+                .contains("return __declaring.shout(__arg0);");
+        assertThat(container).doesNotContain("() -> produce_GreetingFactory_greeting()");
     }
 
     @Test
@@ -152,12 +152,11 @@ class ProxyForProducesOutputCrossScopeTest {
                 "  @Produces",
                 "  public Integer perUse(Greeting g) { return 1; }");
 
-        assertThat(container)
-                .contains("perUnit(options.resolveOverride(io.example.Greeting.class,"
-                        + " () -> produce_GreetingFactory_greeting()))")
-                .contains("perUse(options.resolveOverride(io.example.Greeting.class,"
-                        + " () -> produce_GreetingFactory_greeting()))")
-                .doesNotContain("GreetingFactory_greetingProxy");
+        String value = "__arg0 = options.resolveOverride(io.example.Greeting.class,"
+                + " () -> produce_GreetingFactory_greeting());";
+        assertThat(FactoryInvocation.of(container, "GreetingFactory_perUnit")).contains(value);
+        assertThat(FactoryInvocation.of(container, "GreetingFactory_perUse")).contains(value);
+        assertThat(container).doesNotContain("GreetingFactory_greetingProxy");
     }
 
     @Test
@@ -166,9 +165,9 @@ class ProxyForProducesOutputCrossScopeTest {
                 "  @Produces(scope = Scope.SINGLETON)",
                 "  public String lazy(Provider<Greeting> g) { return \"lazy\"; }");
 
-        assertThat(container)
-                .contains("lazy(() -> options.resolveOverride(io.example.Greeting.class,"
-                        + " () -> produce_GreetingFactory_greeting()))")
-                .doesNotContain("GreetingFactory_greetingProxy");
+        assertThat(FactoryInvocation.of(container, "GreetingFactory_lazy"))
+                .contains("__arg0 = () -> options.resolveOverride(io.example.Greeting.class,"
+                        + " () -> produce_GreetingFactory_greeting());");
+        assertThat(container).doesNotContain("GreetingFactory_greetingProxy");
     }
 }

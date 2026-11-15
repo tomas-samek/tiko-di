@@ -118,8 +118,9 @@ public final class TikoContainerImpl_4ae99f55 implements Container {
   }
 
   private Clock invokeFactory_Producers_clock() {
+    Producers __declaring = getProducers();
     try {
-      return getProducers().clock();
+      return __declaring.clock();
     } catch (Exception __t) {
       try {
         getErrorHandler().onError(new ProduceFailure(Producers.class, "clock", __t));
@@ -135,8 +136,9 @@ public final class TikoContainerImpl_4ae99f55 implements Container {
   }
 
   private RequestId invokeFactory_Producers_requestId() {
+    Producers __declaring = getProducers();
     try {
-      return getProducers().requestId();
+      return __declaring.requestId();
     } catch (Exception __t) {
       try {
         getErrorHandler().onError(new ProduceFailure(Producers.class, "requestId", __t));
