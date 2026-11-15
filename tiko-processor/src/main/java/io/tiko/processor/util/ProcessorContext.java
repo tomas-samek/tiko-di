@@ -259,8 +259,10 @@ public final class ProcessorContext {
     public List<EventHandlerModel> getEventHandlers() {
         // Sorted view (#334): the registry's dispatcher names, HANDLER_INFO indexes, and
         // subscription order all follow this list — element visitation order tracks source
-        // order, which must not leak into generated output.
+        // order, which must not leak into generated output. A handler whose component is not
+        // in the build is not either (#744).
         return eventHandlers.stream()
+                .filter(handler -> isInTheBuild(handler.getOwner()))
                 .sorted(java.util.Comparator.comparing(
                                 (EventHandlerModel h) -> h.getOwner().qualifiedName())
                         .thenComparing(EventHandlerModel::getMethodName)
@@ -316,7 +318,7 @@ public final class ProcessorContext {
         }
         for (List<FactoryMethodModel> fs : factoryMethods.values()) {
             for (FactoryMethodModel f : fs) {
-                if (f.getReturnTypeName().equals(implFqn) && isProfileActive(f.getProfiles())) {
+                if (f.getReturnTypeName().equals(implFqn) && isActive(f)) {
                     return Optional.of(f);
                 }
             }
@@ -342,7 +344,7 @@ public final class ProcessorContext {
         }
         for (List<FactoryMethodModel> fs : factoryMethods.values()) {
             for (FactoryMethodModel f : fs) {
-                if (f.getReturnTypeName().equals(implFqn) && isProfileActive(f.getProfiles())) {
+                if (f.getReturnTypeName().equals(implFqn) && isActive(f)) {
                     matches.add(f);
                 }
             }
@@ -374,7 +376,7 @@ public final class ProcessorContext {
         }
         if (factoryMethods.containsKey(key)) {
             for (FactoryMethodModel exact : factoryMethods.get(key)) {
-                if (isProfileActive(exact.getProfiles())) {
+                if (isActive(exact)) {
                     return Optional.of(exact);
                 }
             }
@@ -428,6 +430,23 @@ public final class ProcessorContext {
     }
 
     /**
+     * Whether {@code factory} is part of this build: its own profiles are active, and so is the
+     * component that declares it. A component left out by its profile takes its {@code @Produces}
+     * methods with it, static ones included; nothing would be there to call them on (#744).
+     */
+    public boolean isActive(FactoryMethodModel factory) {
+        return isProfileActive(factory.getProfiles()) && isInTheBuild(factory.getDeclaringClass());
+    }
+
+    /** False only for the class of a registered component whose profile is not active. */
+    private boolean isInTheBuild(ClassDecl owner) {
+        String fqn = owner.qualifiedName();
+        return components.values().stream()
+                .filter(component -> component.getDecl().qualifiedName().equals(fqn))
+                .allMatch(component -> isProfileActive(component.getProfiles()));
+    }
+
+    /**
      * Returns true if the given component/factory should be included based on active profiles.
      */
     public boolean isProfileActive(List<String> profiles) {
@@ -461,7 +480,7 @@ public final class ProcessorContext {
     public List<FactoryMethodModel> getActiveFactoryMethods() {
         return factoryMethods.values().stream()
                 .flatMap(List::stream)
-                .filter(f -> isProfileActive(f.getProfiles()))
+                .filter(this::isActive)
                 .toList();
     }
 

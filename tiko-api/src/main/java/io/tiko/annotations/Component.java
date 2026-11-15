@@ -83,6 +83,10 @@ public @interface Component {
      * <p>
      * If specified, the component is only available when one of these profiles is active.
      * Empty array (default) means the component is available in all profiles.
+     * <p>
+     * The active profiles are those of the processor option {@code -Atiko.profiles=dev,test}. A
+     * component left out by its profiles takes what it declares with it: its
+     * {@code @EventHandler} and {@code @Produces} methods are not part of the build either.
      *
      * @return array of profile names
      */
