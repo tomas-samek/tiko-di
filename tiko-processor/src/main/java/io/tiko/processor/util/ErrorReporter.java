@@ -3,6 +3,8 @@ package io.tiko.processor.util;
 import io.tiko.processor.core.Diagnostics;
 import io.tiko.processor.core.model.Location;
 import io.tiko.processor.model.WiringError;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
 
@@ -28,6 +30,10 @@ public final class ErrorReporter {
     public static final String KIND_SCOPE_VIOLATION = "SCOPE_VIOLATION";
     public static final String KIND_AMBIGUOUS_QUALIFIER = "AMBIGUOUS_QUALIFIER";
     public static final String KIND_BAD_PRODUCES = "BAD_PRODUCES";
+
+    /** The start of a fix that names what to inject instead. */
+    private static final String INJECT = "Inject ";
+
     /** A Kotlin construct Tiko rejects because it would add DI semantics Java has no counterpart for. */
     public static final String KOTLIN_UNSUPPORTED = io.tiko.processor.core.KotlinConstructRules.KIND;
     /** A provider's nullability differs from its injection point's (they must match exactly). */
@@ -143,6 +149,53 @@ public final class ErrorReporter {
                 "Inject a different type that " + hidingComponent + " does expose");
     }
 
+    /**
+     * An injection point typed by a component's own class, when the component is declared with
+     * {@code exposeSelf = false} (#724): {@code container.get(Impl.class)} does not answer either.
+     */
+    public void ownClassNotExposed(
+            Location at, String componentName, String injectingClass, List<String> routableTypes) {
+        var fixes = new ArrayList<String>();
+        if (!routableTypes.isEmpty()) {
+            fixes.add(INJECT + String.join(" or ", routableTypes) + ", which " + componentName + " is exposed as");
+        }
+        fixes.add("Remove exposeSelf = false from " + componentName + "'s @Component to inject it by its own class");
+        reportError(
+                KIND_MISSING_DEPENDENCY,
+                at,
+                componentName + " is declared with exposeSelf = false, so it cannot be injected by its own class"
+                        + " (used by " + injectingClass + ")",
+                fixes.toArray(String[]::new));
+    }
+
+    /** An unqualified injection point whose type has only named providers (#724). */
+    public void onlyNamedProviders(Location at, String dependencyKey, List<String> namedProviders) {
+        String firstName =
+                namedProviders.get(0).substring(0, namedProviders.get(0).indexOf(' '));
+        reportError(
+                KIND_MISSING_DEPENDENCY,
+                at,
+                "Cannot resolve dependency: " + dependencyKey + ". It has only named providers, and a named provider"
+                        + " answers only an injection point that names it: " + String.join(", ", namedProviders),
+                "Name the one to inject on the parameter: @Named(" + firstName + ")",
+                "Leave one provider of " + dependencyKey + " unnamed, as the default");
+    }
+
+    /**
+     * A parameterized injection point reached a component that implements the same interface with
+     * other type arguments (#724): routing is by the raw type.
+     */
+    public void typeArgumentMismatch(Location at, String requested, String componentName, String rawType) {
+        reportError(
+                KIND_MISSING_DEPENDENCY,
+                at,
+                "Cannot inject " + requested + ": " + componentName + " is the component routed as " + rawType
+                        + ", and it is not a " + requested,
+                "Add a component that implements " + requested + "; with more than one implementation of " + rawType
+                        + ", name them and inject with @Named",
+                "Change the parameter to the type " + componentName + " implements");
+    }
+
     public void circularDependency(Location at, String cycle) {
         reportError(
                 KIND_CIRCULAR_DEPENDENCY,
@@ -187,7 +240,7 @@ public final class ErrorReporter {
                 at,
                 className + " must implement an interface. " + reason,
                 "Extract an interface from " + className + " and inject that",
-                "Inject " + heldPrototype + " into " + consumerName + " as a Provider and call get() on each use,"
+                INJECT + heldPrototype + " into " + consumerName + " as a Provider and call get() on each use,"
                         + " so every use builds it inside the current unit");
     }
 
@@ -289,6 +342,21 @@ public final class ErrorReporter {
                 "Move the handler method to a @Component class");
     }
 
+    /**
+     * A proxied EVENT component injected by an interface other than the one its proxy implements
+     * (#724): the proxy implements the first interface only.
+     */
+    public void proxiedOtherInterfaceInjection(
+            Location at, String concreteName, String proxiedInterface, String requestedInterface) {
+        reportError(
+                KIND_SCOPE_VIOLATION,
+                at,
+                concreteName + " is EVENT-scoped and proxied; the generated proxy implements " + proxiedInterface
+                        + " only, so this injection point cannot be typed by " + requestedInterface + ".",
+                INJECT + proxiedInterface + " instead of " + requestedInterface,
+                "Make an interface that extends both the first interface " + concreteName + " implements");
+    }
+
     public void proxiedConcreteInjection(Location at, String concreteName, String interfaceName) {
         // Same SCOPE_VIOLATION family as missingInterface: the cross-scope proxy implements
         // the interface, so a concrete-typed injection point can never receive it (#331).
@@ -297,7 +365,7 @@ public final class ErrorReporter {
                 at,
                 concreteName + " is EVENT-scoped and proxied; the generated proxy implements " + interfaceName
                         + ", so this injection point cannot be typed by the concrete class.",
-                "Inject " + interfaceName + " instead of " + concreteName,
+                INJECT + interfaceName + " instead of " + concreteName,
                 "Use Provider<" + interfaceName + "> for lazy per-call resolution");
     }
 

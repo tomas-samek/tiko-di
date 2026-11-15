@@ -4,6 +4,7 @@ import io.tiko.Scope;
 import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.MethodDecl;
 import io.tiko.processor.core.model.TypeRef;
+import io.tiko.processor.util.TypeUtil;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -167,6 +168,48 @@ public final class ComponentModel {
      */
     public boolean isExposeSelf() {
         return exposeSelf;
+    }
+
+    /**
+     * The erased names of the types this component is routable as, the same set the generated
+     * container dispatches on: the {@code expose} list, or every directly implemented interface
+     * (JDK lifecycle markers aside) under the permissive default, plus its own class when
+     * {@link #isExposeSelf()}. A parameterized interface routes as its raw type.
+     */
+    public List<String> getRoutableTypeNames() {
+        var names = new ArrayList<String>();
+        boolean restricted = isExposeRestricted();
+        for (TypeRef type : restricted ? exposeTypes : decl.interfaces()) {
+            String routable = type.erasedName();
+            // An explicit expose list is honoured verbatim; a marker named there is an opt-in (#301).
+            if (!restricted && TypeUtil.isLifecycleMarkerInterface(routable)) {
+                continue;
+            }
+            if (!names.contains(routable)) {
+                names.add(routable);
+            }
+        }
+        if (exposeSelf && !names.contains(qualifiedName)) {
+            names.add(qualifiedName);
+        }
+        return names;
+    }
+
+    /**
+     * Whether a request for the erased type {@code typeName} under {@code qualifier} (empty for
+     * none) reaches this component, as {@code container.get(type)} / {@code get(type, name)}
+     * would (#724). An unnamed component answers an unqualified request by every routable type;
+     * a named one answers it only by its own class, and a qualified request by every routable
+     * type under its name.
+     */
+    public boolean routes(String typeName, String qualifier) {
+        if (!qualifier.isEmpty()) {
+            return qualifier.equals(name) && getRoutableTypeNames().contains(typeName);
+        }
+        if (getName().isPresent()) {
+            return exposeSelf && qualifiedName.equals(typeName);
+        }
+        return getRoutableTypeNames().contains(typeName);
     }
 
     /**

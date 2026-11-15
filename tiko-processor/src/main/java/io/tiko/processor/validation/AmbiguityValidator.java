@@ -54,7 +54,7 @@ public final class AmbiguityValidator {
                             ? component.getExposeTypes()
                             : component.getDecl().interfaces();
                     for (var iface : declared) {
-                        register(namedProvidersByTypeAndName, iface.displayName() + "#" + name, info);
+                        register(namedProvidersByTypeAndName, iface.erasedName() + "#" + name, info);
                     }
                 }
                 continue;
@@ -69,8 +69,9 @@ public final class AmbiguityValidator {
             var declared = component.isExposeRestricted()
                     ? component.getExposeTypes()
                     : component.getDecl().interfaces();
+            // By the erased name: Repo<User> and Repo<Order> both route as Repo (#724).
             for (var iface : declared) {
-                register(providersByType, iface.displayName(), info);
+                register(providersByType, iface.erasedName(), info);
             }
 
             // Additional shadow-target keys carried by @TestComponent (explicit value() or implicit walk).
@@ -193,7 +194,7 @@ public final class AmbiguityValidator {
     private boolean matchesType(DependencyModel dep, String typeKey) {
         // Compare against the parameter type (or unwrapped Provider<T>), not the picked
         // class — we are asking "is this dependency for the ambiguous type?".
-        String depType = dep.getUnwrappedType().map(TypeRef::displayName).orElse(dep.getTypeName());
+        String depType = dep.getUnwrappedType().map(TypeRef::erasedName).orElse(dep.getTypeName());
         return depType.equals(typeKey);
     }
 

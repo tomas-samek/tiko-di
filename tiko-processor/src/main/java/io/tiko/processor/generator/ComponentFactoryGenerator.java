@@ -125,6 +125,11 @@ public final class ComponentFactoryGenerator {
                 .build();
     }
 
+    /** The type as a class literal can name it: a parameterized type by its raw type. */
+    private static TypeName literalOf(TypeName type) {
+        return type instanceof ParameterizedTypeName parameterized ? parameterized.rawType() : type;
+    }
+
     /**
      * Creates the factory method that instantiates the component.
      */
@@ -136,6 +141,17 @@ public final class ComponentFactoryGenerator {
 
         // Resolve dependencies
         List<String> parameterNames = new ArrayList<>();
+        // An override is keyed by a class literal, which carries no type arguments: a Repo<User>
+        // parameter is looked up as Repo and received unchecked (#724).
+        boolean unchecked = component.getDependencies().stream()
+                .filter(dependency -> !dependency.isPicker())
+                .map(dependency -> dependency.getUnwrappedType().orElse(dependency.getType()))
+                .anyMatch(type -> !type.typeArguments().isEmpty());
+        if (unchecked) {
+            methodBuilder.addAnnotation(AnnotationSpec.builder(SuppressWarnings.class)
+                    .addMember("value", "$S", "unchecked")
+                    .build());
+        }
         for (DependencyModel dependency : component.getDependencies()) {
             String paramName = dependency.getParameterName();
             parameterNames.add(paramName);
@@ -146,7 +162,8 @@ public final class ComponentFactoryGenerator {
                 // resolution key is the inner type T (not Provider<T>). resolveOverride
                 // does one map lookup and routes the cast through the class token (#309).
                 TypeName providerType = dependency.getType().javaPoet();
-                TypeName innerType = dependency.getUnwrappedType().orElseThrow().javaPoet();
+                TypeName innerType =
+                        literalOf(dependency.getUnwrappedType().orElseThrow().javaPoet());
                 String existing = generateContainerGetCall(dependency, component);
                 if (dependency.getQualifier().isPresent() && !dependency.isPicked()) {
                     String qualifier = dependency.getQualifier().orElseThrow();
@@ -189,17 +206,19 @@ public final class ComponentFactoryGenerator {
                 if (dependency.getQualifier().isPresent() && !dependency.isPicked()) {
                     String qualifier = dependency.getQualifier().orElseThrow();
                     methodBuilder.addStatement(
-                            "$1T $2L = container.options().resolveOverride($1T.class, $3S, () -> $4L)",
+                            "$1T $2L = container.options().resolveOverride($5T.class, $3S, () -> $4L)",
                             declaredType,
                             paramName,
                             qualifier,
-                            existing);
+                            existing,
+                            literalOf(declaredType));
                 } else {
                     methodBuilder.addStatement(
-                            "$1T $2L = container.options().resolveOverride($1T.class, () -> $3L)",
+                            "$1T $2L = container.options().resolveOverride($4T.class, () -> $3L)",
                             declaredType,
                             paramName,
-                            existing);
+                            existing,
+                            literalOf(declaredType));
                 }
             }
         }
