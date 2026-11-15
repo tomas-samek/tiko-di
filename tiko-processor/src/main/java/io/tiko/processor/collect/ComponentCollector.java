@@ -402,7 +402,6 @@ public final class ComponentCollector {
                 > 1;
     }
 
-    /** The methods declared on {@code decl} that carry the annotation and were not rejected, in declaration order. */
     /**
      * The lifecycle hooks of {@code decl}: those it declares, then those of each superclass in turn
      * (#742). That is the order {@code @PreDestroy} runs in; {@code @PostConstruct} runs in the

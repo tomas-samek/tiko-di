@@ -1387,6 +1387,17 @@ public final class ContainerGenerator {
         method.endControlFlow();
     }
 
+    /** How many superclasses {@code decl} has; a subclass always has more than its superclass. */
+    private static int superclassCount(ClassDecl decl) {
+        int count = 0;
+        for (var type = decl.superclass().flatMap(TypeRefs::declared);
+                type.isPresent();
+                type = type.get().superclass().flatMap(TypeRefs::declared)) {
+            count++;
+        }
+        return count;
+    }
+
     /**
      * Emits the destroy-hook walk for an EVENT scope teardown. Iterates the
      * scope map's values in reverse insertion order (= reverse-creation, LIFO),
@@ -1401,17 +1412,6 @@ public final class ContainerGenerator {
      * <p>Factory-produced beans living in the same scope map are silently skipped
      * (they don't match any instanceof case).
      */
-    /** How many superclasses {@code decl} has; a subclass always has more than its superclass. */
-    private static int superclassCount(ClassDecl decl) {
-        int count = 0;
-        for (var type = decl.superclass().flatMap(TypeRefs::declared);
-                type.isPresent();
-                type = type.get().superclass().flatMap(TypeRefs::declared)) {
-            count++;
-        }
-        return count;
-    }
-
     private void emitScopedTeardown(MethodSpec.Builder method, Scope scope, String scopeMapExpr) {
         List<ComponentModel> withHooks = new ArrayList<>();
         for (ComponentModel c : activeComponents()) {
