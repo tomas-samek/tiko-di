@@ -49,8 +49,7 @@ class UndeliverableEventGenerationTest {
                         "Listener __handler = container.getListener();",
                         "__handler.onText(event);",
                         "} catch (Exception __t) {",
-                        "onError(new EventHandlerError(HANDLER_INFO_");
-        assertThat(source)
+                        "onError(new EventHandlerError(HANDLER_INFO_")
                 .as("async on the publishing thread: a failed lookup is routed and the dispatch ends")
                 .containsSubsequence(
                         "final Listener __handler;",

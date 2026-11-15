@@ -46,7 +46,11 @@ final class OverflowRejectionHandler implements RejectedExecutionHandler {
     Runnable asWorker(Runnable workerLoop) {
         return () -> {
             WORKER_OF.set(pool);
-            workerLoop.run();
+            try {
+                workerLoop.run();
+            } finally {
+                WORKER_OF.remove();
+            }
         };
     }
 
