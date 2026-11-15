@@ -346,7 +346,12 @@ public final class ComponentCollector {
         implementedInterface.ifPresent(builder::implementedInterface);
 
         // Determine if proxy is needed (EVENT scope with interface)
-        boolean needsProxy = attributes.scope() == Scope.EVENT && implementedInterface.isPresent();
+        // A proxy implements the interface by name, so a parameterized one (Comparable<Amount>)
+        // is none: the component is then used as itself, like one without an interface (#741).
+        boolean needsProxy = attributes.scope() == Scope.EVENT
+                && implementedInterface
+                        .filter(type -> type.typeArguments().isEmpty())
+                        .isPresent();
         builder.requiresProxy(needsProxy);
 
         return builder.build();

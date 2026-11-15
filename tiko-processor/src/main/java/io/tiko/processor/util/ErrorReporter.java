@@ -237,6 +237,23 @@ public final class ErrorReporter {
                 "Change the scope of '" + methodName + "' to " + componentScope + " or PROTOTYPE");
     }
 
+    /**
+     * A proxied interface inherits a method from a generic interface (#741): its signature is written
+     * in that interface's type parameter, which the generated proxy cannot name.
+     */
+    public void proxiedInterfaceInheritsGenericMember(
+            Location at, String interfaceName, String methodName, String typeParameter) {
+        reportError(
+                KIND_OTHER,
+                at,
+                interfaceName + " is proxied for an EVENT-scoped value, and its method '" + methodName
+                        + "' is inherited from a generic interface and its signature uses the type parameter '"
+                        + typeParameter + "'. The generated proxy cannot name that type.",
+                "Redeclare '" + methodName + "' in " + interfaceName
+                        + " with the concrete types, e.g. '@Override String " + methodName + "();'",
+                "Give the EVENT-scoped value an interface that does not extend the generic one");
+    }
+
     public void rawWrapperInjection(Location parameter, Location owner, String wrapperName) {
         // Prefer the parameter for location; fall back to the owner when the
         // parameter location is unavailable (defensive — collection always sets it today).

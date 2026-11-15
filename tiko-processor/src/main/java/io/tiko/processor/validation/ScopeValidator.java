@@ -190,8 +190,7 @@ public final class ScopeValidator {
                             chain.getLast());
             return false;
         }
-        if (provider instanceof ComponentModel component
-                && component.getImplementedInterface().isEmpty()) {
+        if (provider instanceof ComponentModel component && !component.requiresProxy()) {
             context.getErrorReporter()
                     .missingInterfaceThroughPrototype(
                             consumer.location(),
@@ -258,7 +257,8 @@ public final class ScopeValidator {
                 + providerScope + "-scoped bean; the proxy needs an interface to implement.";
 
         if (providerObj instanceof ComponentModel component) {
-            if (component.getImplementedInterface().isEmpty()) {
+            // No interface, or only a parameterized one, which a proxy cannot implement (#741).
+            if (!component.requiresProxy()) {
                 context.getErrorReporter().missingInterface(consumerLocation, providerTypeName, reason);
                 return false;
             }

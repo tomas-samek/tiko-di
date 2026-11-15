@@ -151,6 +151,13 @@ public final class KotlinConstructValidator {
                     report(violation.get());
                     valid = false;
                 }
+                var typeParameter = ProxiedInterfaceMembers.inheritedTypeParameter(method);
+                if (typeParameter.isPresent()) {
+                    context.getErrorReporter()
+                            .proxiedInterfaceInheritsGenericMember(
+                                    decl.location(), decl.qualifiedName(), method.name(), typeParameter.get());
+                    valid = false;
+                }
             }
         }
         return valid;

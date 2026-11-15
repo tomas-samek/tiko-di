@@ -73,6 +73,8 @@ In a multi-module or test-wiring container `OutboxStartup` itself waits for its 
 
 An EVENT-scoped bean injected into a SINGLETON is wired through an **auto-generated proxy** that resolves the current unit's instance on every call. The proxied bean must implement an interface (no reflection — the processor emits a typed proxy class).
 
+The proxy implements the bean's first interface by name and forwards every instance method of it to the current unit's bean, default methods included, so an override in the bean is what runs. Two shapes do not fit: a parameterized interface (`implements Comparable<Amount>`) is not a proxy interface, so such a bean counts as having none; and a method inherited from a generic interface (`interface Ctx extends Supplier<String>`) is a compile error until the interface redeclares it with concrete types (`@Override String get();`).
+
 | Consumer ↓ / Dependency → | SINGLETON | EVENT     | PROTOTYPE |
 |---------------------------|-----------|-----------|-----------|
 | `SINGLETON`               | direct    | **proxy** | direct    |

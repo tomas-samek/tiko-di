@@ -247,7 +247,8 @@ public final class ProxyGenerator {
      */
     private List<MethodSpec> createFactoryDelegatingMethods(FactoryMethodModel factory, ClassDecl interfaceDecl) {
         List<MethodSpec> methods = new ArrayList<>();
-        String delegateCall = "container.produce_" + factory.getFactoryIdentifier() + "()";
+        // this.container: an interface method may have a parameter named container (#741).
+        String delegateCall = "this.container.produce_" + factory.getFactoryIdentifier() + "()";
         for (MethodDecl method : AbstractInterfaceMethods.collect(interfaceDecl)) {
             methods.add(createDelegatingMethod(method, delegateCall));
         }
@@ -266,6 +267,7 @@ public final class ProxyGenerator {
                         throw new IllegalStateException("Proxy only for EVENT scope, got: " + component.getScope());
                 };
 
-        return "container." + methodName + "()";
+        // this.container: an interface method may have a parameter named container (#741).
+        return "this.container." + methodName + "()";
     }
 }
