@@ -73,10 +73,6 @@ public final class EventHandlerCollector {
             return null;
         }
 
-        // First parameter is the event type
-        var eventType = parameters.get(0).type();
-        var eventTypeName = TypeRefs.qualifiedName(eventType);
-
         // Check if second parameter is Event<?> wrapper
         boolean hasEventWrapper = parameters.size() > 1
                 && TypeRefs.qualifiedName(parameters.get(1).type()).equals(EVENT_WRAPPER);
@@ -90,8 +86,8 @@ public final class EventHandlerCollector {
         if (subscribed.isEmpty()) {
             return null; // an event type no event can have, or one the handler cannot take, was reported
         }
-        eventType = subscribed.get();
-        eventTypeName = TypeRefs.qualifiedName(eventType);
+        var eventType = subscribed.get();
+        var eventTypeName = TypeRefs.qualifiedName(eventType);
 
         var eventTriggers = collectEventTriggers(method, errors);
 
