@@ -301,9 +301,11 @@ public final class Tiko {
                 props.load(input);
             }
             String implClassName = props.getProperty("impl");
-            implClass = Class.forName(implClassName);
+            // Through the loader that found the descriptor, not tiko-runtime's own: the generated
+            // container lives with the application, which may sit in a child loader (#733).
+            implClass = Class.forName(implClassName, true, classLoader);
         } else {
-            implClass = Class.forName("io.tiko.generated.TikoContainerImpl");
+            implClass = Class.forName("io.tiko.generated.TikoContainerImpl", true, classLoader);
         }
 
         // Single-module: publishLifecycleEvents=true so the per-module container publishes
@@ -368,11 +370,12 @@ public final class Tiko {
                 started++;
             }
             return wrapper;
-        } catch (RuntimeException | LinkageError e) {
-            // RuntimeException covers normal start failures (bad config); LinkageError covers a
-            // half-present transport jar (missing transitive dep). Either way, unwind cleanly.
+        } catch (RuntimeException | Error e) {
+            // RuntimeException covers normal start failures (bad config); Error covers a
+            // half-present transport jar (LinkageError) and anything else a transport throws
+            // (#737). Either way, unwind cleanly.
             for (int i = started - 1; i >= 0; i--) {
-                shutdownQuietly(bootstraps.get(i));
+                shutdownQuietly(bootstraps.get(i), e);
             }
             shutdownQuietly(container, e);
             throw e;
@@ -478,12 +481,18 @@ public final class Tiko {
         }
     }
 
-    /** Best-effort transport teardown on a failing bootstrap path. */
-    private static void shutdownQuietly(TransportBootstrap bootstrap) {
+    /**
+     * Best-effort transport teardown on a failing bootstrap path. What the teardown throws is
+     * suppressed on {@code bootFailure}, so it stays visible without masking it (#737).
+     */
+    @SuppressWarnings("java:S1181") // unwinding a bootstrap failure; the original exception is the one that matters
+    private static void shutdownQuietly(TransportBootstrap bootstrap, Throwable bootFailure) {
         try {
             bootstrap.shutdown();
-        } catch (Exception ignored) {
-            /* best-effort */
+        } catch (Throwable cleanupFailure) {
+            if (cleanupFailure != bootFailure) {
+                bootFailure.addSuppressed(cleanupFailure);
+            }
         }
     }
 
@@ -656,30 +665,65 @@ public final class Tiko {
             // Shut transports down BEFORE the container's @PreDestroy chain so their bridge
             // components are still live. Per-bootstrap throws are isolated so one bad
             // transport cannot strand another's resources.
-            for (TransportBootstrap tb : bootstraps) {
-                try {
-                    tb.shutdown();
-                } catch (Exception ignored) {
-                    /* best-effort */
-                }
-            }
-            // Unlike start(), skip the bound call for a null owner: there is nothing to report, and
-            // runBound(null) would hide an outer binding.
-            if (threads == null) {
-                delegate.shutdown();
-                return;
-            }
+            Error transportError = shutDownTransports();
             Throwable shutdownFailure = null;
             try {
-                OwnedThreads.runBound(threads, delegate::shutdown);
+                // Unlike start(), skip the bound call for a null owner: runBound(null) would hide
+                // an outer binding.
+                if (threads == null) {
+                    delegate.shutdown();
+                } else {
+                    OwnedThreads.runBound(threads, delegate::shutdown);
+                }
             } catch (Throwable t) {
                 shutdownFailure = t;
             }
-            // The report never masks the shutdown failure: a throwing handler is suppressed on it.
-            threads.reportSurvivors(onThreadsOutlivingClose, shutdownFailure);
+            if (transportError != null) {
+                // The container's own failure wins; the transport's Error travels with it.
+                if (shutdownFailure == null) {
+                    shutdownFailure = transportError;
+                } else {
+                    shutdownFailure.addSuppressed(transportError);
+                }
+            }
+            if (threads != null) {
+                // The report never masks the shutdown failure: a throwing handler is suppressed on it.
+                threads.reportSurvivors(onThreadsOutlivingClose, shutdownFailure);
+            }
             if (shutdownFailure != null) {
                 throw Unchecked.<RuntimeException>sneakyThrow(shutdownFailure);
             }
+        }
+
+        /**
+         * Stops every transport and logs each one that fails to stop (#737). Returns the first
+         * {@link Error} a transport threw, for the caller to rethrow once the container itself has
+         * shut down; later ones are suppressed on it.
+         */
+        @SuppressWarnings("java:S1181") // Error included: the container's teardown must still run.
+        private Error shutDownTransports() {
+            Error first = null;
+            for (TransportBootstrap tb : bootstraps) {
+                try {
+                    tb.shutdown();
+                } catch (Throwable failure) {
+                    TikoLog.log(
+                            LoggerHolder.LOG,
+                            System.Logger.Level.WARNING,
+                            failure,
+                            "Transport {0} failed to shut down: {1}",
+                            tb.getClass().getName(),
+                            failure);
+                    if (failure instanceof Error error) {
+                        if (first == null) {
+                            first = error;
+                        } else {
+                            first.addSuppressed(error);
+                        }
+                    }
+                }
+            }
+            return first;
         }
 
         @Override

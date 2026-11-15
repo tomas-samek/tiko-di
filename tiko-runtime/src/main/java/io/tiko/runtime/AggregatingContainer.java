@@ -172,7 +172,7 @@ public final class AggregatingContainer implements Container {
         this.dispatchExecutor =
                 ownsEventExecutor ? eventExecutor : new RetrySchedulingExecutor(eventExecutor, ownedThreads);
         this.shutdownTimeout = shutdownTimeout;
-        this.options = options;
+        this.options = options.forOneContainer();
         this.descriptorName = descriptorName;
         this.moduleContainers = new ArrayList<>();
         this.componentToContainerMap = new ConcurrentHashMap<>();
@@ -422,6 +422,11 @@ public final class AggregatingContainer implements Container {
         } catch (java.net.MalformedURLException | IllegalArgumentException e) {
             throw new ContainerInitializationException("Failed to derive " + sibling + " URL from " + base, e);
         }
+    }
+
+    /** The options this container works on: its own copy of the caller's (#734). For tests. */
+    TikoOptions options() {
+        return options;
     }
 
     @Override

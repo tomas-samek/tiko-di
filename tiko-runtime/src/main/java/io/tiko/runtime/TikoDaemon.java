@@ -87,13 +87,27 @@ public final class TikoDaemon {
      * call more than once and safe to race with JVM shutdown. The first caller runs teardown.
      * Subsequent explicit calls return immediately. Use {@link #awaitShutdown()} to wait for
      * teardown to finish. Hook removal is a no-op when the JVM is already exiting.
+     *
+     * <p>The hook is removed only once teardown has finished: the JVM waits for registered hooks
+     * alone, so a hook removed earlier would let a JVM exit that begins during teardown cut
+     * {@code @PreDestroy} short (#735).
      */
     public void stop() {
+        try {
+            tryShutdown();
+        } finally {
+            // Not while another caller is still tearing down: that caller removes it when done.
+            if (terminated.getCount() == 0) {
+                removeHook();
+            }
+        }
+    }
+
+    private void removeHook() {
         try {
             Runtime.getRuntime().removeShutdownHook(hook);
         } catch (IllegalStateException jvmAlreadyShuttingDown) {
             // Reached during JVM shutdown (e.g. via the hook itself) — nothing to remove.
         }
-        tryShutdown();
     }
 }

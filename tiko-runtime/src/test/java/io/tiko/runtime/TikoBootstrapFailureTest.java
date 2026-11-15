@@ -57,6 +57,77 @@ class TikoBootstrapFailureTest {
                 .hasMessageContaining("transport start failed");
     }
 
+    /** #737: the cleanup failures are swallowed, but they travel with the failure that is thrown. */
+    @Test
+    void cleanupFailuresAreSuppressedOnTheStartFailure() {
+        ShutdownThrowingContainer container = new ShutdownThrowingContainer();
+        List<TransportBootstrap> bootstraps = List.of(new ShutdownThrowingBootstrap(), new ThrowingBootstrap());
+
+        assertThatThrownBy(() -> Tiko.startTransports(container, bootstraps))
+                .isInstanceOf(IllegalStateException.class)
+                .satisfies(startFailure -> assertThat(startFailure.getSuppressed())
+                        .extracting(Throwable::getMessage)
+                        .containsExactly("transport shutdown boom", "container shutdown boom"));
+    }
+
+    /** #737: an {@link Error} from a transport's start unwinds like any other start failure. */
+    @Test
+    void errorFromTransportStartShutsDownContainerAndStartedTransports() {
+        BootstrapTestContainer container = new BootstrapTestContainer();
+        RecordingBootstrap ok = new RecordingBootstrap();
+        TransportBootstrap bad = new RecordingBootstrap() {
+            @Override
+            public void start(Container started) {
+                throw new AssertionError("transport start error");
+            }
+        };
+
+        assertThatThrownBy(() -> Tiko.startTransports(container, List.of(ok, bad)))
+                .isInstanceOf(AssertionError.class)
+                .hasMessage("transport start error");
+
+        assertThat(container.shutdowns.get()).isEqualTo(1);
+        assertThat(ok.shutdowns.get()).isEqualTo(1);
+    }
+
+    /** #737: a transport that fails to stop is logged, and the container still shuts down. */
+    @Test
+    void transportShutdownFailureOnCloseIsLoggedAndTheContainerStillShutsDown() {
+        CapturingLoggerFinder.clear();
+        BootstrapTestContainer container = new BootstrapTestContainer();
+        RecordingBootstrap ok = new RecordingBootstrap();
+        Container handle = Tiko.startTransports(container, List.of(new ShutdownThrowingBootstrap(), ok));
+
+        handle.close();
+
+        assertThat(container.shutdowns.get()).isEqualTo(1);
+        assertThat(ok.shutdowns.get()).as("a later transport is still stopped").isEqualTo(1);
+        assertThat(CapturingLoggerFinder.RECORDS)
+                .filteredOn(entry -> entry.level() == System.Logger.Level.WARNING)
+                .filteredOn(entry -> entry.message().contains("ShutdownThrowingBootstrap"))
+                .singleElement()
+                .satisfies(entry -> assertThat(entry.thrown()).hasMessage("transport shutdown boom"));
+    }
+
+    /** #737: an {@link Error} from a transport's shutdown is rethrown only after the container shut down. */
+    @Test
+    void errorFromTransportShutdownOnCloseIsRethrownAfterTheContainerShutsDown() {
+        BootstrapTestContainer container = new BootstrapTestContainer();
+        RecordingBootstrap ok = new RecordingBootstrap();
+        TransportBootstrap bad = new RecordingBootstrap() {
+            @Override
+            public void shutdown() {
+                throw new AssertionError("transport shutdown error");
+            }
+        };
+        Container handle = Tiko.startTransports(container, List.of(bad, ok));
+
+        assertThatThrownBy(handle::close).isInstanceOf(AssertionError.class).hasMessage("transport shutdown error");
+
+        assertThat(container.shutdowns.get()).isEqualTo(1);
+        assertThat(ok.shutdowns.get()).isEqualTo(1);
+    }
+
     @Test
     void noTransportsReturnsBareContainerWithoutShutdown() {
         BootstrapTestContainer container = new BootstrapTestContainer();
@@ -102,7 +173,7 @@ class TikoBootstrapFailureTest {
                 .doesNotThrowAnyException();
     }
 
-    private static final class RecordingBootstrap implements TransportBootstrap {
+    private static class RecordingBootstrap implements TransportBootstrap {
         final AtomicInteger shutdowns = new AtomicInteger();
 
         @Override
