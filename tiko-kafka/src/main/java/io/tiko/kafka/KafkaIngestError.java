@@ -14,6 +14,9 @@ import org.apache.kafka.common.header.Headers;
  * does on a decode failure). A {@link KafkaIngestErrorDecider} can skip or dead-letter those
  * without retrying; any other cause may be transient.
  *
+ * <p>When {@link #cause()} is an {@link Error}, the topic's consumer has stopped: an {@code Error}
+ * is reported once, with the record it came from left uncommitted, and is not retried.
+ *
  * @param topic     source topic
  * @param partition partition number
  * @param offset    record offset within the partition

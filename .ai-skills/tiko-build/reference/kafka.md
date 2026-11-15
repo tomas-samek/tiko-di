@@ -39,7 +39,7 @@ Outbound is the mirror: a `@KafkaSink` is subscribed by the runtime to its
 parameter type — when that event is published locally, the return value is
 serialized to the topic. Same `SINGLETON` rule; **do not** also add
 `@EventHandler` (that double-fires). `partitionKey` names an accessor on the
-return type for the message key.
+return type for the message key. A `null` return sends nothing.
 
 ```java
 @Component(scope = Scope.SINGLETON)
@@ -76,7 +76,8 @@ for good. Handle the permanent cases without letting them retry: if the bridge r
 case itself, log it and **return `null`** (the record is committed, nothing is published; in Kotlin
 declare the return type nullable). For an exception from deeper down, or to dead-letter it, throw
 a dedicated exception and decide it from a `KafkaIngestErrorDecider` (below). Everything else keeps
-being sought back. Decider reference:
+being sought back. A record without a value (a tombstone) never reaches the bridge: it is committed
+and nothing is published. Decider reference:
 `OrderKafkaConsumer` + `WarehouseIngestPolicy` + `RejectedOrderDoesNotBlockPartitionIT` in
 [`tiko-examples/08_kafka_order_warehouse`](../../../tiko-examples/08_kafka_order_warehouse).
 
@@ -158,7 +159,9 @@ TikoOptions.builder().errorHandler(ctx -> {
 ```
 
 The other outcomes are `SKIP` (commit past) and `FAIL` (stop this topic's consumer). A
-decider that throws or returns `null` falls back to `SEEK`.
+decider that throws or returns `null` falls back to `SEEK`. An `Error` (`NoClassDefFoundError`,
+Kotlin's `TODO()`) is not decided: it is reported as a `KafkaIngestError` with that cause, the
+record stays uncommitted, and the topic's consumer stops.
 
 ### Testing Kafka bridges: use the fake broker, never a real one in unit/IT scope
 

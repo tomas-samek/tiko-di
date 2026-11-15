@@ -14,6 +14,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -34,6 +35,10 @@ import org.apache.kafka.common.header.internals.RecordHeaders;
  * <p>Each topic has a single partition (id 0); each record gets a monotonically increasing
  * offset. The fake supports per-record commit, seek, and wakeup so the bootstrap's
  * happy-path AND error-path code paths are testable.
+ *
+ * <p>A consumer's {@code poll} waits like the real client's: it returns as soon as a record is
+ * there, and otherwise after the timeout, or with a {@code WakeupException} once
+ * {@code wakeup()} is called.
  *
  * <p>Usage:
  * <pre>{@code
@@ -64,6 +69,8 @@ public final class FakeKafkaBroker {
         }
         List<StoredRecord> list = records.computeIfAbsent(topic, k -> new ArrayList<>());
         list.add(new StoredRecord(list.size(), payload, headers, System.currentTimeMillis()));
+        // Consumers waiting in poll() wait on this broker (#755).
+        notifyAll();
     }
 
     /** All records that were sent through {@link #producerClient()} for the given topic, in send order. */
@@ -198,10 +205,33 @@ public final class FakeKafkaBroker {
 
         @Override
         public ConsumerRecords<String, byte[]> poll(Duration timeout) {
-            if (wakeup) {
-                wakeup = false;
-                throw new org.apache.kafka.common.errors.WakeupException();
+            long deadline = System.nanoTime() + timeout.toNanos();
+            // The broker is the monitor: produce() and wakeup() notify it, so an idle consumer
+            // sleeps for the timeout instead of spinning (#755), and misses neither.
+            synchronized (broker) {
+                while (true) {
+                    if (wakeup) {
+                        wakeup = false;
+                        throw new org.apache.kafka.common.errors.WakeupException();
+                    }
+                    Map<TopicPartition, List<ConsumerRecord<String, byte[]>>> out = fetch();
+                    long remaining = deadline - System.nanoTime();
+                    if (!out.isEmpty() || remaining <= 0) {
+                        return new ConsumerRecords<>(out);
+                    }
+                    try {
+                        TimeUnit.NANOSECONDS.timedWait(broker, remaining);
+                    } catch (InterruptedException interrupted) {
+                        // Keep the interrupt for the caller and throw what the real consumer throws.
+                        Thread.currentThread().interrupt();
+                        throw new org.apache.kafka.common.errors.InterruptException(interrupted);
+                    }
+                }
             }
+        }
+
+        /** Every unread record of the subscribed, unpaused topics; advances the positions past them. */
+        private Map<TopicPartition, List<ConsumerRecord<String, byte[]>>> fetch() {
             Map<TopicPartition, List<ConsumerRecord<String, byte[]>>> out = new HashMap<>();
             for (String topic : subscribed) {
                 TopicPartition tp = new TopicPartition(topic, 0);
@@ -229,7 +259,7 @@ public final class FakeKafkaBroker {
                     out.put(tp, batch);
                 }
             }
-            return new ConsumerRecords<>(out);
+            return out;
         }
 
         @Override
@@ -256,6 +286,9 @@ public final class FakeKafkaBroker {
         @Override
         public void wakeup() {
             wakeup = true;
+            synchronized (broker) {
+                broker.notifyAll();
+            }
         }
 
         @Override
