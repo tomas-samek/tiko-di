@@ -102,6 +102,57 @@ class TikoDaemonTest {
         }
     }
 
+    /**
+     * #735: the JVM waits only for registered hooks. While an explicit {@code stop()} is tearing down,
+     * the hook stays registered, so a JVM exit that begins meanwhile waits for the teardown; a second
+     * {@code stop()} during that teardown does not remove it either.
+     */
+    @Test
+    void stopKeepsTheJvmHookRegisteredUntilTeardownFinishes() throws InterruptedException {
+        var entered = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var delegate = new RecordingContainer();
+        delegate.shutdownAction = () -> {
+            entered.countDown();
+            try {
+                release.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        };
+        var daemon = new TikoDaemon(delegate);
+        var timeout = Duration.ofSeconds(5);
+        var owner = Thread.ofPlatform().daemon().start(daemon::stop);
+        try {
+            assertThat(entered.await(timeout.toMillis(), TimeUnit.MILLISECONDS)).isTrue();
+
+            daemon.stop(); // a second explicit stop while the first one is tearing down
+
+            assertThat(hookIsRegistered(daemon))
+                    .as("the hook must outlive a teardown that is still running")
+                    .isTrue();
+
+            release.countDown();
+            assertThat(owner.join(timeout)).isTrue();
+            assertThat(hookIsRegistered(daemon))
+                    .as("the caller that ran teardown removes the hook once it is done")
+                    .isFalse();
+        } finally {
+            release.countDown();
+            owner.join(timeout);
+            Runtime.getRuntime().removeShutdownHook(daemon.shutdownHook());
+        }
+    }
+
+    /** Whether the daemon's hook is registered with the JVM; leaves the registration as it found it. */
+    private static boolean hookIsRegistered(TikoDaemon daemon) {
+        boolean registered = Runtime.getRuntime().removeShutdownHook(daemon.shutdownHook());
+        if (registered) {
+            Runtime.getRuntime().addShutdownHook(daemon.shutdownHook());
+        }
+        return registered;
+    }
+
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
     void concurrentShutdownKeepsWaiterBlockedUntilCleanupCompletes(boolean jvmHook) throws InterruptedException {

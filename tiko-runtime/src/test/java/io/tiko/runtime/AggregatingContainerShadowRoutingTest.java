@@ -13,7 +13,7 @@ import org.junit.jupiter.api.io.TempDir;
 class AggregatingContainerShadowRoutingTest {
 
     @Test
-    void shadowDeclarationRegistersAsOverrideOnSharedOptions(@TempDir Path tmp) throws Exception {
+    void shadowDeclarationRegistersAsOverrideOnTheContainersOwnOptions(@TempDir Path tmp) throws Exception {
         Path meta = tmp.resolve("META-INF").resolve("tiko");
         Files.createDirectories(meta);
 
@@ -38,7 +38,7 @@ class AggregatingContainerShadowRoutingTest {
 
         try {
             TikoOptions opts = TikoOptions.builder().build();
-            new AggregatingContainer(
+            var container = new AggregatingContainer(
                     new LocalEventBus(),
                     ctx -> {},
                     null,
@@ -46,7 +46,10 @@ class AggregatingContainerShadowRoutingTest {
                     opts,
                     "META-INF/tiko/test-container.properties");
 
-            assertThat(opts.hasOverride(String.class)).isTrue();
+            assertThat(container.options().hasOverride(String.class)).isTrue();
+            assertThat(opts.hasOverride(String.class))
+                    .as("#734: the caller's options stay as built, so they can boot another container")
+                    .isFalse();
         } finally {
             Thread.currentThread().setContextClassLoader(previous);
         }
@@ -79,7 +82,7 @@ class AggregatingContainerShadowRoutingTest {
             TikoOptions opts = TikoOptions.builder()
                     .override(String.class, () -> "user-wins")
                     .build();
-            new AggregatingContainer(
+            var container = new AggregatingContainer(
                     new LocalEventBus(),
                     ctx -> {},
                     null,
@@ -88,7 +91,7 @@ class AggregatingContainerShadowRoutingTest {
                     "META-INF/tiko/test-container.properties");
 
             // User override stays put — IfAbsent semantics yield to user.
-            assertThat(opts.getOverride(String.class).get()).isEqualTo("user-wins");
+            assertThat(container.options().getOverride(String.class).get()).isEqualTo("user-wins");
         } finally {
             Thread.currentThread().setContextClassLoader(previous);
         }
@@ -109,7 +112,7 @@ class AggregatingContainerShadowRoutingTest {
                 new URL[] {tmp.toUri().toURL()}, AggregatingContainerShadowRoutingTest.class.getClassLoader())) {
             Thread.currentThread().setContextClassLoader(cl);
             TikoOptions opts = TikoOptions.builder().build();
-            new AggregatingContainer(
+            var container = new AggregatingContainer(
                     new LocalEventBus(),
                     ctx -> {},
                     null,
@@ -117,7 +120,7 @@ class AggregatingContainerShadowRoutingTest {
                     opts,
                     "META-INF/tiko/container.properties");
 
-            assertThat(opts.hasOverride(String.class)).isFalse();
+            assertThat(container.options().hasOverride(String.class)).isFalse();
         } finally {
             Thread.currentThread().setContextClassLoader(previous);
         }

@@ -69,6 +69,34 @@ public final class TikoOptions {
         this.onThreadsOutlivingClose = b.onThreadsOutlivingClose;
     }
 
+    /** Copies {@code source}, with an override map of its own. */
+    private TikoOptions(TikoOptions source) {
+        this.configSource = source.configSource;
+        this.errorHandler = source.errorHandler;
+        this.eventExecutor = source.eventExecutor;
+        this.shutdownTimeout = source.shutdownTimeout;
+        this.teardownTimeout = source.teardownTimeout;
+        this.eventBusDecorator = source.eventBusDecorator;
+        this.queueCapacity = source.queueCapacity;
+        this.overflowPolicy = source.overflowPolicy;
+        this.eventExecutorCoreSize = source.eventExecutorCoreSize;
+        this.eventExecutorMaxSize = source.eventExecutorMaxSize;
+        this.eventExecutorKeepAlive = source.eventExecutorKeepAlive;
+        this.overrides = new java.util.concurrent.ConcurrentHashMap<>(source.overrides);
+        this.transportReplacements = source.transportReplacements;
+        this.testWiring = source.testWiring;
+        this.onThreadsOutlivingClose = source.onThreadsOutlivingClose;
+    }
+
+    /**
+     * The options one container works on: equal to these, but shadow overrides the container adds
+     * ({@link #internalAddOverrideIfAbsent}) land in the copy. The caller's object stays as built,
+     * so it can boot another container (#734).
+     */
+    TikoOptions forOneContainer() {
+        return new TikoOptions(this);
+    }
+
     /**
      * @return the configured {@link ConfigSource}, or {@code null} if none was set
      */
