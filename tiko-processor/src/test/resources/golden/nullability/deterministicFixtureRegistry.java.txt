@@ -33,8 +33,8 @@ public final class EventRegistry_7a299740 {
     Event<PingEvent> __wrapper = EventChainContext.wrap(event);
     Event<?> __previous = EventChainContext.enter(__wrapper);
     try {
-      Alpha __handler = container.getAlpha();
       try {
+        Alpha __handler = container.getAlpha();
         __handler.onPing(event);
       } catch (Exception __t) {
         ErrorHandler __err = container.getErrorHandler();
@@ -58,8 +58,8 @@ public final class EventRegistry_7a299740 {
     Event<PingEvent> __wrapper = EventChainContext.wrap(event);
     Event<?> __previous = EventChainContext.enter(__wrapper);
     try {
-      Mike __handler = container.getMike();
       try {
+        Mike __handler = container.getMike();
         __handler.onPing(event);
       } catch (Exception __t) {
         ErrorHandler __err = container.getErrorHandler();

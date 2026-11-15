@@ -129,6 +129,10 @@ public @interface EventHandler {
      * {@code cause()} is a {@link java.util.concurrent.TimeoutException}. Subsequent events
      * keep flowing.
      *
+     * <p>The budget is the handler's running time: it starts when a worker starts the handler, not
+     * when the event is published. An event that never reaches a worker (dropped by the overflow
+     * policy or at shutdown) is not reported as a timeout.
+     *
      * <p><strong>Requires {@code async = true}.</strong> A timeout on a synchronous handler
      * is a compile-time error. When the executor runs an async handler inline under
      * {@code CALLER_RUNS}, the invocation completes before the timeout can take effect.

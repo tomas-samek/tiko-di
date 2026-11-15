@@ -24,10 +24,34 @@ final class OverflowRejectionHandler implements RejectedExecutionHandler {
         static final System.Logger LOG = System.getLogger("io.tiko.events");
     }
 
+    /**
+     * The pool the current thread is a worker of, by the identity its handler was created with;
+     * unset on every other thread. See {@link #asWorker}.
+     */
+    private static final ThreadLocal<Object> WORKER_OF = new ThreadLocal<>();
+
     private final OverflowPolicy policy;
+
+    /** Stands for the one pool this handler serves; its workers carry it in {@link #WORKER_OF}. */
+    private final Object pool = new Object();
 
     OverflowRejectionHandler(OverflowPolicy policy) {
         this.policy = policy;
+    }
+
+    /**
+     * Wraps what a worker thread of this handler's pool runs, so a task that worker submits back
+     * to the pool is recognised as coming from inside it (#727).
+     */
+    Runnable asWorker(Runnable workerLoop) {
+        return () -> {
+            WORKER_OF.set(pool);
+            workerLoop.run();
+        };
+    }
+
+    private boolean calledFromOwnWorker() {
+        return WORKER_OF.get() == pool;
     }
 
     @Override
@@ -43,7 +67,17 @@ final class OverflowRejectionHandler implements RejectedExecutionHandler {
                     case BlockingTask retry when retry.rejectResubmission() -> {
                         // The original submission loop will retry when there is capacity.
                     }
-                    case null, default -> enqueueBlocking(r, executor);
+                    case null, default -> {
+                        if (calledFromOwnWorker()) {
+                            // Queue space opens only when a worker takes a task. A worker waiting
+                            // for it waits for itself, and once every worker does, the pool has
+                            // stopped for good (#727). So the publishing worker runs the task. It
+                            // is still backpressure: the worker takes nothing new until it is done.
+                            r.run();
+                        } else {
+                            enqueueBlocking(r, executor);
+                        }
+                    }
                 }
             }
             case DROP ->
