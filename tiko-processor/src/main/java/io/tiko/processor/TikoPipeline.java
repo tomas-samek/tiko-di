@@ -131,7 +131,11 @@ public final class TikoPipeline {
         if (profilesOption == null || profilesOption.isBlank()) {
             return List.of();
         }
-        return Arrays.asList(profilesOption.split(","));
+        // Trimmed: "-Atiko.profiles=dev, test" names the profiles dev and test (#744).
+        return Arrays.stream(profilesOption.split(","))
+                .map(String::strip)
+                .filter(profile -> !profile.isEmpty())
+                .toList();
     }
 
     /**
