@@ -354,6 +354,7 @@ public final class Tiko {
      * transports already started (reverse order) and shuts the container down before rethrowing,
      * so a failed bootstrap never leaves a started-but-unreachable container behind (#348).
      */
+    @SuppressWarnings("java:S1181") // Error included: started transports and the container are unwound first
     static Container startTransports(Container container, java.util.List<TransportBootstrap> bootstraps) {
         if (bootstraps.isEmpty()) {
             return container;

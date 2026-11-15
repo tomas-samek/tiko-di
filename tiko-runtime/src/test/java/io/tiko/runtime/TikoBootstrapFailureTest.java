@@ -81,8 +81,9 @@ class TikoBootstrapFailureTest {
                 throw new AssertionError("transport start error");
             }
         };
+        List<TransportBootstrap> bootstraps = List.of(ok, bad);
 
-        assertThatThrownBy(() -> Tiko.startTransports(container, List.of(ok, bad)))
+        assertThatThrownBy(() -> Tiko.startTransports(container, bootstraps))
                 .isInstanceOf(AssertionError.class)
                 .hasMessage("transport start error");
 
