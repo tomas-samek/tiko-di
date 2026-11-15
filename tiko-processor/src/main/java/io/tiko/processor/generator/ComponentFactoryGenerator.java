@@ -42,7 +42,7 @@ public final class ComponentFactoryGenerator {
     /** Opens the catch block of generated code that routes or rethrows a failure named {@code __t}. */
     private static final String CATCH_FAILURE = "catch ($T __t)";
 
-    private static final ClassName GENERATED_COMPONENT = ClassName.get("io.tiko.runtime", "GeneratedComponent");
+    private static final ClassName GENERATED_COMPONENT = ClassName.get(RUNTIME_PACKAGE, "GeneratedComponent");
 
     private final ProcessorContext context;
 
