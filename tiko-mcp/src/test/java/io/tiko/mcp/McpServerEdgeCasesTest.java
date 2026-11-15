@@ -14,7 +14,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -25,18 +24,17 @@ import org.junit.jupiter.params.provider.MethodSource;
 /** Input-handling edges of the MCP server found in the 0.7.0 review (#762). */
 class McpServerEdgeCasesTest {
 
-    private static final Pattern PARENT_VERSION =
-            Pattern.compile("<parent>.*?<version>([^<]+)</version>.*?</parent>", Pattern.DOTALL);
-
     @Test
     void serverReportsTheVersionOfItsArtifact() throws Exception {
         // Surefire runs in the module directory; the module inherits its version from the parent.
-        var matcher = PARENT_VERSION.matcher(Files.readString(Path.of("pom.xml"), StandardCharsets.UTF_8));
-        assertThat(matcher.find())
-                .as("tiko-mcp/pom.xml states the parent version")
-                .isTrue();
+        var pom = Files.readString(Path.of("pom.xml"), StandardCharsets.UTF_8);
+        int parent = pom.indexOf("<parent>");
+        int version = pom.indexOf("<version>", parent);
+        assertThat(parent).as("tiko-mcp/pom.xml has a parent").isNotNegative();
+        assertThat(version).as("the parent states its version").isBetween(parent, pom.indexOf("</parent>"));
+        var parentVersion = pom.substring(version + "<version>".length(), pom.indexOf("</version>", version));
 
-        assertThat(McpStdioBridge.serverVersion()).isEqualTo(matcher.group(1));
+        assertThat(McpStdioBridge.serverVersion()).isEqualTo(parentVersion.strip());
     }
 
     @Test
