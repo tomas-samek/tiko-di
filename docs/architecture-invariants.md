@@ -31,7 +31,10 @@ non-JDK / non-`io.tiko` type in `tiko-api/src/main`.
 documented RUNTIME exceptions are `@PostConstruct` and `@PreDestroy`, because the container
 invokes them via generated code at runtime, and `@Named`, because `@TikoTest` reads it on
 test-method parameters to look the named component up (#715). The container never reads
-`@Named`: wiring by name is still generated at compile time.
+`@Named`: wiring by name is still generated at compile time. `@GeneratedComponent`
+(`tiko-runtime`) is `CLASS`: the processor writes it on generated factories so that a later
+compile, which sees only class files, can read what the SOURCE-retained `@Component` said
+(#707). It is absent from reflection and never read at run time.
 
 **Rationale.** Compile-time concerns must not leak into runtime bytecode; SOURCE retention is
 a code-level invariant, not a version-pinning bet.

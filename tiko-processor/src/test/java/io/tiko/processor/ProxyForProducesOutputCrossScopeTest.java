@@ -96,7 +96,7 @@ class ProxyForProducesOutputCrossScopeTest {
         // The consumer's factory must instantiate the proxy, not call produce_*()
         // directly — that's what makes the SINGLETON pick up the current REQUEST
         // scope's connection on every method call.
-        assertThat(consumerFactoryBody).contains("new GreetingFactory_greetingProxy(container)");
+        assertThat(consumerFactoryBody).containsPattern("new GreetingFactory_greetingProxy_\\w+\\(container\\)");
         assertThat(consumerFactoryBody).doesNotContain("container.produce_GreetingFactory_greeting()");
     }
 
@@ -138,7 +138,8 @@ class ProxyForProducesOutputCrossScopeTest {
                 "  @Produces(scope = Scope.SINGLETON)", "  public String shout(Greeting g) { return g.hello(); }");
 
         assertThat(container)
-                .contains("getGreetingFactory().shout(new GreetingFactory_greetingProxy(this))")
+                .containsPattern(
+                        "getGreetingFactory\\(\\)\\.shout\\(new GreetingFactory_greetingProxy_\\w+\\(this\\)\\)")
                 .doesNotContain("shout(produce_GreetingFactory_greeting())");
     }
 
@@ -153,7 +154,7 @@ class ProxyForProducesOutputCrossScopeTest {
         assertThat(container)
                 .contains("perUnit(produce_GreetingFactory_greeting())")
                 .contains("perUse(produce_GreetingFactory_greeting())")
-                .doesNotContain("new GreetingFactory_greetingProxy(this)");
+                .doesNotContain("GreetingFactory_greetingProxy");
     }
 
     @Test
@@ -164,6 +165,6 @@ class ProxyForProducesOutputCrossScopeTest {
 
         assertThat(container)
                 .contains("lazy(() -> produce_GreetingFactory_greeting())")
-                .doesNotContain("new GreetingFactory_greetingProxy(this)");
+                .doesNotContain("GreetingFactory_greetingProxy");
     }
 }

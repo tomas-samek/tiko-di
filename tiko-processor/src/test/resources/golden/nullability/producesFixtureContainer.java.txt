@@ -91,9 +91,9 @@ public final class TikoContainerImpl_4ae99f55 implements Container {
 
   private final TikoOptions options;
 
-  private final ProducersFactory producersFactory;
+  private final ProducersFactory_4ae99f55 producersFactory;
 
-  private final ServiceFactory serviceFactory;
+  private final ServiceFactory_4ae99f55 serviceFactory;
 
   public TikoContainerImpl_4ae99f55(EventBus eventBus, ErrorHandler errorHandler,
       ExecutorService userEventExecutor, boolean publishLifecycleEvents, Duration shutdownTimeout,
@@ -105,8 +105,8 @@ public final class TikoContainerImpl_4ae99f55 implements Container {
     this.publishLifecycleEvents = publishLifecycleEvents;
     this.shutdownTimeout = shutdownTimeout;
     this.options = options;
-    this.producersFactory = new ProducersFactory(this);
-    this.serviceFactory = new ServiceFactory(this);
+    this.producersFactory = new ProducersFactory_4ae99f55(this);
+    this.serviceFactory = new ServiceFactory_4ae99f55(this);
   }
 
   public Producers getProducers() {

@@ -10,9 +10,12 @@ paths:
 ## Code Generation Strategy
 
 All code is generated in the `io.tiko.generated` package:
-- `TikoContainerImpl` - Main container implementation
-- `<ComponentName>Factory` - Factory for each component
-- `EventRegistry` - Event handler wiring
+- `TikoContainerImpl_<hash>` - Main container implementation
+- `<ComponentName>Factory_<hash>` - Factory for each component, `<ComponentName>Proxy_<hash>` its proxy
+- `EventRegistry_<hash>` - Event handler wiring
+
+`<hash>` is the module's hash. Every module generates into this one package, so every generated class
+name carries it (#726); build such names with `GeneratedNames`, never by hand.
 
 ## Generated Code Markings
 

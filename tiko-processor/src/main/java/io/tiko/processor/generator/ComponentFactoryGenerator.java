@@ -5,6 +5,7 @@ import io.tiko.processor.core.GeneratorAnnotations;
 import io.tiko.processor.core.model.MethodDecl;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
+import io.tiko.processor.util.GeneratedNames;
 import io.tiko.processor.util.ProcessorContext;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -41,6 +42,8 @@ public final class ComponentFactoryGenerator {
     /** Opens the catch block of generated code that routes or rethrows a failure named {@code __t}. */
     private static final String CATCH_FAILURE = "catch ($T __t)";
 
+    private static final ClassName GENERATED_COMPONENT = ClassName.get(RUNTIME_PACKAGE, "GeneratedComponent");
+
     private final ProcessorContext context;
 
     /**
@@ -74,10 +77,19 @@ public final class ComponentFactoryGenerator {
     public void generate(ComponentModel component, String containerClassName, String factoryClassPrefix)
             throws IOException {
         this.currentContainerClassName = containerClassName;
-        String factoryClassName = factoryClassPrefix + component.getClassName() + "Factory";
+        String factoryClassName = GeneratedNames.factoryClass(context, factoryClassPrefix, component);
 
         TypeSpec factoryClass = TypeSpec.classBuilder(factoryClassName)
                 .addAnnotation(GeneratorAnnotations.generatedBy(ComponentFactoryGenerator.class))
+                // What the source-retained @Component said, for a later compile that sees only
+                // this class: a test compile checks its test components against it (#707).
+                .addAnnotation(AnnotationSpec.builder(GENERATED_COMPONENT)
+                        .addMember(
+                                "scope",
+                                "$T.$L",
+                                io.tiko.Scope.class,
+                                component.getScope().name())
+                        .build())
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                 .addField(createContainerField())
                 .addMethod(createConstructor())
@@ -299,7 +311,7 @@ public final class ComponentFactoryGenerator {
             // would capture the first scope's instance and reuse a stale (often closed)
             // reference on subsequent scope frames.
             if (factory.isProxiedFor(consumer.getScope())) {
-                return String.format("new %sProxy(container)", factory.getFactoryIdentifier());
+                return String.format("new %s(container)", GeneratedNames.proxyClass(context, factory));
             }
             return String.format("container.produce_%s()", factory.getFactoryIdentifier());
         } else if (provider instanceof io.tiko.processor.config.ConfigurationModel) {

@@ -12,6 +12,7 @@ import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
+import io.tiko.processor.util.GeneratedNames;
 import io.tiko.processor.util.ProcessorContext;
 import io.tiko.processor.util.TypeRefs;
 import io.tiko.processor.util.TypeUtil;
@@ -617,7 +618,7 @@ public final class ContainerGenerator {
         List<FieldSpec> fields = new ArrayList<>();
 
         for (ComponentModel component : activeComponents()) {
-            String factoryClassName = currentFactoryPrefix + component.getClassName() + "Factory";
+            String factoryClassName = GeneratedNames.factoryClass(context, currentFactoryPrefix, component);
             String fieldName = getFactoryFieldName(component.getClassName());
 
             fields.add(FieldSpec.builder(
@@ -630,7 +631,7 @@ public final class ContainerGenerator {
             // Add proxy field for components that need proxies
             if (component.requiresProxy()) {
                 String proxyFieldName = getProxyFieldName(component.getClassName());
-                String proxyClassName = component.getClassName() + "Proxy";
+                String proxyClassName = GeneratedNames.proxyClass(context, component);
 
                 fields.add(FieldSpec.builder(
                                 ClassName.get(GENERATED_PACKAGE, proxyClassName),
@@ -681,7 +682,7 @@ public final class ContainerGenerator {
 
         // Initialize factory fields
         for (ComponentModel component : activeComponents()) {
-            String factoryClassName = currentFactoryPrefix + component.getClassName() + "Factory";
+            String factoryClassName = GeneratedNames.factoryClass(context, currentFactoryPrefix, component);
             String fieldName = getFactoryFieldName(component.getClassName());
 
             constructor.addStatement("this.$L = new $L(this)", fieldName, factoryClassName);
@@ -691,7 +692,7 @@ public final class ContainerGenerator {
         for (ComponentModel component : activeComponents()) {
             if (component.requiresProxy()) {
                 String proxyFieldName = getProxyFieldName(component.getClassName());
-                String proxyClassName = component.getClassName() + "Proxy";
+                String proxyClassName = GeneratedNames.proxyClass(context, component);
 
                 constructor.addStatement("this.$L = new $L(this)", proxyFieldName, proxyClassName);
             }
@@ -921,7 +922,7 @@ public final class ContainerGenerator {
             // the first unit's instance in every later unit (#725). Provider<T> resolves on each
             // call and needs none.
             call = !dependency.isProvider() && factoryDep.isProxiedFor(consumerScope)
-                    ? "new " + factoryDep.getFactoryIdentifier() + "Proxy(this)"
+                    ? "new " + GeneratedNames.proxyClass(context, factoryDep) + "(this)"
                     : factoryGetterName(factoryDep) + "()";
         } else if (provider instanceof ComponentModel component) {
             // Named lookup routes through the typed get(Class, name) dispatcher; per-class getters
@@ -961,7 +962,7 @@ public final class ContainerGenerator {
 
         // If component requires proxy, return proxy instead
         if (component.requiresProxy()) {
-            String proxyClassName = component.getClassName() + "Proxy";
+            String proxyClassName = GeneratedNames.proxyClass(context, component);
             returnType = ClassName.get(GENERATED_PACKAGE, proxyClassName);
         }
 

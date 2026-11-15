@@ -33,7 +33,10 @@ class KspBootTest {
                 .flatMap(result::generatedJava);
         assertThat(container).as("generated container").isPresent();
         assertThat(container.get()).contains("ServiceFactory").contains("RepositoryFactory");
-        assertThat(result.generatedJava("io.tiko.generated.ServiceFactory"))
+        assertThat(result.generatedJavaNames().stream()
+                        .filter(name -> name.startsWith("io.tiko.generated.ServiceFactory_"))
+                        .findFirst()
+                        .flatMap(result::generatedJava))
                 .hasValueSatisfying(factory -> assertThat(factory).contains("new Service("));
     }
 

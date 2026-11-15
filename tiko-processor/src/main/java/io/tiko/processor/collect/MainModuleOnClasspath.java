@@ -1,5 +1,6 @@
 package io.tiko.processor.collect;
 
+import io.tiko.Scope;
 import io.tiko.processor.core.ClasspathProbe;
 import io.tiko.processor.core.ProcessingEnv;
 import io.tiko.processor.core.model.ClassDecl;
@@ -7,8 +8,10 @@ import io.tiko.processor.core.model.Visibility;
 import java.io.IOException;
 import java.io.StringReader;
 import java.io.UncheckedIOException;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
@@ -26,15 +29,24 @@ public final class MainModuleOnClasspath {
     private static final String GENERATED_PACKAGE = "io.tiko.generated";
     private static final String MODULE_PREFIX = "TikoModule_";
     private static final String CONTAINER_PREFIX = "TikoContainerImpl_";
+    private static final String GENERATED_COMPONENT = "io.tiko.runtime.GeneratedComponent";
 
     /** {@code null} when no main module is on the classpath. */
     private final String containerFqn;
 
     private final Set<String> componentFqns;
 
+    /** Scope by component class name, binary and canonical; only for factories that state one. */
+    private final Map<String, Scope> scopes;
+
     private MainModuleOnClasspath(String containerFqn, Set<String> componentFqns) {
+        this(containerFqn, withCanonicalNames(componentFqns), Map.of());
+    }
+
+    private MainModuleOnClasspath(String containerFqn, Set<String> componentFqns, Map<String, Scope> scopes) {
         this.containerFqn = containerFqn;
-        this.componentFqns = withCanonicalNames(componentFqns);
+        this.componentFqns = componentFqns;
+        this.scopes = scopes;
     }
 
     /**
@@ -45,6 +57,48 @@ public final class MainModuleOnClasspath {
      * components are what its factories create.
      */
     public static MainModuleOnClasspath read(ProcessingEnv env) {
+        var module = readWithoutScopes(env);
+        return new MainModuleOnClasspath(
+                module.containerFqn, module.componentFqns, scopesStatedBy(generatedClasses(env)));
+    }
+
+    /**
+     * The classes the main compiles generated, as each frontend can list them: KSP lists compiled
+     * classes, javac lists their names and resolves each.
+     */
+    private static List<ClassDecl> generatedClasses(ProcessingEnv env) {
+        var compiled = env.classpath().compiledClassesIn(GENERATED_PACKAGE);
+        if (!compiled.isEmpty()) {
+            return compiled;
+        }
+        return env.classpath().simpleClassNamesIn(GENERATED_PACKAGE).stream()
+                .sorted()
+                .map(name -> env.types().findClass(GENERATED_PACKAGE + "." + name))
+                .flatMap(Optional::stream)
+                .toList();
+    }
+
+    /**
+     * The scope each main component factory states in its {@code @GeneratedComponent} (#707). A
+     * module compiled by a Tiko that wrote no such annotation contributes nothing.
+     */
+    private static Map<String, Scope> scopesStatedBy(List<ClassDecl> generated) {
+        var scopes = new LinkedHashMap<String, Scope>();
+        for (var decl : generated) {
+            var stated = decl.annotation(GENERATED_COMPONENT);
+            if (stated.isEmpty()) {
+                continue;
+            }
+            var scope = Scope.valueOf(stated.get().enumName("scope"));
+            createdByMainFactory(decl).ifPresent(component -> {
+                scopes.put(component, scope);
+                scopes.put(component.replace('$', '.'), scope);
+            });
+        }
+        return scopes;
+    }
+
+    private static MainModuleOnClasspath readWithoutScopes(ProcessingEnv env) {
         var classpath = env.classpath();
         var modules = readModules(classpath);
         var descriptor = classpath.readResource(CONTAINER_DESCRIPTOR);
@@ -120,7 +174,7 @@ public final class MainModuleOnClasspath {
      * factories of a standalone test container ({@code TestContainerImpl_}) are left out.
      */
     private static Optional<String> createdByMainFactory(ClassDecl decl) {
-        if (!decl.className().simpleName().endsWith("Factory") || !takesMainContainer(decl)) {
+        if (!isComponentFactory(decl) || !takesMainContainer(decl)) {
             return Optional.empty();
         }
         return decl.methods().stream()
@@ -129,6 +183,15 @@ public final class MainModuleOnClasspath {
                 .findFirst()
                 .flatMap(create -> create.returnType().declaration())
                 .map(created -> created.className().reflectionName());
+    }
+
+    /**
+     * A factory states {@code @GeneratedComponent}; one compiled by a Tiko that wrote none is told by
+     * its name, {@code <Component>Factory}.
+     */
+    private static boolean isComponentFactory(ClassDecl decl) {
+        return decl.annotation(GENERATED_COMPONENT).isPresent()
+                || decl.className().simpleName().endsWith("Factory");
     }
 
     private static boolean takesMainContainer(ClassDecl decl) {
@@ -155,6 +218,14 @@ public final class MainModuleOnClasspath {
      */
     public Set<String> componentFqns() {
         return componentFqns;
+    }
+
+    /**
+     * The scope the main component {@code componentFqn} was declared with; empty when its module
+     * does not state it (compiled by an older Tiko) or the class is no main component.
+     */
+    public Optional<Scope> scopeOf(String componentFqn) {
+        return Optional.ofNullable(scopes.get(componentFqn));
     }
 
     private static Set<String> withCanonicalNames(Set<String> binaryNames) {

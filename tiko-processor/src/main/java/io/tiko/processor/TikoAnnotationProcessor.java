@@ -43,14 +43,18 @@ public final class TikoAnnotationProcessor extends AbstractProcessor {
     }
 
     /**
-     * Every Tiko annotation, not just the entry points, plus {@code @Generated} on the generated
-     * sources: javac's {@code -Xlint:processing} reports any annotation no processor supports and
-     * claims (returns {@code true} for), which fails {@code -Werror} builds.
+     * Every Tiko annotation, not just the entry points, plus {@code @Generated} and
+     * {@code @GeneratedComponent} on the generated sources: javac's {@code -Xlint:processing} reports
+     * any annotation no processor supports and claims (returns {@code true} for), which fails
+     * {@code -Werror} builds.
      */
     @Override
     public Set<String> getSupportedAnnotationTypes() {
         return Set.of(
-                "io.tiko.annotations.*", ComponentCollector.TEST_COMPONENT_FQN, Generated.class.getCanonicalName());
+                "io.tiko.annotations.*",
+                ComponentCollector.TEST_COMPONENT_FQN,
+                Generated.class.getCanonicalName(),
+                "io.tiko.runtime.GeneratedComponent");
     }
 
     @Override

@@ -189,12 +189,12 @@ class KspTestCompileTest {
                 JavaFileObjects.forSourceLines(
                         "demo.SystemClock",
                         "package demo;",
-                        "@io.tiko.annotations.Component",
+                        "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
                         "public class SystemClock implements Clock {}"),
                 JavaFileObjects.forSourceLines(
                         "demo.Scheduler",
                         "package demo;",
-                        "@io.tiko.annotations.Component",
+                        "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
                         "public class Scheduler {",
                         "    private final Clock clock;",
                         "    public Scheduler(Clock clock) { this.clock = clock; }",
@@ -226,10 +226,10 @@ class KspTestCompileTest {
 
                 interface Clock
 
-                @Component
+                @Component(scope = io.tiko.Scope.SINGLETON)
                 class SystemClock : Clock
 
-                @Component
+                @Component(scope = io.tiko.Scope.SINGLETON)
                 class Scheduler(val clock: Clock)
                 """));
         var test = compileTest(librariesOf(main), KspCompiler.kotlin("FixedClock.kt", """
@@ -348,14 +348,14 @@ class KspTestCompileTest {
                 JavaFileObjects.forSourceLines(
                         "demo.Scheduler",
                         "package demo;",
-                        "@io.tiko.annotations.Component",
+                        "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
                         "public class Scheduler implements Clock, AutoCloseable {",
                         "    public void close() {}",
                         "}"),
                 JavaFileObjects.forSourceLines(
                         "demo.Consumer",
                         "package demo;",
-                        "@io.tiko.annotations.Component",
+                        "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
                         "public class Consumer {",
                         "    private final Clock clock;",
                         "    public Consumer(Clock clock) { this.clock = clock; }",
@@ -386,12 +386,12 @@ class KspTestCompileTest {
 
                 interface Clock
 
-                @Component
+                @Component(scope = io.tiko.Scope.SINGLETON)
                 open class Scheduler : Clock, AutoCloseable {
                     override fun close() {}
                 }
 
-                @Component
+                @Component(scope = io.tiko.Scope.SINGLETON)
                 class Consumer(val clock: Clock)
                 """));
         var test = compileTest(librariesOf(main), KspCompiler.kotlin("FixedScheduler.kt", """
@@ -426,13 +426,13 @@ class KspTestCompileTest {
                         "demo.Outer",
                         "package demo;",
                         "public class Outer {",
-                        "    @io.tiko.annotations.Component",
+                        "    @io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
                         "    public static class Scheduler {}",
                         "}"),
                 JavaFileObjects.forSourceLines(
                         "demo.Consumer",
                         "package demo;",
-                        "@io.tiko.annotations.Component",
+                        "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
                         "public class Consumer {",
                         "    private final Outer.Scheduler clock;",
                         "    public Consumer(Outer.Scheduler clock) { this.clock = clock; }",
@@ -461,11 +461,11 @@ class KspTestCompileTest {
                 import io.tiko.annotations.Component
 
                 class Outer {
-                    @Component
+                    @Component(scope = io.tiko.Scope.SINGLETON)
                     open class Scheduler
                 }
 
-                @Component
+                @Component(scope = io.tiko.Scope.SINGLETON)
                 class Consumer(val clock: Outer.Scheduler)
                 """));
         var test = compileTest(librariesOf(main), KspCompiler.kotlin("FixedScheduler.kt", """
@@ -501,13 +501,13 @@ class KspTestCompileTest {
                         "demo.Outer",
                         "package demo;",
                         "public class Outer {",
-                        "    @io.tiko.annotations.Component",
+                        "    @io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
                         "    public static class SystemClock implements Clock {}",
                         "}"),
                 JavaFileObjects.forSourceLines(
                         "demo.Consumer",
                         "package demo;",
-                        "@io.tiko.annotations.Component",
+                        "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
                         "public class Consumer {",
                         "    private final Clock clock;",
                         "    public Consumer(Clock clock) { this.clock = clock; }",
@@ -538,11 +538,11 @@ class KspTestCompileTest {
                 interface Clock
 
                 class Outer {
-                    @Component
+                    @Component(scope = io.tiko.Scope.SINGLETON)
                     class SystemClock : Clock
                 }
 
-                @Component
+                @Component(scope = io.tiko.Scope.SINGLETON)
                 class Consumer(val clock: Clock)
                 """));
         var test = compileTest(librariesOf(main), KspCompiler.kotlin("FixedClock.kt", """
@@ -576,12 +576,12 @@ class KspTestCompileTest {
                 JavaFileObjects.forSourceLines(
                         "demo.SystemClock",
                         "package demo;",
-                        "@io.tiko.annotations.Component",
+                        "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
                         "public class SystemClock implements Clock {}"),
                 JavaFileObjects.forSourceLines(
                         "demo.Consumer",
                         "package demo;",
-                        "@io.tiko.annotations.Component",
+                        "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
                         "public class Consumer {",
                         "    private final Clock clock;",
                         "    public Consumer(Clock clock) { this.clock = clock; }",
@@ -613,10 +613,10 @@ class KspTestCompileTest {
 
                 interface Clock
 
-                @Component
+                @Component(scope = io.tiko.Scope.SINGLETON)
                 class SystemClock : Clock
 
-                @Component
+                @Component(scope = io.tiko.Scope.SINGLETON)
                 class Consumer(val clock: Clock)
                 """));
         var test = compileTest(librariesOf(main), KspCompiler.kotlin("Fixtures.kt", """
@@ -659,10 +659,18 @@ class KspTestCompileTest {
 
     @Test
     void testCompileSeesComponentsOfEveryCompiledModule() {
-        var alpha = compileMain(
-                KspCompiler.kotlin("Alpha.kt", "package a", "", "@io.tiko.annotations.Component", "open class Alpha"));
-        var beta = compileMain(
-                KspCompiler.kotlin("Beta.kt", "package b", "", "@io.tiko.annotations.Component", "open class Beta"));
+        var alpha = compileMain(KspCompiler.kotlin(
+                "Alpha.kt",
+                "package a",
+                "",
+                "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
+                "open class Alpha"));
+        var beta = compileMain(KspCompiler.kotlin(
+                "Beta.kt",
+                "package b",
+                "",
+                "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
+                "open class Beta"));
         var libraries = new ArrayList<File>(librariesOf(alpha));
         libraries.addAll(librariesOf(beta));
 
@@ -691,11 +699,17 @@ class KspTestCompileTest {
         var alpha = javacCompile(
                 List.of(),
                 JavaFileObjects.forSourceLines(
-                        "a.Alpha", "package a;", "@io.tiko.annotations.Component", "public class Alpha {}"));
+                        "a.Alpha",
+                        "package a;",
+                        "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
+                        "public class Alpha {}"));
         var beta = javacCompile(
                 List.of(),
                 JavaFileObjects.forSourceLines(
-                        "b.Beta", "package b;", "@io.tiko.annotations.Component", "public class Beta {}"));
+                        "b.Beta",
+                        "package b;",
+                        "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
+                        "public class Beta {}"));
         var alphaClasses = writeClassOutput(alpha, dir.resolve("alpha"));
         var betaClasses = writeClassOutput(beta, dir.resolve("beta"));
 
@@ -726,18 +740,32 @@ class KspTestCompileTest {
                 javacCompile(
                         List.of(),
                         JavaFileObjects.forSourceLines(
-                                "a.Alpha", "package a;", "@io.tiko.annotations.Component", "public class Alpha {}")),
+                                "a.Alpha",
+                                "package a;",
+                                "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
+                                "public class Alpha {}")),
                 dir.resolve("alpha"));
         var javacBeta = writeClassOutput(
                 javacCompile(
                         List.of(),
                         JavaFileObjects.forSourceLines(
-                                "b.Beta", "package b;", "@io.tiko.annotations.Component", "public class Beta {}")),
+                                "b.Beta",
+                                "package b;",
+                                "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
+                                "public class Beta {}")),
                 dir.resolve("beta"));
-        var kspAlpha = compileMain(
-                KspCompiler.kotlin("Alpha.kt", "package a", "", "@io.tiko.annotations.Component", "open class Alpha"));
-        var kspBeta = compileMain(
-                KspCompiler.kotlin("Beta.kt", "package b", "", "@io.tiko.annotations.Component", "open class Beta"));
+        var kspAlpha = compileMain(KspCompiler.kotlin(
+                "Alpha.kt",
+                "package a",
+                "",
+                "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
+                "open class Alpha"));
+        var kspBeta = compileMain(KspCompiler.kotlin(
+                "Beta.kt",
+                "package b",
+                "",
+                "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
+                "open class Beta"));
 
         var javacContainers = List.of(
                 implOf(Files.readString(javacAlpha.resolve(CONTAINER_DESCRIPTOR))),
@@ -1081,6 +1109,132 @@ class KspTestCompileTest {
             @Component(scope = Scope.SINGLETON)
             class Scheduler(val clock: Clock)
             """;
+
+    private static final String SCOPE_MISMATCH =
+            "Scope mismatch: @TestComponent demo.FixedClock declares scope PROTOTYPE but shadows @Component"
+                    + " demo.SystemClock declared with scope SINGLETON";
+
+    /**
+     * #707: a test component must have the scope of the main component it shadows. A test compile
+     * sees the main module only as compiled classes; the scope is read from the
+     * {@code @GeneratedComponent} its factories carry, on both frontends.
+     */
+    @Test
+    void testComponentWithAnotherScopeThanTheMainComponentItShadowsIsRejected(@TempDir Path dir) throws Exception {
+        var mainClasses = writeClassOutput(javacClockMain(), dir.resolve("main"));
+        var javacTest = javacAttempt(
+                List.of(mainClasses.toFile()),
+                JavaFileObjects.forSourceString("io.tiko.test.TestComponent", TEST_COMPONENT_ANNOTATION),
+                javacTestClock("FixedClock", "(scope = io.tiko.Scope.PROTOTYPE)"));
+        assertThat(javacTest.status()).isEqualTo(Compilation.Status.FAILURE);
+        assertThat(javacTest.errors()).anyMatch(error -> error.getMessage(null).contains(SCOPE_MISMATCH));
+
+        var main = compileMain(KspCompiler.kotlin("Clock.kt", KOTLIN_CLOCK_MAIN));
+        var result = KspCompiler.compile(
+                List.of(new TikoSymbolProcessorProvider()),
+                Map.of(),
+                withTestComponentAnnotation(librariesOf(main)),
+                KspCompiler.kotlin("FixedClock.kt", """
+                        package demo
+
+                        import io.tiko.Scope
+                        import io.tiko.test.TestComponent
+
+                        @TestComponent(scope = Scope.PROTOTYPE)
+                        class FixedClock : Clock
+                        """));
+        assertThat(result.exitCode()).as(result.messages()).isEqualTo(KotlinCompilation.ExitCode.COMPILATION_ERROR);
+        assertThat(result.messages()).contains(SCOPE_MISMATCH);
+    }
+
+    /** #707: the mismatch is found through a class key too, when the test component extends the main one. */
+    @Test
+    void testComponentExtendingAMainComponentOfAnotherScopeIsRejected(@TempDir Path dir) throws Exception {
+        var mainClasses = writeClassOutput(javacClockMain(), dir.resolve("main"));
+        var javacTest = javacAttempt(
+                List.of(mainClasses.toFile()),
+                JavaFileObjects.forSourceString("io.tiko.test.TestComponent", TEST_COMPONENT_ANNOTATION),
+                JavaFileObjects.forSourceLines(
+                        "demo.FixedClock",
+                        "package demo;",
+                        "@io.tiko.test.TestComponent(scope = io.tiko.Scope.PROTOTYPE)",
+                        "public class FixedClock extends SystemClock {}"));
+
+        assertThat(javacTest.status()).isEqualTo(Compilation.Status.FAILURE);
+        assertThat(javacTest.errors()).anyMatch(error -> error.getMessage(null).contains(SCOPE_MISMATCH));
+    }
+
+    @Test
+    void bothFrontendsReadTheScopeAMainComponentWasDeclaredWith(@TempDir Path dir) throws Exception {
+        var javacModule = javacMainModuleSeenBy(
+                List.of(writeClassOutput(javacClockMain(), dir.resolve("main")).toFile()));
+        var kspModule = mainModuleSeenBy(librariesOf(compileMain(KspCompiler.kotlin("Clock.kt", KOTLIN_CLOCK_MAIN))));
+
+        for (var module : List.of(javacModule, kspModule)) {
+            assertThat(module.scopeOf("demo.SystemClock")).hasValue(io.tiko.Scope.SINGLETON);
+            assertThat(module.scopeOf("demo.Clock"))
+                    .as("an interface is no component, so it states no scope")
+                    .isEmpty();
+        }
+    }
+
+    /** One module of {@link #twoModulesWithSameNamedComponentsBootTogetherAndEachResolvesItsOwn}. */
+    private static Compilation javacHealthModule(String pkg) {
+        return javacCompile(
+                List.of(),
+                JavaFileObjects.forSourceLines(
+                        pkg + ".Session", "package " + pkg + ";", "public interface Session { String owner(); }"),
+                JavaFileObjects.forSourceLines(
+                        pkg + ".SessionImpl",
+                        "package " + pkg + ";",
+                        "@io.tiko.annotations.Component(scope = io.tiko.Scope.EVENT)",
+                        "public class SessionImpl implements Session {",
+                        "    public String owner() { return \"" + pkg + "\"; }",
+                        "}"),
+                JavaFileObjects.forSourceLines(
+                        pkg + ".Health",
+                        "package " + pkg + ";",
+                        "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
+                        "public class Health {",
+                        "    private final Session session;",
+                        "    public Health(Session session) { this.session = session; }",
+                        "    public String sessionOwner() { return session.owner(); }",
+                        "}"));
+    }
+
+    /**
+     * #726: every module generates into {@code io.tiko.generated}, so the per-component classes carry
+     * the module hash. Two modules that each have a {@code Health} component and a proxied
+     * {@code SessionImpl} then generate differently named classes and boot together.
+     */
+    @Test
+    void twoModulesWithSameNamedComponentsBootTogetherAndEachResolvesItsOwn(@TempDir Path dir) throws Exception {
+        var alpha = javacHealthModule("alpha");
+        var beta = javacHealthModule("beta");
+
+        assertThat(generatedJavaNames(alpha))
+                .anyMatch(name -> name.startsWith("io.tiko.generated.HealthFactory_"))
+                .anyMatch(name -> name.startsWith("io.tiko.generated.SessionImplFactory_"))
+                .anyMatch(name -> name.startsWith("io.tiko.generated.SessionImplProxy_"))
+                .doesNotContainAnyElementsOf(generatedJavaNames(beta));
+
+        var alphaClasses = writeClassOutput(alpha, dir.resolve("alpha"));
+        var betaClasses = writeClassOutput(beta, dir.resolve("beta"));
+        try (var program = KspProgram.boot(programOver(alphaClasses, betaClasses))) {
+            var owners = new ArrayList<Object>();
+            program.runInEventScope(() -> {
+                for (var pkg : List.of("alpha", "beta")) {
+                    var health = program.get(pkg + ".Health");
+                    try {
+                        owners.add(health.getClass().getMethod("sessionOwner").invoke(health));
+                    } catch (ReflectiveOperationException e) {
+                        throw new AssertionError(e);
+                    }
+                }
+            });
+            assertThat(owners).containsExactly("alpha", "beta");
+        }
+    }
 
     /** A main module with an interface, its one implementation, and a component injecting it. */
     private static Compilation javacClockMain() {

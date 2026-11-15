@@ -134,7 +134,8 @@ class ProducesCheckedExceptionPropagationTest {
                 Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(component);
         CompilationSubject.assertThat(c).succeeded();
         JavaFileObject source = c.generatedSourceFiles().stream()
-                .filter(f -> f.getName().endsWith(factoryName + ".java"))
+                // The factory name ends in the module hash (#726).
+                .filter(f -> f.getName().contains("/" + factoryName + "_"))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError(factoryName + " was not generated"));
         return new String(source.openInputStream().readAllBytes(), StandardCharsets.UTF_8);

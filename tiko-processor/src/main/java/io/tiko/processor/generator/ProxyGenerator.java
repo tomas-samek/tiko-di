@@ -8,6 +8,7 @@ import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.model.ComponentModel;
 import io.tiko.processor.model.FactoryMethodModel;
 import io.tiko.processor.util.AbstractInterfaceMethods;
+import io.tiko.processor.util.GeneratedNames;
 import io.tiko.processor.util.ProcessorContext;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -72,7 +73,7 @@ public final class ProxyGenerator {
             return false;
         }
 
-        String proxyClassName = component.getClassName() + "Proxy";
+        String proxyClassName = GeneratedNames.proxyClass(context, component);
 
         TypeSpec proxyClass = TypeSpec.classBuilder(proxyClassName)
                 .addAnnotation(GeneratorAnnotations.generatedBy(ProxyGenerator.class))
@@ -112,7 +113,7 @@ public final class ProxyGenerator {
             return false;
         }
 
-        String proxyClassName = factory.getFactoryIdentifier() + "Proxy";
+        String proxyClassName = GeneratedNames.proxyClass(context, factory);
 
         TypeSpec proxyClass = TypeSpec.classBuilder(proxyClassName)
                 .addAnnotation(GeneratorAnnotations.generatedBy(ProxyGenerator.class))

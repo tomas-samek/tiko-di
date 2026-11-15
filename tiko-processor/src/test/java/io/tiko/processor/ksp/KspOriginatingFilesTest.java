@@ -68,8 +68,9 @@ class KspOriginatingFilesTest {
                 .anyMatch(path -> path.startsWith("io/tiko/generated/EventRegistry"))
                 .contains("META-INF/tiko/topology.json", "META-INF/tiko/container.properties");
         assertThat(requests)
-                .filteredOn(request -> request.path().endsWith("Factory.java"))
-                .extracting(Request::path, Request::aggregating, Request::originatingFiles)
+                .filteredOn(request -> isFactory(request.path()))
+                .extracting(
+                        request -> withoutModuleHash(request.path()), Request::aggregating, Request::originatingFiles)
                 .containsExactlyInAnyOrder(
                         org.assertj.core.groups.Tuple.tuple(
                                 "io/tiko/generated/ClockFactory.java", false, List.of("Clock.kt")),
@@ -78,7 +79,7 @@ class KspOriginatingFilesTest {
                         org.assertj.core.groups.Tuple.tuple(
                                 "io/tiko/generated/ProducersFactory.java", false, List.of("Producers.kt")));
         assertThat(requests)
-                .filteredOn(request -> !request.path().endsWith("Factory.java"))
+                .filteredOn(request -> !isFactory(request.path()))
                 .isNotEmpty()
                 .allSatisfy(request -> {
                     assertThat(request.aggregating()).as(request.path()).isTrue();
@@ -86,6 +87,15 @@ class KspOriginatingFilesTest {
                             .as(request.path())
                             .containsExactly("Clock.kt", "Producers.kt", "Ticker.kt");
                 });
+    }
+
+    /** A component factory: {@code <Component>Factory_<moduleHash>.java} (#726). */
+    private static boolean isFactory(String path) {
+        return path.matches(".*Factory_[0-9a-f]+\\.java");
+    }
+
+    private static String withoutModuleHash(String path) {
+        return path.replaceFirst("_[0-9a-f]+\\.java$", ".java");
     }
 
     /**
