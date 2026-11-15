@@ -299,7 +299,78 @@ class KspKafkaBridgeTest {
                         """,
                         List.of(
                                 "@KafkaSource 'OrderConsumer.fromKafka' takes the Kotlin value class demo.OrderId",
-                                "Use a regular class")));
+                                "Use a regular class")),
+                Arguments.of(
+                        "privateSourceRejected",
+                        """
+                        @Component(scope = Scope.SINGLETON)
+                        class OrderConsumer {
+                            @KafkaSource(topic = "orders")
+                            @EventTrigger(eventName = "OrderPlaced")
+                            private fun fromKafka(placed: OrderPlaced): OrderPlaced = placed
+                        }
+                        """,
+                        List.of("@KafkaSource 'OrderConsumer.fromKafka' is not public", "Make 'fromKafka' public")),
+                Arguments.of(
+                        "parameterizedPayloadRejected",
+                        """
+                        @Component(scope = Scope.SINGLETON)
+                        class OrderConsumer {
+                            @KafkaSource(topic = "orders")
+                            @EventTrigger(eventName = "OrderPlaced")
+                            fun fromKafka(batch: List<OrderPlaced>): OrderPlaced = batch[0]
+                        }
+                        """,
+                        List.of(
+                                "@KafkaSource 'OrderConsumer.fromKafka' takes the payload type",
+                                "is parameterized",
+                                "Declare a class of your own for the payload")),
+                Arguments.of(
+                        "privatePayloadRejected",
+                        """
+                        private class Hidden(val id: String)
+                        @Component(scope = Scope.SINGLETON)
+                        class OrderPublisher {
+                            @KafkaSink(topic = "orders")
+                            fun toKafka(hidden: Hidden): OrderPlaced = OrderPlaced(hidden.id)
+                        }
+                        """,
+                        List.of(
+                                "@KafkaSink 'OrderPublisher.toKafka' uses demo.Hidden, which is not public",
+                                "Make demo.Hidden public")),
+                Arguments.of(
+                        "twoSourcesInOneGroupRejected",
+                        """
+                        @Component(scope = Scope.SINGLETON)
+                        class OrderConsumer {
+                            @KafkaSource(topic = "orders")
+                            @EventTrigger(eventName = "OrderPlaced")
+                            fun placed(placed: OrderPlaced): OrderPlaced = placed
+
+                            @KafkaSource(topic = "orders")
+                            @EventTrigger(eventName = "OrderId")
+                            fun id(placed: OrderPlaced): String = placed.orderId
+                        }
+                        """,
+                        List.of("reads topic 'orders' in the same consumer group as", "consumerGroup")),
+                Arguments.of(
+                        "sourceAndSinkLoopRejected",
+                        """
+                        @Component(scope = Scope.SINGLETON)
+                        class OrderConsumer {
+                            @KafkaSource(topic = "orders")
+                            @EventTrigger(eventName = "OrderPlaced")
+                            fun fromKafka(placed: OrderPlaced): OrderPlaced = placed
+                        }
+                        @Component(scope = Scope.SINGLETON)
+                        class OrderPublisher {
+                            @KafkaSink(topic = "orders")
+                            fun toKafka(placed: OrderPlaced): OrderPlaced = placed
+                        }
+                        """,
+                        List.of(
+                                "@KafkaSink 'OrderPublisher.toKafka' sends demo.OrderPlaced to topic 'orders'",
+                                "without end")));
     }
 
     /**

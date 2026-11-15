@@ -42,7 +42,7 @@ class KafkaTransportBootstrapGeneratorTest {
                                 import io.tiko.Scope;
                                 @Component(scope = Scope.SINGLETON)
                                 public class OrderPublisher {
-                                    @KafkaSink(topic = "orders", partitionKey = "orderId")
+                                    @KafkaSink(topic = "order-events", partitionKey = "orderId")
                                     public OrderPlaced toKafka(OrderPlaced e) { return e; }
                                 }
                                 """));
