@@ -181,8 +181,9 @@ A compile-time leak check warns when a `@Component` holds an `AutoCloseable`-typ
 Supported for compatibility and migration ease. **Prefer the constructor + `AutoCloseable` form** — single source of truth, no risk of multiple `@PreDestroy` methods on one class.
 
 - `@PostConstruct` runs after dependency injection completes. With constructor injection there's rarely a need: deps are already wired by the time the constructor body executes, so init logic belongs in the constructor.
-- `@PreDestroy` runs at scope teardown (`SINGLETON`: on `container.shutdown()`; `EVENT`: on scope exit). Hooks fire in reverse-creation (LIFO) order — a bean's dependencies are still available during its cleanup. The corresponding `Ending` lifecycle event is published before any `@PreDestroy` runs.
+- `@PreDestroy` runs at scope teardown (`SINGLETON`: on `container.shutdown()`; `EVENT`: on scope exit). Hooks fire in reverse-creation (LIFO) order — a bean's dependencies are still available during its cleanup, including a SINGLETON it reaches through a PROTOTYPE component. The corresponding `Ending` lifecycle event is published before any `@PreDestroy` runs.
 - If a class declares an explicit `@PreDestroy`, it wins over `AutoCloseable.close()` (no double-cleanup).
+- Hooks are inherited: a component also runs the hooks its superclasses declare, `@PostConstruct` superclass first and `@PreDestroy` subclass first. A hook the subclass overrides runs once, and only when the override carries the annotation itself.
 
 ```java
 @Component(scope = Scope.SINGLETON)
