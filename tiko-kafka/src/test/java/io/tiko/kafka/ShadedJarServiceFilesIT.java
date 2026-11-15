@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.jar.JarFile;
+import java.util.zip.ZipEntry;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -79,7 +80,7 @@ class ShadedJarServiceFilesIT {
 
     private static List<String> entries() throws IOException {
         try (var jar = new JarFile(shadedJar().toFile())) {
-            return jar.stream().map(entry -> entry.getName()).toList();
+            return jar.stream().map(ZipEntry::getName).toList();
         }
     }
 
