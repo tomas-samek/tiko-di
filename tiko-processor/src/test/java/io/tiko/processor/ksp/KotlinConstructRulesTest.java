@@ -220,6 +220,24 @@ class KotlinConstructRulesTest {
                         "@EventHandler inside an object declaration",
                         "move it into a @Component class"),
                 rejected(
+                        "basicTypeProducesNamesAFormKotlinCanWrite",
+                        """
+                        @Component(scope = Scope.SINGLETON) class Settings {
+                            @Produces(name = "port") fun port(): Int = 8080
+                        }
+                        """,
+                        ErrorReporter.KIND_BAD_PRODUCES,
+                        "returns Kotlin 'Int', which compiles to the primitive 'int'",
+                        "class Port(val value: Int)"),
+                rejected(
+                        "basicTypeInjectionNamesAFormKotlinCanWrite",
+                        """
+                        @Component(scope = Scope.SINGLETON) class Server(@param:Named("on") val on: Boolean)
+                        """,
+                        ErrorReporter.KIND_MISSING_DEPENDENCY,
+                        "Cannot inject Kotlin 'Boolean', which compiles to the primitive 'boolean'",
+                        "class On(val value: Boolean)"),
+                rejected(
                         "suspendEventHandlerRejectedUntilK2",
                         """
                         @Component(scope = Scope.SINGLETON) class Listener {

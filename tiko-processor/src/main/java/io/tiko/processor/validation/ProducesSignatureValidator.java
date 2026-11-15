@@ -1,9 +1,11 @@
 package io.tiko.processor.validation;
 
 import io.tiko.processor.core.model.MethodDecl;
+import io.tiko.processor.core.model.SourceLanguage;
 import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.model.FactoryMethodModel;
 import io.tiko.processor.util.ErrorReporter;
+import io.tiko.processor.util.PrimitiveNames;
 import io.tiko.processor.util.ProcessorContext;
 import io.tiko.processor.util.TypeUtil;
 
@@ -58,6 +60,18 @@ public final class ProducesSignatureValidator {
                     "@Produces method '" + fqn + "' must return a non-void type; factories produce instances.",
                     "Return the instance the factory creates instead of void",
                     "If the method only has side effects it is not a factory - remove @Produces");
+            return false;
+        }
+        if (returnType.isPrimitive() && factory.getDeclaringClass().language() == SourceLanguage.KOTLIN) {
+            // Kotlin cannot spell the boxed type the Java fix names, so name a form it can write (#748).
+            String kotlinType = PrimitiveNames.kotlin(factory.getReturnTypeName());
+            report(
+                    method,
+                    "@Produces method '" + fqn + "' returns Kotlin '" + kotlinType
+                            + "', which compiles to the primitive '" + factory.getReturnTypeName()
+                            + "'; dependency injection resolves object types.",
+                    PrimitiveNames.holderFix(kotlinType, factory.getMethodName()) + " and produce that",
+                    "For settings, bind a @Configuration @JvmRecord data class instead of producing single values");
             return false;
         }
         if (returnType.isPrimitive()) {
