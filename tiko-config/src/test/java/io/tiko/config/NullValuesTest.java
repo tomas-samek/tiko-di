@@ -10,9 +10,11 @@ import io.tiko.config.internal.YamlLoader;
 import io.tiko.config.internal.coercers.Coercers;
 import io.tiko.config.internal.coercers.CoercionException;
 import io.tiko.config.internal.coercers.CompositeCoercers;
+import io.tiko.config.internal.coercers.NestedRecordSupport;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -75,16 +77,17 @@ class NullValuesTest {
         hosts.add(null);
         var labels = new LinkedHashMap<String, Object>();
         labels.put("env", null);
+        var list = CompositeCoercers.list(Coercers.stringCoercer());
+        var set = CompositeCoercers.set("db.hosts", Coercers.stringCoercer());
+        var map = CompositeCoercers.map(Coercers.stringCoercer());
 
-        assertThatThrownBy(
-                        () -> CompositeCoercers.list(Coercers.stringCoercer()).coerce(hosts))
+        assertThatThrownBy(() -> list.coerce(hosts))
                 .isInstanceOf(CoercionException.class)
                 .hasMessageContaining("element at index 1 has no value");
-        assertThatThrownBy(() -> CompositeCoercers.set("db.hosts", Coercers.stringCoercer())
-                        .coerce(hosts))
+        assertThatThrownBy(() -> set.coerce(hosts))
                 .isInstanceOf(CoercionException.class)
                 .hasMessageContaining("element at index 1 has no value");
-        assertThatThrownBy(() -> CompositeCoercers.map(Coercers.stringCoercer()).coerce(labels))
+        assertThatThrownBy(() -> map.coerce(labels))
                 .isInstanceOf(CoercionException.class)
                 .hasMessageContaining("entry 'env' has no value");
     }
@@ -107,16 +110,14 @@ class NullValuesTest {
         node.put("host", null);
         node.put("port", null);
         node.put("alias", null);
+        var strings = Coercers.stringCoercer();
 
-        assertThatThrownBy(() -> io.tiko.config.internal.coercers.NestedRecordSupport.requireField(
-                        node, "host", "ServerConfig", Coercers.stringCoercer()))
+        assertThatThrownBy(() -> NestedRecordSupport.requireField(node, "host", "ServerConfig", strings))
                 .isInstanceOf(CoercionException.class)
                 .hasMessage("ServerConfig.host is required but has no value");
-        assertThat(io.tiko.config.internal.coercers.NestedRecordSupport.fieldOrDefault(
-                        node, "port", "ServerConfig", Coercers.intCoercer(), 8080))
+        assertThat(NestedRecordSupport.fieldOrDefault(node, "port", "ServerConfig", Coercers.intCoercer(), 8080))
                 .isEqualTo(8080);
-        assertThat(io.tiko.config.internal.coercers.NestedRecordSupport.optionalField(
-                        node, "alias", "ServerConfig", Coercers.stringCoercer()))
+        assertThat(NestedRecordSupport.optionalField(node, "alias", "ServerConfig", strings))
                 .isEmpty();
         assertThat(node).isEmpty();
     }
@@ -128,6 +129,6 @@ class NullValuesTest {
 
     @Test
     void emptyElementsAreStillReadSoTheBinderCanReportThem() {
-        assertThat(load("hosts:\n  - a\n  -\n").data().get("hosts")).isEqualTo(java.util.Arrays.asList("a", null));
+        assertThat(load("hosts:\n  - a\n  -\n").data()).containsEntry("hosts", Arrays.asList("a", null));
     }
 }
