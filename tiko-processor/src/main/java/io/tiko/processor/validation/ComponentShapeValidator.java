@@ -193,42 +193,45 @@ public final class ComponentShapeValidator {
         boolean restricted = component.isExposeRestricted();
         for (TypeRef type :
                 restricted ? component.getExposeTypes() : component.getDecl().interfaces()) {
-            if (type.isError()) {
-                context.getErrorReporter()
-                        .error(
-                                component.getDecl().location(),
-                                component.getQualifiedName() + " implements " + type.displayName() + ", which "
-                                        + UNRESOLVED,
-                                GENERATE_EARLIER,
-                                CHECK_THE_NAME);
-                valid = false;
-                continue;
-            }
-            // A JDK lifecycle marker is not routed under the permissive default (#301).
-            if (!restricted && TypeUtil.isLifecycleMarkerInterface(type.erasedName())) {
-                continue;
-            }
-            var hidden = type.declaration().flatMap(ComponentShapeValidator::firstHidden);
-            if (hidden.isPresent()) {
-                String name = hidden.get().qualifiedName();
-                var fixes = new java.util.ArrayList<String>();
-                fixes.add("Make " + name + " public");
-                if (!restricted) {
-                    fixes.add("Route " + component.getClassName() + " only as public types: list them in @Component("
-                            + "expose = {...}), or expose = {" + component.getClassName() + ".class} for its own"
-                            + " class alone");
-                }
-                context.getErrorReporter()
-                        .error(
-                                component.getDecl().location(),
-                                component.getQualifiedName() + " is routed as " + type.erasedName()
-                                        + ", which is not public; the generated container names it from the"
-                                        + " io.tiko.generated package",
-                                fixes.toArray(String[]::new));
-                valid = false;
-            }
+            valid &= validateRoutableType(component, type, restricted);
         }
         return valid;
+    }
+
+    private boolean validateRoutableType(ComponentModel component, TypeRef type, boolean restricted) {
+        if (type.isError()) {
+            context.getErrorReporter()
+                    .error(
+                            component.getDecl().location(),
+                            component.getQualifiedName() + " implements " + type.displayName() + ", which "
+                                    + UNRESOLVED,
+                            GENERATE_EARLIER,
+                            CHECK_THE_NAME);
+            return false;
+        }
+        // A JDK lifecycle marker is not routed under the permissive default (#301).
+        if (!restricted && TypeUtil.isLifecycleMarkerInterface(type.erasedName())) {
+            return true;
+        }
+        var hidden = type.declaration().flatMap(ComponentShapeValidator::firstHidden);
+        if (hidden.isEmpty()) {
+            return true;
+        }
+        var fixes = new java.util.ArrayList<String>();
+        fixes.add("Make " + hidden.get().qualifiedName() + " public");
+        if (!restricted) {
+            fixes.add("Route " + component.getClassName() + " only as public types: list them in @Component("
+                    + "expose = {...}), or expose = {" + component.getClassName() + ".class} for its own"
+                    + " class alone");
+        }
+        context.getErrorReporter()
+                .error(
+                        component.getDecl().location(),
+                        component.getQualifiedName() + " is routed as " + type.erasedName()
+                                + ", which is not public; the generated container names it from the"
+                                + " io.tiko.generated package",
+                        fixes.toArray(String[]::new));
+        return false;
     }
 
     /** The class itself or the first class it is nested in that another package cannot name. */
