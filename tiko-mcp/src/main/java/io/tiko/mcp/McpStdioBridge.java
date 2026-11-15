@@ -7,12 +7,16 @@ import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
+import java.io.FilterInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.CountDownLatch;
 import java.util.function.BiFunction;
 
 /**
@@ -41,20 +45,92 @@ public final class McpStdioBridge {
     /**
      * Start the SDK-managed stdio JSON-RPC loop. Returns when stdin closes.
      */
-    public void run() throws Exception {
+    public void run() {
         // stdout is the MCP protocol channel (JSON-RPC responses), not a log destination.
-        var server = start(McpJsonDefaults.getMapper(), System.in, System.out, registrations); // NOSONAR java:S106
+        run(System.in, System.out); // NOSONAR java:S106
+    }
+
+    /**
+     * Serves {@code in} until it ends, then closes the server. The transport reads on its own
+     * thread and gives no sign of the end of input, so the stream itself reports it (#762): a
+     * client that goes away closes stdin, and the process must not outlive it.
+     */
+    void run(InputStream in, OutputStream out) {
+        var input = new EndOfInput(in);
+        var server = start(McpJsonDefaults.getMapper(), input, out, registrations);
 
         LoggerHolder.LOG.log(Level.INFO, "tiko-mcp server started on stdio");
 
-        // Block the main thread; the transport drives request handling on its
-        // own threads. Returns when stdin closes (transport terminates).
         try {
-            Thread.currentThread().join();
+            input.await();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         } finally {
             server.closeGracefully();
+        }
+    }
+
+    /** The version of this artifact, as the build wrote it; reported to clients as the server version. */
+    static String serverVersion() {
+        return VersionHolder.VERSION;
+    }
+
+    /** Lazy holder: the resource is read once, on the first server start. */
+    private static final class VersionHolder {
+        static final String VERSION = load();
+
+        private static String load() {
+            var unknown = "unknown";
+            try (var resource = McpStdioBridge.class.getResourceAsStream("version.properties")) {
+                if (resource == null) {
+                    return unknown;
+                }
+                var properties = new Properties();
+                properties.load(resource);
+                return properties.getProperty("version", unknown);
+            } catch (IOException unreadable) {
+                return unknown;
+            }
+        }
+    }
+
+    /** An input stream that lets a waiting thread know when it has ended or failed. */
+    private static final class EndOfInput extends FilterInputStream {
+        private final CountDownLatch ended = new CountDownLatch(1);
+
+        EndOfInput(InputStream in) {
+            super(in);
+        }
+
+        @Override
+        public int read() throws IOException {
+            try {
+                return seen(super.read());
+            } catch (IOException failed) {
+                ended.countDown();
+                throw failed;
+            }
+        }
+
+        @Override
+        public int read(byte[] buffer, int offset, int length) throws IOException {
+            try {
+                return seen(super.read(buffer, offset, length));
+            } catch (IOException failed) {
+                ended.countDown();
+                throw failed;
+            }
+        }
+
+        private int seen(int result) {
+            if (result < 0) {
+                ended.countDown();
+            }
+            return result;
+        }
+
+        void await() throws InterruptedException {
+            ended.await();
         }
     }
 
@@ -73,7 +149,7 @@ public final class McpStdioBridge {
         // unicast outbound sink, and one response is dropped ("Failed to enqueue message", #509).
         return McpServer.sync(transport)
                 .immediateExecution(true)
-                .serverInfo("tiko-mcp", "0.1.0")
+                .serverInfo("tiko-mcp", serverVersion())
                 .capabilities(
                         McpSchema.ServerCapabilities.builder().tools(false).build())
                 .tools(specs)
@@ -117,6 +193,25 @@ public final class McpStdioBridge {
         if (s == null) {
             return "";
         }
-        return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
+        var escaped = new StringBuilder(s.length() + 16);
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '"' -> escaped.append("\\\"");
+                case '\\' -> escaped.append("\\\\");
+                case '\n' -> escaped.append("\\n");
+                case '\r' -> escaped.append("\\r");
+                case '\t' -> escaped.append("\\t");
+                default -> {
+                    // JSON allows no raw control character inside a string (#762).
+                    if (c < 0x20) {
+                        escaped.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        escaped.append(c);
+                    }
+                }
+            }
+        }
+        return escaped.toString();
     }
 }

@@ -32,7 +32,7 @@ public final class ExplainWiringTool {
 
     public Map<String, Object> execute(Map<String, Object> args) {
         var fqn = ToolArgs.required(args, "componentFqn");
-        long maxDepth = args.get("maxDepth") instanceof Long l ? l : DEFAULT_MAX_DEPTH;
+        long maxDepth = ToolArgs.depth(args, "maxDepth", DEFAULT_MAX_DEPTH);
         var profile = ToolArgs.strOrNull(args.get("profile"));
 
         var root = findComponent(fqn, profile);

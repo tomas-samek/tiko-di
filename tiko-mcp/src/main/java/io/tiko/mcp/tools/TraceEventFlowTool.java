@@ -40,7 +40,7 @@ public final class TraceEventFlowTool {
 
     public Map<String, Object> execute(Map<String, Object> args) {
         var eventType = ToolArgs.required(args, "eventType");
-        long maxDepth = args.get("maxDepth") instanceof Long l ? l : DEFAULT_MAX_DEPTH;
+        long maxDepth = ToolArgs.depth(args, "maxDepth", DEFAULT_MAX_DEPTH);
 
         if (!isKnownEvent(eventType)) {
             throw new IllegalArgumentException("Unknown event '" + eventType + "'.");

@@ -44,6 +44,13 @@
     </dependencies>
 
     <build>
+        <resources>
+            <!-- version.properties carries ${project.version}: the server reports it to clients (#762). -->
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
