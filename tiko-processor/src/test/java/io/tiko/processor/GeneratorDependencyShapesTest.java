@@ -57,6 +57,9 @@ class GeneratorDependencyShapesTest {
                 Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(iface, impl, tagged, consumer);
 
         assertThat(c).succeeded();
-        assertThat(c).generatedSourceFile("io.tiko.generated.ConsumerFactory");
+        // The factory name ends in the module hash (#726).
+        org.assertj.core.api.Assertions.assertThat(c.generatedSourceFiles())
+                .extracting(javax.tools.JavaFileObject::getName)
+                .anyMatch(name -> name.contains("/io/tiko/generated/ConsumerFactory_"));
     }
 }

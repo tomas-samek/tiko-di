@@ -285,6 +285,11 @@ them up with `container.get(Clock.class, "name")`: a named test component shadow
 **Scope match required.** The `@TestComponent.scope` must match the shadowed
 `@Component.scope`, or the build fails with a clear diagnostic. Use
 `TikoOptions.override(...)` if you need different lifecycle semantics.
+The defaults differ: `@Component` is `PROTOTYPE` unless it says otherwise, `@TestComponent` is
+`SINGLETON`. To shadow a component that relies on the default, write
+`@TestComponent(scope = Scope.PROTOTYPE)`. The check also runs when the tests compile against an
+already compiled main module, as Maven and Gradle do; a main module compiled with a Tiko older
+than 0.7.0 does not record its scopes and is not checked.
 
 **Named shadow is not currently supported.** A `@TestComponent(name = "primary")`
 does not shadow a `@Component(name = "primary")` — the validator's shadow path

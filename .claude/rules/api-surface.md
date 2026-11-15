@@ -15,6 +15,9 @@ paths:
   them via generated code at runtime — that is the bar for keeping `RUNTIME`.
 - `@Named` is `RUNTIME` because `@TikoTest` reads it on test-method parameters (#715).
   The container never reads it; do not add reflective lookups on it.
+- `io.tiko.runtime.GeneratedComponent` is `CLASS`. The processor writes it on the factories it
+  generates and reads it back from the class file in a later compile (#707); nothing reads it at
+  run time, and application code does not use it.
 - When adding a new annotation, audit it: if the bytecode doesn't read it, it must
   be `SOURCE`.
 

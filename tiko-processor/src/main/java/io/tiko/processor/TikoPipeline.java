@@ -315,7 +315,8 @@ public final class TikoPipeline {
      * helper only adds shadow entries the validator could not have seen.
      */
     private boolean markClasspathShadowedTestComponents() {
-        Set<String> mainFqns = MainModuleOnClasspath.read(context.env()).componentFqns();
+        var mainModule = MainModuleOnClasspath.read(context.env());
+        Set<String> mainFqns = mainModule.componentFqns();
         if (mainFqns.isEmpty()) {
             return true;
         }
@@ -341,9 +342,56 @@ public final class TikoPipeline {
                 valid = false;
                 continue;
             }
-            context.markShadowedByTestOverride(claim.getKey(), testComponents.get(0));
+            if (scopesMatch(testComponents.get(0), claim.getKey(), mainModule)) {
+                context.markShadowedByTestOverride(claim.getKey(), testComponents.get(0));
+            } else {
+                valid = false;
+            }
         }
         return valid;
+    }
+
+    /**
+     * Whether {@code testComponent} has the scope of every main component it shadows under
+     * {@code key}: the main component the key names, or those that implement the key. Reports each
+     * mismatch, as a single-round compile does (#707). A main component whose module states no
+     * scope (compiled by an older Tiko) is not checked.
+     */
+    private boolean scopesMatch(ComponentModel testComponent, String key, MainModuleOnClasspath mainModule) {
+        boolean match = true;
+        for (String mainFqn : mainComponentsUnder(key, mainModule.componentFqns())) {
+            var mainScope = mainModule.scopeOf(mainFqn);
+            if (mainScope.isPresent() && mainScope.get() != testComponent.getScope()) {
+                context.getErrorReporter()
+                        .testComponentScopeMismatch(
+                                testComponent.getDecl().location(),
+                                testComponent.getQualifiedName(),
+                                testComponent.getScope(),
+                                mainFqn,
+                                mainScope.get());
+                match = false;
+            }
+        }
+        return match;
+    }
+
+    /** The main components a shadow key stands for, each once, under its canonical name. */
+    private List<String> mainComponentsUnder(String key, Set<String> mainFqns) {
+        if (mainFqns.contains(key)) {
+            return List.of(key);
+        }
+        var types = context.env().types();
+        var keyDecl = types.findClass(key);
+        if (keyDecl.isEmpty()) {
+            return List.of();
+        }
+        var keyType = types.erasure(keyDecl.get().asType());
+        return mainFqns.stream()
+                .filter(fqn -> !fqn.contains("$"))
+                .filter(fqn -> types.findClass(fqn)
+                        .filter(main -> types.isAssignable(types.erasure(main.asType()), keyType))
+                        .isPresent())
+                .toList();
     }
 
     /**

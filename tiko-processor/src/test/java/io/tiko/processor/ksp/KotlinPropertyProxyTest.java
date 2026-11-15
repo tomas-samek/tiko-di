@@ -54,7 +54,10 @@ class KotlinPropertyProxyTest {
         var result = KspCompiler.compile(new TikoSymbolProcessorProvider(), source);
 
         assertThat(result.exitCode()).as(result.messages()).isEqualTo(KotlinCompilation.ExitCode.OK);
-        assertThat(result.generatedJava("io.tiko.generated.RequestContextImplProxy"))
+        assertThat(result.generatedJavaNames().stream()
+                        .filter(name -> name.startsWith("io.tiko.generated.RequestContextImplProxy_"))
+                        .findFirst()
+                        .flatMap(result::generatedJava))
                 .hasValueSatisfying(proxy -> assertThat(proxy)
                         .contains(
                                 "public String getRequestId()",

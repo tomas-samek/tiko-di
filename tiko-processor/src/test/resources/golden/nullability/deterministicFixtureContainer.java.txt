@@ -85,11 +85,11 @@ public final class TikoContainerImpl_7a299740 implements Container {
 
   private final TikoOptions options;
 
-  private final AlphaFactory alphaFactory;
+  private final AlphaFactory_7a299740 alphaFactory;
 
-  private final MikeFactory mikeFactory;
+  private final MikeFactory_7a299740 mikeFactory;
 
-  private final ZuluFactory zuluFactory;
+  private final ZuluFactory_7a299740 zuluFactory;
 
   public TikoContainerImpl_7a299740(EventBus eventBus, ErrorHandler errorHandler,
       ExecutorService userEventExecutor, boolean publishLifecycleEvents, Duration shutdownTimeout,
@@ -101,9 +101,9 @@ public final class TikoContainerImpl_7a299740 implements Container {
     this.publishLifecycleEvents = publishLifecycleEvents;
     this.shutdownTimeout = shutdownTimeout;
     this.options = options;
-    this.alphaFactory = new AlphaFactory(this);
-    this.mikeFactory = new MikeFactory(this);
-    this.zuluFactory = new ZuluFactory(this);
+    this.alphaFactory = new AlphaFactory_7a299740(this);
+    this.mikeFactory = new MikeFactory_7a299740(this);
+    this.zuluFactory = new ZuluFactory_7a299740(this);
   }
 
   public Alpha getAlpha() {
