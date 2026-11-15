@@ -53,6 +53,68 @@ class EventTest {
         assertThat(paid.findInChain(Validated.class)).isEmpty();
     }
 
+    private record Tick(int n) {}
+
+    /** A chain of {@code hops} re-publishes on top of {@code Tick(0)}; the last wrapper holds {@code Tick(hops)}. */
+    private static Event<?> republished(int hops) {
+        Event<?> event = new Event<>(new Tick(0));
+        for (int n = 1; n <= hops; n++) {
+            event = new Event<>(new Tick(n), event);
+        }
+        return event;
+    }
+
+    /** #730: up to the bound nothing is dropped and the wrappers are the ones that were linked. */
+    @Test
+    void chainWithinTheBoundIsKeptAsItWasBuilt() {
+        Event<Tick> root = new Event<>(new Tick(0));
+        Event<?> event = root;
+        for (int n = 1; n <= Event.MAX_ANCESTORS; n++) {
+            event = new Event<>(new Tick(n), event);
+        }
+
+        assertThat(event.getChainDepth()).isEqualTo(Event.MAX_ANCESTORS);
+        assertThat(event.getRoot()).isSameAs(root);
+        assertThat(event.getOriginChain()).hasSize(Event.MAX_ANCESTORS + 1).startsWith(new Tick(0));
+    }
+
+    /** #730: a longer chain keeps its most recent ancestors; the older ones drop off. */
+    @Test
+    void chainLongerThanTheBoundKeepsItsMostRecentAncestors() {
+        Event<?> event = republished(200);
+
+        assertThat(event.getChainDepth()).isEqualTo(Event.MAX_ANCESTORS);
+        assertThat(event.getOriginChain())
+                .hasSize(Event.MAX_ANCESTORS + 1)
+                .startsWith(new Tick(200 - Event.MAX_ANCESTORS))
+                .endsWith(new Tick(200));
+        assertThat(event.getRoot().getPayload()).isEqualTo(new Tick(200 - Event.MAX_ANCESTORS));
+        assertThat(event.getRoot().getOrigin()).isEmpty();
+    }
+
+    /** #730: an ancestor kept in a long chain is still the event it was: same id, time and payload. */
+    @Test
+    void ancestorOfALongChainStillEqualsTheEventItWas() {
+        Event<?> parent = republished(150);
+        Event<Tick> child = new Event<>(new Tick(151), parent);
+
+        assertThat(child.getOrigin()).contains(parent);
+        Event<?> kept = child.getOrigin().orElseThrow();
+        assertThat(kept.getEventId()).isEqualTo(parent.getEventId());
+        assertThat(kept.getTimestamp()).isEqualTo(parent.getTimestamp());
+        assertThat(kept.getPayload()).isEqualTo(new Tick(150));
+    }
+
+    /** #730: the chain of a long-running re-publish loop is read without recursion. */
+    @Test
+    void veryLongRepublishLoopIsReadWithoutOverflowingTheStack() {
+        Event<?> event = republished(100_000);
+
+        assertThat(event.getOriginChain()).hasSize(Event.MAX_ANCESTORS + 1).endsWith(new Tick(100_000));
+        assertThat(event.findInChain(Tick.class)).contains(new Tick(100_000 - Event.MAX_ANCESTORS));
+        assertThat(event.findInChain(Created.class)).isEmpty();
+    }
+
     @Test
     void nullPayloadIsRejected() {
         assertThatNullPointerException().isThrownBy(() -> new Event<>(null)).withMessageContaining("payload");

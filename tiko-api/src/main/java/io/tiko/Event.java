@@ -1,7 +1,7 @@
 package io.tiko;
 
 import java.time.Instant;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -34,12 +34,23 @@ import java.util.Optional;
  * }
  * }</pre>
  *
+ * <p><strong>Bound:</strong> an event holds itself and at most its 64 most recent ancestors. A
+ * chain up to that length is kept exactly as it was built. In a longer one, such as a handler that
+ * publishes the event it handles again and again, the oldest ancestors drop off, so the history a
+ * long-running loop keeps reachable stays bounded: {@link #getRoot()} and {@link #getOriginChain()}
+ * then start at the oldest ancestor still held, not at the event that began the loop. An ancestor
+ * that is kept stays equal to the event it was: same payload, id and timestamp.</p>
+ *
  * @param <T> the type of the event payload
  */
 public final class Event<T> {
 
+    /** How many ancestors an event holds at most (#730); see the class Javadoc. */
+    static final int MAX_ANCESTORS = 64;
+
     private final T payload;
     private final Event<?> origin;
+    private final int depth;
     private final Instant timestamp;
     private final String eventId;
 
@@ -60,9 +71,43 @@ public final class Event<T> {
      */
     public Event(T payload, Event<?> origin) {
         this.payload = Objects.requireNonNull(payload, "Event payload cannot be null");
-        this.origin = origin;
+        // One more ancestor than the bound allows: link to the origin without its oldest ancestor.
+        this.origin = origin == null || origin.depth < MAX_ANCESTORS ? origin : origin.withAncestors(MAX_ANCESTORS - 1);
+        this.depth = this.origin == null ? 0 : this.origin.depth + 1;
         this.timestamp = Instant.now();
         this.eventId = java.util.UUID.randomUUID().toString();
+    }
+
+    /** The event {@code source} was, on top of another origin: it keeps the payload, timestamp and id. */
+    private Event(Event<T> source, Event<?> origin) {
+        this.payload = source.payload;
+        this.origin = origin;
+        this.depth = origin == null ? 0 : origin.depth + 1;
+        this.timestamp = source.timestamp;
+        this.eventId = source.eventId;
+    }
+
+    /**
+     * This event with only its {@code count} nearest ancestors. The originals are shared with
+     * other chains and cannot be cut, so this event and those ancestors are copied; the oldest copy
+     * has no origin, which lets everything older be collected.
+     */
+    private Event<T> withAncestors(int count) {
+        Event<?>[] nearest = new Event<?>[count];
+        Event<?> ancestor = this.origin;
+        for (int i = 0; i < count; i++) {
+            nearest[i] = ancestor;
+            ancestor = ancestor.origin;
+        }
+        Event<?> copy = null;
+        for (int i = count - 1; i >= 0; i--) {
+            copy = nearest[i].onTopOf(copy);
+        }
+        return onTopOf(copy);
+    }
+
+    private Event<T> onTopOf(Event<?> newOrigin) {
+        return new Event<>(this, newOrigin);
     }
 
     /**
@@ -102,24 +147,24 @@ public final class Event<T> {
     }
 
     /**
-     * Returns the full origin chain from root to this event.
+     * Returns the origin chain from root to this event.
      *
      * <p>The list starts with the root event and ends with this event's payload.
      * Example: [OrderCreatedEvent, OrderValidatedEvent, PaymentProcessedEvent]</p>
      *
+     * <p>The root is the oldest ancestor this event still holds; see the bound in the class
+     * Javadoc.</p>
+     *
      * @return immutable list of all event payloads in the chain
      */
     public List<Object> getOriginChain() {
-        List<Object> chain = new ArrayList<>();
-        buildChain(this, chain);
-        return Collections.unmodifiableList(chain);
-    }
-
-    private void buildChain(Event<?> event, List<Object> chain) {
-        if (event.origin != null) {
-            buildChain(event.origin, chain);
+        Object[] chain = new Object[depth + 1];
+        Event<?> current = this;
+        for (int i = depth; i >= 0; i--) {
+            chain[i] = current.payload;
+            current = current.origin;
         }
-        chain.add(event.payload);
+        return Collections.unmodifiableList(Arrays.asList(chain));
     }
 
     /**
@@ -144,17 +189,11 @@ public final class Event<T> {
      * @return the chain depth
      */
     public int getChainDepth() {
-        int depth = 0;
-        Event<?> current = this.origin;
-        while (current != null) {
-            depth++;
-            current = current.origin;
-        }
         return depth;
     }
 
     /**
-     * Returns the root event of the chain.
+     * Returns the root event of the chain: the oldest ancestor this event still holds.
      *
      * @return the root event
      */
