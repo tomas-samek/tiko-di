@@ -21,7 +21,7 @@ If you are on an older plugin version and cannot upgrade, force processing expli
             <path>
                 <groupId>io.github.tomas-samek</groupId>
                 <artifactId>tiko-processor</artifactId>
-                <version>0.6.0</version>
+                <version>0.7.0</version>
             </path>
         </annotationProcessorPaths>
     </configuration>
@@ -32,9 +32,9 @@ If you are on an older plugin version and cannot upgrade, force processing expli
 
 ```groovy
 dependencies {
-    implementation "io.github.tomas-samek:tiko-api:0.6.0"
-    implementation "io.github.tomas-samek:tiko-runtime:0.6.0"
-    annotationProcessor "io.github.tomas-samek:tiko-processor:0.6.0"
+    implementation "io.github.tomas-samek:tiko-api:0.7.0"
+    implementation "io.github.tomas-samek:tiko-runtime:0.7.0"
+    annotationProcessor "io.github.tomas-samek:tiko-processor:0.7.0"
 }
 ```
 
@@ -45,7 +45,7 @@ The `annotationProcessor` configuration sets `--processor-path` for you, which i
 `javac` does not resolve dependencies, so the processor path lists `tiko-processor` together with what it needs to run: `tiko-processor-core`, `tiko-config`, `tiko-api`, SnakeYAML and JavaPoet (`com.palantir.javapoet`). `tiko-processor-core` exists from 0.7.0; leave it out for 0.6.x. Take the SnakeYAML and JavaPoet versions from the `tiko-processor` POM of the release you use.
 
 ```bash
-V=0.6.0   # the Tiko version
+V=0.7.0   # the Tiko version
 PROCESSOR_PATH=tiko-processor-$V.jar:tiko-processor-core-$V.jar:tiko-config-$V.jar:tiko-api-$V.jar:snakeyaml-2.3.jar:javapoet-0.1.0.jar
 
 javac -proc:full \
