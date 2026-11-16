@@ -203,7 +203,11 @@ class OrderToWarehouseE2EIT {
         Path target = Path.of("..", moduleName, "target");
         try {
             return Files.list(target)
-                    .filter(p -> p.toString().endsWith(".jar") && !p.toString().contains("original-"))
+                    // A release build puts -sources and -javadoc jars next to it; they cannot be run.
+                    .filter(p -> p.toString().endsWith(".jar")
+                            && !p.toString().contains("original-")
+                            && !p.toString().endsWith("-sources.jar")
+                            && !p.toString().endsWith("-javadoc.jar"))
                     .map(Path::toString)
                     .findFirst()
                     .orElseThrow(() -> new IllegalStateException("No shaded jar in " + target));

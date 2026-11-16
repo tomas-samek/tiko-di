@@ -36,11 +36,19 @@ class MultiModuleFatJarIT {
         assertThat(process.exitValue()).as(output).isZero();
     }
 
+    /**
+     * The fat jar. A release build puts {@code -sources} and {@code -javadoc} jars next to it,
+     * which {@code java -jar} cannot run.
+     */
     private static Path shadedJar() throws IOException {
         try (Stream<Path> files = Files.list(Path.of("target"))) {
-            return files.filter(p -> p.getFileName().toString().matches("app-.*\\.jar"))
+            return files.filter(p -> isRunnableAppJar(p.getFileName().toString()))
                     .findFirst()
                     .orElseThrow(() -> new IllegalStateException("shaded app jar not found under target/"));
         }
+    }
+
+    private static boolean isRunnableAppJar(String name) {
+        return name.matches("app-.*\\.jar") && !name.endsWith("-sources.jar") && !name.endsWith("-javadoc.jar");
     }
 }
