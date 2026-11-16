@@ -1,13 +1,13 @@
 package io.tiko.processor.validation;
 
 import static com.google.testing.compile.CompilationSubject.assertThat;
+import static io.tiko.processor.CompileTesting.compile;
+import static io.tiko.processor.CompileTesting.generated;
 
 import com.google.testing.compile.Compilation;
-import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
-import io.tiko.processor.TikoAnnotationProcessor;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
+import java.util.List;
 import javax.tools.JavaFileObject;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -20,11 +20,11 @@ import org.junit.jupiter.api.Test;
  */
 class ProducesOnComponentClassTest {
 
+    private static final String SINGLETON_PRODUCES = "@Produces(scope = Scope.SINGLETON)";
+
     @Test
     void staticProducesReturningSameTypeOnComponentClass_isAccepted() {
-        Compilation compilation = Compiler.javac()
-                .withProcessors(new TikoAnnotationProcessor())
-                .compile(STATIC_PRODUCES_SAME_TYPE_FIXTURE);
+        Compilation compilation = compile(database("@Component(scope = Scope.SINGLETON)", SINGLETON_PRODUCES));
 
         assertThat(compilation).succeeded();
     }
@@ -35,7 +35,7 @@ class ProducesOnComponentClassTest {
      */
     @Test
     void scopeStatedOnTheSelfFactoryIsTheComponentsScope() throws IOException {
-        var container = generatedContainer(database("@Component", "@Produces(scope = Scope.SINGLETON)"));
+        var container = generatedContainer(database("@Component", SINGLETON_PRODUCES));
 
         Assertions.assertThat(container)
                 .contains("__getOrCreateSingleton(\"demo.Database\", () -> databaseFactory.create())");
@@ -53,9 +53,7 @@ class ProducesOnComponentClassTest {
     /** Two different scopes stated on the two annotations are a located error, never a silent pick. */
     @Test
     void conflictingScopesOnComponentAndSelfFactoryAreRejected() {
-        Compilation compilation = Compiler.javac()
-                .withProcessors(new TikoAnnotationProcessor())
-                .compile(database("@Component(scope = Scope.EVENT)", "@Produces(scope = Scope.SINGLETON)"));
+        Compilation compilation = compile(database("@Component(scope = Scope.EVENT)", SINGLETON_PRODUCES));
 
         assertThat(compilation).failed();
         assertThat(compilation)
@@ -67,9 +65,8 @@ class ProducesOnComponentClassTest {
     /** Two different profile lists stated on the two annotations are a located error as well. */
     @Test
     void conflictingProfilesOnComponentAndSelfFactoryAreRejected() {
-        Compilation compilation = Compiler.javac()
-                .withProcessors(new TikoAnnotationProcessor())
-                .compile(database("@Component(profiles = {\"dev\"})", "@Produces(profiles = {\"prod\"})"));
+        Compilation compilation =
+                compile(database("@Component(profiles = {\"dev\"})", "@Produces(profiles = {\"prod\"})"));
 
         assertThat(compilation).failed();
         assertThat(compilation)
@@ -81,19 +78,17 @@ class ProducesOnComponentClassTest {
     /** Profiles stated on the self factory apply to the component, like its scope. */
     @Test
     void profilesStatedOnTheSelfFactoryApplyToTheComponent() {
-        Compilation compilation = Compiler.javac()
-                .withProcessors(new TikoAnnotationProcessor())
-                .withOptions("-Atiko.profiles=prod")
-                .compile(
-                        database("@Component", "@Produces(scope = Scope.SINGLETON, profiles = {\"dev\"})"),
-                        JavaFileObjects.forSourceLines(
-                                "demo.Consumer",
-                                "package demo;",
-                                "import io.tiko.annotations.Component;",
-                                "@Component",
-                                "public class Consumer {",
-                                "    public Consumer(Database database) {}",
-                                "}"));
+        Compilation compilation = compile(
+                List.of("-Atiko.profiles=prod"),
+                database("@Component", "@Produces(scope = Scope.SINGLETON, profiles = {\"dev\"})"),
+                JavaFileObjects.forSourceLines(
+                        "demo.Consumer",
+                        "package demo;",
+                        "import io.tiko.annotations.Component;",
+                        "@Component",
+                        "public class Consumer {",
+                        "    public Consumer(Database database) {}",
+                        "}"));
 
         assertThat(compilation).failed();
         assertThat(compilation).hadErrorContaining("Cannot resolve dependency: demo.Database");
@@ -115,33 +110,8 @@ class ProducesOnComponentClassTest {
     }
 
     private static String generatedContainer(JavaFileObject... sources) throws IOException {
-        Compilation compilation =
-                Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(sources);
+        Compilation compilation = compile(sources);
         assertThat(compilation).succeeded();
-        JavaFileObject container = compilation.generatedSourceFiles().stream()
-                .filter(file -> file.getName().contains("TikoContainerImpl"))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("TikoContainerImpl was not generated"));
-        return new String(container.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        return generated(compilation, "TikoContainerImpl");
     }
-
-    private static final JavaFileObject STATIC_PRODUCES_SAME_TYPE_FIXTURE = JavaFileObjects.forSourceLines(
-            "io.tiko.processor.fixtures.producesonsamecomponent.Database",
-            "package io.tiko.processor.fixtures.producesonsamecomponent;",
-            "",
-            "import io.tiko.Scope;",
-            "import io.tiko.annotations.Component;",
-            "import io.tiko.annotations.Produces;",
-            "",
-            "@Component(scope = Scope.SINGLETON)",
-            "public class Database {",
-            "",
-            "    private Database() {",
-            "    }",
-            "",
-            "    @Produces(scope = Scope.SINGLETON)",
-            "    public static Database create() {",
-            "        return new Database();",
-            "    }",
-            "}");
 }

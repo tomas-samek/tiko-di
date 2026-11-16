@@ -1,13 +1,12 @@
 package io.tiko.processor;
 
+import static io.tiko.processor.CompileTesting.compile;
+import static io.tiko.processor.CompileTesting.generated;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.google.testing.compile.Compilation;
 import com.google.testing.compile.CompilationSubject;
-import com.google.testing.compile.Compiler;
-import com.google.testing.compile.JavaFileObjects;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import javax.tools.JavaFileObject;
 import org.junit.jupiter.api.Test;
 
@@ -122,24 +121,12 @@ class LookupGenerationTest {
     }
 
     private static JavaFileObject source(String name, String... lines) {
-        var all = new String[lines.length + 2];
-        all[0] = "package demo;";
-        all[1] = IMPORTS;
-        System.arraycopy(lines, 0, all, 2, lines.length);
-        return JavaFileObjects.forSourceLines("demo." + name, all);
-    }
-
-    private static Compilation compile(JavaFileObject... sources) {
-        return Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(sources);
+        return CompileTesting.source(IMPORTS, name, lines);
     }
 
     private static String container(JavaFileObject... sources) throws IOException {
         Compilation compilation = compile(sources);
         CompilationSubject.assertThat(compilation).succeeded();
-        JavaFileObject file = compilation.generatedSourceFiles().stream()
-                .filter(f -> f.getName().contains("TikoContainerImpl"))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("TikoContainerImpl was not generated"));
-        return new String(file.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        return generated(compilation, "TikoContainerImpl");
     }
 }

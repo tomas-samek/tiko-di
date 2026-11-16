@@ -1,10 +1,11 @@
 package io.tiko.processor.validation;
 
+import static io.tiko.processor.CompileTesting.compile;
+
 import com.google.testing.compile.Compilation;
 import com.google.testing.compile.CompilationSubject;
-import com.google.testing.compile.Compiler;
-import com.google.testing.compile.JavaFileObjects;
-import io.tiko.processor.TikoAnnotationProcessor;
+import io.tiko.Scope;
+import io.tiko.processor.CompileTesting;
 import java.util.stream.Stream;
 import javax.tools.JavaFileObject;
 import org.junit.jupiter.api.Test;
@@ -23,26 +24,25 @@ class ScopeCaptureThroughPrototypeTest {
     private static final String IMPORTS =
             "import io.tiko.Scope; import io.tiko.Provider; import io.tiko.annotations.*;";
 
-    private static final JavaFileObject CONCRETE_EVENT_CTX =
-            source("demo.Ctx", "@Component(scope = Scope.EVENT)", "public class Ctx {", "}");
+    private static final String EVENT_COMPONENT = "@Component(scope = Scope.EVENT)";
+
+    /** The annotation and modifiers of an instance {@code @Produces} method of SINGLETON scope. */
+    private static final String SINGLETON_INSTANCE_PRODUCES = "@Produces(scope = Scope.SINGLETON) public";
+
+    private static final JavaFileObject CONCRETE_EVENT_CTX = source("Ctx", EVENT_COMPONENT, "public class Ctx {", "}");
 
     private static final JavaFileObject PROTOTYPE_MID_TAKING_CTX =
-            source("demo.Mid", "@Component", "public class Mid {", "  @Inject public Mid(Ctx ctx) {}", "}");
+            source("Mid", "@Component", "public class Mid {", "  @Inject public Mid(Ctx ctx) {}", "}");
+
+    private static final JavaFileObject SINGLETON_HOLDER_OF_MID = holder(Scope.SINGLETON, "Mid mid");
 
     static Stream<Arguments> singletonConsumersOfThePrototype() {
         return Stream.of(
-                Arguments.of(
-                        "SINGLETON @Component",
-                        source(
-                                "demo.Holder",
-                                "@Component(scope = Scope.SINGLETON)",
-                                "public class Holder {",
-                                "  @Inject public Holder(Mid mid) {}",
-                                "}")),
+                Arguments.of("SINGLETON @Component", SINGLETON_HOLDER_OF_MID),
                 Arguments.of(
                         "SINGLETON @Produces",
                         source(
-                                "demo.Holders",
+                                "Holders",
                                 "@Component",
                                 "public class Holders {",
                                 "  @Produces(scope = Scope.SINGLETON) public String holder(Mid mid) { return \"h\"; }",
@@ -66,13 +66,8 @@ class ScopeCaptureThroughPrototypeTest {
         Compilation c = compile(
                 CONCRETE_EVENT_CTX,
                 PROTOTYPE_MID_TAKING_CTX,
-                source("demo.Outer", "@Component", "public class Outer {", "  @Inject public Outer(Mid mid) {}", "}"),
-                source(
-                        "demo.Holder",
-                        "@Component(scope = Scope.SINGLETON)",
-                        "public class Holder {",
-                        "  @Inject public Holder(Outer outer) {}",
-                        "}"));
+                source("Outer", "@Component", "public class Outer {", "  @Inject public Outer(Mid mid) {}", "}"),
+                holder(Scope.SINGLETON, "Outer outer"));
 
         CompilationSubject.assertThat(c).failed();
         CompilationSubject.assertThat(c).hadErrorContaining("through PROTOTYPE 'Outer' -> PROTOTYPE 'Mid'");
@@ -81,20 +76,15 @@ class ScopeCaptureThroughPrototypeTest {
     @Test
     void singletonReachingAnEventProducedValueThroughAPrototypeFailsCompilation() {
         Compilation c = compile(
-                source("demo.Conn", "public interface Conn {", "}"),
+                source("Conn", "public interface Conn {", "}"),
                 source(
-                        "demo.Conns",
+                        "Conns",
                         "@Component",
                         "public class Conns {",
                         "  @Produces(scope = Scope.EVENT) public Conn conn() { return new Conn() {}; }",
                         "}"),
-                source("demo.Mid", "@Component", "public class Mid {", "  @Inject public Mid(Conn conn) {}", "}"),
-                source(
-                        "demo.Holder",
-                        "@Component(scope = Scope.SINGLETON)",
-                        "public class Holder {",
-                        "  @Inject public Holder(Mid mid) {}",
-                        "}"));
+                source("Mid", "@Component", "public class Mid {", "  @Inject public Mid(Conn conn) {}", "}"),
+                SINGLETON_HOLDER_OF_MID);
 
         CompilationSubject.assertThat(c).failed();
         CompilationSubject.assertThat(c)
@@ -107,150 +97,89 @@ class ScopeCaptureThroughPrototypeTest {
     void captureThroughAPrototypeProducesMethodNamesTheMethod() {
         Compilation c = compile(
                 CONCRETE_EVENT_CTX,
-                source("demo.Thing", "public class Thing {", "}"),
+                source("Thing", "public class Thing {", "}"),
                 source(
-                        "demo.Things",
+                        "Things",
                         "@Component",
                         "public class Things {",
                         "  @Produces public Thing thing(Ctx ctx) { return new Thing(); }",
                         "}"),
-                source(
-                        "demo.Holder",
-                        "@Component(scope = Scope.SINGLETON)",
-                        "public class Holder {",
-                        "  @Inject public Holder(Thing thing) {}",
-                        "}"));
+                holder(Scope.SINGLETON, "Thing thing"));
 
         CompilationSubject.assertThat(c).failed();
         CompilationSubject.assertThat(c).hadErrorContaining("through PROTOTYPE 'Things.thing'");
     }
 
     static Stream<Arguments> graphsThatStayValid() {
-        JavaFileObject ctxApi = source("demo.CtxApi", "public interface CtxApi {", "}");
-        JavaFileObject proxiedCtx =
-                source("demo.Ctx", "@Component(scope = Scope.EVENT)", "public class Ctx implements CtxApi {", "}");
+        JavaFileObject ctxApi = source("CtxApi", "public interface CtxApi {", "}");
+        JavaFileObject proxiedCtx = source("Ctx", EVENT_COMPONENT, "public class Ctx implements CtxApi {", "}");
         JavaFileObject midTakingTheInterface =
-                source("demo.Mid", "@Component", "public class Mid {", "  @Inject public Mid(CtxApi ctx) {}", "}");
-        JavaFileObject singletonHolder = source(
-                "demo.Holder",
-                "@Component(scope = Scope.SINGLETON)",
-                "public class Holder {",
-                "  @Inject public Holder(Mid mid) {}",
-                "}");
+                source("Mid", "@Component", "public class Mid {", "  @Inject public Mid(CtxApi ctx) {}", "}");
         return Stream.of(
                 Arguments.of(
                         "PROTOTYPE receives the EVENT bean through its interface",
-                        new JavaFileObject[] {ctxApi, proxiedCtx, midTakingTheInterface, singletonHolder}),
+                        new JavaFileObject[] {ctxApi, proxiedCtx, midTakingTheInterface, SINGLETON_HOLDER_OF_MID}),
                 Arguments.of("SINGLETON takes the PROTOTYPE as a Provider", new JavaFileObject[] {
-                    CONCRETE_EVENT_CTX,
-                    PROTOTYPE_MID_TAKING_CTX,
-                    source(
-                            "demo.Holder",
-                            "@Component(scope = Scope.SINGLETON)",
-                            "public class Holder {",
-                            "  @Inject public Holder(Provider<Mid> mid) {}",
-                            "}")
+                    CONCRETE_EVENT_CTX, PROTOTYPE_MID_TAKING_CTX, holder(Scope.SINGLETON, "Provider<Mid> mid")
                 }),
                 Arguments.of("PROTOTYPE takes the concrete EVENT bean as a Provider", new JavaFileObject[] {
                     CONCRETE_EVENT_CTX,
                     source(
-                            "demo.Mid",
+                            "Mid",
                             "@Component",
                             "public class Mid {",
                             "  @Inject public Mid(Provider<Ctx> ctx) {}",
                             "}"),
-                    singletonHolder
+                    SINGLETON_HOLDER_OF_MID
                 }),
                 Arguments.of("EVENT consumer of the PROTOTYPE", new JavaFileObject[] {
-                    CONCRETE_EVENT_CTX,
-                    PROTOTYPE_MID_TAKING_CTX,
-                    source(
-                            "demo.Holder",
-                            "@Component(scope = Scope.EVENT)",
-                            "public class Holder {",
-                            "  @Inject public Holder(Mid mid) {}",
-                            "}")
+                    CONCRETE_EVENT_CTX, PROTOTYPE_MID_TAKING_CTX, holder(Scope.EVENT, "Mid mid")
                 }),
                 Arguments.of(
                         "PROTOTYPE consumer of the PROTOTYPE, nothing longer-lived above it", new JavaFileObject[] {
                             CONCRETE_EVENT_CTX,
                             PROTOTYPE_MID_TAKING_CTX,
                             source(
-                                    "demo.Outer",
+                                    "Outer",
                                     "@Component",
                                     "public class Outer {",
                                     "  @Inject public Outer(Mid mid) {}",
                                     "}")
                         }),
                 Arguments.of("PROTOTYPE cycle broken by a Provider below a SINGLETON", new JavaFileObject[] {
-                    source("demo.A", "@Component", "public class A {", "  @Inject public A(Provider<B> b) {}", "}"),
-                    source("demo.B", "@Component", "public class B {", "  @Inject public B(A a) {}", "}"),
-                    source(
-                            "demo.Holder",
-                            "@Component(scope = Scope.SINGLETON)",
-                            "public class Holder {",
-                            "  @Inject public Holder(B b) {}",
-                            "}")
+                    source("A", "@Component", "public class A {", "  @Inject public A(Provider<B> b) {}", "}"),
+                    source("B", "@Component", "public class B {", "  @Inject public B(A a) {}", "}"),
+                    holder(Scope.SINGLETON, "B b")
                 }),
                 Arguments.of("diamond of PROTOTYPEs over a SINGLETON and the event bus", new JavaFileObject[] {
-                    source("demo.Shared", "@Component(scope = Scope.SINGLETON)", "public class Shared {", "}"),
+                    source("Shared", "@Component(scope = Scope.SINGLETON)", "public class Shared {", "}"),
                     source(
-                            "demo.Leaf",
+                            "Leaf",
                             "@Component",
                             "public class Leaf {",
                             "  @Inject public Leaf(Shared shared, io.tiko.EventBus bus) {}",
                             "}"),
+                    source("Left", "@Component", "public class Left {", "  @Inject public Left(Leaf leaf) {}", "}"),
                     source(
-                            "demo.Left",
-                            "@Component",
-                            "public class Left {",
-                            "  @Inject public Left(Leaf leaf) {}",
-                            "}"),
-                    source(
-                            "demo.Top",
+                            "Top",
                             "@Component",
                             "public class Top {",
                             "  @Inject public Top(Left left, Leaf leaf) {}",
                             "}"),
-                    source(
-                            "demo.Holder",
-                            "@Component(scope = Scope.SINGLETON)",
-                            "public class Holder {",
-                            "  @Inject public Holder(Top top) {}",
-                            "}")
+                    holder(Scope.SINGLETON, "Top top")
                 }),
                 Arguments.of("static SINGLETON @Produces on an EVENT component", new JavaFileObject[] {
-                    source(
-                            "demo.Cfg",
-                            "@Component(scope = Scope.EVENT)",
-                            "public class Cfg {",
-                            "  @Produces(scope = Scope.SINGLETON) public static String thing() { return \"t\"; }",
-                            "}")
+                    cfg(EVENT_COMPONENT, "@Produces(scope = Scope.SINGLETON) public static")
                 }),
-                Arguments.of("EVENT @Produces on an EVENT component", new JavaFileObject[] {
-                    source(
-                            "demo.Cfg",
-                            "@Component(scope = Scope.EVENT)",
-                            "public class Cfg {",
-                            "  @Produces(scope = Scope.EVENT) public String thing() { return \"t\"; }",
-                            "}")
-                }),
-                Arguments.of("PROTOTYPE @Produces on an EVENT component", new JavaFileObject[] {
-                    source(
-                            "demo.Cfg",
-                            "@Component(scope = Scope.EVENT)",
-                            "public class Cfg {",
-                            "  @Produces public String thing() { return \"t\"; }",
-                            "}")
-                }),
-                Arguments.of("SINGLETON @Produces on a PROTOTYPE component", new JavaFileObject[] {
-                    source(
-                            "demo.Cfg",
-                            "@Component",
-                            "public class Cfg {",
-                            "  @Produces(scope = Scope.SINGLETON) public String thing() { return \"t\"; }",
-                            "}")
-                }));
+                Arguments.of(
+                        "EVENT @Produces on an EVENT component",
+                        new JavaFileObject[] {cfg(EVENT_COMPONENT, "@Produces(scope = Scope.EVENT) public")}),
+                Arguments.of(
+                        "PROTOTYPE @Produces on an EVENT component",
+                        new JavaFileObject[] {cfg(EVENT_COMPONENT, "@Produces public")}),
+                Arguments.of(
+                        "SINGLETON @Produces on a PROTOTYPE component",
+                        new JavaFileObject[] {cfg("@Component", SINGLETON_INSTANCE_PRODUCES)}));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -261,12 +190,7 @@ class ScopeCaptureThroughPrototypeTest {
 
     @Test
     void singletonInstanceProducesOnAnEventComponentFailsCompilation() {
-        Compilation c = compile(source(
-                "demo.Cfg",
-                "@Component(scope = Scope.EVENT)",
-                "public class Cfg {",
-                "  @Produces(scope = Scope.SINGLETON) public String thing() { return \"t\"; }",
-                "}"));
+        Compilation c = compile(cfg(EVENT_COMPONENT, SINGLETON_INSTANCE_PRODUCES));
 
         CompilationSubject.assertThat(c).failed();
         CompilationSubject.assertThat(c)
@@ -276,15 +200,30 @@ class ScopeCaptureThroughPrototypeTest {
         CompilationSubject.assertThat(c).hadErrorContaining("Make 'thing' static");
     }
 
-    private static JavaFileObject source(String fqn, String... lines) {
-        var all = new String[lines.length + 2];
-        all[0] = "package demo;";
-        all[1] = IMPORTS;
-        System.arraycopy(lines, 0, all, 2, lines.length);
-        return JavaFileObjects.forSourceLines(fqn, all);
+    private static JavaFileObject source(String name, String... lines) {
+        return CompileTesting.source(IMPORTS, name, lines);
     }
 
-    private static Compilation compile(JavaFileObject... sources) {
-        return Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(sources);
+    /** A {@code Holder} component of {@code scope} whose constructor injects {@code param}. */
+    private static JavaFileObject holder(Scope scope, String param) {
+        return source(
+                "Holder",
+                "@Component(scope = Scope." + scope + ")",
+                "public class Holder {",
+                "  @Inject public Holder(" + param + ") {}",
+                "}");
+    }
+
+    /**
+     * A {@code Cfg} component annotated {@code componentAnnotation} whose {@code thing()} method is
+     * declared with {@code produces}: its {@code @Produces} annotation and its modifiers.
+     */
+    private static JavaFileObject cfg(String componentAnnotation, String produces) {
+        return source(
+                "Cfg",
+                componentAnnotation,
+                "public class Cfg {",
+                "  " + produces + " String thing() { return \"t\"; }",
+                "}");
     }
 }

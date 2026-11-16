@@ -28,6 +28,22 @@ class BoundedExecutionTest {
     private static final Function<Throwable, ErrorContext> AS_PREDESTROY =
             t -> new PreDestroyFailure(BoundedExecutionTest.class, t);
 
+    /**
+     * A hook that counts {@code started} down and then blocks on a latch nothing releases: only the
+     * timeout's {@code cancel(true)} interrupt can wake it, and it counts {@code interrupted} down.
+     */
+    private static BoundedExecution.CheckedRunnable hungHook(CountDownLatch started, CountDownLatch interrupted) {
+        var neverReleased = new CountDownLatch(1);
+        return () -> {
+            started.countDown();
+            try {
+                neverReleased.await();
+            } catch (InterruptedException e) {
+                interrupted.countDown();
+            }
+        };
+    }
+
     @Test
     void nullTimeoutRunsInlineAndSucceeds() {
         AtomicReference<ErrorContext> routed = new AtomicReference<>();
@@ -72,18 +88,8 @@ class BoundedExecutionTest {
         AtomicReference<ErrorContext> routed = new AtomicReference<>();
         CountDownLatch started = new CountDownLatch(1);
         CountDownLatch interrupted = new CountDownLatch(1);
-        CountDownLatch neverReleased = new CountDownLatch(1);
 
-        BoundedExecution.CheckedRunnable hung = () -> {
-            started.countDown();
-            try {
-                neverReleased.await(); // only the timeout's cancel(true) interrupt can wake this
-            } catch (InterruptedException e) {
-                interrupted.countDown();
-            }
-        };
-
-        BoundedExecution.run(hung, Duration.ofMillis(50), routed::set, AS_PREDESTROY);
+        BoundedExecution.run(hungHook(started, interrupted), Duration.ofMillis(50), routed::set, AS_PREDESTROY);
 
         assertThat(started.await(2, TimeUnit.SECONDS))
                 .as("hook must have started")
@@ -150,18 +156,8 @@ class BoundedExecutionTest {
             AtomicReference<ErrorContext> routed = new AtomicReference<>();
             CountDownLatch started = new CountDownLatch(1);
             CountDownLatch interrupted = new CountDownLatch(1);
-            CountDownLatch neverReleased = new CountDownLatch(1);
 
-            BoundedExecution.CheckedRunnable hung = () -> {
-                started.countDown();
-                try {
-                    neverReleased.await();
-                } catch (InterruptedException e) {
-                    interrupted.countDown();
-                }
-            };
-
-            BoundedExecution.run(hung, Duration.ZERO, routed::set, AS_PREDESTROY);
+            BoundedExecution.run(hungHook(started, interrupted), Duration.ZERO, routed::set, AS_PREDESTROY);
 
             assertThat(started.await(2, TimeUnit.SECONDS))
                     .as("attempt %d: the timed-out hook ran", attempt)
@@ -240,14 +236,7 @@ class BoundedExecutionTest {
     void boundedHungHookTimesOutWhenTheCallerArrivesInterrupted() throws InterruptedException {
         AtomicReference<ErrorContext> routed = new AtomicReference<>();
         CountDownLatch hookInterrupted = new CountDownLatch(1);
-        CountDownLatch neverReleased = new CountDownLatch(1);
-        BoundedExecution.CheckedRunnable hung = () -> {
-            try {
-                neverReleased.await();
-            } catch (InterruptedException e) {
-                hookInterrupted.countDown();
-            }
-        };
+        BoundedExecution.CheckedRunnable hung = hungHook(new CountDownLatch(1), hookInterrupted);
 
         Thread.currentThread().interrupt();
         boolean stillInterrupted;
@@ -263,24 +252,5 @@ class BoundedExecutionTest {
                 .as("the overrunning hook is interrupted")
                 .isTrue();
         assertThat(stillInterrupted).as("the caller's interrupt flag is kept").isTrue();
-    }
-
-    @Test
-    void zeroTimeoutRoutesTimeoutForAHookThatCannotFinishInstantly() throws InterruptedException {
-        AtomicReference<ErrorContext> routed = new AtomicReference<>();
-        CountDownLatch neverReleased = new CountDownLatch(1);
-
-        BoundedExecution.CheckedRunnable hung = () -> {
-            try {
-                neverReleased.await();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        };
-
-        BoundedExecution.run(hung, Duration.ZERO, routed::set, AS_PREDESTROY);
-
-        assertThat(routed.get()).isInstanceOf(PreDestroyFailure.class);
-        assertThat(((PreDestroyFailure) routed.get()).cause()).isInstanceOf(TimeoutException.class);
     }
 }

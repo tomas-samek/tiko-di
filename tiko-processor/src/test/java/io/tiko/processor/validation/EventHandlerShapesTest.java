@@ -1,17 +1,14 @@
 package io.tiko.processor.validation;
 
+import static io.tiko.processor.validation.ShapeTesting.assertLocatedError;
+import static io.tiko.processor.validation.ShapeTesting.compile;
+import static io.tiko.processor.validation.ShapeTesting.errorsOf;
+import static io.tiko.processor.validation.ShapeTesting.listener;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.google.testing.compile.Compilation;
-import com.google.testing.compile.Compiler;
-import com.google.testing.compile.JavaFileObjects;
-import io.tiko.processor.TikoAnnotationProcessor;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
-import javax.tools.JavaFileObject;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -29,56 +26,12 @@ class EventHandlerShapesTest {
             import io.tiko.annotations.EventHandler;
             """;
 
-    private static final Pattern PACKAGE = Pattern.compile("package ([\\w.]+);");
-    private static final Pattern TYPE_NAME = Pattern.compile("(?:class|interface|record) (\\w+)");
-
-    /** Compiles each source under the package it declares (default {@code demo}) and its first type's name. */
-    private static Compilation compile(List<String> sources) {
-        var files = new ArrayList<JavaFileObject>();
-        for (String source : sources) {
-            var declared = PACKAGE.matcher(source);
-            String packageName = declared.find() ? declared.group(1) : "demo";
-            String body = declared.reset().find() ? source.substring(declared.end()) : source;
-            var type = TYPE_NAME.matcher(body);
-            assertThat(type.find()).as("source declares a type").isTrue();
-            files.add(JavaFileObjects.forSourceString(
-                    packageName + "." + type.group(1), "package " + packageName + ";\n" + IMPORTS + body));
-        }
-        return Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(files);
-    }
-
-    private static List<String> errorsOf(Compilation compilation) {
-        return compilation.errors().stream()
-                .map(error -> error.getMessage(Locale.ROOT))
-                .toList();
-    }
-
-    private static String listener(String handler) {
-        return """
-                @Component(scope = Scope.SINGLETON)
-                public class Listener {
-                    %s
-                }
-                """.formatted(handler);
-    }
-
     private static final String ORDER = "public record OrderPlaced(String id) {}";
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("rejected")
     void unsupportedHandlerShapeIsALocatedError(String name, List<String> sources, List<String> fragments) {
-        var compilation = compile(sources);
-
-        assertThat(compilation.status()).isEqualTo(Compilation.Status.FAILURE);
-        assertThat(errorsOf(compilation))
-                .as("no processor crash")
-                .noneMatch(message -> message.contains("Tiko DI processing failed"));
-        assertThat(errorsOf(compilation))
-                .anySatisfy(message -> assertThat(message).contains(fragments).contains("Suggested fixes:"));
-        assertThat(compilation.errors())
-                .as("no error in generated code")
-                .noneMatch(error ->
-                        error.getSource() != null && error.getSource().getName().contains("io/tiko/generated"));
+        assertLocatedError(compile(IMPORTS, sources), fragments);
     }
 
     static Stream<Arguments> rejected() {
@@ -114,7 +67,7 @@ class EventHandlerShapesTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("supported")
     void handlerShapeCompiles(String name, List<String> sources) {
-        var compilation = compile(sources);
+        var compilation = compile(IMPORTS, sources);
 
         assertThat(errorsOf(compilation)).isEmpty();
         assertThat(compilation.status()).isEqualTo(Compilation.Status.SUCCESS);

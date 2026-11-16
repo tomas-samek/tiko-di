@@ -1,13 +1,11 @@
 package io.tiko.processor;
 
+import static io.tiko.processor.CompileTesting.generated;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.google.testing.compile.Compilation;
 import com.google.testing.compile.CompilationSubject;
-import com.google.testing.compile.Compiler;
-import com.google.testing.compile.JavaFileObjects;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.stream.Stream;
 import javax.tools.JavaFileObject;
 import org.junit.jupiter.api.Test;
@@ -150,25 +148,13 @@ class TeardownGenerationTest {
     }
 
     private static JavaFileObject source(String name, String... lines) {
-        var all = new String[lines.length + 2];
-        all[0] = "package demo;";
-        all[1] = IMPORTS;
-        System.arraycopy(lines, 0, all, 2, lines.length);
-        return JavaFileObjects.forSourceLines("demo." + name, all);
+        return CompileTesting.source(IMPORTS, name, lines);
     }
 
+    /** Compiles and asserts success: every test here reads what a clean compile generated. */
     private static Compilation compile(JavaFileObject... sources) {
-        Compilation compilation =
-                Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(sources);
+        Compilation compilation = CompileTesting.compile(sources);
         CompilationSubject.assertThat(compilation).succeeded();
         return compilation;
-    }
-
-    private static String generated(Compilation compilation, String nameFragment) throws IOException {
-        JavaFileObject file = compilation.generatedSourceFiles().stream()
-                .filter(f -> f.getName().contains(nameFragment))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError(nameFragment + " was not generated"));
-        return new String(file.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
     }
 }

@@ -11,7 +11,6 @@ import io.tiko.kafka.test.FakeKafkaBroker;
 import io.tiko.runtime.Tiko;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -159,54 +158,5 @@ class KafkaRunnerFailureHandlingTest {
 
         assertThat(received).containsExactly("ok", "ok");
         assertThat(errors).isNotEmpty();
-    }
-
-    /** Delegating client base for per-test overrides. */
-    private static class ForwardingClient implements KafkaConsumerClient {
-        private final KafkaConsumerClient delegate;
-
-        ForwardingClient(KafkaConsumerClient delegate) {
-            this.delegate = delegate;
-        }
-
-        @Override
-        public void subscribe(Collection<String> topics) {
-            delegate.subscribe(topics);
-        }
-
-        @Override
-        public ConsumerRecords<String, byte[]> poll(Duration timeout) {
-            return delegate.poll(timeout);
-        }
-
-        @Override
-        public void commitSync(Map<TopicPartition, OffsetAndMetadata> offsets) {
-            delegate.commitSync(offsets);
-        }
-
-        @Override
-        public void seek(TopicPartition partition, long offset) {
-            delegate.seek(partition, offset);
-        }
-
-        @Override
-        public void pause(Collection<TopicPartition> partitions) {
-            delegate.pause(partitions);
-        }
-
-        @Override
-        public void resume(Collection<TopicPartition> partitions) {
-            delegate.resume(partitions);
-        }
-
-        @Override
-        public void wakeup() {
-            delegate.wakeup();
-        }
-
-        @Override
-        public void close() {
-            delegate.close();
-        }
     }
 }

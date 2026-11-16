@@ -659,18 +659,8 @@ class KspTestCompileTest {
 
     @Test
     void testCompileSeesComponentsOfEveryCompiledModule() {
-        var alpha = compileMain(KspCompiler.kotlin(
-                "Alpha.kt",
-                "package a",
-                "",
-                "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
-                "open class Alpha"));
-        var beta = compileMain(KspCompiler.kotlin(
-                "Beta.kt",
-                "package b",
-                "",
-                "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
-                "open class Beta"));
+        var alpha = kspOneComponentModule("a", "Alpha");
+        var beta = kspOneComponentModule("b", "Beta");
         var libraries = new ArrayList<File>(librariesOf(alpha));
         libraries.addAll(librariesOf(beta));
 
@@ -696,22 +686,8 @@ class KspTestCompileTest {
     /** The javac counterpart of {@link #testCompileSeesComponentsOfEveryCompiledModule}: same shadows. */
     @Test
     void javacTestCompileSeesComponentsOfEveryCompiledModule(@TempDir Path dir) throws Exception {
-        var alpha = javacCompile(
-                List.of(),
-                JavaFileObjects.forSourceLines(
-                        "a.Alpha",
-                        "package a;",
-                        "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
-                        "public class Alpha {}"));
-        var beta = javacCompile(
-                List.of(),
-                JavaFileObjects.forSourceLines(
-                        "b.Beta",
-                        "package b;",
-                        "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
-                        "public class Beta {}"));
-        var alphaClasses = writeClassOutput(alpha, dir.resolve("alpha"));
-        var betaClasses = writeClassOutput(beta, dir.resolve("beta"));
+        var alphaClasses = writeClassOutput(javacOneComponentModule("a", "Alpha"), dir.resolve("alpha"));
+        var betaClasses = writeClassOutput(javacOneComponentModule("b", "Beta"), dir.resolve("beta"));
 
         var test = javacCompile(
                 List.of(alphaClasses.toFile(), betaClasses.toFile()),
@@ -736,36 +712,10 @@ class KspTestCompileTest {
     /** Two modules on the classpath in either order: both frontends pick the lowest-named module's container. */
     @Test
     void bothFrontendsPickTheSameContainerInEitherClasspathOrder(@TempDir Path dir) throws Exception {
-        var javacAlpha = writeClassOutput(
-                javacCompile(
-                        List.of(),
-                        JavaFileObjects.forSourceLines(
-                                "a.Alpha",
-                                "package a;",
-                                "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
-                                "public class Alpha {}")),
-                dir.resolve("alpha"));
-        var javacBeta = writeClassOutput(
-                javacCompile(
-                        List.of(),
-                        JavaFileObjects.forSourceLines(
-                                "b.Beta",
-                                "package b;",
-                                "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
-                                "public class Beta {}")),
-                dir.resolve("beta"));
-        var kspAlpha = compileMain(KspCompiler.kotlin(
-                "Alpha.kt",
-                "package a",
-                "",
-                "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
-                "open class Alpha"));
-        var kspBeta = compileMain(KspCompiler.kotlin(
-                "Beta.kt",
-                "package b",
-                "",
-                "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
-                "open class Beta"));
+        var javacAlpha = writeClassOutput(javacOneComponentModule("a", "Alpha"), dir.resolve("alpha"));
+        var javacBeta = writeClassOutput(javacOneComponentModule("b", "Beta"), dir.resolve("beta"));
+        var kspAlpha = kspOneComponentModule("a", "Alpha");
+        var kspBeta = kspOneComponentModule("b", "Beta");
 
         var javacContainers = List.of(
                 implOf(Files.readString(javacAlpha.resolve(CONTAINER_DESCRIPTOR))),
@@ -1234,6 +1184,27 @@ class KspTestCompileTest {
             });
             assertThat(owners).containsExactly("alpha", "beta");
         }
+    }
+
+    /** A javac-compiled main module whose one component is the SINGLETON {@code <pkg>.<name>}. */
+    private static Compilation javacOneComponentModule(String pkg, String name) {
+        return javacCompile(
+                List.of(),
+                JavaFileObjects.forSourceLines(
+                        pkg + "." + name,
+                        "package " + pkg + ";",
+                        "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
+                        "public class " + name + " {}"));
+    }
+
+    /** The KSP counterpart of {@link #javacOneComponentModule}: the same component as an open Kotlin class. */
+    private static KspResult kspOneComponentModule(String pkg, String name) {
+        return compileMain(KspCompiler.kotlin(
+                name + ".kt",
+                "package " + pkg,
+                "",
+                "@io.tiko.annotations.Component(scope = io.tiko.Scope.SINGLETON)",
+                "open class " + name));
     }
 
     /** A main module with an interface, its one implementation, and a component injecting it. */
