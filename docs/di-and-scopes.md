@@ -222,7 +222,7 @@ A constructor or `@Produces` parameter resolves the component that `container.ge
 
 - A component is routable as every interface it implements directly (the JDK's `AutoCloseable` / `Closeable` aside) and as its own class. `@Component(expose = {...})` narrows the interfaces to the listed ones, and `exposeSelf = false` takes the class itself out. A parameter typed by a type the component hides is a compile error that names the component.
 - A parameterized interface routes as its raw type: `Repo<User>` and `Repo<Order>` are both `Repo`. With one implementation, a `Repo<User>` parameter gets it. With two, an unqualified `Repo<...>` parameter is ambiguous: name the implementations and inject with `@Named`, or choose one with `@Pick`.
-- A named component answers a parameter that names it, or one typed by its own class. An unqualified parameter whose type has only named providers is a compile error that lists them.
+- A named component answers a parameter that names it, or one typed by its own class. An unqualified parameter takes the unnamed provider of its type. When there is none and exactly one named provider, it takes that one; with several named providers it is a compile error that lists them. `container.get(type)` does not do the same at run time: there a named provider is looked up by its name, `container.get(type, "name")`.
 - An EVENT-scoped component is received through its proxy, which implements its first interface: inject that interface.
 
 ### `@Named("...")` — string-keyed disambiguation

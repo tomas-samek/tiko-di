@@ -168,15 +168,15 @@ public final class ErrorReporter {
                 fixes.toArray(String[]::new));
     }
 
-    /** An unqualified injection point whose type has only named providers (#724). */
+    /** An unqualified injection point whose type has several named providers and no unnamed one (#724). */
     public void onlyNamedProviders(Location at, String dependencyKey, List<String> namedProviders) {
         String firstName =
                 namedProviders.get(0).substring(0, namedProviders.get(0).indexOf(' '));
         reportError(
                 KIND_MISSING_DEPENDENCY,
                 at,
-                "Cannot resolve dependency: " + dependencyKey + ". It has only named providers, and a named provider"
-                        + " answers only an injection point that names it: " + String.join(", ", namedProviders),
+                "Cannot resolve dependency: " + dependencyKey + ". It has only named providers, and more than one,"
+                        + " so an injection point without @Named cannot choose: " + String.join(", ", namedProviders),
                 "Name the one to inject on the parameter: @Named(" + firstName + ")",
                 "Leave one provider of " + dependencyKey + " unnamed, as the default");
     }
