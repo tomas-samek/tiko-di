@@ -215,7 +215,7 @@ class EventChainContextTimeoutTest {
         List<ErrorContext> errors = new CopyOnWriteArrayList<>();
         var ran = new AtomicInteger();
 
-        try {
+        try (var executor = new InlineExecutor()) {
             EventChainContext.runAsyncWithRetry(
                     () -> {
                         ran.incrementAndGet();
@@ -225,7 +225,7 @@ class EventChainContextTimeoutTest {
                     },
                     new RetryPolicy(
                             2, 0L, BackoffStrategy.FIXED, Duration.ofMillis(50).toNanos()),
-                    new InlineExecutor(),
+                    executor,
                     errors::add,
                     INFO,
                     "evt");
