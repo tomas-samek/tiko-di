@@ -5,7 +5,7 @@
 
 # Tiko DI
 
-> A modern, compile-time dependency injection framework for Java 21+ with event-driven architecture
+> A compile-time orchestrator for Java 21+: dependency injection and an event bus in the core, your libraries plugged in through `@Produces`
 
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.tomas-samek/tiko-bom?label=Maven%20Central&color=blue)](https://central.sonatype.com/artifact/io.github.tomas-samek/tiko-bom)
 [![Build](https://github.com/tomas-samek/tiko-di/actions/workflows/maven.yml/badge.svg?branch=main)](https://github.com/tomas-samek/tiko-di/actions/workflows/maven.yml)
