@@ -137,6 +137,26 @@ attributions are lost. This is what `#294` (tiko-mcp) and `#295`
 If any shaded module is missing the transformer, file an issue and
 fix it before releasing.
 
+### Release-profile build
+
+The workflow builds with `-Prelease`, which normal CI never uses, and
+the integration tests run in that build (`-DskipTests` skips the unit
+tests only). Run the same build locally, without signing, before
+dispatching:
+
+```bash
+mvn -Prelease -Dgpg.skip=true -DskipTests verify > release-preflight.log 2>&1; echo "rc=$?"
+```
+
+It needs Docker for the Kafka and outbox e2e tests. Judge it by the
+exit code and the log, not by a piped tail. A failure here is a
+failure of the workflow's deploy step.
+
+This is what the first `0.7.0` attempt missed: the profile puts
+`-sources` and `-javadoc` jars next to each shaded jar, and
+`MultiModuleFatJarIT` started the javadoc jar instead of the fat jar
+(`#817`). The deploy step failed, so nothing was uploaded or pushed.
+
 ## Step 2 — ask for the version inputs
 
 Once pre-flight is clean, ask the user. Don't dispatch yet.
@@ -396,6 +416,9 @@ are the operational gotchas:
 - **"Workflow succeeded" ≠ "on Maven Central."** Drilled into Step 4
   because `0.1.0` sat in staging unpublished for three days before
   anyone noticed.
+- **Green CI on `main` does not cover the release build.** It runs
+  with `-Prelease` and with the integration tests; run it locally first
+  (Step 1, "Release-profile build").
 - **Re-running a workflow that previously failed re-uses the run id.**
   GitHub UI re-run doesn't create a new run; the watcher loop in
   Step 3 that polls for *"new run id"* will spin forever if you used
