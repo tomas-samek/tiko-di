@@ -56,7 +56,7 @@ The pool is a SINGLETON `@Component` that produces a `DataSource` via
 public class HikariDataSourceFactory {
     private final DbConfig config;
 
-    @Inject HikariDataSourceFactory(DbConfig config) { this.config = config; }
+    @Inject public HikariDataSourceFactory(DbConfig config) { this.config = config; }
 
     @Produces(scope = Scope.SINGLETON)
     public DataSource dataSource() {
@@ -105,7 +105,7 @@ at container shutdown automatically.
 public class JdbcConnectionProvider {
     private final DataSource ds;
 
-    @Inject JdbcConnectionProvider(DataSource ds) { this.ds = ds; }
+    @Inject public JdbcConnectionProvider(DataSource ds) { this.ds = ds; }
 
     @Produces(scope = Scope.EVENT)
     public Connection connection() throws SQLException {
@@ -123,7 +123,7 @@ The interesting part — repositories inject `Connection` directly:
 public class OrderRepository {
     private final Connection connection;   // ← proxy
 
-    @Inject OrderRepository(Connection connection) { this.connection = connection; }
+    @Inject public OrderRepository(Connection connection) { this.connection = connection; }
 
     public Optional<Order> findById(UUID id) throws SQLException {
         try (var ps = connection.prepareStatement("SELECT ...")) { ... }
@@ -153,7 +153,7 @@ public class TransactionContext implements AutoCloseable {
     private boolean committed = false;
     private boolean rolledBack = false;
 
-    @Inject TransactionContext(Connection connection) { this.connection = connection; }
+    @Inject public TransactionContext(Connection connection) { this.connection = connection; }
 
     public void commit() throws SQLException { connection.commit(); committed = true; }
     public void rollback() throws SQLException { connection.rollback(); rolledBack = true; }

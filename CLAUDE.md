@@ -66,8 +66,8 @@ tiko/
 ├── tiko-processor/        # Compile-time annotation processor (javac and KSP entry points)
 ├── tiko-processor-core/   # Frontend-neutral processor model, its javac and KSP frontends,
 │                          # generator helpers — shared by both processors
-├── tiko-runtime/          # Runtime container — `Tiko` bootstrap, `TikoContainerImpl`,
-│                          # `AggregatingContainer`, `LocalEventBus`, `DefaultErrorHandler`
+├── tiko-runtime/          # Runtime — `Tiko` bootstrap, `AggregatingContainer`, `LocalEventBus`,
+│                          # `DefaultErrorHandler` (the container class itself is generated)
 ├── tiko-config/           # YAML-backed @Configuration injection (optional)
 ├── tiko-kafka/            # Kafka transport runtime — consumer runners, producer client,
 │                          # `KafkaBootstrapSupport`, `FakeKafkaBroker` test support
@@ -78,7 +78,7 @@ tiko/
 ├── tiko-archetype/        # Maven archetype for new Tiko services
 ├── tiko-bom/              # Bill of materials (no parent — excluded from spotless aggregate)
 ├── tiko-coverage/         # JaCoCo aggregate module for Sonar
-└── tiko-examples/         # Numbered example apps 01–16 (also serve as behavioral tests)
+└── tiko-examples/         # Numbered example apps 01–17 (also serve as behavioral tests)
 ```
 
 Event abstractions (`EventBus`, `@EventHandler`, `@EventTrigger`, `Event<T>`, etc.) live

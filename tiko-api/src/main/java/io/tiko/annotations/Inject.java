@@ -44,8 +44,8 @@ import java.lang.annotation.Target;
  *
  * <h2>Multiple Constructors</h2>
  * <p>A component class can have multiple constructors, but only one can be annotated
- * with {@code @Inject}. If no constructor is annotated, the no-arg constructor is used
- * (if present).</p>
+ * with {@code @Inject}. If no constructor is annotated, the single public constructor is used;
+ * a class with several public constructors and none annotated is a compile error.</p>
  *
  * <h2>Benefits of Constructor-Only Injection</h2>
  * <ul>

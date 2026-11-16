@@ -6,7 +6,7 @@ For a runnable example, see [`tiko-examples/12_testing`](../tiko-examples/12_tes
 
 ## Dependency
 
-`tiko-test` is a test-scope dependency. The processor runs at `test-compile` so a separate `TestContainerImpl_<hash>` is emitted under `target/test-classes/`; the runtime picks it up automatically when `META-INF/tiko/test-container.properties` is on the classpath.
+`tiko-test` is a test-scope dependency. The processor runs at `test-compile` so a separate `TestContainerImpl_<hash>` is emitted under `target/test-classes/`; a container that opted into test wiring (every `@TikoTest` container does) uses it when `META-INF/tiko/test-container.properties` is on the classpath.
 
 ```xml
 <dependency>
@@ -190,7 +190,7 @@ void awaitAsyncDispatchBlocksUntilHandlersDrain(EventBus bus, RecordingEventBus 
 }
 ```
 
-The extension wires the container's executor into the recorder during boot, so this works without any setup. If the executor does not drain inside the timeout a `TimeoutException` is thrown with the active count and queue size — much more informative than a bare `Thread.sleep` that races and flakes.
+The extension wires the container's executor into the recorder during boot, so this works without any setup. If the executor does not drain inside the timeout a `TimeoutException` is thrown with the number of deliveries still in flight — much more informative than a bare `Thread.sleep` that races and flakes.
 
 ## `@EventScopeTest` — scope helper
 

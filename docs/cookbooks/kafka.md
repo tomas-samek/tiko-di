@@ -64,9 +64,10 @@ local `EventBus` (dispatched **by return type**, not by name). A `null` return p
 and still commits the record (see [below](#which-failures-redeliver-a-record)).
 
 **Rules (enforced at compile time):**
-- The enclosing class is `@Component(scope = Scope.SINGLETON)` (consumer threads run
-  outside any unit of work).
-- The method must be **non-void** and carry a sibling **`@EventTrigger`**.
+- The enclosing class is `@Component(scope = Scope.SINGLETON)`. Each record is handled in its
+  own unit of work, opened around the bridge call.
+- The method must be **non-void** and carry exactly one sibling **`@EventTrigger`**; a second
+  one is a compile error.
 - Signature: `(Payload payload)` or `(Payload payload, KafkaContext ctx)`.
 - The bridge class, the bridge method and the payload type are public, and the payload type is
   not parameterized (`List<Order>`): the generated bootstrap sits in another package and hands
@@ -161,7 +162,7 @@ the **return value**, and sends it to the topic.
 **Rules:**
 - Enclosing class is `@Component(scope = Scope.SINGLETON)`.
 - **Do NOT also annotate with `@EventHandler`** — the runtime's `EventBus.subscribe()`
-  is the exclusive hook; adding `@EventHandler` double-fires the method.
+  is the exclusive hook, so the combination is a compile error.
 - A sink must not take the event type that a `@KafkaSource` of the same module returns from the
   same topic: every record read would be published, picked up by the sink and sent to the topic
   again. It is a compile error. A source and a sink are the two sides of a topic and usually live
@@ -218,8 +219,8 @@ adapter to change the wire format. The default is JSON (Jackson), registered und
 
 To plug in a different format (Avro, Protobuf, a schema-registry client, ...):
 
-1. Implement `EventSerializer` — or `KafkaSerializer` (the Kafka-named sub-interface) if you want it
-   selectable by config name. A single instance handles every payload type via the method-level
+1. Implement `KafkaSerializer` (the Kafka-named sub-interface of `EventSerializer`): the lookup by
+   config name and the per-bridge `serializer` attribute both take that type. A single instance handles every payload type via the method-level
    type parameter on `deserialize`, so you write one impl, not one per event class.
 2. Register it for name-based lookup by shipping a `NamedKafkaSerializer` via
    `META-INF/services/io.tiko.kafka.NamedKafkaSerializer` whose `name()` is your config key.
@@ -327,7 +328,7 @@ fulfilled.
 
 | Outcome       | Effect |
 |---------------|--------|
-| `SEEK`        | Seek back; the record is redelivered on the next poll. No offset committed. |
+| `SEEK`        | Route the `KafkaIngestError`; seek back and pause the partition for the `seek-backoff` delay, after which the record is redelivered. No offset committed. |
 | `SKIP`        | Route the `KafkaIngestError`; commit past the record. |
 | `DEAD_LETTER` | Route a `KafkaRecordDeadLettered` (carrying `attempts`) instead of `KafkaIngestError`; commit past. Forward it from your `ErrorHandler` to whatever dead-letter sink you run. |
 | `FAIL`        | Route the `KafkaIngestError`; stop **this topic's** consumer (the record is left uncommitted and redelivers if the consumer restarts). |

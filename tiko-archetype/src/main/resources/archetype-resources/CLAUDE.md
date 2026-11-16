@@ -175,7 +175,7 @@ container does; a test calling `Tiko.create(...)` itself adds
 - **`SINGLETON` injecting `EVENT` requires an interface** on the shorter-scoped bean.
 - **`Container.get(...)` after `shutdown()` throws** — one-shot container.
 - **JDK 23+ silently skips annotation processing without `<proc>full</proc>`** — already set in this `pom.xml`.
-- **Override the *consumer's* declared type, not the impl's** — `TikoOptions.override(PaymentGateway.class, mock)` matches sites typed `PaymentGateway`, not `HttpPaymentGateway`.
+- **Override the *consumer's* declared type, not the impl's** — `TikoOptions.builder().override(PaymentGateway.class, () -> mock)` matches sites typed `PaymentGateway`, not `HttpPaymentGateway`.
 
 ## Build and run
 
@@ -187,7 +187,8 @@ mvn clean install      # full clean build
 ```
 
 Generated code lives under `target/generated-sources/annotations/io/tiko/generated/`
-(`TikoContainerImpl_<hash>.java`, per-component factories, `EventRegistry.java`).
+(`TikoContainerImpl_<hash>.java`, one `<Component>Factory_<hash>.java` per component,
+`EventRegistry_<hash>.java`).
 
 ### Long-running services (Kafka consumers, schedulers)
 
@@ -233,7 +234,7 @@ dependency's API, `javap` its jar.
 ## Where to dig deeper
 
 - README: <https://github.com/tomas-samek/tiko-di/blob/main/README.md>
-- Examples (15 modules): <https://github.com/tomas-samek/tiko-di/tree/main/tiko-examples>
+- Examples: <https://github.com/tomas-samek/tiko-di/tree/main/tiko-examples>
 - Docs index: <https://github.com/tomas-samek/tiko-di/tree/main/docs>
 
 ---

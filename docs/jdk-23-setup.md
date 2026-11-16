@@ -1,6 +1,6 @@
 # Annotation processing on JDK 23+
 
-Starting with **JDK 23**, `javac` no longer runs annotation processing implicitly. If none of `-processor`, `--processor-path`, `--processor-module-path`, or `-proc:full`/`-proc:only` is specified, the compiler **silently skips processing** — meaning Tiko's code generator never runs, no `TikoContainerImpl` is produced, and your app fails at runtime with a cryptic `ClassNotFoundException: io.tiko.generated.TikoContainerImpl` (or a `NoSuchElementException` from `Tiko.create()`).
+Starting with **JDK 23**, `javac` no longer runs annotation processing implicitly. If none of `-processor`, `--processor-path`, `--processor-module-path`, or `-proc:full`/`-proc:only` is specified, the compiler **silently skips processing** — meaning Tiko's code generator never runs, no `TikoContainerImpl` is produced, and your app fails at startup: `Tiko.create()` throws `ContainerInitializationException: Tiko container implementation not found. Did you include tiko-processor in your annotation processor path?`
 
 > JDK 21 and 22 still run processing but emit a warning ("`Annotation processing is enabled because one or more processors were found on the class path...`"). JDK 23+ makes the new behavior the default.
 
@@ -64,9 +64,10 @@ After `mvn compile` (or the equivalent), confirm the generated container exists:
 ```bash
 ls target/generated-sources/annotations/io/tiko/generated/
 # Expected:
-#   TikoContainerImpl.java
-#   <YourComponent>Factory.java   (one per @Component)
-#   EventRegistry.java
+#   TikoContainerImpl_<hash>.java
+#   <YourComponent>Factory_<hash>.java   (one per @Component)
+#   EventRegistry_<hash>.java
+# <hash> is one value for the whole module.
 ```
 
 If that directory is empty or missing, processing was skipped — re-check the compiler plugin version and the `<annotationProcessorPaths>` / `annotationProcessor` declaration.
