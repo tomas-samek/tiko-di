@@ -118,7 +118,7 @@ that the cookbook cites is
 
 ### Open design questions
 
-Async generalisation, scheduling-as-tick-event, retry-as-event-loop — the
+Scheduling-as-tick-event, units of work that nest — the
 small set of unresolved questions about extending the event model itself.
 An honest scope note, not a deferral promise: these are where tiko's
 position isn't yet earned by observation, and where a contributor's

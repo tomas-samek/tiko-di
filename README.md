@@ -43,7 +43,7 @@ HTTP (Javalin, Jetty, Spark, Vert.x), DataSource (HikariCP, Agroal), schema migr
 
 ### Open design questions
 
-Async generalisation, scheduling-as-tick-event, retry-as-event-loop — the small set of unresolved questions about extending the event model itself. An honest scope note, not a deferral promise.
+Scheduling-as-tick-event, units of work that nest — the small set of unresolved questions about extending the event model itself. An honest scope note, not a deferral promise.
 
 ## What you plug in
 
@@ -74,7 +74,7 @@ Lookup-table answer to "does tiko support X?":
 - **Long-form prose?** [`docs/orchestrator-model.md`](./docs/orchestrator-model.md).
 - **Reference shape?** [`tiko-examples/15_quickstart`](./tiko-examples/15_quickstart) — the canonical small service the skill cites.
 - **Scaffold a fresh project?** Maven archetype — see [Scaffold a new project](#scaffold-a-new-project-archetype) below.
-- **Kotlin?** Gradle + KSP is supported — setup, construct rules and nullability rules are in [`reference/kotlin.md`](./.ai-skills/tiko-build/reference/kotlin.md); runnable builds: [`tiko-examples-gradle/`](./tiko-examples-gradle) (quickstart, Ktor + Exposed REST API, Kafka consumer, transactional outbox).
+- **Kotlin?** Gradle + KSP is supported — setup, construct rules and nullability rules are in [`reference/kotlin.md`](./.ai-skills/tiko-build/reference/kotlin.md); runnable builds: [`tiko-examples-gradle/`](./tiko-examples-gradle) (quickstart, Ktor + Exposed REST API, Kafka consumer, transactional outbox). Coroutines are the next Kotlin milestone: `suspend` handlers and bridges ([Kotlin K2](https://github.com/tomas-samek/tiko-di/milestone/20)).
 - **Library not in the cookbook?** Read [`.ai-skills/tiko-cookbook-extension/SKILL.md`](./.ai-skills/tiko-cookbook-extension/SKILL.md) — the procedural skill for adding a new recipe. Load-bearing rule: **ask, don't fabricate.**
 
 ## Quick example

@@ -22,7 +22,7 @@ When a user says *"I need X"*, classify X into one of three buckets:
 |---|---|---|
 | **Core** | container, scopes, event bus, compile-time wiring, lifecycle | Use a tiko primitive directly. |
 | **Plug in** | any integration with an external system (HTTP, DB, cache, templating, scheduling, retry, observability, security, SDK clients) | Bring the library; expose it as a `@Produces` value; consume as a constructor parameter. |
-| **Open** | extending the event model itself (new async modes, scheduling-as-event, retry-as-loop) | File an issue. Don't invent. |
+| **Open** | extending the event model itself (a new delivery mode, scheduling-as-event, units of work that nest) | File an issue. Don't invent. |
 
 **Default if uncertain: Plug in.** Never search for "tiko's equivalent of
 Spring's X" — that frame is the failure mode this skill exists to prevent.

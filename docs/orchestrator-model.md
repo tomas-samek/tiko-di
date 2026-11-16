@@ -31,7 +31,7 @@ Classify first, then write code.
 │  → PLUG IN. Bring the library, expose it via @Produces. See §3 cookbook.
 │
 ├─ X extends the event model itself
-│  (new async modes, scheduling-as-tick-event, retry-as-event-loop)
+│  (a new delivery mode, scheduling-as-tick-event, units of work that nest)
 │  → OPEN design question. File an issue; don't invent.
 │
 └─ default if uncertain → PLUG IN via @Produces.
