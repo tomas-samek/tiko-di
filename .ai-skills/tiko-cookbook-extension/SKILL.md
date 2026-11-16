@@ -66,7 +66,7 @@ three buckets:
 |---|---|
 | **Core** (container, scopes, event bus, compile-time wiring, lifecycle) | **Not a cookbook entry.** Surface to the user — this is a framework-feature discussion, not an integration recipe. File an issue if it's a real gap. |
 | **Plug in** (HTTP, DB, cache, templates, scheduling, retry, SDK clients, security) | **Proceed to step 2.** This is what the cookbook is for. |
-| **Open design questions** (extends the event model itself — new async modes, scheduling-as-event, retry-as-loop) | **Not a cookbook entry.** Surface to the user — open an issue against tiko-di; the cookbook can't make this decision. |
+| **Open design questions** (extends the event model itself — a new delivery mode, scheduling-as-event, units of work that nest) | **Not a cookbook entry.** Surface to the user — open an issue against tiko-di; the cookbook can't make this decision. |
 
 If you're not sure which bucket — that's a step-1 ask. Don't pick.
 

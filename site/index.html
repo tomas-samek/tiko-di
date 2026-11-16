@@ -6,6 +6,13 @@
   <meta name="color-scheme" content="light dark">
   <title>Tiko — a compile-time orchestrator for Java</title>
   <meta name="description" content="Tiko is a compile-time orchestrator for Java with an integrated event model. Tiko orchestrates, it doesn't bundle — direct access, compile-time safe, nothing wrapped.">
+  <link rel="canonical" href="https://tomas-samek.github.io/tiko-di/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Tiko">
+  <meta property="og:title" content="Tiko — a compile-time orchestrator for Java">
+  <meta property="og:description" content="Tiko orchestrates, it doesn't bundle — direct access, compile-time safe, nothing wrapped. Dependency injection and an event bus, wired and checked at compile time.">
+  <meta property="og:url" content="https://tomas-samek.github.io/tiko-di/">
+  <meta name="twitter:card" content="summary">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
 </head>
@@ -72,9 +79,10 @@
       </div>
       <div class="card">
         <h3>Open design questions</h3>
-        <p>Async generalisation, scheduling as a tick event, retry as an event loop — the small set of unresolved questions about extending the event model itself.</p>
+        <p>Scheduling as a tick event, units of work that nest — the small set of unresolved questions about extending the event model itself.</p>
       </div>
     </div>
+    <p class="note">Also in the box, each an optional module: <a href="https://github.com/tomas-samek/tiko-di/blob/main/docs/cookbooks/kafka.md"><code>tiko-kafka</code></a> — <code>@KafkaSource</code> / <code>@KafkaSink</code> bridges between Kafka topics and the event bus, validated at compile time; <a href="https://github.com/tomas-samek/tiko-di/blob/main/docs/testing.md"><code>tiko-test</code></a> — the <code>@TikoTest</code> JUnit 5 extension; <a href="https://github.com/tomas-samek/tiko-di#ai-agent-topology-server-mcp"><code>tiko-mcp</code></a> — an MCP server that lets an AI assistant read the wiring graph the processor wrote.</p>
   </div>
 </section>
 
@@ -306,7 +314,12 @@
     &lt;/plugins&gt;
 &lt;/build&gt;<!-- /sync:install --></code></pre>
     <p class="note">On JDK 23+, <code>javac</code> runs annotation processing only when asked — the snippet above already does (it needs <code>maven-compiler-plugin</code> ≥ 3.13.0). Gradle and plain <code>javac</code>: <a href="https://github.com/tomas-samek/tiko-di/blob/main/docs/jdk-23-setup.md">jdk-23-setup.md</a>. Starting fresh? The <a href="https://github.com/tomas-samek/tiko-di#scaffold-a-new-project-archetype">Maven archetype</a> scaffolds a runnable project.</p>
-    <p class="note">Kotlin works through Gradle and KSP2: put <code>tiko-processor</code> on the <code>ksp(...)</code> configuration. Wiring is still checked at compile time, and the generated code is still Java. Setup and rules: <a href="https://github.com/tomas-samek/tiko-di/blob/main/.ai-skills/tiko-build/reference/kotlin.md">kotlin.md</a>.</p>
+    <p class="note">Kotlin works through Gradle and KSP2: put <code>tiko-processor</code> on the <code>ksp(...)</code> configuration. Wiring is still checked at compile time, and the generated code is still Java. Setup and rules: <a href="https://github.com/tomas-samek/tiko-di/blob/main/.ai-skills/tiko-build/reference/kotlin.md">kotlin.md</a>. Coroutines are the next Kotlin milestone: <code>suspend</code> event handlers and Kafka bridges, with units of work that follow the coroutine (<a href="https://github.com/tomas-samek/tiko-di/milestone/20">Kotlin K2</a>). The dependencies, from <code>tiko-examples-gradle/kotlin-quickstart/build.gradle.kts</code> (test dependencies trimmed):</p>
+<pre><code>dependencies {
+    implementation(<span class="s">"io.github.tomas-samek:tiko-api:$tikoVersion"</span>)
+    implementation(<span class="s">"io.github.tomas-samek:tiko-runtime:$tikoVersion"</span>)
+    ksp(<span class="s">"io.github.tomas-samek:tiko-processor:$tikoVersion"</span>)
+}</code></pre>
   </div>
 </section>
 </main>
@@ -320,6 +333,7 @@
       <li><a href="https://github.com/tomas-samek/tiko-di/tree/main/tiko-examples">Examples</a></li>
       <li><a href="https://github.com/tomas-samek/tiko-di#scaffold-a-new-project-archetype">Archetype</a></li>
       <li><a href="https://central.sonatype.com/artifact/io.github.tomas-samek/tiko-bom">Maven Central</a></li>
+      <li><a href="https://github.com/tomas-samek/tiko-di/releases">Releases</a></li>
       <li><a href="https://github.com/tomas-samek/tiko-di">GitHub</a></li>
       <li><a href="https://github.com/tomas-samek/tiko-di/blob/main/SECURITY.md">Security policy</a></li>
     </ul>
