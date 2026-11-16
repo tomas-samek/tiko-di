@@ -16,7 +16,7 @@ Three scopes — longest to shortest lifetime:
 
 A **unit of work** is the synchronous reach of an inbound stimulus, bounded at every async / transport hop. EVENT is single-frame in `0.x.0` — calling `runInEventScope` while a unit is already open throws `IllegalStateException`. Nestability is a deferred-but-additive future change.
 
-EVENT-scoped beans only resolve while a unit of work is open. Resolving one outside a frame — via `container.get(...)`, `getAll(...)`, or a method call on a proxy held by a SINGLETON — throws `NoActiveEventScopeException` instead of silently materializing an instance that no teardown would ever drain.
+EVENT-scoped beans only resolve while a unit of work is open. Resolving the instance itself outside a frame — `container.get(...)` of its class, `getAll(...)`, or a method call on a proxy held by a SINGLETON — throws `NoActiveEventScopeException` instead of silently materializing an instance that no teardown would ever drain. A lookup by a proxied interface returns the proxy, which can be held outside a unit; see [Cross-scope injection](#cross-scope-injection).
 
 ### When singletons are constructed
 
@@ -80,6 +80,8 @@ The proxy implements the bean's first interface by name and forwards every insta
 | `SINGLETON`               | direct    | **proxy** | direct    |
 | `EVENT`                   | direct    | direct    | direct    |
 | `PROTOTYPE`               | direct    | direct    | direct    |
+
+The table states where a proxy is required. An EVENT component that implements an interface is handed to every consumer as its proxy, EVENT and PROTOTYPE consumers included; inside a unit the proxy resolves to that unit's instance, so those consumers see what a direct reference would give them. An EVENT `@Produces` value is proxied only for a consumer that outlives it.
 
 A SINGLETON keeps a PROTOTYPE it injects for its own lifetime, so the rule reaches through it: whatever that PROTOTYPE injects directly must be safe for the SINGLETON too. Two shapes are compile errors:
 
@@ -214,7 +216,7 @@ public class DatabaseConnection {
 
 ## Qualifiers — `@Named`, `@Pick`, `Picker<T>`, `pick()`
 
-When multiple components implement the same interface (or multiple `@Produces` methods return the same type), the injection site needs to disambiguate. Tiko has three mechanisms, each for a different situation.
+When multiple components implement the same interface (or multiple `@Produces` methods return the same type), the injection site needs to disambiguate. Tiko has three mechanisms for an injection point, `@Named`, `@Pick` and `Picker<T>`, each for a different situation, and the fluent `pick()` for lookups on the container.
 
 ### What an injection point resolves
 
@@ -245,7 +247,7 @@ public class DataService {
 }
 ```
 
-`@Named` resolves named `@Component`s (above) and named `@Produces` outputs alike. **Reach for `@Named` when the qualifier is genuinely a string** — externally configured, supplied at runtime, or familiar to teams coming from `jakarta.inject`. When the disambiguator is a *class* you can name at compile time, prefer `@Pick` (next) for refactor safety. A runnable injection-site example lives in `tiko-examples/01_basic_di` (`NamedGreeterConsumer`).
+`@Named` resolves named `@Component`s (above) and named `@Produces` outputs alike. **Reach for `@Named` when the qualifier is genuinely a string** — externally configured, supplied at runtime, or familiar to teams coming from `jakarta.inject`; with a class to point at, use `@Pick` (next). A runnable injection-site example lives in `tiko-examples/01_basic_di` (`NamedGreeterConsumer`).
 
 ### `@Pick(Class)` — class-literal, refactor-safe
 
@@ -325,7 +327,7 @@ A picker answers for the whole application. In a multi-module application an inj
 - **`@Named("name") T`** — compile-time-known, string-based qualifier. Best for disambiguating multiple `@Produces` methods returning the same type.
 - **`Picker<T>`** — runtime queries: the impl class or name is computed at runtime, you need to iterate all impls, or you want a single primitive that handles cross-module lookup transparently.
 
-### Fluent `pick()` API on the container
+### Lookups in a multi-module container
 
 In a multi-module container, unqualified `container.get(Greeter.class)` and
 `container.getProvider(Greeter.class)` use the first matching module in discovery order when no
@@ -334,6 +336,8 @@ loading. For an explicit choice, request a registered concrete class such as
 `container.get(EnglishGreeter.class)` or use a unique qualifier such as
 `container.get(Greeter.class, "english")`. Use `container.getAll(Greeter.class)` to list all matches.
 Constructor dependencies follow the compile-time qualifier rules above.
+
+### Fluent `pick()` API on the container
 
 `container.get(Class)` and `container.get(Class, String)` are the 80% shortcuts. For anything else — a fallback when the bean is missing, a lazy `Provider`, or future axes — go through `container.pick(Class)`:
 
