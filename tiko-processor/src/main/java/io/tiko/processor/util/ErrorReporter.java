@@ -49,14 +49,7 @@ public final class ErrorReporter {
     }
 
     /**
-     * Reports an error at the given location.
-     */
-    public void error(Location at, String message) {
-        reportError(KIND_OTHER, at, message);
-    }
-
-    /**
-     * Reports an error with suggested fixes.
+     * Reports an error at the given location, with any suggested fixes.
      */
     public void error(Location at, String problem, String... suggestedFixes) {
         reportError(KIND_OTHER, at, problem, suggestedFixes);
@@ -81,24 +74,10 @@ public final class ErrorReporter {
     }
 
     /**
-     * Reports a note (informational message) at the given location.
-     */
-    public void note(Location at, String message) {
-        diagnostics.note(at, message);
-    }
-
-    /**
      * Returns true if any errors have been reported.
      */
     public boolean hasErrors() {
         return hasErrors;
-    }
-
-    /**
-     * Resets the error state (useful for testing).
-     */
-    public void reset() {
-        hasErrors = false;
     }
 
     // Convenience methods for common error patterns
@@ -206,17 +185,6 @@ public final class ErrorReporter {
                 "Consider using event-based communication instead of direct dependencies");
     }
 
-    public void scopeViolation(Location at, String consumerScope, String dependencyScope, String dependencyType) {
-        reportError(
-                KIND_SCOPE_VIOLATION,
-                at,
-                "Scope violation: " + consumerScope + "-scoped bean cannot inject " + dependencyScope + "-scoped bean '"
-                        + dependencyType + "'",
-                "Make " + dependencyType + " implement an interface for proxy generation",
-                "Change the scope of " + dependencyType + " to " + consumerScope + " or longer",
-                "Use Provider<" + dependencyType + "> for lazy resolution");
-    }
-
     public void missingInterface(Location at, String className, String reason) {
         // missingInterface is emitted exclusively from ScopeValidator's cross-scope path
         // (proxy generation requires an interface) — tag as SCOPE_VIOLATION so MCP
@@ -272,22 +240,17 @@ public final class ErrorReporter {
      * An instance {@code @Produces} method outlives the EVENT component it is called on (#723).
      */
     public void producesOutlivesDeclaringComponent(
-            Location at,
-            String producesScope,
-            String producesName,
-            String methodName,
-            String componentScope,
-            String componentName) {
+            Location at, String producesName, String methodName, String componentName) {
         reportError(
                 KIND_SCOPE_VIOLATION,
                 at,
-                producesScope + " @Produces method '" + producesName + "' is declared on " + componentScope
-                        + "-scoped component '" + componentName + "'. Calling it needs an instance of '"
+                "SINGLETON @Produces method '" + producesName + "' is declared on EVENT-scoped component '"
+                        + componentName + "'. Calling it needs an instance of '"
                         + componentName + "', which exists only inside a unit of work, and the produced value"
                         + " would outlive that unit.",
                 "Make '" + methodName + "' static if it does not use the instance",
                 "Declare '" + methodName + "' on a SINGLETON or PROTOTYPE component",
-                "Change the scope of '" + methodName + "' to " + componentScope + " or PROTOTYPE");
+                "Change the scope of '" + methodName + "' to EVENT or PROTOTYPE");
     }
 
     /**
@@ -367,14 +330,6 @@ public final class ErrorReporter {
                         + ", so this injection point cannot be typed by the concrete class.",
                 INJECT + interfaceName + " instead of " + concreteName,
                 "Use Provider<" + interfaceName + "> for lazy per-call resolution");
-    }
-
-    public void invalidAnnotationUsage(Location at, String annotationName, String reason) {
-        reportError(
-                KIND_OTHER,
-                at,
-                "Invalid use of " + annotationName + ": " + reason,
-                "Review the " + annotationName + " usage against the Tiko documentation");
     }
 
     public void duplicateQualifier(Location at, String qualifier, String existingComponent) {

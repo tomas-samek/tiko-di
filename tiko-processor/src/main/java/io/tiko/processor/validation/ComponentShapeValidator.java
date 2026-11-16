@@ -1,6 +1,7 @@
 package io.tiko.processor.validation;
 
 import io.tiko.annotations.Inject;
+import io.tiko.processor.core.GeneratedCodeAccess;
 import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.Location;
 import io.tiko.processor.core.model.MethodDecl;
@@ -97,10 +98,7 @@ public final class ComponentShapeValidator {
         }
 
         for (EventHandlerModel handler : context.getEventHandlers()) {
-            String declaringFqn = handler.getOwner().qualifiedName();
-            boolean onComponent = context.getComponents().values().stream()
-                    .anyMatch(c -> c.getQualifiedName().equals(declaringFqn));
-            if (!onComponent) {
+            if (!context.isRegisteredComponent(handler.getOwner())) {
                 context.getErrorReporter()
                         .eventHandlerOutsideComponent(
                                 handler.getMethod().location(),
@@ -138,7 +136,7 @@ public final class ComponentShapeValidator {
     }
 
     private boolean requirePublic(MethodDecl member, String annotation) {
-        if (TypeUtil.isCallableFromGeneratedCode(member.visibility())) return true;
+        if (GeneratedCodeAccess.isCallable(member.visibility())) return true;
         String owner = member.owner().orElseThrow().className().simpleName();
         boolean constructor = member.isConstructor();
         String name = constructor ? owner : member.name();
@@ -190,10 +188,9 @@ public final class ComponentShapeValidator {
      */
     private boolean validateRoutableTypes(ComponentModel component) {
         boolean valid = true;
-        boolean restricted = component.isExposeRestricted();
-        for (TypeRef type :
-                restricted ? component.getExposeTypes() : component.getDecl().interfaces()) {
-            valid &= validateRoutableType(component, type, restricted);
+        // A JDK lifecycle marker is not routed under the permissive default (#301).
+        for (TypeRef type : component.getRoutedTypes()) {
+            valid &= validateRoutableType(component, type, component.isExposeRestricted());
         }
         return valid;
     }
@@ -209,11 +206,7 @@ public final class ComponentShapeValidator {
                             CHECK_THE_NAME);
             return false;
         }
-        // A JDK lifecycle marker is not routed under the permissive default (#301).
-        if (!restricted && TypeUtil.isLifecycleMarkerInterface(type.erasedName())) {
-            return true;
-        }
-        var hidden = type.declaration().flatMap(ComponentShapeValidator::firstHidden);
+        var hidden = type.declaration().flatMap(GeneratedCodeAccess::firstHidden);
         if (hidden.isEmpty()) {
             return true;
         }
@@ -232,18 +225,6 @@ public final class ComponentShapeValidator {
                                 + " io.tiko.generated package",
                         fixes.toArray(String[]::new));
         return false;
-    }
-
-    /** The class itself or the first class it is nested in that another package cannot name. */
-    private static java.util.Optional<ClassDecl> firstHidden(ClassDecl decl) {
-        for (var current = java.util.Optional.of(decl);
-                current.isPresent();
-                current = current.get().enclosingClass()) {
-            if (!TypeUtil.isCallableFromGeneratedCode(current.get().visibility())) {
-                return current;
-            }
-        }
-        return java.util.Optional.empty();
     }
 
     private boolean validateDependencies(Location owner, String ownerName, List<DependencyModel> dependencies) {

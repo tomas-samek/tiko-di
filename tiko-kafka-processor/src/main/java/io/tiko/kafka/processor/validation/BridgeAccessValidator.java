@@ -3,10 +3,10 @@ package io.tiko.kafka.processor.validation;
 import io.tiko.kafka.processor.model.KafkaSinkDescriptor;
 import io.tiko.kafka.processor.model.KafkaSourceDescriptor;
 import io.tiko.processor.core.Diagnostics;
+import io.tiko.processor.core.GeneratedCodeAccess;
 import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.MethodDecl;
 import io.tiko.processor.core.model.TypeRef;
-import io.tiko.processor.core.model.Visibility;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -90,14 +90,14 @@ public final class BridgeAccessValidator {
      *     method has no parameter, which {@link BridgeMethodShapeValidator} reports
      */
     private static Optional<Problem> firstProblem(Bridge bridge, TypeRef literal, Role role, List<TypeRef> named) {
-        var hiddenOwner = firstHidden(bridge.owner());
+        var hiddenOwner = GeneratedCodeAccess.firstHidden(bridge.owner());
         if (hiddenOwner.isPresent()) {
             var name = hiddenOwner.get().qualifiedName();
             return Optional.of(new Problem(
                     bridge.label() + " is declared in " + name + NOT_PUBLIC + BOOTSTRAP + " looks the bridge up by it.",
                     MAKE + name + " public."));
         }
-        if (!isVisible(bridge.method().visibility())) {
+        if (!GeneratedCodeAccess.isCallable(bridge.method().visibility())) {
             return Optional.of(new Problem(
                     bridge.label() + " is not public: " + BOOTSTRAP + " calls it.",
                     MAKE + "'" + bridge.method().name() + "' public."));
@@ -127,32 +127,12 @@ public final class BridgeAccessValidator {
 
     /** The first class in the type, type arguments included, that another package cannot name. */
     private static Optional<ClassDecl> firstHidden(TypeRef type) {
-        var hidden = type.declaration().flatMap(BridgeAccessValidator::firstHidden);
+        var hidden = type.declaration().flatMap(GeneratedCodeAccess::firstHidden);
         if (hidden.isPresent()) {
             return hidden;
         }
         return type.typeArguments().stream()
                 .flatMap(argument -> firstHidden(argument).stream())
                 .findFirst();
-    }
-
-    /** The class itself or the first class it is nested in that another package cannot name. */
-    private static Optional<ClassDecl> firstHidden(ClassDecl decl) {
-        for (var current = Optional.of(decl);
-                current.isPresent();
-                current = current.get().enclosingClass()) {
-            if (!isVisible(current.get().visibility())) {
-                return current;
-            }
-        }
-        return Optional.empty();
-    }
-
-    /**
-     * Public, or Kotlin {@code internal}: public on the JVM and visible to the module the bootstrap
-     * is compiled into. The DI processor applies the same rule to what its generated code calls.
-     */
-    private static boolean isVisible(Visibility visibility) {
-        return visibility == Visibility.PUBLIC || visibility == Visibility.KOTLIN_INTERNAL;
     }
 }

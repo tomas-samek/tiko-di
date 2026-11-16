@@ -58,6 +58,11 @@ public final class FactoryMethodModel {
         return methodName;
     }
 
+    /** The name messages show for this method: {@code Owner.method}. */
+    public String getDisplayName() {
+        return declaringClass.className().simpleName() + "." + methodName;
+    }
+
     public TypeRef getReturnType() {
         return returnType;
     }

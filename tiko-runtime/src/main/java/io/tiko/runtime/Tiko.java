@@ -155,8 +155,7 @@ public final class Tiko {
             if (classLoader == null) classLoader = Tiko.class.getClassLoader();
 
             String descriptorName = selectDescriptor(options, classLoader);
-            int moduleCount =
-                    ModuleDescriptors.find(descriptorName, classLoader).size();
+            var descriptors = ModuleDescriptors.find(descriptorName, classLoader);
 
             // Bind configuration first: the container needs the bound tiko.shutdownTimeout.
             // A no-op (BoundConfigs.NONE) without tiko-config on the classpath.
@@ -175,7 +174,7 @@ public final class Tiko {
             // always wrapped so close() can report the threads that outlive it (#634).
             Container container;
             Container handle;
-            if (moduleCount > 1 || testMode) {
+            if (descriptors.size() > 1 || testMode) {
                 container = new AggregatingContainer(
                         eventBus,
                         errorHandler,
@@ -190,10 +189,10 @@ public final class Tiko {
                 container = createSingleModuleContainer(
                         eventBus,
                         errorHandler,
-                        options.eventExecutor(),
                         effectiveShutdownTimeout,
                         options,
-                        descriptorName,
+                        descriptors,
+                        classLoader,
                         ownedThreads);
                 handle = new BootHandle(
                         container, java.util.List.of(), ownedThreads, options.threadsOutlivingCloseHandler());
@@ -284,16 +283,12 @@ public final class Tiko {
     private static Container createSingleModuleContainer(
             EventBus eventBus,
             ErrorHandler errorHandler,
-            ExecutorService userEventExecutor,
             java.time.Duration shutdownTimeout,
             TikoOptions options,
-            String descriptorName,
+            java.util.List<java.net.URL> resources,
+            ClassLoader classLoader,
             OwnedThreads ownedThreads)
             throws Exception {
-        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-        if (classLoader == null) classLoader = Tiko.class.getClassLoader();
-
-        var resources = ModuleDescriptors.find(descriptorName, classLoader);
         Class<?> implClass;
         if (!resources.isEmpty()) {
             Properties props = new Properties();
@@ -317,6 +312,7 @@ public final class Tiko {
         // A supplied executor reaches the generated code as a view that schedules async retries on
         // the boot's retry thread (#653); getEventExecutor() on the handle unwraps it again.
         var constructor = implClass.getDeclaredConstructor(CONTAINER_CTOR_PARAM_TYPES);
+        var userEventExecutor = options.eventExecutor();
         var dispatchExecutor =
                 userEventExecutor == null ? null : new RetrySchedulingExecutor(userEventExecutor, ownedThreads);
         Container container = OwnedThreads.callBound(ownedThreads, () -> (Container) constructor.newInstance(
@@ -337,13 +333,7 @@ public final class Tiko {
         try {
             container.start();
         } catch (Throwable startupFailure) {
-            try {
-                container.shutdown();
-            } catch (Throwable cleanupFailure) {
-                if (cleanupFailure != startupFailure) {
-                    startupFailure.addSuppressed(cleanupFailure);
-                }
-            }
+            shutdownQuietly(container::shutdown, startupFailure);
             throw startupFailure;
         }
     }
@@ -376,9 +366,9 @@ public final class Tiko {
             // half-present transport jar (LinkageError) and anything else a transport throws
             // (#737). Either way, unwind cleanly.
             for (int i = started - 1; i >= 0; i--) {
-                shutdownQuietly(bootstraps.get(i), e);
+                shutdownQuietly(bootstraps.get(i)::shutdown, e);
             }
-            shutdownQuietly(container, e);
+            shutdownQuietly(container::shutdown, e);
             throw e;
         }
     }
@@ -398,7 +388,7 @@ public final class Tiko {
             }
             bootstraps = applyTransportReplacements(bootstraps, options);
         } catch (RuntimeException | java.util.ServiceConfigurationError e) {
-            shutdownQuietly(container, e);
+            shutdownQuietly(container::shutdown, e);
             throw e;
         }
         return startTransports(container, bootstraps);
@@ -467,29 +457,14 @@ public final class Tiko {
     }
 
     /**
-     * Best-effort container teardown on a failing bootstrap path — never masks the original failure.
-     * Anything the teardown throws, an {@link Error} from a thread-report handler included, is
-     * suppressed on {@code bootFailure}.
+     * Best-effort teardown of a container or a transport on a failing bootstrap path — never masks
+     * the original failure. Anything the teardown throws, an {@link Error} from a thread-report
+     * handler included, is suppressed on {@code bootFailure}, so it stays visible (#737).
      */
     @SuppressWarnings("java:S1181") // unwinding a bootstrap failure; the original exception is the one that matters
-    private static void shutdownQuietly(Container container, Throwable bootFailure) {
+    private static void shutdownQuietly(Runnable shutdown, Throwable bootFailure) {
         try {
-            container.shutdown();
-        } catch (Throwable cleanupFailure) {
-            if (cleanupFailure != bootFailure) {
-                bootFailure.addSuppressed(cleanupFailure);
-            }
-        }
-    }
-
-    /**
-     * Best-effort transport teardown on a failing bootstrap path. What the teardown throws is
-     * suppressed on {@code bootFailure}, so it stays visible without masking it (#737).
-     */
-    @SuppressWarnings("java:S1181") // unwinding a bootstrap failure; the original exception is the one that matters
-    private static void shutdownQuietly(TransportBootstrap bootstrap, Throwable bootFailure) {
-        try {
-            bootstrap.shutdown();
+            shutdown.run();
         } catch (Throwable cleanupFailure) {
             if (cleanupFailure != bootFailure) {
                 bootFailure.addSuppressed(cleanupFailure);
@@ -681,11 +656,7 @@ public final class Tiko {
             }
             if (transportError != null) {
                 // The container's own failure wins; the transport's Error travels with it.
-                if (shutdownFailure == null) {
-                    shutdownFailure = transportError;
-                } else {
-                    shutdownFailure.addSuppressed(transportError);
-                }
+                shutdownFailure = BoundedExecution.retainFailure(shutdownFailure, transportError);
             }
             if (threads != null) {
                 // The report never masks the shutdown failure: a throwing handler is suppressed on it.
@@ -716,11 +687,7 @@ public final class Tiko {
                             tb.getClass().getName(),
                             failure);
                     if (failure instanceof Error error) {
-                        if (first == null) {
-                            first = error;
-                        } else {
-                            first.addSuppressed(error);
-                        }
+                        first = BoundedExecution.retainFailure(first, error);
                     }
                 }
             }

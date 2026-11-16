@@ -138,7 +138,8 @@ public final class BoundedExecution {
         return t;
     }
 
-    static Throwable retainFailure(Throwable primary, Throwable next) {
+    /** The first failure wins; a later one is suppressed on it. */
+    static <T extends Throwable> T retainFailure(T primary, T next) {
         if (primary == null) {
             return next;
         }

@@ -15,7 +15,6 @@ import io.tiko.processor.model.FactoryMethodModel;
 import io.tiko.processor.util.GeneratedNames;
 import io.tiko.processor.util.ProcessorContext;
 import io.tiko.processor.util.TypeRefs;
-import io.tiko.processor.util.TypeUtil;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
@@ -898,11 +897,7 @@ public final class ContainerGenerator {
         // Mirrors ComponentFactoryGenerator without the "container." prefix.
         if (dependency.isPicked()) {
             String pickedFqn = dependency.getPickedTypeName().orElseThrow();
-            Object pickedProvider = dependency
-                    .getQualifier()
-                    .map(q ->
-                            context.findComponentOrFactory(pickedFqn + "#" + q).orElse(null))
-                    .orElseGet(() -> context.findByImplClass(pickedFqn).orElse(null));
+            Object pickedProvider = context.findProvider(dependency).orElse(null);
             String pickedCall;
             if (pickedProvider instanceof FactoryMethodModel pickedFactory) {
                 pickedCall = factoryGetterName(pickedFactory) + "()";
@@ -926,18 +921,18 @@ public final class ContainerGenerator {
      */
     private static String overridable(DependencyModel dependency, String typeName, String call) {
         String lazy = dependency.isProvider() ? LAZY : "";
-        String resolution = dependency.isProvider() ? call.substring(lazy.length()) : call;
         String name = dependency
                 .getQualifier()
                 .map(qualifier -> "\"" + CodeLiterals.javaString(qualifier) + "\", ")
                 .orElse("");
-        return lazy + "options.resolveOverride(" + typeName + ".class, " + name + LAZY + resolution + ")";
+        return lazy + "options.resolveOverride(" + typeName + ".class, " + name + LAZY + call + ")";
     }
 
     /**
      * Resolves a non-picked, non-built-in dependency to its container getter call (component
      * getter, {@code produce_*} factory getter, {@code get(Class)} for {@code @Configuration},
-     * or a qualified {@code get(Class, name)}), wrapping in a lazy lambda for {@code Provider<T>}.
+     * or a qualified {@code get(Class, name)}); {@link #overridable} makes it lazy for
+     * {@code Provider<T>}.
      * Extracted from {@link #generateContainerGetCall} to keep that method's branching in check.
      */
     private String resolveProviderCall(DependencyModel dependency, String typeName, Scope consumerScope) {
@@ -969,8 +964,7 @@ public final class ContainerGenerator {
                     .map(q -> "get(" + typeName + ".class, \"" + CodeLiterals.javaString(q) + "\")")
                     .orElse("get" + simpleClassName(typeName) + "()");
         }
-
-        return dependency.isProvider() ? LAZY + call : call;
+        return call;
     }
 
     /**
@@ -2133,7 +2127,8 @@ public final class ContainerGenerator {
      *
      * <ul>
      *   <li>When {@code expose} is empty (permissive default), the list is every
-     *       directly-implemented interface of the component class.</li>
+     *       directly-implemented interface of the component class, the JDK lifecycle
+     *       markers aside (#301).</li>
      *   <li>When {@code expose} is non-empty (opt-in restriction), the list is exactly
      *       those declared types.</li>
      *   <li>The concrete component class itself is appended when {@code exposeSelf} is
@@ -2147,15 +2142,7 @@ public final class ContainerGenerator {
     private List<TypeName> effectiveRoutableTypes(ComponentModel component) {
         TypeName componentType = component.getDecl().className();
         List<TypeName> keys = new ArrayList<>();
-        // Implicit interfaces are filtered for JDK lifecycle markers (AutoCloseable/Closeable):
-        // they are cleanup conventions, not service contracts, so they must not become dispatch
-        // keys (#301). An explicit expose = {...} list is honored verbatim — if the user names a
-        // marker there, that is a deliberate opt-in.
-        boolean filterMarkers = !component.isExposeRestricted();
-        List<TypeRef> declared = component.isExposeRestricted()
-                ? component.getExposeTypes()
-                : component.getDecl().interfaces();
-        for (TypeRef iface : declared) {
+        for (TypeRef iface : component.getRoutedTypes()) {
             TypeName n = iface.javaPoet();
             // Class literals are erased: a parameterized interface (Repo<User>) must route
             // as its raw type — emitting type arguments into `$T.class` is a parse error
@@ -2163,18 +2150,12 @@ public final class ContainerGenerator {
             if (n instanceof ParameterizedTypeName p) {
                 n = p.rawType();
             }
-            if (filterMarkers && isLifecycleMarker(n)) continue;
             if (!keys.contains(n)) keys.add(n);
         }
         if (component.isExposeSelf() && !keys.contains(componentType)) {
             keys.add(componentType);
         }
         return keys;
-    }
-
-    /** True if {@code n} is a JDK lifecycle marker interface; delegates to the shared TypeUtil predicate. */
-    private static boolean isLifecycleMarker(TypeName n) {
-        return n instanceof ClassName cn && TypeUtil.isLifecycleMarkerInterface(cn.canonicalName());
     }
 
     /**

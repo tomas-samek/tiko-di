@@ -111,7 +111,7 @@ public final class CircularDependencyDetector {
             }
         }
         if (provider instanceof FactoryMethodModel factory && !factory.isStatic()) {
-            declaringComponentOf(factory).ifPresent(needed::add);
+            context.activeComponentOf(factory.getDeclaringClass()).ifPresent(needed::add);
         }
         return needed;
     }
@@ -125,13 +125,6 @@ public final class CircularDependencyDetector {
     private Optional<Object> resolve(String key) {
         return context.findComponentOrFactory(key)
                 .filter(provider -> provider instanceof ComponentModel || provider instanceof FactoryMethodModel);
-    }
-
-    private Optional<ComponentModel> declaringComponentOf(FactoryMethodModel factory) {
-        String declaringClass = factory.getDeclaringClass().qualifiedName();
-        return context.getActiveComponents().stream()
-                .filter(component -> component.getQualifiedName().equals(declaringClass))
-                .findFirst();
     }
 
     private static List<DependencyModel> dependenciesOf(Object provider) {

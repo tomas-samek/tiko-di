@@ -58,7 +58,7 @@ public final class LocalEventBus implements EventBus {
                 // OverflowPolicy.THROW (#714): the publisher asked to be told that the async queue
                 // is full. The remaining callbacks still get the event; then the publisher gets
                 // the exception.
-                overflow = retainOverflow(overflow, e);
+                overflow = BoundedExecution.retainFailure(overflow, e);
             } catch (Exception e) {
                 // Defense-in-depth: the generated dispatcher already catches and reports
                 // its own throws via the ErrorHandler with a rich EventHandlerInfo. This
@@ -78,17 +78,6 @@ public final class LocalEventBus implements EventBus {
         if (overflow != null) {
             throw overflow;
         }
-    }
-
-    private static EventQueueOverflowException retainOverflow(
-            EventQueueOverflowException first, EventQueueOverflowException next) {
-        if (first == null) {
-            return next;
-        }
-        if (first != next) {
-            first.addSuppressed(next);
-        }
-        return first;
     }
 
     @Override

@@ -171,6 +171,29 @@ public final class ComponentModel {
     }
 
     /**
+     * The types this component is declared routable as, its own class aside: the {@code expose}
+     * list, or every directly implemented interface under the permissive default.
+     */
+    public List<TypeRef> getDeclaredRoutableTypes() {
+        return isExposeRestricted() ? exposeTypes : decl.interfaces();
+    }
+
+    /**
+     * {@link #getDeclaredRoutableTypes()} as the container routes them: under the permissive
+     * default the JDK lifecycle markers are left out, they are cleanup conventions and not
+     * service contracts (#301). An explicit {@code expose} list is honoured verbatim; a marker
+     * named there is an opt-in.
+     */
+    public List<TypeRef> getRoutedTypes() {
+        if (isExposeRestricted()) {
+            return exposeTypes;
+        }
+        return decl.interfaces().stream()
+                .filter(type -> !TypeUtil.isLifecycleMarkerInterface(type.erasedName()))
+                .toList();
+    }
+
+    /**
      * The erased names of the types this component is routable as, the same set the generated
      * container dispatches on: the {@code expose} list, or every directly implemented interface
      * (JDK lifecycle markers aside) under the permissive default, plus its own class when
@@ -178,13 +201,8 @@ public final class ComponentModel {
      */
     public List<String> getRoutableTypeNames() {
         var names = new ArrayList<String>();
-        boolean restricted = isExposeRestricted();
-        for (TypeRef type : restricted ? exposeTypes : decl.interfaces()) {
+        for (TypeRef type : getRoutedTypes()) {
             String routable = type.erasedName();
-            // An explicit expose list is honoured verbatim; a marker named there is an opt-in (#301).
-            if (!restricted && TypeUtil.isLifecycleMarkerInterface(routable)) {
-                continue;
-            }
             if (!names.contains(routable)) {
                 names.add(routable);
             }
