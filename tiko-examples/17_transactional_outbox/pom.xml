@@ -7,7 +7,7 @@
     <parent>
         <groupId>io.github.tomas-samek.examples</groupId>
         <artifactId>tiko-examples</artifactId>
-        <version>0.7.0</version>
+        <version>0.7.1-SNAPSHOT</version>
     </parent>
     <artifactId>17_transactional_outbox</artifactId>
     <packaging>pom</packaging>
