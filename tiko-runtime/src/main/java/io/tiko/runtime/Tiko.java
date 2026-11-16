@@ -189,7 +189,6 @@ public final class Tiko {
                 container = createSingleModuleContainer(
                         eventBus,
                         errorHandler,
-                        options.eventExecutor(),
                         effectiveShutdownTimeout,
                         options,
                         descriptors,
@@ -284,7 +283,6 @@ public final class Tiko {
     private static Container createSingleModuleContainer(
             EventBus eventBus,
             ErrorHandler errorHandler,
-            ExecutorService userEventExecutor,
             java.time.Duration shutdownTimeout,
             TikoOptions options,
             java.util.List<java.net.URL> resources,
@@ -314,6 +312,7 @@ public final class Tiko {
         // A supplied executor reaches the generated code as a view that schedules async retries on
         // the boot's retry thread (#653); getEventExecutor() on the handle unwraps it again.
         var constructor = implClass.getDeclaredConstructor(CONTAINER_CTOR_PARAM_TYPES);
+        var userEventExecutor = options.eventExecutor();
         var dispatchExecutor =
                 userEventExecutor == null ? null : new RetrySchedulingExecutor(userEventExecutor, ownedThreads);
         Container container = OwnedThreads.callBound(ownedThreads, () -> (Container) constructor.newInstance(
