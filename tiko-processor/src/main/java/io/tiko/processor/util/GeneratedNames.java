@@ -29,6 +29,11 @@ public final class GeneratedNames {
         return factory.getFactoryIdentifier() + "Proxy" + moduleSuffix(context);
     }
 
+    /** {@code EventRegistry_<hash>}, the event-handler wiring of the container this compile generates. */
+    public static String eventRegistryClass(ProcessorContext context) {
+        return "EventRegistry" + moduleSuffix(context);
+    }
+
     /** {@code _<hash>}, taken from the name of the container this compile generates. */
     private static String moduleSuffix(ProcessorContext context) {
         var container = context.getContainerClassName();

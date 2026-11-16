@@ -50,10 +50,7 @@ public final class AmbiguityValidator {
                 // @TestComponent stays out: test-side substitution is intentional.
                 if (!component.isTestComponent()) {
                     String name = component.getName().orElseThrow();
-                    var declared = component.isExposeRestricted()
-                            ? component.getExposeTypes()
-                            : component.getDecl().interfaces();
-                    for (var iface : declared) {
+                    for (var iface : component.getDeclaredRoutableTypes()) {
                         register(namedProvidersByTypeAndName, iface.erasedName() + "#" + name, info);
                     }
                 }
@@ -66,11 +63,8 @@ public final class AmbiguityValidator {
             if (component.isExposeSelf()) {
                 register(providersByType, component.getQualifiedName(), info);
             }
-            var declared = component.isExposeRestricted()
-                    ? component.getExposeTypes()
-                    : component.getDecl().interfaces();
             // By the erased name: Repo<User> and Repo<Order> both route as Repo (#724).
-            for (var iface : declared) {
+            for (var iface : component.getDeclaredRoutableTypes()) {
                 register(providersByType, iface.erasedName(), info);
             }
 

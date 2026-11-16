@@ -56,7 +56,7 @@ public final class ScopeValidator {
     public boolean validate(FactoryMethodModel factory) {
         boolean valid = true;
 
-        String consumerName = displayName(factory);
+        String consumerName = factory.getDisplayName();
         for (DependencyModel dependency : factory.getDependencies()) {
             if (!validateDependencyOf(factory.getMethod().location(), factory.getScope(), consumerName, dependency)) {
                 valid = false;
@@ -75,20 +75,16 @@ public final class ScopeValidator {
         if (factory.isStatic() || factory.getScope() != Scope.SINGLETON) {
             return true;
         }
-        String declaringClass = factory.getDeclaringClass().qualifiedName();
-        for (ComponentModel component : context.getActiveComponents()) {
-            if (component.getScope() == Scope.EVENT
-                    && component.getQualifiedName().equals(declaringClass)) {
-                context.getErrorReporter()
-                        .producesOutlivesDeclaringComponent(
-                                factory.getMethod().location(),
-                                factory.getScope().name(),
-                                displayName(factory),
-                                factory.getMethodName(),
-                                component.getScope().name(),
-                                component.getClassName());
-                return false;
-            }
+        var declaring = context.activeComponentOf(factory.getDeclaringClass())
+                .filter(component -> component.getScope() == Scope.EVENT);
+        if (declaring.isPresent()) {
+            context.getErrorReporter()
+                    .producesOutlivesDeclaringComponent(
+                            factory.getMethod().location(),
+                            factory.getDisplayName(),
+                            factory.getMethodName(),
+                            declaring.get().getClassName());
+            return false;
         }
         return true;
     }
@@ -217,11 +213,7 @@ public final class ScopeValidator {
     private static String displayName(Object prototype) {
         return prototype instanceof ComponentModel component
                 ? component.getClassName()
-                : displayName((FactoryMethodModel) prototype);
-    }
-
-    private static String displayName(FactoryMethodModel factory) {
-        return factory.getDeclaringClass().className().simpleName() + "." + factory.getMethodName();
+                : ((FactoryMethodModel) prototype).getDisplayName();
     }
 
     /**

@@ -8,7 +8,6 @@ import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.FactoryMethodModel;
 import io.tiko.processor.util.ProcessorContext;
 import io.tiko.processor.util.TypeUtil;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -66,27 +65,33 @@ public final class DependencyGraphValidator {
      * Validates all dependencies of a component.
      */
     private boolean validateComponent(ComponentModel component) {
-        boolean valid = true;
+        return validateDependencies(
+                component.getDecl().location(),
+                component.getClassName(),
+                component.getDecl().language(),
+                component.getDependencies());
+    }
 
-        for (DependencyModel dependency : component.getDependencies()) {
+    private boolean validateDependencies(
+            Location location,
+            String injectingIdentifier,
+            SourceLanguage language,
+            List<DependencyModel> dependencies) {
+        boolean valid = true;
+        for (DependencyModel dependency : dependencies) {
             // Skip dependencies that don't resolve to a single user-declared provider here:
             //  - Picker<T>: its "at least one impl of T" check lives in PickerValidator.
             //  - EventBus: a built-in, container-provided dependency (#314), not a user bean.
             if (dependency.isPicker() || dependency.isEventBus()) {
                 continue;
             }
-            if (!isResolved(dependency)) {
-                reportUnresolved(
-                        component.getDecl().location(),
-                        dependency,
-                        component.getClassName(),
-                        component.getDecl().language());
+            if (context.findProvider(dependency).isEmpty()) {
+                reportUnresolved(location, dependency, injectingIdentifier, language);
                 valid = false;
-            } else if (!hasMatchingTypeArguments(component.getDecl().location(), dependency)) {
+            } else if (!hasMatchingTypeArguments(location, dependency)) {
                 valid = false;
             }
         }
-
         return valid;
     }
 
@@ -120,25 +125,12 @@ public final class DependencyGraphValidator {
         }
 
         // Validate factory method's own dependencies
-        for (DependencyModel dependency : factory.getDependencies()) {
-            // Picker<T> (checked in PickerValidator) and the built-in EventBus (#314) don't
-            // resolve to a user-declared provider here.
-            if (dependency.isPicker() || dependency.isEventBus()) {
-                continue;
-            }
-            if (!isResolved(dependency)) {
-                reportUnresolved(
+        return validateDependencies(
                         factory.getMethod().location(),
-                        dependency,
                         factory.getFactoryIdentifier(),
-                        factory.getDeclaringClass().language());
-                valid = false;
-            } else if (!hasMatchingTypeArguments(factory.getMethod().location(), dependency)) {
-                valid = false;
-            }
-        }
-
-        return valid;
+                        factory.getDeclaringClass().language(),
+                        factory.getDependencies())
+                && valid;
     }
 
     /**
@@ -160,14 +152,6 @@ public final class DependencyGraphValidator {
             return false;
         }
         return true;
-    }
-
-    private boolean isResolved(DependencyModel dependency) {
-        String depKey = dependency.getDependencyKey();
-        if (dependency.isPicked() && dependency.getQualifier().isEmpty()) {
-            return context.findByImplClass(depKey).isPresent();
-        }
-        return context.findComponentOrFactory(depKey).isPresent();
     }
 
     /**
@@ -221,21 +205,12 @@ public final class DependencyGraphValidator {
         if (dependency.isPicked() || dependency.getQualifier().isPresent()) {
             return List.of();
         }
-        String typeName = dependency.getDependencyKey();
-        var named = new ArrayList<String>();
-        for (ComponentModel component : context.getActiveComponents()) {
-            if (component.getName().isPresent()
-                    && component.getRoutableTypeNames().contains(typeName)) {
-                named.add("\"" + component.getName().orElseThrow() + "\" (" + component.getQualifiedName() + ")");
-            }
-        }
-        for (FactoryMethodModel factory : context.getActiveFactoryMethods()) {
-            String name = factory.getName();
-            if (name != null && !name.isEmpty() && factory.getReturnTypeName().equals(typeName)) {
-                named.add("\"" + name + "\" (" + factory.getFactoryIdentifier() + ")");
-            }
-        }
-        return named;
+        return context.namedProvidersOf(dependency.getDependencyKey()).stream()
+                .map(provider -> provider instanceof ComponentModel component
+                        ? "\"" + component.getName().orElseThrow() + "\" (" + component.getQualifiedName() + ")"
+                        : "\"" + ((FactoryMethodModel) provider).getName() + "\" ("
+                                + ((FactoryMethodModel) provider).getFactoryIdentifier() + ")")
+                .toList();
     }
 
     /**
@@ -289,10 +264,7 @@ public final class DependencyGraphValidator {
         if (component.isExposeSelf() && typeUtil.isSameType(requested, componentType)) {
             return true;
         }
-        var declared = component.isExposeRestricted()
-                ? component.getExposeTypes()
-                : component.getDecl().interfaces();
-        for (TypeRef exposed : declared) {
+        for (TypeRef exposed : component.getDeclaredRoutableTypes()) {
             if (typeUtil.isSameType(requested, exposed)) {
                 return true;
             }

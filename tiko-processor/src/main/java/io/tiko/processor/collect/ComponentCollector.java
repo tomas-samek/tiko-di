@@ -6,6 +6,7 @@ import io.tiko.annotations.Inject;
 import io.tiko.annotations.PostConstruct;
 import io.tiko.annotations.PreDestroy;
 import io.tiko.annotations.Produces;
+import io.tiko.processor.core.GeneratedCodeAccess;
 import io.tiko.processor.core.ProcessingEnv;
 import io.tiko.processor.core.model.AnnotationRef;
 import io.tiko.processor.core.model.ClassDecl;
@@ -276,20 +277,17 @@ public final class ComponentCollector {
                     "Move " + decl.className().simpleName() + " into a named package");
             return false;
         }
-        for (Optional<ClassDecl> current = Optional.of(decl);
-                current.isPresent();
-                current = current.get().enclosingClass()) {
-            var checked = current.get();
-            if (!TypeUtil.isCallableFromGeneratedCode(checked.visibility())) {
-                String nested =
-                        checked == decl ? "" : ", and so must " + checked.qualifiedName() + ", which it is nested in";
-                errors.error(
-                        decl.location(),
-                        component + " must be public" + nested
-                                + "; the generated code refers to it from the io.tiko.generated package",
-                        "Add the public modifier to " + checked.qualifiedName());
-                return false;
-            }
+        var hidden = GeneratedCodeAccess.firstHidden(decl);
+        if (hidden.isPresent()) {
+            var checked = hidden.get();
+            String nested =
+                    checked == decl ? "" : ", and so must " + checked.qualifiedName() + ", which it is nested in";
+            errors.error(
+                    decl.location(),
+                    component + " must be public" + nested
+                            + "; the generated code refers to it from the io.tiko.generated package",
+                    "Add the public modifier to " + checked.qualifiedName());
+            return false;
         }
         if (!decl.asType().typeArguments().isEmpty()) {
             errors.error(
@@ -431,7 +429,7 @@ public final class ComponentCollector {
                 injectConstructor = constructor;
             }
 
-            if (TypeUtil.isCallableFromGeneratedCode(constructor.visibility())) {
+            if (GeneratedCodeAccess.isCallable(constructor.visibility())) {
                 publicConstructors.add(constructor);
             }
         }
@@ -440,7 +438,7 @@ public final class ComponentCollector {
             return injectConstructor;
         }
         var primary = decl.primaryConstructor()
-                .filter(constructor -> TypeUtil.isCallableFromGeneratedCode(constructor.visibility()));
+                .filter(constructor -> GeneratedCodeAccess.isCallable(constructor.visibility()));
         if (primary.isPresent()) {
             return primary.get();
         }

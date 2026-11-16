@@ -7,6 +7,7 @@ import io.tiko.processor.core.GeneratorAnnotations;
 import io.tiko.processor.core.model.TypeRef;
 import io.tiko.processor.model.EventHandlerModel;
 import io.tiko.processor.model.EventTriggerModel;
+import io.tiko.processor.util.GeneratedNames;
 import io.tiko.processor.util.ProcessorContext;
 import java.io.IOException;
 import java.util.List;
@@ -49,10 +50,7 @@ public final class EventRegistryGenerator {
      * colliding on a single {@code io.tiko.generated.EventRegistry} slot.
      */
     private String registryClassName() {
-        String containerName = context.getContainerClassName();
-        int underscore = containerName.lastIndexOf('_');
-        String suffix = underscore >= 0 ? containerName.substring(underscore) : "";
-        return "EventRegistry" + suffix;
+        return GeneratedNames.eventRegistryClass(context);
     }
 
     public void generate() throws IOException {

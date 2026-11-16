@@ -284,30 +284,11 @@ public final class TikoOptions {
      * Package-private entry point used by {@link AggregatingContainer} to register
      * shadow-declared overrides AFTER {@link Builder#build()} has been called.
      * User code cannot reach this method; it is the only mutation surface on
-     * {@link TikoOptions} outside the {@link Builder}. Always overwrites.
-     *
-     * @see #internalAddOverrideIfAbsent(Class, java.util.function.Supplier)
-     */
-    <T> void internalAddOverride(Class<T> type, java.util.function.Supplier<? extends T> supplier) {
-        overrides.put(new OverrideKey(type, ""), supplier);
-    }
-
-    /**
-     * Same as {@link #internalAddOverride(Class, java.util.function.Supplier)} but
-     * a no-op when the key already has an override. Used to give user-provided
-     * overrides precedence over shadow-declared ones.
+     * {@link TikoOptions} outside the {@link Builder}. A no-op when the key already has an
+     * override, so a user-provided override takes precedence over a shadow-declared one.
      */
     <T> void internalAddOverrideIfAbsent(Class<T> type, java.util.function.Supplier<? extends T> supplier) {
         overrides.putIfAbsent(new OverrideKey(type, ""), supplier);
-    }
-
-    /**
-     * Named-key variant of {@link #internalAddOverrideIfAbsent(Class, java.util.function.Supplier)}.
-     */
-    <T> void internalAddOverrideIfAbsent(
-            Class<T> type, String name, java.util.function.Supplier<? extends T> supplier) {
-        Objects.requireNonNull(name, "name");
-        overrides.putIfAbsent(new OverrideKey(type, name), supplier);
     }
 
     public static Builder builder() {

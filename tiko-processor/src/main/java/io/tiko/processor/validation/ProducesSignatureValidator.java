@@ -1,5 +1,6 @@
 package io.tiko.processor.validation;
 
+import io.tiko.processor.core.GeneratedCodeAccess;
 import io.tiko.processor.core.model.MethodDecl;
 import io.tiko.processor.core.model.SourceLanguage;
 import io.tiko.processor.core.model.TypeRef;
@@ -7,7 +8,6 @@ import io.tiko.processor.model.FactoryMethodModel;
 import io.tiko.processor.util.ErrorReporter;
 import io.tiko.processor.util.PrimitiveNames;
 import io.tiko.processor.util.ProcessorContext;
-import io.tiko.processor.util.TypeUtil;
 
 /**
  * Validates that {@code @Produces} method signatures are ones the code generator can
@@ -112,7 +112,7 @@ public final class ProducesSignatureValidator {
                     "Remove @Produces from the abstract method");
             return false;
         }
-        if (!TypeUtil.isCallableFromGeneratedCode(method.visibility())) {
+        if (!GeneratedCodeAccess.isCallable(method.visibility())) {
             report(
                     method,
                     "@Produces method '" + fqn

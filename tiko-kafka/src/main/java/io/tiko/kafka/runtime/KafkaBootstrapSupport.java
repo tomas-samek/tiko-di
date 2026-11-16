@@ -79,7 +79,7 @@ public final class KafkaBootstrapSupport {
     private void startClients() {
         KafkaConfig config = container.get(KafkaConfig.class);
         EventBus eventBus = container.getEventBus();
-        ErrorHandler errorHandler = resolveErrorHandler(container);
+        ErrorHandler errorHandler = container.getErrorHandler();
         KafkaIngestErrorDecider decider = resolveDecider(container.getAll(KafkaIngestErrorDecider.class));
         Map<String, KafkaSerializer> named = loadNamedSerializers();
 
@@ -223,17 +223,6 @@ public final class KafkaBootstrapSupport {
     @SuppressWarnings("unchecked")
     private static <T> Class<T> asEventType(Class<?> eventType) {
         return (Class<T>) eventType;
-    }
-
-    /**
-     * Returns the {@link ErrorHandler} configured on the container.
-     *
-     * <p>{@link Container#getErrorHandler()} is now part of the API so no reflection is needed.
-     * Custom {@code Container} implementations that do not override the method receive the
-     * JUL-backed default defined on the interface.
-     */
-    private static ErrorHandler resolveErrorHandler(Container container) {
-        return container.getErrorHandler();
     }
 
     /**

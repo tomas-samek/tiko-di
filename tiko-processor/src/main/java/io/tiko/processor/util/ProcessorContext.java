@@ -7,6 +7,7 @@ import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.Location;
 import io.tiko.processor.core.model.MethodDecl;
 import io.tiko.processor.model.ComponentModel;
+import io.tiko.processor.model.DependencyModel;
 import io.tiko.processor.model.EventHandlerModel;
 import io.tiko.processor.model.FactoryMethodModel;
 import io.tiko.processor.model.WiringError;
@@ -21,6 +22,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.stream.Stream;
 
 /**
  * Shared context for annotation processing.
@@ -233,9 +235,20 @@ public final class ProcessorContext {
      * it (#612). A class carries one component annotation, hence at most one name.
      */
     public boolean isRegisteredComponent(ClassDecl decl) {
+        return componentsOfClass(decl).findAny().isPresent();
+    }
+
+    /** The active component the class {@code decl} declares, if it declares one. */
+    public Optional<ComponentModel> activeComponentOf(ClassDecl decl) {
+        return componentsOfClass(decl)
+                .filter(component -> isProfileActive(component.getProfiles()))
+                .findFirst();
+    }
+
+    private Stream<ComponentModel> componentsOfClass(ClassDecl decl) {
         String fqn = decl.qualifiedName();
         return components.values().stream()
-                .anyMatch(c -> c.getDecl().qualifiedName().equals(fqn));
+                .filter(component -> component.getQualifiedName().equals(fqn));
     }
 
     /**
@@ -400,34 +413,37 @@ public final class ProcessorContext {
         }
         // No unnamed provider. A single named one is still an unambiguous answer, as it was
         // before 0.7.0; several are not, and the dependency stays unresolved (#724).
-        return soleNamedProvider(typeName);
+        List<Object> named = namedProvidersOf(typeName);
+        return named.size() == 1 ? Optional.of(named.get(0)) : Optional.empty();
     }
 
-    /**
-     * The one active named provider of {@code typeName}, component or {@code @Produces} method,
-     * when there is exactly one; empty when there is none or more than one.
-     */
-    private Optional<Object> soleNamedProvider(String typeName) {
+    /** The active named providers of {@code typeName}: components, then {@code @Produces} methods. */
+    public List<Object> namedProvidersOf(String typeName) {
         List<Object> named = new ArrayList<>();
-        for (ComponentModel component : components.values()) {
-            if (isProfileActive(component.getProfiles())
-                    && component.getName().isPresent()
+        for (ComponentModel component : getActiveComponents()) {
+            if (component.getName().isPresent()
                     && component.getRoutableTypeNames().contains(typeName)) {
                 named.add(component);
             }
         }
-        for (List<FactoryMethodModel> sameKey : factoryMethods.values()) {
-            for (FactoryMethodModel factory : sameKey) {
-                String name = factory.getName();
-                if (isActive(factory)
-                        && name != null
-                        && !name.isEmpty()
-                        && factory.getReturnTypeName().equals(typeName)) {
-                    named.add(factory);
-                }
+        for (FactoryMethodModel factory : getActiveFactoryMethods()) {
+            String name = factory.getName();
+            if (name != null && !name.isEmpty() && factory.getReturnTypeName().equals(typeName)) {
+                named.add(factory);
             }
         }
-        return named.size() == 1 ? Optional.of(named.get(0)) : Optional.empty();
+        return named;
+    }
+
+    /**
+     * The provider {@code dependency} resolves to: the picked class for a {@code @Pick} without
+     * {@code @Named}, otherwise the lookup by its key.
+     */
+    public Optional<Object> findProvider(DependencyModel dependency) {
+        String key = dependency.getDependencyKey();
+        return dependency.isPicked() && dependency.getQualifier().isEmpty()
+                ? findByImplClass(key)
+                : findComponentOrFactory(key);
     }
 
     /**
@@ -467,10 +483,7 @@ public final class ProcessorContext {
 
     /** False only for the class of a registered component whose profile is not active. */
     private boolean isInTheBuild(ClassDecl owner) {
-        String fqn = owner.qualifiedName();
-        return components.values().stream()
-                .filter(component -> component.getDecl().qualifiedName().equals(fqn))
-                .allMatch(component -> isProfileActive(component.getProfiles()));
+        return componentsOfClass(owner).allMatch(component -> isProfileActive(component.getProfiles()));
     }
 
     /**

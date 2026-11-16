@@ -156,33 +156,7 @@ public final class ComponentFactoryGenerator {
             String paramName = dependency.getParameterName();
             parameterNames.add(paramName);
 
-            if (dependency.isProvider()) {
-                // Provider<T>'s lambda consults the override at call time so overrides
-                // registered after Provider construction still take effect, and so the
-                // resolution key is the inner type T (not Provider<T>). resolveOverride
-                // does one map lookup and routes the cast through the class token (#309).
-                TypeName providerType = dependency.getType().javaPoet();
-                TypeName innerType =
-                        literalOf(dependency.getUnwrappedType().orElseThrow().javaPoet());
-                String existing = generateContainerGetCall(dependency, component);
-                if (dependency.getQualifier().isPresent() && !dependency.isPicked()) {
-                    String qualifier = dependency.getQualifier().orElseThrow();
-                    methodBuilder.addStatement(
-                            "$1T $2L = () -> container.options().resolveOverride($3T.class, $4S, () -> $5L)",
-                            providerType,
-                            paramName,
-                            innerType,
-                            qualifier,
-                            existing);
-                } else {
-                    methodBuilder.addStatement(
-                            "$1T $2L = () -> container.options().resolveOverride($3T.class, () -> $4L)",
-                            providerType,
-                            paramName,
-                            innerType,
-                            existing);
-                }
-            } else if (dependency.isPicker()) {
+            if (dependency.isPicker()) {
                 // Picker<T> is constructed inline via the generic ContainerPicker<T> impl —
                 // one runtime class services every Picker injection point regardless of T.
                 TypeName baseType = dependency.getUnwrappedType().orElseThrow().javaPoet();
@@ -194,32 +168,32 @@ public final class ComponentFactoryGenerator {
                         ClassName.get(RUNTIME_PACKAGE, "ContainerPicker"),
                         baseType);
             } else {
-                // Direct dependency resolution. Wrap with an override-aware lookup so a
+                // Wrap the resolution with an override-aware lookup so a
                 // TikoOptions.override(DeclaredType.class, ...) registered by tests applies
                 // at the injection site, regardless of which concrete @Component provides
                 // the type. The override key is the parameter's declared type — interface
                 // when the consumer injects by interface, concrete class otherwise (#128).
                 // resolveOverride does one map lookup and routes the cast through the
                 // class token (#309); the production getter only runs on the fallback path.
+                // Provider<T> is keyed by its inner type T, and its lambda consults the
+                // override at call time, so one registered after construction still applies.
                 TypeName declaredType = dependency.getType().javaPoet();
-                String existing = generateContainerGetCall(dependency, component);
-                if (dependency.getQualifier().isPresent() && !dependency.isPicked()) {
-                    String qualifier = dependency.getQualifier().orElseThrow();
-                    methodBuilder.addStatement(
-                            "$1T $2L = container.options().resolveOverride($5T.class, $3S, () -> $4L)",
-                            declaredType,
-                            paramName,
-                            qualifier,
-                            existing,
-                            literalOf(declaredType));
-                } else {
-                    methodBuilder.addStatement(
-                            "$1T $2L = container.options().resolveOverride($4T.class, () -> $3L)",
-                            declaredType,
-                            paramName,
-                            existing,
-                            literalOf(declaredType));
-                }
+                TypeName keyType = dependency.isProvider()
+                        ? dependency.getUnwrappedType().orElseThrow().javaPoet()
+                        : declaredType;
+                CodeBlock key = dependency.getQualifier().isPresent() && !dependency.isPicked()
+                        ? CodeBlock.of(
+                                "$T.class, $S",
+                                literalOf(keyType),
+                                dependency.getQualifier().orElseThrow())
+                        : CodeBlock.of("$T.class", literalOf(keyType));
+                methodBuilder.addStatement(
+                        "$T $L = $Lcontainer.options().resolveOverride($L, () -> $L)",
+                        declaredType,
+                        paramName,
+                        dependency.isProvider() ? "() -> " : "",
+                        key,
+                        generateContainerGetCall(dependency, component));
             }
         }
 
@@ -291,11 +265,7 @@ public final class ComponentFactoryGenerator {
         // any @Component(name=...) metadata.
         if (dependency.isPicked()) {
             String pickedFqn = dependency.getPickedTypeName().orElseThrow();
-            Object pickedProvider = dependency
-                    .getQualifier()
-                    .map(q ->
-                            context.findComponentOrFactory(pickedFqn + "#" + q).orElse(null))
-                    .orElseGet(() -> context.findByImplClass(pickedFqn).orElse(null));
+            Object pickedProvider = context.findProvider(dependency).orElse(null);
             if (pickedProvider instanceof io.tiko.processor.model.FactoryMethodModel pickedFactory) {
                 return String.format("container.produce_%s()", pickedFactory.getFactoryIdentifier());
             }

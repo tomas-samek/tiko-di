@@ -75,7 +75,7 @@ public final class NullabilityValidator {
         }
         for (var factory : context.getActiveFactoryMethods()) {
             var consumer = new Consumer(
-                    producerName(factory),
+                    factory.getDisplayName(),
                     factory.getScope(),
                     factory.getDeclaringClass().language() == SourceLanguage.KOTLIN,
                     false);
@@ -149,16 +149,12 @@ public final class NullabilityValidator {
         if (dependency.isEventBus()) {
             return Optional.of(new Provider("the container's EventBus", false, null));
         }
-        var key = dependency.getDependencyKey();
-        var found = dependency.isPicked() && dependency.getQualifier().isEmpty()
-                ? context.findByImplClass(key)
-                : context.findComponentOrFactory(key);
-        return found.map(NullabilityValidator::describe);
+        return context.findProvider(dependency).map(NullabilityValidator::describe);
     }
 
     private static Provider describe(Object provider) {
         if (provider instanceof FactoryMethodModel factory) {
-            return new Provider("@Produces " + producerName(factory), isNullable(factory), factory);
+            return new Provider("@Produces " + factory.getDisplayName(), isNullable(factory), factory);
         }
         if (provider instanceof ComponentModel component) {
             return new Provider("@Component " + component.getClassName(), false, null);
@@ -186,8 +182,8 @@ public final class NullabilityValidator {
                     + code(pointText(dependency, true)));
             if (provider.factory() != null
                     && provider.factory().getDeclaringClass().language() == SourceLanguage.KOTLIN) {
-                fixes.add("If the producer can return null, declare " + producerName(provider.factory())
-                        + "'s return type as " + code(type + "?"));
+                fixes.add("If the producer can return null, declare "
+                        + provider.factory().getDisplayName() + "'s return type as " + code(type + "?"));
             }
             errors.error(
                     ErrorReporter.NULLABILITY_MISMATCH,
@@ -274,7 +270,7 @@ public final class NullabilityValidator {
                 ErrorReporter.NULLABILITY_MISMATCH,
                 dependency.getParameter().location(),
                 MISMATCH + point(dependency, consumer) + " is a " + code(pointText(dependency, false))
-                        + ", which can hand out the value of @Produces " + producerName(factory) + ", and that"
+                        + ", which can hand out the value of @Produces " + factory.getDisplayName() + ", and that"
                         + " producer returns " + code(produced + "?") + MAY_BE_NULL,
                 fixes.toArray(String[]::new));
     }
@@ -300,7 +296,7 @@ public final class NullabilityValidator {
         var type = TypeRefs.declared(factory.getReturnType())
                 .map(decl -> decl.className().simpleName())
                 .orElseGet(() -> factory.getReturnType().displayName());
-        return "make the producer non-null: return " + code(type) + " from " + producerName(factory);
+        return "make the producer non-null: return " + code(type) + " from " + factory.getDisplayName();
     }
 
     /** The simple name of the type the point injects ({@code Foo} for {@code Foo?} and {@code Provider<Foo?>}). */
@@ -319,10 +315,6 @@ public final class NullabilityValidator {
 
     private static String wrapperName(DependencyModel dependency) {
         return dependency.isPicker() ? "Picker" : "Provider";
-    }
-
-    private static String producerName(FactoryMethodModel factory) {
-        return factory.getDeclaringClass().className().simpleName() + "." + factory.getMethodName();
     }
 
     private static String code(String text) {
