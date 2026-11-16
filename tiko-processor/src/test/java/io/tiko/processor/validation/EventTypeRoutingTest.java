@@ -1,16 +1,14 @@
 package io.tiko.processor.validation;
 
+import static io.tiko.processor.validation.ShapeTesting.assertLocatedError;
+import static io.tiko.processor.validation.ShapeTesting.compile;
+import static io.tiko.processor.validation.ShapeTesting.errorsOf;
+import static io.tiko.processor.validation.ShapeTesting.listener;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.google.testing.compile.Compilation;
-import com.google.testing.compile.Compiler;
-import com.google.testing.compile.JavaFileObjects;
-import io.tiko.processor.TikoAnnotationProcessor;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import javax.tools.JavaFileObject;
 import org.junit.jupiter.api.Test;
@@ -27,43 +25,15 @@ import org.junit.jupiter.params.provider.MethodSource;
 class EventTypeRoutingTest {
 
     private static final String IMPORTS = """
-            package demo;
             import io.tiko.Event;
             import io.tiko.Scope;
             import io.tiko.annotations.Component;
             import io.tiko.annotations.EventHandler;
             """;
 
-    private static final Pattern TYPE_NAME = Pattern.compile("(?:class|interface|record) (\\w+)");
-
     private static final String SHAPE = "public interface Shape {}";
     private static final String CIRCLE = "public record Circle(int radius) implements Shape {}";
     private static final String SQUARE = "public record Square(int side) implements Shape {}";
-
-    private static Compilation compile(String... sources) {
-        var files = new ArrayList<JavaFileObject>();
-        for (String source : sources) {
-            var matcher = TYPE_NAME.matcher(source);
-            assertThat(matcher.find()).as("source declares a type").isTrue();
-            files.add(JavaFileObjects.forSourceString("demo." + matcher.group(1), IMPORTS + source));
-        }
-        return Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(files);
-    }
-
-    private static List<String> errorsOf(Compilation compilation) {
-        return compilation.errors().stream()
-                .map(error -> error.getMessage(Locale.ROOT))
-                .toList();
-    }
-
-    private static String listener(String handler) {
-        return """
-                @Component(scope = Scope.SINGLETON)
-                public class Listener {
-                    %s
-                }
-                """.formatted(handler);
-    }
 
     private static String registryOf(Compilation compilation) throws IOException {
         for (JavaFileObject file : compilation.generatedSourceFiles()) {
@@ -76,13 +46,13 @@ class EventTypeRoutingTest {
 
     @Test
     void eventTypeNamesTheClassTheHandlerSubscribesTo() throws IOException {
-        var compilation = compile(SHAPE, CIRCLE, SQUARE, listener("""
+        var compilation = compile(IMPORTS, List.of(SHAPE, CIRCLE, SQUARE, listener("""
                         @EventHandler(eventType = Circle.class)
                             public void onCircle(Shape shape) {}
 
                             @EventHandler(eventType = Square.class)
                             public void onSquare(Shape shape, Event<?> event) {}
-                        """));
+                        """)));
 
         assertThat(errorsOf(compilation)).isEmpty();
         assertThat(compilation.status()).isEqualTo(Compilation.Status.SUCCESS);
@@ -94,7 +64,8 @@ class EventTypeRoutingTest {
 
     @Test
     void handlerOfAConcreteTypeNeedsNoEventType() throws IOException {
-        var compilation = compile(SHAPE, CIRCLE, listener("@EventHandler public void on(Circle circle) {}"));
+        var compilation =
+                compile(IMPORTS, List.of(SHAPE, CIRCLE, listener("@EventHandler public void on(Circle circle) {}")));
 
         assertThat(errorsOf(compilation)).isEmpty();
         assertThat(registryOf(compilation)).contains("eventBus.subscribe(Circle.class,");
@@ -104,15 +75,7 @@ class EventTypeRoutingTest {
     @MethodSource("rejected")
     void handlerThatCouldNeverBeInvokedOrMisusesEventTypeIsALocatedError(
             String name, List<String> sources, List<String> fragments) {
-        var compilation = compile(sources.toArray(String[]::new));
-
-        assertThat(compilation.status()).isEqualTo(Compilation.Status.FAILURE);
-        assertThat(errorsOf(compilation))
-                .anySatisfy(message -> assertThat(message).contains(fragments).contains("Suggested fixes:"));
-        assertThat(compilation.errors())
-                .as("no error in generated code")
-                .noneMatch(error ->
-                        error.getSource() != null && error.getSource().getName().contains("io/tiko/generated"));
+        assertLocatedError(compile(IMPORTS, sources), fragments);
     }
 
     static Stream<Arguments> rejected() {

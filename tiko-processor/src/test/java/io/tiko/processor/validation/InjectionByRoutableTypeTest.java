@@ -1,17 +1,13 @@
 package io.tiko.processor.validation;
 
+import static io.tiko.processor.validation.ShapeTesting.assertLocatedError;
+import static io.tiko.processor.validation.ShapeTesting.compile;
+import static io.tiko.processor.validation.ShapeTesting.errorsOf;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.google.testing.compile.Compilation;
-import com.google.testing.compile.Compiler;
-import com.google.testing.compile.JavaFileObjects;
-import io.tiko.processor.TikoAnnotationProcessor;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
-import javax.tools.JavaFileObject;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -25,35 +21,25 @@ import org.junit.jupiter.params.provider.MethodSource;
 class InjectionByRoutableTypeTest {
 
     private static final String IMPORTS = """
-            package demo;
             import io.tiko.Scope;
             import io.tiko.annotations.Component;
             import io.tiko.annotations.Inject;
             import io.tiko.annotations.Named;
             """;
 
-    private static final Pattern TYPE_NAME = Pattern.compile("(?:class|interface) (\\w+)");
-
-    /** Compiles each source as {@code demo.<first type declared in it>}. */
-    private static Compilation compile(List<String> sources) {
-        var files = new ArrayList<JavaFileObject>();
-        for (String source : sources) {
-            var matcher = TYPE_NAME.matcher(source);
-            assertThat(matcher.find()).as("source declares a type").isTrue();
-            files.add(JavaFileObjects.forSourceString("demo." + matcher.group(1), IMPORTS + source));
-        }
-        return Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(files);
-    }
-
-    private static List<String> errorsOf(Compilation compilation) {
-        return compilation.errors().stream()
-                .map(error -> error.getMessage(Locale.ROOT))
-                .toList();
-    }
-
     private static final String A = "public interface A {}";
     private static final String B = "public interface B {}";
     private static final String REPO = "public interface Repo<T> {}";
+
+    private static final String USER_REPO = """
+            @Component(scope = Scope.SINGLETON)
+            public class UserRepo implements Repo<String> {}
+            """;
+
+    private static final String COUNT_REPO = """
+            @Component(scope = Scope.SINGLETON)
+            public class CountRepo implements Repo<Integer> {}
+            """;
 
     private static String consumer(String parameter) {
         return """
@@ -67,7 +53,7 @@ class InjectionByRoutableTypeTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("resolved")
     void injectionPointResolvesWhatTheContainerRoutes(String name, List<String> sources) {
-        var compilation = compile(sources);
+        var compilation = compile(IMPORTS, sources);
 
         assertThat(errorsOf(compilation)).isEmpty();
         assertThat(compilation.status()).isEqualTo(Compilation.Status.SUCCESS);
@@ -79,14 +65,9 @@ class InjectionByRoutableTypeTest {
                                 @Component(scope = Scope.SINGLETON)
                                 public class Impl implements A, B {}
                                 """, consumer("B b"))),
-                Arguments.of("parameterized interface", List.of(REPO, """
-                                @Component(scope = Scope.SINGLETON)
-                                public class UserRepo implements Repo<String> {}
-                                """, consumer("Repo<String> repo"))),
-                Arguments.of("parameterized interface as a @Produces parameter", List.of(REPO, """
-                                @Component(scope = Scope.SINGLETON)
-                                public class UserRepo implements Repo<String> {}
-                                """, """
+                Arguments.of("parameterized interface", List.of(REPO, USER_REPO, consumer("Repo<String> repo"))),
+                Arguments.of(
+                        "parameterized interface as a @Produces parameter", List.of(REPO, USER_REPO, """
                                 @Component(scope = Scope.SINGLETON)
                                 public class Wiring {
                                     @io.tiko.annotations.Produces(scope = Scope.SINGLETON)
@@ -140,15 +121,7 @@ class InjectionByRoutableTypeTest {
     @MethodSource("unresolved")
     void injectionPointTheContainerWouldNotRouteIsALocatedError(
             String name, List<String> sources, List<String> fragments) {
-        var compilation = compile(sources);
-
-        assertThat(compilation.status()).isEqualTo(Compilation.Status.FAILURE);
-        assertThat(errorsOf(compilation))
-                .anySatisfy(message -> assertThat(message).contains(fragments).contains("Suggested fixes:"));
-        assertThat(compilation.errors())
-                .as("no error in generated code")
-                .noneMatch(error ->
-                        error.getSource() != null && error.getSource().getName().contains("io/tiko/generated"));
+        assertLocatedError(compile(IMPORTS, sources), fragments);
     }
 
     static Stream<Arguments> unresolved() {
@@ -191,32 +164,17 @@ class InjectionByRoutableTypeTest {
                         List.of("Impl is EVENT-scoped and proxied", "implements demo.A", "Inject demo.A instead")),
                 Arguments.of(
                         "parameterized request with one implementation per type argument",
-                        List.of(REPO, """
-                                @Component(scope = Scope.SINGLETON)
-                                public class UserRepo implements Repo<String> {}
-                                """, """
-                                @Component(scope = Scope.SINGLETON)
-                                public class CountRepo implements Repo<Integer> {}
-                                """, consumer("Repo<String> users")),
+                        List.of(REPO, USER_REPO, COUNT_REPO, consumer("Repo<String> users")),
                         List.of("Multiple unnamed providers for type demo.Repo", "UserRepo", "CountRepo")),
                 Arguments.of(
                         "parameterized request that reaches an implementation of other type arguments",
-                        List.of(REPO, """
-                                @Component(scope = Scope.SINGLETON)
-                                public class CountRepo implements Repo<Integer> {}
-                                """, consumer("Repo<String> users")),
+                        List.of(REPO, COUNT_REPO, consumer("Repo<String> users")),
                         List.of(
                                 "Cannot inject demo.Repo<java.lang.String>",
                                 "demo.CountRepo is the component routed as demo.Repo")),
                 Arguments.of(
                         "raw request with one implementation per type argument",
-                        List.of(REPO, """
-                                @Component(scope = Scope.SINGLETON)
-                                public class UserRepo implements Repo<String> {}
-                                """, """
-                                @Component(scope = Scope.SINGLETON)
-                                public class CountRepo implements Repo<Integer> {}
-                                """, consumer("Repo repo")),
+                        List.of(REPO, USER_REPO, COUNT_REPO, consumer("Repo repo")),
                         List.of("demo.Repo", "UserRepo", "CountRepo")));
     }
 }

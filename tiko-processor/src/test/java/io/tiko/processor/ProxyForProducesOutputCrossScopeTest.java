@@ -1,13 +1,13 @@
 package io.tiko.processor;
 
+import static io.tiko.processor.CompileTesting.compile;
+import static io.tiko.processor.CompileTesting.generated;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.google.testing.compile.Compilation;
 import com.google.testing.compile.CompilationSubject;
-import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import javax.tools.JavaFileObject;
 import org.junit.jupiter.api.Test;
 
@@ -57,8 +57,7 @@ class ProxyForProducesOutputCrossScopeTest {
                 "  public GreetingConsumer(Greeting g) {}",
                 "}");
 
-        Compilation c =
-                Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(iface, factory, consumer);
+        Compilation c = compile(iface, factory, consumer);
 
         // Without the fix, javac compiles the generated GreetingConsumerFactory.java
         // and it works (per PR #93), but the singleton captures a closed/leaked
@@ -68,16 +67,7 @@ class ProxyForProducesOutputCrossScopeTest {
         // must instantiate it instead of calling produce_*() directly.
         CompilationSubject.assertThat(c).succeeded();
 
-        JavaFileObject proxySource = c.generatedSourceFiles().stream()
-                .filter(f -> f.getName().contains("GreetingFactory_greetingProxy"))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError(
-                        "Expected GreetingFactory_greetingProxy.java in generated sources but found: "
-                                + c.generatedSourceFiles().stream()
-                                        .map(JavaFileObject::getName)
-                                        .toList()));
-
-        String proxyBody = new String(proxySource.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        String proxyBody = generated(c, "GreetingFactory_greetingProxy");
 
         // The proxy implements the factory's return-type interface and
         // delegates each interface method to container.produce_<id>().
@@ -85,13 +75,7 @@ class ProxyForProducesOutputCrossScopeTest {
         assertThat(proxyBody).contains("container.produce_GreetingFactory_greeting()");
         assertThat(proxyBody).contains("public String hello()");
 
-        JavaFileObject consumerFactorySource = c.generatedSourceFiles().stream()
-                .filter(f -> f.getName().contains("GreetingConsumerFactory"))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("GreetingConsumerFactory was not generated"));
-
-        String consumerFactoryBody =
-                new String(consumerFactorySource.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        String consumerFactoryBody = generated(c, "GreetingConsumerFactory");
 
         // The consumer's factory must instantiate the proxy, not call produce_*()
         // directly — that's what makes the SINGLETON pick up the current REQUEST
@@ -116,15 +100,9 @@ class ProxyForProducesOutputCrossScopeTest {
                 "  public Greeting greeting() { return () -> \"hi\"; }"));
         lines.addAll(java.util.List.of(greetingFactoryMethods));
         lines.add("}");
-        Compilation c = Compiler.javac()
-                .withProcessors(new TikoAnnotationProcessor())
-                .compile(GREETING, JavaFileObjects.forSourceLines("io.example.GreetingFactory", lines));
+        Compilation c = compile(GREETING, JavaFileObjects.forSourceLines("io.example.GreetingFactory", lines));
         CompilationSubject.assertThat(c).succeeded();
-        JavaFileObject container = c.generatedSourceFiles().stream()
-                .filter(f -> f.getName().contains("TikoContainerImpl"))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("TikoContainerImpl not generated"));
-        return new String(container.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        return generated(c, "TikoContainerImpl");
     }
 
     /**

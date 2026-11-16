@@ -21,13 +21,13 @@ import io.tiko.runtime.Tiko;
 import io.tiko.runtime.TikoOptions;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiFunction;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.Callback;
@@ -60,7 +60,7 @@ class KafkaRuntimeEdgeCasesTest {
         broker.produce("errors", utf8("fatal"));
         broker.produce("errors", utf8("third"));
         List<Long> committed = new CopyOnWriteArrayList<>();
-        KafkaConsumerClient client = new Forwarding(broker.consumerClient("g")) {
+        KafkaConsumerClient client = new ForwardingClient(broker.consumerClient("g")) {
             @Override
             public void commitSync(Map<TopicPartition, OffsetAndMetadata> offsets) {
                 offsets.values().forEach(offset -> committed.add(offset.offset()));
@@ -106,7 +106,7 @@ class KafkaRuntimeEdgeCasesTest {
     void errorFromThePollIsReportedAndStopsTheConsumer() {
         AtomicInteger polls = new AtomicInteger();
         AtomicBoolean closed = new AtomicBoolean();
-        KafkaConsumerClient client = new Forwarding(new FakeKafkaBroker().consumerClient("g")) {
+        KafkaConsumerClient client = new ForwardingClient(new FakeKafkaBroker().consumerClient("g")) {
             @Override
             public ConsumerRecords<String, byte[]> poll(Duration timeout) {
                 polls.incrementAndGet();
@@ -206,6 +206,25 @@ class KafkaRuntimeEdgeCasesTest {
         }
     }
 
+    /** The sink of the two #752 tests: a start that creates a producer for it. */
+    private static final GeneratedSinkDescriptor OUT_SINK = new GeneratedSinkDescriptor(
+            "out", "", OrderPlaced.class, KafkaSerializer.Default.class, (container, event) -> event, p -> null);
+
+    /** A consumer factory over {@code broker} that counts in {@code openConsumers} the clients not closed yet. */
+    private static BiFunction<KafkaConfig, String, KafkaConsumerClient> countingConsumers(
+            FakeKafkaBroker broker, AtomicInteger openConsumers) {
+        return (config, group) -> {
+            openConsumers.incrementAndGet();
+            return new ForwardingClient(broker.consumerClient(group)) {
+                @Override
+                public void close() {
+                    openConsumers.decrementAndGet();
+                    super.close();
+                }
+            };
+        };
+    }
+
     /** #752: a start that fails after it created clients closes them before it throws. */
     @Test
     void startThatFailsHalfWayStopsTheConsumersAndClosesTheProducerItCreated() {
@@ -221,24 +240,13 @@ class KafkaRuntimeEdgeCasesTest {
                 UnbuildableSerializer.class,
                 false,
                 (container, payload, ctx) -> payload);
-        var sink = new GeneratedSinkDescriptor(
-                "out", "", OrderPlaced.class, KafkaSerializer.Default.class, (container, event) -> event, p -> null);
 
         try (Container container = Tiko.create()) {
             var support = new KafkaBootstrapSupport(
                     container,
                     List.of(good, bad),
-                    List.of(sink),
-                    (KafkaConfig config, String group) -> {
-                        openConsumers.incrementAndGet();
-                        return new Forwarding(broker.consumerClient(group)) {
-                            @Override
-                            public void close() {
-                                openConsumers.decrementAndGet();
-                                super.close();
-                            }
-                        };
-                    },
+                    List.of(OUT_SINK),
+                    countingConsumers(broker, openConsumers),
                     config -> new ClosingProducer(broker.producerClient(), producerClosed));
 
             assertThatThrownBy(support::start)
@@ -263,24 +271,13 @@ class KafkaRuntimeEdgeCasesTest {
         TikoOptions options = TikoOptions.builder()
                 .configSource(ConfigSources.fromMap(Map.of("tiko", Map.of("kafka", kafka))))
                 .build();
-        var sink = new GeneratedSinkDescriptor(
-                "out", "", OrderPlaced.class, KafkaSerializer.Default.class, (container, event) -> event, p -> null);
 
         try (Container container = Tiko.create(options)) {
             var support = new KafkaBootstrapSupport(
                     container,
                     List.of(RunnerTestSupport.stringSource("good", payload -> payload)),
-                    List.of(sink),
-                    (KafkaConfig config, String group) -> {
-                        openConsumers.incrementAndGet();
-                        return new Forwarding(broker.consumerClient(group)) {
-                            @Override
-                            public void close() {
-                                openConsumers.decrementAndGet();
-                                super.close();
-                            }
-                        };
-                    },
+                    List.of(OUT_SINK),
+                    countingConsumers(broker, openConsumers),
                     config -> new ClosingProducer(broker.producerClient(), producerClosed));
 
             assertThatThrownBy(support::start).hasMessageContaining("SKIPP");
@@ -400,54 +397,6 @@ class KafkaRuntimeEdgeCasesTest {
         @Override
         public void close() {
             closed.set(true);
-            delegate.close();
-        }
-    }
-
-    private static class Forwarding implements KafkaConsumerClient {
-        private final KafkaConsumerClient delegate;
-
-        Forwarding(KafkaConsumerClient delegate) {
-            this.delegate = delegate;
-        }
-
-        @Override
-        public void subscribe(Collection<String> topics) {
-            delegate.subscribe(topics);
-        }
-
-        @Override
-        public ConsumerRecords<String, byte[]> poll(Duration timeout) {
-            return delegate.poll(timeout);
-        }
-
-        @Override
-        public void commitSync(Map<TopicPartition, OffsetAndMetadata> offsets) {
-            delegate.commitSync(offsets);
-        }
-
-        @Override
-        public void seek(TopicPartition partition, long offset) {
-            delegate.seek(partition, offset);
-        }
-
-        @Override
-        public void pause(Collection<TopicPartition> partitions) {
-            delegate.pause(partitions);
-        }
-
-        @Override
-        public void resume(Collection<TopicPartition> partitions) {
-            delegate.resume(partitions);
-        }
-
-        @Override
-        public void wakeup() {
-            delegate.wakeup();
-        }
-
-        @Override
-        public void close() {
             delegate.close();
         }
     }

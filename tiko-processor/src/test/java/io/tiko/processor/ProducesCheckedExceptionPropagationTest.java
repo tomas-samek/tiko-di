@@ -1,13 +1,13 @@
 package io.tiko.processor;
 
+import static io.tiko.processor.CompileTesting.compile;
+import static io.tiko.processor.CompileTesting.generated;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.google.testing.compile.Compilation;
 import com.google.testing.compile.CompilationSubject;
-import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import javax.tools.JavaFileObject;
 import org.junit.jupiter.api.Test;
 
@@ -37,19 +37,13 @@ class ProducesCheckedExceptionPropagationTest {
                 "  public DataSource dataSource() throws SQLException { return null; }",
                 "}");
 
-        Compilation c =
-                Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(factory);
+        Compilation c = compile(factory);
 
         // Pre-fix: javac fails because produce_PoolFactory_dataSource()
         // calls getPoolFactory().dataSource() with an undeclared SQLException.
         CompilationSubject.assertThat(c).succeeded();
 
-        JavaFileObject containerSource = c.generatedSourceFiles().stream()
-                .filter(f -> f.getName().contains("TikoContainerImpl"))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("TikoContainerImpl was not generated"));
-
-        String body = new String(containerSource.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        String body = generated(c, "TikoContainerImpl");
 
         // A per-factory invokeFactory_*() helper exists, with the try/catch
         // and the ProduceFailure + sneakyThrow plumbing. Catch is narrowed to
@@ -130,14 +124,9 @@ class ProducesCheckedExceptionPropagationTest {
     }
 
     private static String generatedFactory(JavaFileObject component, String factoryName) throws IOException {
-        Compilation c =
-                Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(component);
+        Compilation c = compile(component);
         CompilationSubject.assertThat(c).succeeded();
-        JavaFileObject source = c.generatedSourceFiles().stream()
-                // The factory name ends in the module hash (#726).
-                .filter(f -> f.getName().contains("/" + factoryName + "_"))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError(factoryName + " was not generated"));
-        return new String(source.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        // The factory name ends in the module hash (#726).
+        return generated(c, "/" + factoryName + "_");
     }
 }

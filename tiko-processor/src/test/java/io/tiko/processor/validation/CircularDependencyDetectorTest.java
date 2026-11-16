@@ -1,10 +1,12 @@
 package io.tiko.processor.validation;
 
+import static io.tiko.processor.CompileTesting.compile;
+
 import com.google.testing.compile.Compilation;
 import com.google.testing.compile.CompilationSubject;
-import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
-import io.tiko.processor.TikoAnnotationProcessor;
+import io.tiko.processor.CompileTesting;
+import java.util.List;
 import javax.tools.JavaFileObject;
 import org.junit.jupiter.api.Test;
 
@@ -16,10 +18,6 @@ import org.junit.jupiter.api.Test;
  * propagates the full cycle, not just the root node).
  */
 class CircularDependencyDetectorTest {
-
-    private static Compilation compile(JavaFileObject... sources) {
-        return Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(sources);
-    }
 
     /** A SINGLETON {@code @Component} 'name' with one {@code @Inject} constructor param ({@code ctorParams}). */
     private static JavaFileObject bean(String name, String ctorParams) {
@@ -48,27 +46,34 @@ class CircularDependencyDetectorTest {
 
     /** A source in package {@code demo} with the Tiko imports a {@code @Produces} fixture needs. */
     private static JavaFileObject source(String name, String... lines) {
-        var all = new String[lines.length + 2];
-        all[0] = "package demo;";
-        all[1] = "import io.tiko.Scope; import io.tiko.Provider; import io.tiko.annotations.*;";
-        System.arraycopy(lines, 0, all, 2, lines.length);
-        return JavaFileObjects.forSourceLines("demo." + name, all);
+        return CompileTesting.source(
+                "import io.tiko.Scope; import io.tiko.Provider; import io.tiko.annotations.*;", name, lines);
     }
 
     private static final JavaFileObject THING = source("Thing", "public class Thing {}");
 
+    private static final String THING_PARAM = "Thing thing";
+    private static final String INSTANCE_METHOD = "public";
+    private static final String STATIC_METHOD = "public static";
+
+    /**
+     * A SINGLETON {@code Cfg} that injects {@code ctorParam} and produces the SINGLETON {@code Thing}
+     * from a method with {@code producesModifiers}: {@link #INSTANCE_METHOD} or {@link #STATIC_METHOD}.
+     */
+    private static JavaFileObject cfgProducingThing(String ctorParam, String producesModifiers) {
+        return source(
+                "Cfg",
+                "@Component(scope = Scope.SINGLETON)",
+                "public class Cfg {",
+                "  @Inject public Cfg(" + ctorParam + ") {}",
+                "  @Produces(scope = Scope.SINGLETON) " + producesModifiers + " Thing thing() { return new Thing(); }",
+                "}");
+    }
+
     /** #722: an instance {@code @Produces} method needs an instance of its declaring component. */
     @Test
     void componentInjectingWhatItsOwnInstanceProducesMethodProducesFailsWithFullPath() {
-        Compilation c = compile(
-                THING,
-                source(
-                        "Cfg",
-                        "@Component(scope = Scope.SINGLETON)",
-                        "public class Cfg {",
-                        "  @Inject public Cfg(Thing thing) {}",
-                        "  @Produces(scope = Scope.SINGLETON) public Thing thing() { return new Thing(); }",
-                        "}"));
+        Compilation c = compile(THING, cfgProducingThing(THING_PARAM, INSTANCE_METHOD));
 
         CompilationSubject.assertThat(c).failed();
         CompilationSubject.assertThat(c).hadErrorContaining("demo.Cfg -> demo.Thing -> demo.Cfg");
@@ -76,16 +81,7 @@ class CircularDependencyDetectorTest {
 
     @Test
     void cycleThroughAnInstanceProducesMethodsDeclaringComponentFailsWithFullPath() {
-        Compilation c = compile(
-                THING,
-                bean("User", "Thing thing"),
-                source(
-                        "Cfg",
-                        "@Component(scope = Scope.SINGLETON)",
-                        "public class Cfg {",
-                        "  @Inject public Cfg(User user) {}",
-                        "  @Produces(scope = Scope.SINGLETON) public Thing thing() { return new Thing(); }",
-                        "}"));
+        Compilation c = compile(THING, bean("User", THING_PARAM), cfgProducingThing("User user", INSTANCE_METHOD));
 
         CompilationSubject.assertThat(c).failed();
         CompilationSubject.assertThat(c).hadErrorContaining("demo.Cfg -> demo.User -> demo.Thing -> demo.Cfg");
@@ -93,30 +89,14 @@ class CircularDependencyDetectorTest {
 
     @Test
     void staticProducesMethodOnAComponentThatInjectsItsProductCompiles() {
-        Compilation c = compile(
-                THING,
-                source(
-                        "Cfg",
-                        "@Component(scope = Scope.SINGLETON)",
-                        "public class Cfg {",
-                        "  @Inject public Cfg(Thing thing) {}",
-                        "  @Produces(scope = Scope.SINGLETON) public static Thing thing() { return new Thing(); }",
-                        "}"));
+        Compilation c = compile(THING, cfgProducingThing(THING_PARAM, STATIC_METHOD));
 
         CompilationSubject.assertThat(c).succeeded();
     }
 
     @Test
     void componentTakingItsOwnProductAsAProviderCompiles() {
-        Compilation c = compile(
-                THING,
-                source(
-                        "Cfg",
-                        "@Component(scope = Scope.SINGLETON)",
-                        "public class Cfg {",
-                        "  @Inject public Cfg(Provider<Thing> thing) {}",
-                        "  @Produces(scope = Scope.SINGLETON) public Thing thing() { return new Thing(); }",
-                        "}"));
+        Compilation c = compile(THING, cfgProducingThing("Provider<Thing> thing", INSTANCE_METHOD));
 
         CompilationSubject.assertThat(c).succeeded();
     }
@@ -142,7 +122,7 @@ class CircularDependencyDetectorTest {
     private static JavaFileObject[] profileVariantsWhereOnlyProdCycles() {
         return new JavaFileObject[] {
             THING,
-            bean("User", "Thing thing"),
+            bean("User", THING_PARAM),
             source(
                     "Things",
                     "@Component",
@@ -158,10 +138,7 @@ class CircularDependencyDetectorTest {
     /** #722: the cycle walk follows the variant the build's profiles select, not the first one declared. */
     @Test
     void cycleThroughTheActiveProfileVariantFailsWithFullPath() {
-        Compilation c = Compiler.javac()
-                .withProcessors(new TikoAnnotationProcessor())
-                .withOptions("-Atiko.profiles=prod")
-                .compile(profileVariantsWhereOnlyProdCycles());
+        Compilation c = compile(List.of("-Atiko.profiles=prod"), profileVariantsWhereOnlyProdCycles());
 
         CompilationSubject.assertThat(c).failed();
         CompilationSubject.assertThat(c).hadErrorContaining("demo.User -> demo.Thing -> demo.User");
@@ -169,10 +146,7 @@ class CircularDependencyDetectorTest {
 
     @Test
     void cycleOnlyInAnInactiveProfileVariantCompiles() {
-        Compilation c = Compiler.javac()
-                .withProcessors(new TikoAnnotationProcessor())
-                .withOptions("-Atiko.profiles=dev")
-                .compile(profileVariantsWhereOnlyProdCycles());
+        Compilation c = compile(List.of("-Atiko.profiles=dev"), profileVariantsWhereOnlyProdCycles());
 
         CompilationSubject.assertThat(c).succeeded();
     }

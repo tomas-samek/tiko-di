@@ -1,23 +1,18 @@
 package io.tiko.processor.validation;
 
+import static io.tiko.processor.validation.ShapeTesting.assertLocatedError;
+import static io.tiko.processor.validation.ShapeTesting.errorsOf;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.google.testing.compile.Compilation;
 import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
+import io.tiko.processor.GenGenerator;
 import io.tiko.processor.TikoAnnotationProcessor;
-import java.io.IOException;
-import java.io.Writer;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
-import java.util.Set;
 import java.util.stream.Stream;
-import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Processor;
-import javax.annotation.processing.RoundEnvironment;
-import javax.lang.model.SourceVersion;
-import javax.lang.model.element.TypeElement;
 import javax.tools.JavaFileObject;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -25,7 +20,10 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 /**
  * Component and {@code @Produces} shapes that used to fail as raw javac errors in generated code
- * (#746): each either compiles, or is a located error with a suggested fix.
+ * (#746): each either compiles, or is a located error with a suggested fix. A primitive injection
+ * point is one of them (#748): nothing can provide a primitive, so the error says so, with a fix,
+ * in place of "Cannot resolve dependency: int". The Kotlin wording is covered by
+ * {@code KotlinConstructRulesTest}.
  */
 class ComponentAndProducesShapesTest {
 
@@ -43,66 +41,21 @@ class ComponentAndProducesShapesTest {
         return JavaFileObjects.forSourceString(fqn, packageLine + IMPORTS + body);
     }
 
-    /** Generates {@code demo.Later} in the first round, as another annotation processor would. */
-    static final class LaterGenerator extends AbstractProcessor {
-        private boolean generated;
-
-        @Override
-        public Set<String> getSupportedAnnotationTypes() {
-            return Set.of("*");
-        }
-
-        @Override
-        public SourceVersion getSupportedSourceVersion() {
-            return SourceVersion.latestSupported();
-        }
-
-        @Override
-        public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
-            if (!generated) {
-                generated = true;
-                try (Writer writer =
-                        processingEnv.getFiler().createSourceFile("demo.Later").openWriter()) {
-                    writer.write("package demo; public interface Later {}");
-                } catch (IOException e) {
-                    throw new IllegalStateException(e);
-                }
-            }
-            return false;
-        }
-    }
-
+    /** With {@code withLaterGenerator}, another processor generates {@code demo.Later} in the first round. */
     private static Compilation compile(boolean withLaterGenerator, List<JavaFileObject> sources) {
         var processors = new ArrayList<Processor>();
         if (withLaterGenerator) {
-            processors.add(new LaterGenerator());
+            processors.add(new GenGenerator("demo.Later"));
         }
         processors.add(new TikoAnnotationProcessor());
         return Compiler.javac().withProcessors(processors).compile(sources);
-    }
-
-    private static List<String> errorsOf(Compilation compilation) {
-        return compilation.errors().stream()
-                .map(error -> error.getMessage(Locale.ROOT))
-                .toList();
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("rejected")
     void unsupportedShapeIsALocatedError(
             String name, boolean withLaterGenerator, List<JavaFileObject> sources, List<String> fragments) {
-        var compilation = compile(withLaterGenerator, sources);
-
-        assertThat(compilation.status()).isEqualTo(Compilation.Status.FAILURE);
-        assertThat(errorsOf(compilation))
-                .as("no processor crash")
-                .noneMatch(message -> message.contains("Tiko DI processing failed"));
-        assertThat(errorsOf(compilation))
-                .anySatisfy(message -> assertThat(message).contains(fragments).contains("Suggested fixes:"));
-        assertThat(compilation.errors())
-                .as("no error in generated code")
-                .noneMatch(error ->
-                        error.getSource() != null && error.getSource().getName().contains("io/tiko/generated"));
+        assertLocatedError(compile(withLaterGenerator, sources), fragments);
     }
 
     static Stream<Arguments> rejected() {
@@ -189,6 +142,28 @@ class ComponentAndProducesShapesTest {
                                 }
                                 """)),
                         List.of("@Produces methods named 'thing' in demo.Cfg", "Rename")),
+                Arguments.of(
+                        "primitive constructor parameter",
+                        false,
+                        List.of(source("demo.Server", """
+                                @Component(scope = Scope.SINGLETON)
+                                public class Server {
+                                    public Server(int port) {}
+                                }
+                                """)),
+                        List.of(
+                                "Cannot inject the primitive 'int' (parameter 'port')",
+                                "Inject a small type that holds the value")),
+                Arguments.of(
+                        "primitive @Produces parameter",
+                        false,
+                        List.of(source("demo.Things", """
+                                @Component
+                                public class Things {
+                                    @Produces public String label(boolean loud) { return loud ? "A" : "a"; }
+                                }
+                                """)),
+                        List.of("Cannot inject the primitive 'boolean' (parameter 'loud')")),
                 Arguments.of(
                         "parameter of a type another processor generates in this build",
                         true,

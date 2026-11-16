@@ -10,7 +10,6 @@ import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -47,7 +46,7 @@ class TikoMcpServerSubprocessIT {
 
     @Test
     void serverListsToolsAndPassesCallArgumentsThrough(@TempDir Path projectDir) throws Exception {
-        var jar = shadedJar();
+        var jar = ShadedJar.find();
 
         // Minimal fixture so TopologyStore.loadFrom() finds a SINGLETON component and its dependency.
         var topology = projectDir.resolve("m/target/classes/META-INF/tiko/topology.json");
@@ -148,25 +147,6 @@ class TikoMcpServerSubprocessIT {
             proc.destroyForcibly().waitFor(5, TimeUnit.SECONDS);
             reader.shutdownNow();
             stdin.close();
-        }
-    }
-
-    /** The shaded jar {@code package} built for the current version (not {@code original-…}). */
-    private static Path shadedJar() throws IOException {
-        try (var files = Files.list(Paths.get("target"))) {
-            var jar = files.filter(p -> {
-                        var name = p.getFileName().toString();
-                        return name.startsWith("tiko-mcp-")
-                                && name.endsWith(".jar")
-                                && !name.endsWith("-sources.jar")
-                                && !name.endsWith("-javadoc.jar");
-                    })
-                    .sorted()
-                    .findFirst();
-            assertThat(jar)
-                    .as("shaded tiko-mcp jar in target/ (run under mvn verify)")
-                    .isPresent();
-            return jar.get();
         }
     }
 
