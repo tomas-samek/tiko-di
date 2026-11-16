@@ -370,6 +370,11 @@ public final class EventChainContext {
      * up, not when it is submitted (#728). An event that waits in the queue, or never leaves it
      * because it was dropped by overflow or by shutdown, is no handler that overran; its future
      * simply never completes.
+     *
+     * <p>A body the executor runs inline, on the submitting thread ({@code CALLER_RUNS} with a full
+     * queue, or {@code BLOCK} called from the pool's own worker), is not time-boxed and runs to
+     * completion. The breach would be seen only after the body has returned: the submitter would
+     * be interrupted for work that is already done, and a retry would run a completed handler again.
      */
     private static CompletableFuture<Void> runOnce(Runnable body, long timeoutNanos, ExecutorService executor) {
         if (timeoutNanos <= 0) {
@@ -379,11 +384,14 @@ public final class EventChainContext {
         // has no handle on it).
         AtomicReference<Thread> worker = new AtomicReference<>();
         CompletableFuture<Void> outcome = new CompletableFuture<>();
+        Thread submitter = Thread.currentThread();
         CompletableFuture.runAsync(
                         () -> {
-                            worker.set(Thread.currentThread());
-                            // Completes outcome with TimeoutException unless the body gets there first.
-                            outcome.orTimeout(timeoutNanos, TimeUnit.NANOSECONDS);
+                            if (Thread.currentThread() != submitter) {
+                                worker.set(Thread.currentThread());
+                                // Completes outcome with TimeoutException unless the body gets there first.
+                                outcome.orTimeout(timeoutNanos, TimeUnit.NANOSECONDS);
+                            }
                             body.run();
                         },
                         executor)
