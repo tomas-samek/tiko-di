@@ -340,7 +340,7 @@ class KafkaRuntimeEdgeCasesTest {
         var broker = new FakeKafkaBroker();
         var consumer = broker.consumerClient("g");
         consumer.subscribe(List.of("live"));
-        var producer = Thread.ofPlatform().daemon().start(() -> {
+        Thread.ofPlatform().daemon().start(() -> {
             await().pollDelay(Duration.ofMillis(100)).atMost(TIMEOUT).until(() -> true);
             broker.produce("live", utf8("r0"));
         });
@@ -348,9 +348,10 @@ class KafkaRuntimeEdgeCasesTest {
         long started = System.nanoTime();
         ConsumerRecords<String, byte[]> records = consumer.poll(LONG_POLL);
 
+        // The record itself shows the producing thread ran. Whether that thread has already ended
+        // is not asserted: the consumer is woken from inside produce(), before the thread returns.
         assertThat(records.count()).isEqualTo(1);
         assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofSeconds(10));
-        assertThat(producer.isAlive()).isFalse();
     }
 
     @Test
