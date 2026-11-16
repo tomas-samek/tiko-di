@@ -341,6 +341,24 @@ The canonical verification is Step 8 below — a fresh-`m2` `mvn compile`
 against the copy-pasted snippet proves the bumped coordinate actually
 resolves before the PR merges.
 
+### After the pin PR merges — check the two pages that show the install snippet
+
+- **Project page**, `https://tomas-samek.github.io/tiko-di/`: deploys from
+  `site/` on a push to `main` that touches `site/**` (`pages.yml`). Confirm
+  the run for the merge commit succeeded and the page shows `<X.Y.Z>`.
+- **The owner's portfolio page**, `https://tomas-samek.github.io/projects/tiko-di/`:
+  lives in another repository (`tomas-samek/tomas-samek.github.io`) and
+  renders this README when that site builds — on a push there, or once a
+  night. A merge here does not rebuild it, so it keeps the prior version
+  until the next night (`0.7.0`: its Installation section still said
+  `0.6.0` hours after the pin PR merged). Rebuild it and check:
+
+```bash
+gh workflow run deploy.yml -R tomas-samek/tomas-samek.github.io --ref main
+# once that run finishes — expect 0:
+curl -s https://tomas-samek.github.io/projects/tiko-di/ | grep -c "<prior X.Y.Z>"
+```
+
 ## Step 7 — GitHub Release notes
 
 Once Central is live, draft the release notes:
