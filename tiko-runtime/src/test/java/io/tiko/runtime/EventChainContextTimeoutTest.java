@@ -7,14 +7,17 @@ import io.tiko.ErrorContext;
 import io.tiko.ErrorHandler;
 import io.tiko.EventHandlerError;
 import io.tiko.EventHandlerInfo;
+import io.tiko.annotations.BackoffStrategy;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -167,5 +170,78 @@ class EventChainContextTimeoutTest {
                                 e -> assertThat(e.cause())
                                         .isInstanceOf(IllegalStateException.class)
                                         .hasMessage("boom")));
+    }
+
+    /** An executor that runs every task on the submitting thread, as CALLER_RUNS does when the queue is full. */
+    private static final class InlineExecutor extends AbstractExecutorService {
+        @Override
+        public void execute(Runnable command) {
+            command.run();
+        }
+
+        @Override
+        public void shutdown() {
+            // nothing to shut down
+        }
+
+        @Override
+        public List<Runnable> shutdownNow() {
+            return List.of();
+        }
+
+        @Override
+        public boolean isShutdown() {
+            return false;
+        }
+
+        @Override
+        public boolean isTerminated() {
+            return false;
+        }
+
+        @Override
+        public boolean awaitTermination(long timeout, TimeUnit unit) {
+            return true;
+        }
+    }
+
+    /**
+     * A handler the executor runs inline, on the publisher's thread, is not time-boxed: it runs to
+     * completion, as the {@code timeout} Javadoc says. Reporting it afterwards as timed out would
+     * interrupt the publisher and, with retries, run a completed handler again.
+     */
+    @Test
+    void inlineRunOverItsBudgetIsNeitherReportedNorInterrupted() {
+        List<ErrorContext> errors = new CopyOnWriteArrayList<>();
+        var ran = new AtomicInteger();
+
+        try (var inlineExecutor = new InlineExecutor()) {
+            EventChainContext.runAsyncWithRetry(
+                    () -> {
+                        ran.incrementAndGet();
+                        await().pollDelay(Duration.ofMillis(200))
+                                .atMost(Duration.ofSeconds(5))
+                                .until(() -> true);
+                    },
+                    new RetryPolicy(
+                            2, 0L, BackoffStrategy.FIXED, Duration.ofMillis(50).toNanos()),
+                    inlineExecutor,
+                    errors::add,
+                    INFO,
+                    "evt");
+
+            assertThat(Thread.currentThread().isInterrupted())
+                    .as("the publisher's thread is not interrupted")
+                    .isFalse();
+            // The timer of a breached budget fires on another thread: give a late report time to arrive.
+            await().pollDelay(Duration.ofMillis(300))
+                    .atMost(Duration.ofSeconds(5))
+                    .until(() -> true);
+            assertThat(errors).as("no timeout is routed").isEmpty();
+            assertThat(ran).as("the completed handler is not run again").hasValue(1);
+        } finally {
+            // Clears a stray interrupt so it cannot reach the next test.
+            Thread.interrupted();
+        }
     }
 }

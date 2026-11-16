@@ -394,7 +394,40 @@ public final class ProcessorContext {
 
         // Then a component that is routable as the requested type: any interface it is exposed
         // as, not only the first one it implements (#724).
-        return routingComponent(typeName, qualifier, false);
+        Optional<Object> byRoute = routingComponent(typeName, qualifier, false);
+        if (byRoute.isPresent() || !qualifier.isEmpty()) {
+            return byRoute;
+        }
+        // No unnamed provider. A single named one is still an unambiguous answer, as it was
+        // before 0.7.0; several are not, and the dependency stays unresolved (#724).
+        return soleNamedProvider(typeName);
+    }
+
+    /**
+     * The one active named provider of {@code typeName}, component or {@code @Produces} method,
+     * when there is exactly one; empty when there is none or more than one.
+     */
+    private Optional<Object> soleNamedProvider(String typeName) {
+        List<Object> named = new ArrayList<>();
+        for (ComponentModel component : components.values()) {
+            if (isProfileActive(component.getProfiles())
+                    && component.getName().isPresent()
+                    && component.getRoutableTypeNames().contains(typeName)) {
+                named.add(component);
+            }
+        }
+        for (List<FactoryMethodModel> sameKey : factoryMethods.values()) {
+            for (FactoryMethodModel factory : sameKey) {
+                String name = factory.getName();
+                if (isActive(factory)
+                        && name != null
+                        && !name.isEmpty()
+                        && factory.getReturnTypeName().equals(typeName)) {
+                    named.add(factory);
+                }
+            }
+        }
+        return named.size() == 1 ? Optional.of(named.get(0)) : Optional.empty();
     }
 
     /**

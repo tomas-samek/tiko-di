@@ -116,6 +116,17 @@ class InjectionByRoutableTypeTest {
                                 @Component(scope = Scope.SINGLETON, name = "x")
                                 public class Impl implements A, B {}
                                 """, consumer("@Named(\"x\") B b"))),
+                Arguments.of("the only provider is a named component", List.of(A, """
+                                @Component(scope = Scope.SINGLETON, name = "x")
+                                public class ImplX implements A {}
+                                """, consumer("A a"))),
+                Arguments.of("the only provider is a named @Produces method", List.of(A, """
+                                @Component(scope = Scope.SINGLETON)
+                                public class Wiring {
+                                    @io.tiko.annotations.Produces(scope = Scope.SINGLETON, name = "x")
+                                    public A a() { return new A() {}; }
+                                }
+                                """, consumer("A a"))),
                 Arguments.of("unnamed component next to named ones", List.of(A, """
                                 @Component(scope = Scope.SINGLETON, name = "x")
                                 public class ImplX implements A {}
@@ -157,7 +168,7 @@ class InjectionByRoutableTypeTest {
                                 """, consumer("Impl impl")),
                         List.of("demo.Impl", "exposeSelf = false", "Inject demo.A")),
                 Arguments.of(
-                        "only named implementations for an unqualified request",
+                        "several named implementations and no unnamed one for an unqualified request",
                         List.of(A, """
                                 @Component(scope = Scope.SINGLETON, name = "x")
                                 public class ImplX implements A {}

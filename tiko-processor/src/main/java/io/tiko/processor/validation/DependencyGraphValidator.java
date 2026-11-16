@@ -214,8 +214,8 @@ public final class DependencyGraphValidator {
 
     /**
      * For an unqualified request: the named providers of its type, each as {@code "name" (provider)}.
-     * A named provider answers only a request that names it, so with nothing but named providers
-     * the request has no answer (#724).
+     * A single named provider answers the request; this is reached when there are several and no
+     * unnamed one, so the request cannot choose (#724).
      */
     private List<String> namedProvidersOf(DependencyModel dependency) {
         if (dependency.isPicked() || dependency.getQualifier().isPresent()) {
