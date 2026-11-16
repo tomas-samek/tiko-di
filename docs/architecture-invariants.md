@@ -5,7 +5,7 @@ Each invariant is a load-bearing rule for tiko-di's architecture — a constrain
 violated, erodes the compile-time-safety pitch, breaks the public contract, or introduces a
 class of runtime surprise the framework exists to prevent. The registry is independently
 citable: contributors, CLAUDE.md, and agent skills reference invariants by ID (ARCH-1 …
-ARCH-16). It is a living document — `tiko-architect` proposes additions in its step-5
+ARCH-19). It is a living document — `tiko-architect` proposes additions in its step-5
 self-audit whenever a release introduces a new rule that should be codified.
 
 ---
@@ -31,7 +31,9 @@ non-JDK / non-`io.tiko` type in `tiko-api/src/main`.
 documented RUNTIME exceptions are `@PostConstruct` and `@PreDestroy`, because the container
 invokes them via generated code at runtime, and `@Named`, because `@TikoTest` reads it on
 test-method parameters to look the named component up (#715). The container never reads
-`@Named`: wiring by name is still generated at compile time. `@GeneratedComponent`
+`@Named`: wiring by name is still generated at compile time. `tiko-test`'s `@TikoTest`,
+`@TikoTestOptions` and `@EventScopeTest` are RUNTIME too: JUnit and the extension read them
+from the test class. `@GeneratedComponent`
 (`tiko-runtime`) is `CLASS`: the processor writes it on generated factories so that a later
 compile, which sees only class files, can read what the SOURCE-retained `@Component` said
 (#707). It is absent from reflection and never read at run time.
@@ -50,7 +52,9 @@ or the container starting to read `@Named` (or any annotation) reflectively.
 ### ARCH-3 — event dispatch is type-keyed, never name-keyed
 
 **Statement.** Event routing is keyed by the Java payload type; `@EventTrigger.eventName` is
-an optional trace label for topology views, never a routing key.
+an optional trace label for topology views, never a routing key. The key is the exact class: a
+handler receives the events of the one class it subscribes to, and dispatch never walks an
+event's supertypes (#729).
 
 **Rationale.** Name-keyed dispatch is un-checkable at compile time — a typo or rename can
 silently misroute an event. Type-keyed dispatch keeps wiring compile-time-checked, consistent
@@ -59,8 +63,8 @@ with tiko's no-runtime-surprises contract.
 **Anchor.** `docs/events.md` "Trade-off positions" (the "Routing is by event type, not by name" bullet).
 
 **Violation looks like.** A code path that dispatches or filters handlers by `eventName`
-string comparison at runtime; or framework docs / examples implying `eventName` affects which
-handlers run.
+string comparison at runtime; framework docs / examples implying `eventName` affects which
+handlers run; or dispatch that also delivers an event to the handlers of its supertypes.
 
 ---
 
@@ -146,7 +150,8 @@ primitives. Inheritance is a fallback, not a default.
 and makes components independently testable against the interface contract rather than an
 implementation detail.
 
-**Anchor.** Memory `feedback_interfaces_and_composition`.
+**Anchor.** House rule set by the owner (2026-05-22). It has no anchor in code; this entry is
+its record.
 
 **Violation looks like.** A new framework feature that requires consumers to extend a concrete
 class; or a public API method whose return type is a concrete implementation rather than an
@@ -198,36 +203,36 @@ generated proxy that bypasses the interface contract.
 
 **Statement.** Every top-level type emitted by an annotation processor is marked with
 `@javax.annotation.processing.Generated(...)` using the shared helper
-`GeneratorAnnotations.generatedBy(GeneratorClass.class)`.
+`io.tiko.processor.core.GeneratorAnnotations.generatedBy(GeneratorClass.class)`
+(`tiko-processor-core`, which every processor module depends on).
 
 **Rationale.** The `@Generated` marker lets IDEs grey out generated sources and coverage tools
 exclude them. Consistency via the shared helper prevents per-generator drift.
 
 **Anchor.** `.claude/rules/annotation-processors.md` "Generated Code Markings".
 
-**Exception.** `tiko-kafka-processor`'s `KafkaTransportBootstrapGenerator` builds the same
-`@Generated(value = <generator FQN>)` annotation inline: the module deliberately has no compile
-dependency on `tiko-processor`, where the helper lives (the two processors run side by side on
-the user's annotation-processor path). Any other processor module in the same position follows
-the same shape. Recorded at the 0.6.0 gate.
+**History.** Until 0.7.0 the helper lived in `tiko-processor`, and `tiko-kafka-processor` built
+the annotation inline (an exception recorded at the 0.6.0 gate). The helper moved to
+`tiko-processor-core` and the Kafka generator uses it; there is no exception left.
 
 **Violation looks like.** A new processor-emitted top-level class that lacks the `@Generated`
-annotation; or a `tiko-processor` generator that writes its own ad-hoc `@Generated` instead of
-delegating to `GeneratorAnnotations.generatedBy(...)`.
+annotation; or a generator in any processor module that writes its own ad-hoc `@Generated`
+instead of delegating to `GeneratorAnnotations.generatedBy(...)`.
 
 ---
 
 ### ARCH-12 — restriction-style features default permissive; tightening is opt-in
 
 **Statement.** Features that restrict or guard what components can do (e.g. `expose = {...}` on
-`@Component`, profile isolation, scope-violation checks) default to permissive behaviour.
+`@Component`, profile isolation) default to permissive behaviour.
 Tightening is an explicit opt-in by the user.
 
 **Rationale.** Benevolent defaults lower the adoption barrier: a user who does not configure a
 restriction feature gets no surprises. Opt-in tightening is the stated design posture for any
 new "guard" feature.
 
-**Anchor.** Memory `feedback_benevolent_defaults`.
+**Anchor.** House rule set by the owner (2026-05-13). It has no anchor in code; this entry is
+its record.
 
 **Not in scope.** Security fixes recorded as SEC-* entries in
 [`security-model.md`](./security-model.md), validation of the user's own input (a malformed
@@ -235,6 +240,13 @@ value, a misspelled key, a repeated YAML key) and correctness diagnostics (a mis
 a non-public hook) may fail by default — they are not restriction features. Their behaviour
 changes belong in the release notes with a migration line. Clarified at the 0.6.0 gate, where
 #497, #464, #495, #498 and #114 tightened defaults under this reading.
+
+At the 0.7.0 gate four checks that fail by default, with no switch, were accepted under the same
+reading or by the owner's decision: an injection point without `@Named` whose type has several
+named providers and no unnamed one (#724; a single named provider still answers it), a
+`@TestComponent` whose scope differs from the main component it shadows (#707), a thread that
+outlives a `@TikoTest` test (#637), and two `@KafkaSource` methods on one topic and consumer
+group (#750). Each is in the 0.7.0 release notes with a migration line.
 
 **Violation looks like.** A new restriction feature that is on-by-default and breaks existing
 tiko users who have not opted in; or a compile error from a restriction feature that fires
@@ -260,8 +272,9 @@ not be NO-GO'd by stale prose alone; the fixes are filed and shipped next. (Cali
 
 **Anchor.** The #401–#406 drift postmortem and the #408 archetype-doc-sync gate (issues on the
 GitHub tracker). #408 covers the bundled-docs subset mechanically; ARCH-13 covers the broader
-doc surface #408 does not reach automatically. Once #408 lands, its gate test under
-`tiko-archetype/src/test/` is the in-repo foothold for the mechanical half.
+doc surface #408 does not reach automatically. The #408 gate is
+`ArchetypeBundledSkillsInSyncTest` (with `ArchetypeDocSync`) under `tiko-archetype/src/test/`:
+the in-repo foothold for the mechanical half.
 
 **Violation looks like.** CLAUDE.md describing an annotation, scope, or API that was removed
 or renamed without updating the doc; a cookbook showing an import path that no longer exists;
@@ -312,6 +325,11 @@ its unit without violating either.
 **Anchor.** `ContainerGenerator.createRunInDetachedEventScopeMethod` javadoc (`tiko-processor`);
 `docs/superpowers/specs/2026-07-10-issue-220-async-event-scope-design.md`.
 
+**Known limit (#811).** The detached unit is opened on the container of the module that
+declares the handler. In a multi-module application the EVENT-scoped components of the other
+modules are not reachable from it: a `Picker<T>` that lists another module's EVENT-scoped
+implementation fails there with `NoActiveEventScopeException`.
+
 **Violation looks like.** Async dispatch reusing the publisher's open frame; a detached path that
 fails to restore the caller's frame in a `finally`; or `runInEventScope` made re-entrant or
 silently nesting.
@@ -344,3 +362,61 @@ copies remain only so modules built by an older processor keep booting.
 **Violation looks like.** A new module-shipped `META-INF/tiko/` resource that the runtime reads
 from every jar to find each module's contribution; or a library module shipping a
 `META-INF/tiko/` file that collides with the application's own in a fat jar.
+
+---
+
+### ARCH-17 — processor logic runs on the frontend-neutral model
+
+**Statement.** Collecting, validating and generating run on `tiko-processor-core`'s model
+(`ProcessingEnv`, `ClassDecl`, `TypeRef`, …) in `TikoPipeline` and `KafkaPipeline`. The javac
+processing API (`javax.lang.model`, `javax.annotation.processing`) is imported only in
+`io.tiko.processor.core.javac` and the javac entry classes, and the KSP API only in
+`io.tiko.processor.core.ksp` and the KSP entry classes. JavaPoet's `Modifier` in generators is
+the one exception.
+
+**Rationale.** One pipeline serves Java (javac) and Kotlin (KSP). A rule written against one
+frontend's API holds for that frontend only, so Java and Kotlin users would get different
+checks and different generated code for the same wiring.
+
+**Anchor.** `FrontendBoundaryTest` in `tiko-processor`, `tiko-kafka-processor` and
+`tiko-processor-core`; CLAUDE.md "Annotation Processing". Recorded at the 0.7.0 gate.
+
+**Violation looks like.** A validator, collector or generator that imports a frontend's API; or
+a check implemented in a frontend entry class instead of the pipeline.
+
+---
+
+### ARCH-18 — generated class names carry the module's suffix
+
+**Statement.** Every class a processor generates into `io.tiko.generated` for a module ends in
+that module's `_<hash>` suffix: `TikoContainerImpl_<hash>`, `EventRegistry_<hash>`,
+`TikoModule_<hash>`, and the factories and proxies named through `GeneratedNames`.
+
+**Rationale.** Every module generates into the same package. Without the suffix, two modules of
+one application that each have a component `Health` both generate `HealthFactory`, and the
+classpath keeps one of them (#726).
+
+**Anchor.** `GeneratedNames` (`tiko-processor`); `.claude/rules/annotation-processors.md`
+"Code Generation Strategy". Recorded at the 0.7.0 gate.
+
+**Violation looks like.** A generator that composes a class name in `io.tiko.generated` by hand,
+without the module's suffix.
+
+---
+
+### ARCH-19 — threads started for a container are owned by it
+
+**Statement.** A thread that the runtime or a transport starts for a container comes from
+`Container.threadFactory()`, or is one of the container's own dispatch and teardown threads.
+The container reports the threads still running once `close()` has finished its bounded waits
+(`TikoOptions.Builder#onThreadsOutlivingClose`), and `@TikoTest` fails the test that leaked one.
+The JVM shutdown hook of `TikoDaemon` is not such a thread.
+
+**Rationale.** A thread that survives its container cannot be attributed later: in a test suite
+it shows up tests afterwards, as a flaky failure of something unrelated (#637).
+
+**Anchor.** `Container#threadFactory` javadoc (`tiko-api`); `OwnedThreads` (`tiko-runtime`).
+Recorded at the 0.7.0 gate.
+
+**Violation looks like.** Runtime or transport code that calls `new Thread(...)` or builds its
+own executor for work tied to a container, so the thread is invisible to `close()`.

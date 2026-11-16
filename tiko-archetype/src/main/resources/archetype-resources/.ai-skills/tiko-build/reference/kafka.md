@@ -11,11 +11,12 @@ event bus*, not a consumer: it has three hard compile-time rules.
 1. Enclosing class is `@Component(scope = Scope.SINGLETON)`.
 2. The method is **non-void** — it returns the local event payload (or `null` to consume the
    record without publishing anything).
-3. It carries a sibling **`@EventTrigger`** on the same method.
+3. It carries exactly one sibling **`@EventTrigger`** on the same method; a second one is a
+   compile error.
 
 The return value is published on the local bus **by its type**; an ordinary
 `@EventHandler` for that type does the work. This is the canonical inbound
-shape (verbatim from `tiko-examples/08_kafka_order_warehouse`):
+shape (as in `tiko-examples/08_kafka_order_warehouse`, without its validation):
 
 ```java
 @Component(scope = Scope.SINGLETON)
@@ -38,7 +39,7 @@ public class WarehouseService {
 Outbound is the mirror, in the service that produces the event: a `@KafkaSink` is subscribed by the runtime to its
 parameter type — when that event is published locally, the return value is
 serialized to the topic. Same `SINGLETON` rule; **do not** also add
-`@EventHandler` (that double-fires). `partitionKey` names an accessor on the
+`@EventHandler` (a compile error). `partitionKey` names an accessor on the
 return type for the message key. A `null` return sends nothing.
 
 ```java

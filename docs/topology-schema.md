@@ -99,7 +99,7 @@ Every `@EventHandler` method.
 | ---------------- | ------- | ----- |
 | `declaringClass` | string  | |
 | `methodName`     | string  | |
-| `eventType`      | string  | FQN of the first parameter type |
+| `eventType`      | string  | FQN of the class the handler subscribes to: `@EventHandler(eventType = ...)` when stated, else the first parameter type |
 | `async`          | boolean | `@EventHandler(async = ...)` |
 | `hasEventWrapper`| boolean | True when the method takes a second `Event<?>` parameter |
 

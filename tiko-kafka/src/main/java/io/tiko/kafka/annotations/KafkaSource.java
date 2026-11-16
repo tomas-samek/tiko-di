@@ -18,15 +18,18 @@ import java.lang.annotation.Target;
  * offset is committed and the record is not redelivered (in Kotlin, declare the return type
  * nullable). A method that throws takes the ingest-error path instead
  * ({@code tiko.kafka.poison-record-policy}, or a registered {@code KafkaIngestErrorDecider}).
+ * A record without a value (a tombstone) is not handed to the method: its offset is committed
+ * and nothing is published.
  *
  * <p>A sibling {@code @io.tiko.annotations.EventTrigger(eventName = "...")} on the same
- * method is required and declares the tracing name for the published event. The actual
+ * method is required and declares the tracing name for the published event. A second
+ * {@code @EventTrigger} on the method is a compile error. The actual
  * dispatch on the local bus is by return-type class, not by name. See the spec
  * "Trigger semantics on bridge methods — MVP scope cut".
  *
- * <p>The enclosing class must be {@code @Component(scope = Scope.SINGLETON)} (Kafka consumer
- * threads run outside any unit of work). Validated at compile time by
- * {@code tiko-kafka-processor}.
+ * <p>The enclosing class must be {@code @Component(scope = Scope.SINGLETON)}, validated at
+ * compile time by {@code tiko-kafka-processor}. Each record is handled in its own unit of work,
+ * opened around the call to this method.
  */
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.SOURCE)

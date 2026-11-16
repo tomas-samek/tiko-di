@@ -10,7 +10,7 @@ import java.lang.annotation.Target;
  * Test-classpath marker that shadows a production {@code @Component} of the same target type.
  *
  * <p>The {@code tiko-processor} processes {@code @TestComponent}-annotated classes during
- * {@code test-compile} and emits a separate {@code TestTikoContainerImpl_<hash>} into
+ * {@code test-compile} and emits a separate {@code TestContainerImpl_<hash>} into
  * {@code target/test-classes/}. At runtime, {@link io.tiko.runtime.Tiko#create(io.tiko.runtime.TikoOptions)}
  * uses the test container when {@code META-INF/tiko/test-container.properties} is on the classpath
  * <em>and</em> the container opted in via {@link io.tiko.runtime.TikoOptions.Builder#testWiring(boolean)}
@@ -23,7 +23,11 @@ import java.lang.annotation.Target;
  *       class must be assignable to the value type.</li>
  *   <li>When {@code value()} is unset (default {@link Void Void.class}), the processor walks the
  *       superclass chain and shadows the first {@code @Component}-annotated ancestor (if any).</li>
- *   <li>When neither produces a target, the class is a pure addition with no shadowing.</li>
+ *   <li>A class with neither shadows the main component behind each interface it implements.
+ *       Lifecycle markers such as {@code AutoCloseable} are never shadowed.</li>
+ *   <li>A test component with a {@link #name()} shadows nothing: it is an addition, reached by
+ *       its name.</li>
+ *   <li>When none of these produces a target, the class is a pure addition with no shadowing.</li>
  * </ul>
  *
  * <p>{@code SOURCE} retention — never appears in runtime bytecode.
@@ -39,7 +43,8 @@ public @interface TestComponent {
      *
      * <p>When unset (default {@link Void Void.class}), the processor walks the
      * test class's superclass chain and shadows the first {@code @Component}-annotated
-     * ancestor (if any).
+     * ancestor (if any); without one, it shadows the main component behind each interface
+     * the test class implements.
      */
     Class<?> value() default Void.class;
 

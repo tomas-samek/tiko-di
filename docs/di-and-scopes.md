@@ -347,7 +347,7 @@ Greeter english = container.pick(Greeter.class).withName("english").resolve();
 // Lazy Provider that re-resolves each call (preserves scope semantics)
 Provider<Greeter> p = container.pick(Greeter.class).withName("spanish").asProvider();
 
-// Fallback when the bean is absent — no IllegalArgumentException
+// Fallback when the bean is absent — no NoSuchComponentException
 Greeter french = container.pick(Greeter.class)
         .withName("french")
         .orDefault(new NoopGreeter());

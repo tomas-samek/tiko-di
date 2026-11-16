@@ -14,7 +14,7 @@ import java.lang.annotation.Target;
  * <p>The runtime subscribes an {@code EventBus} callback for the method's first parameter
  * type: when a matching event is published locally, the callback invokes this method,
  * serialises the return value with the resolved {@link KafkaSerializer}, and sends a
- * {@code ProducerRecord} to the named topic.
+ * {@code ProducerRecord} to the named topic. A method that returns {@code null} sends nothing.
  *
  * <p><strong>Do NOT also annotate this method with {@code @EventHandler}.</strong>
  * The runtime subscription via {@code EventBus.subscribe()} is the exclusive hook; adding

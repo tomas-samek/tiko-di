@@ -330,10 +330,22 @@ Once Central is live, draft the release notes:
    git log v<prior>..v<X.Y.Z> --oneline
    ```
 2. **Draft the body** as `.release-notes-<X.Y.Z>.md` (untracked file).
-   Structure: Summary → What's new (PRs by theme) → What stays the same
-   → Coordinates (BOM import + a representative dep snippet) → Full
-   changelog pointer. Keep it short for patches; longer for feature
-   releases.
+   It has two parts, for two readers:
+   - **For users** (first): Summary → What's new (by theme) → **What changes
+     for existing code**, one line per change with its migration (code that
+     compiled on the prior release and no longer does, a changed default, a
+     changed message or generated name) → Known limitations (open issues a
+     user can hit, with their numbers) → Coordinates (BOM import + a
+     representative dep snippet).
+   - **For contributors** (after it, in a collapsed
+     `<details><summary>For contributors</summary>` block): internal
+     refactorings, new invariants and house rules, build and CI changes, test
+     infrastructure → Full changelog pointer.
+
+   Collect the "what changes for existing code" lines while the release is
+   being built, not at the end: every PR that changes behaviour adds its
+   line to the notes memory of the release in progress. Keep the body short
+   for patches; longer for feature releases.
 3. **Mention-harvest pre-check** (per
    `feedback_github_markdown_no_mention_harvest` rule in memory):
    ```bash
