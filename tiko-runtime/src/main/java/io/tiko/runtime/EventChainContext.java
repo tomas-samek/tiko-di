@@ -228,6 +228,20 @@ public final class EventChainContext {
     }
 
     /**
+     * The wait {@code close()} makes for async work before it tears the singletons down (#721).
+     * Called from generated container code with the container's event executor: retries still
+     * waiting out their backoff are dropped with a WARNING, then the call waits until every task
+     * handed to that executor has finished, or until {@code deadlineNanos}
+     * ({@link System#nanoTime()}). Events published meanwhile are delivered and waited for too.
+     *
+     * @return whether nothing is pending; always {@code true} for an executor that did not come
+     *     from a {@code Tiko.create(...)} boot, which is not counted
+     */
+    public static boolean awaitPendingDeliveries(ExecutorService executor, long deadlineNanos) {
+        return !(executor instanceof RetryScheduling tracked) || tracked.awaitDeliveries(deadlineNanos);
+    }
+
+    /**
      * Runs an async {@code @EventHandler} body under a wall-clock timeout (#107). Called
      * exclusively from generated {@code EventRegistry} code for a handler that declared
      * {@code @EventHandler(async = true, timeout = ...)}.

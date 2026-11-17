@@ -34,8 +34,23 @@ final class RetrySchedulingExecutor extends AbstractExecutorService implements R
     }
 
     @Override
+    public boolean awaitDeliveries(long deadlineNanos) {
+        return owner.awaitDeliveries(deadlineNanos);
+    }
+
+    /**
+     * Counts the task as pending until it has run or the supplied executor has refused it (#721).
+     * A supplied executor that discards a task without throwing leaves it counted.
+     */
+    @Override
     public void execute(Runnable command) {
-        delegate.execute(command);
+        var tracked = owner.deliveries().track(command);
+        try {
+            delegate.execute(tracked);
+        } catch (RuntimeException refused) {
+            tracked.dropped();
+            throw refused;
+        }
     }
 
     @Override
@@ -45,7 +60,9 @@ final class RetrySchedulingExecutor extends AbstractExecutorService implements R
 
     @Override
     public List<Runnable> shutdownNow() {
-        return delegate.shutdownNow();
+        var neverRun = delegate.shutdownNow();
+        neverRun.forEach(PendingDeliveries::dropped);
+        return neverRun;
     }
 
     @Override

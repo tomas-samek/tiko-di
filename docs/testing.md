@@ -192,6 +192,8 @@ void awaitAsyncDispatchBlocksUntilHandlersDrain(EventBus bus, RecordingEventBus 
 
 The extension wires the container's executor into the recorder during boot, so this works without any setup. If the executor does not drain inside the timeout a `TimeoutException` is thrown with the number of deliveries still in flight — much more informative than a bare `Thread.sleep` that races and flakes.
 
+Wait in the test, not at its end: a `@TikoTest` container does not wait for async handlers when it closes. An application's container does, for up to its `shutdownTimeout` (see [Graceful shutdown drain](./events.md#graceful-shutdown-drain)); a test's container closes at once, and a handler still running then is interrupted and, if it stays, fails the test as a leaked thread. A test of the shutdown wait itself sets the timeout: `options.shutdownTimeout(Duration.ofSeconds(5))` in a `@TikoTestOptions` method.
+
 ## `@EventScopeTest` — scope helper
 
 When a test needs an `EVENT`-scoped bean to be resolvable in the test body, annotate the test method. It works on a `@Test`, on each invocation of a `@RepeatedTest` or `@ParameterizedTest`, and on a `@TestFactory`, where each dynamic test runs in its own unit:

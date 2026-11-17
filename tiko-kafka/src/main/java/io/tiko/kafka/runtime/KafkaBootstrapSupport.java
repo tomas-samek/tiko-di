@@ -41,7 +41,7 @@ public final class KafkaBootstrapSupport {
     private final java.util.function.Function<KafkaConfig, KafkaProducerClient> producerFactory;
 
     private final List<KafkaConsumerRunner> runners = new ArrayList<>();
-    private KafkaProducerClient producer;
+    private volatile KafkaProducerClient producer;
 
     public KafkaBootstrapSupport(
             Container container, List<GeneratedSourceDescriptor> sources, List<GeneratedSinkDescriptor> sinks) {
@@ -126,7 +126,11 @@ public final class KafkaBootstrapSupport {
         }
     }
 
-    public void shutdown() {
+    /**
+     * Stops the consumers, so no new record comes in, and leaves the producer open: the container
+     * is closing, and what its handlers still publish is sent (#721). Does nothing the second time.
+     */
+    public void stopIngest() {
         for (KafkaConsumerRunner r : runners) {
             try {
                 r.stop();
@@ -135,13 +139,19 @@ public final class KafkaBootstrapSupport {
             }
         }
         runners.clear();
-        if (producer != null) {
+    }
+
+    /** Stops the consumers, if {@link #stopIngest()} has not, and closes the producer. */
+    public void shutdown() {
+        stopIngest();
+        var open = producer;
+        if (open != null) {
+            producer = null;
             try {
-                producer.close();
+                open.close();
             } catch (Exception ignored) {
                 /* best-effort */
             }
-            producer = null;
         }
     }
 
@@ -161,12 +171,17 @@ public final class KafkaBootstrapSupport {
                 // The send callback surfaces broker-side failures (record-too-large, topic
                 // authorization, delivery timeout) that never throw synchronously — without
                 // it the rejection is silent egress loss (#342).
-                producer.send(
-                        new ProducerRecord<>(sink.topic(), null, key, bytes, new RecordHeaders()), (md, failure) -> {
-                            if (failure != null) {
-                                routeEgressError(errorHandler, new KafkaEgressError(sink.topic(), event, failure));
-                            }
-                        });
+                var open = producer;
+                if (open == null) {
+                    // The sink stays subscribed after the transport closed (#721).
+                    throw new IllegalStateException("The Kafka producer is closed: the container is shutting down, "
+                            + "and this event reached the sink after its transports closed");
+                }
+                open.send(new ProducerRecord<>(sink.topic(), null, key, bytes, new RecordHeaders()), (md, failure) -> {
+                    if (failure != null) {
+                        routeEgressError(errorHandler, new KafkaEgressError(sink.topic(), event, failure));
+                    }
+                });
             } catch (Exception ex) {
                 routeEgressError(errorHandler, new KafkaEgressError(sink.topic(), event, ex));
             }

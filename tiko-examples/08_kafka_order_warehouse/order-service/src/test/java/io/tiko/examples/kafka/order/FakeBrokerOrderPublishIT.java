@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.tiko.Container;
 import io.tiko.config.ConfigSources;
+import io.tiko.events.ApplicationEndingEvent;
 import io.tiko.examples.kafka.events.OrderPlaced;
 import io.tiko.kafka.KafkaTransport;
 import io.tiko.kafka.serializer.JsonKafkaSerializer;
@@ -40,5 +41,27 @@ class FakeBrokerOrderPublishIT {
                     .deserialize(broker.produced("orders").get(0).value(), OrderPlaced.class);
             assertThat(roundTripped.orderId()).isEqualTo("o-42");
         }
+    }
+
+    /**
+     * #721: the producer stays open while the container closes, so an order published by an
+     * {@code ApplicationEndingEvent} handler still reaches the topic.
+     */
+    @Test
+    void orderPublishedWhileTheContainerClosesIsStillProduced() {
+        FakeKafkaBroker broker = new FakeKafkaBroker();
+
+        Container container = Tiko.create(TikoOptions.builder()
+                .configSource(ConfigSources.classpath("application.yaml"))
+                .replaceTransport(KafkaTransport.class, t -> FakeKafkaTransport.over(t, broker))
+                .build());
+        var bus = container.getEventBus();
+        bus.subscribe(
+                ApplicationEndingEvent.class,
+                ending -> bus.publish(new OrderPlaced("o-last", new BigDecimal("5.00"), Instant.now())));
+
+        container.close();
+
+        assertThat(broker.produced("orders")).extracting(record -> record.key()).containsExactly("o-last");
     }
 }

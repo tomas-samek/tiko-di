@@ -107,6 +107,32 @@ public final class TikoOptions {
     }
 
     /**
+     * What closes the transports of the boot these options belong to, set by the runtime on the
+     * copy the booted container holds ({@link #forOneContainer()}). {@code null} for a boot
+     * without transports. Not copied: it belongs to one boot.
+     */
+    private final java.util.concurrent.atomic.AtomicReference<Runnable> transportCloser =
+            new java.util.concurrent.atomic.AtomicReference<>();
+
+    void transportCloser(Runnable closer) {
+        transportCloser.set(closer);
+    }
+
+    /**
+     * Closes the transports of the container that was booted with these options (#721). For
+     * generated container code, which calls it while closing: after the container has stopped
+     * delivering events and before it tears its singletons down, so a transport's way out, a Kafka
+     * producer for one, stays open for as long as an event handler can still send through it.
+     * Does nothing for a container without transports, and nothing the second time.
+     */
+    public void closeTransports() {
+        var closer = transportCloser.get();
+        if (closer != null) {
+            closer.run();
+        }
+    }
+
+    /**
      * The options one container works on: equal to these, but shadow overrides the container adds
      * ({@link #internalAddOverrideIfAbsent}) land in the copy. The caller's object stays as built,
      * so it can boot another container (#734).
@@ -344,13 +370,16 @@ public final class TikoOptions {
         }
 
         /**
-         * Maximum time {@link io.tiko.Container#shutdown()} waits for the framework's event
-         * executor to terminate gracefully before falling back to {@code shutdownNow()}.
+         * Maximum time {@link io.tiko.Container#shutdown()} waits for the async event handlers
+         * that are queued or running, before it tears the singletons down (#721). A handler of
+         * the framework's event executor that is still running after it is interrupted with
+         * {@code shutdownNow()}.
          * When unset programmatically, the framework resolves the effective value in this
          * precedence order: programmatic > YAML {@code tiko.shutdownTimeout} > {@code Duration.ofSeconds(10)}.
          *
-         * <p>Has <strong>no effect</strong> when {@link #eventExecutor(java.util.concurrent.ExecutorService)}
-         * is set — the user owns the executor's lifecycle and the container does not stop it.
+         * <p>The wait applies when {@link #eventExecutor(java.util.concurrent.ExecutorService)}
+         * is set as well. That executor is never stopped and its threads are never interrupted —
+         * the user owns its lifecycle — so a handler that outruns the wait there keeps running.
          *
          * <p>Note: a JVM {@link Error} (e.g. {@code OutOfMemoryError}) bypasses this graceful
          * drain. Threads may be torn down abruptly when the JVM is in an unrecoverable state.

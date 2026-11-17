@@ -28,6 +28,7 @@ final class ShutdownAwareCallerRunsPolicy implements RejectedExecutionHandler {
             LoggerHolder.LOG.log(
                     System.Logger.Level.WARNING,
                     "Async event task rejected because the event executor is shutting down; the event was dropped.");
+            PendingDeliveries.dropped(r);
             return;
         }
         // Live pool, queue saturated: run on the caller for backpressure (CallerRunsPolicy).

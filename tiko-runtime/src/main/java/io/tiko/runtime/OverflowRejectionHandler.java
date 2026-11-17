@@ -63,6 +63,7 @@ final class OverflowRejectionHandler implements RejectedExecutionHandler {
         if (executor.isShutdown()) {
             // Container is tearing down — drop observably rather than block forever or throw (#346).
             logShutdownDrop();
+            PendingDeliveries.dropped(r);
             return;
         }
         switch (policy) {
@@ -84,10 +85,12 @@ final class OverflowRejectionHandler implements RejectedExecutionHandler {
                     }
                 }
             }
-            case DROP ->
+            case DROP -> {
                 LoggerHolder.LOG.log(
                         System.Logger.Level.WARNING,
                         "Async event queue is full; the event was dropped (overflow policy = DROP).");
+                PendingDeliveries.dropped(r);
+            }
             case THROW ->
                 throw new EventQueueOverflowException("Async event queue is full and the overflow policy is THROW.");
             case ROUTE_TO_DLQ ->
@@ -112,11 +115,13 @@ final class OverflowRejectionHandler implements RejectedExecutionHandler {
                 }
             }
             logShutdownDrop();
+            PendingDeliveries.dropped(r);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             LoggerHolder.LOG.log(
                     System.Logger.Level.WARNING,
                     "Interrupted while waiting for async event-queue space; the event was dropped.");
+            PendingDeliveries.dropped(r);
         }
     }
 
@@ -142,7 +147,8 @@ final class OverflowRejectionHandler implements RejectedExecutionHandler {
                 "Async event task rejected because the event executor is shutting down; the event was dropped.");
     }
 
-    private static final class BlockingTask implements Runnable {
+    /** A task waiting for queue space under {@code BLOCK}; the task it carries is the one that counts. */
+    static final class BlockingTask implements Runnable, PendingDeliveries.Droppable {
         private final AtomicReference<Runnable> pending;
         private Thread resubmitter;
 
@@ -150,8 +156,19 @@ final class OverflowRejectionHandler implements RejectedExecutionHandler {
             pending = new AtomicReference<>(task);
         }
 
+        /** Gives the task up, unless a worker has already claimed it; a counted task stops counting. */
         boolean discard() {
-            return pending.getAndSet(null) != null;
+            var task = pending.getAndSet(null);
+            if (task == null) {
+                return false;
+            }
+            PendingDeliveries.dropped(task);
+            return true;
+        }
+
+        @Override
+        public void dropped() {
+            discard();
         }
 
         boolean tryExecute(ThreadPoolExecutor executor) {

@@ -70,6 +70,13 @@ public final class FakeKafkaTransport implements KafkaTransport {
     }
 
     @Override
+    public void stopIngest() {
+        if (support != null) {
+            support.stopIngest();
+        }
+    }
+
+    @Override
     public void shutdown() {
         if (support != null) {
             support.shutdown();

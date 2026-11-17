@@ -216,7 +216,7 @@ public void onPayment(PaymentEvent event) {
 - **ISO-8601 backoff:** `backoff` is a `Duration` string (`"PT0.1S"`), like `timeout`.
 - **Composes with `timeout`:** if both are set, each attempt is time-boxed and a timed-out attempt counts as a failed attempt to be retried.
 - **Errors are not retried:** an `Error` (vs an `Exception`) stops the loop and is logged, never retried.
-- **Retry thread:** the backoff waits on the container's own `tiko-event-retry-N` thread, created the first time a handler retries. That thread re-submits the next attempt to the event executor. When the executor's queue is full under `CALLER_RUNS`, the attempt runs on the retry thread itself, so it is tracked like every other container thread (see [Threads that outlive `close()`](#threads-that-outlive-close)). There is one retry thread per container, so under a full `CALLER_RUNS` queue a slow attempt delays every other pending retry in the container, and a stuck one blocks them until `close()`. `close()` drops the retries still waiting out their backoff with one `WARNING`, and a retry that would start after `close()` is dropped the same way.
+- **Retry thread:** the backoff waits on the container's own `tiko-event-retry-N` thread, created the first time a handler retries. That thread re-submits the next attempt to the event executor. When the executor's queue is full under `CALLER_RUNS`, the attempt runs on the retry thread itself, so it is tracked like every other container thread (see [Threads that outlive `close()`](#threads-that-outlive-close)). There is one retry thread per container, so under a full `CALLER_RUNS` queue a slow attempt delays every other pending retry in the container, and a stuck one blocks them until `close()`. When `close()` starts waiting for the async handlers, it drops the retries still waiting out their backoff with one `WARNING`, and a retry that would be scheduled after that is dropped the same way.
 - **Idempotency is your responsibility** — a retried handler runs its side effects more than once. Make the work safe to repeat.
 
 ### Dead-letter handling
@@ -282,19 +282,32 @@ aggregator brackets (resolved in [#433](https://github.com/tomas-samek/tiko-di/i
 
 ## Graceful shutdown drain
 
-When `Container.shutdown()` runs, in-flight async event handlers are allowed to
-finish within a configurable budget before the framework-owned executor is
-forced via `shutdownNow()`. This means a server shutdown signal does not
-abruptly cancel async side-effects already queued on the executor — they drain
-cleanly within the configured window.
+`Container.shutdown()` (and `close()`) finishes the async work the container has taken on
+before it tears anything down. In order:
 
-Events published *after* shutdown has begun are dropped rather than dispatched —
-running handlers against singletons that have already been torn down would be worse —
-but the drop is **observable, never silent**: each dropped delivery logs a `WARNING`
-on `io.tiko.events` (#346). Delivery is not guaranteed once shutdown starts; if a
-handler must not miss late events, publish before initiating shutdown. The one residual
-edge is a task still queued when the drain budget expires and `shutdownNow()` cancels it —
-that is the deliberate cost of bounding shutdown, not a silent application-level loss.
+1. **Transports stop taking work in.** Kafka consumers stop; the producer stays open.
+2. **`ApplicationEndingEvent` is published.**
+3. **The container waits for its async handlers**, queued and running, for at most
+   `shutdownTimeout`. Events published during the wait, by a handler that is finishing or by an
+   `ApplicationEndingEvent` handler, are still delivered and waited for, and a `@KafkaSink` still
+   sends them. A retry that is waiting out its backoff is dropped with a `WARNING`: `close()` does
+   not wait for a backoff.
+4. **The container stops delivering events** and refuses `get()`.
+5. **Transports close**: the Kafka producer.
+6. **`@PreDestroy` / `close()` of the singletons** runs.
+7. **The framework's event executor is shut down.** A handler still running after
+   `shutdownTimeout` is interrupted here.
+
+So a handler that was queued or running when `close()` began sees live singletons and can still
+publish, and a consume → async handler → `@KafkaSink` pipeline sends what it had taken in. A
+handler that outruns the budget keeps running while the singletons are torn down and is then
+interrupted: size `shutdownTimeout` to your slowest handler.
+
+Events published *after* step 4 are dropped rather than dispatched — running handlers against
+singletons that have already been torn down would be worse — but the drop is **observable, never
+silent**: each dropped delivery logs a `WARNING` on `io.tiko.events` (#346). The one residual edge
+is a task still queued when the budget expires and `shutdownNow()` cancels it — that is the
+deliberate cost of bounding shutdown, not a silent application-level loss.
 
 Two equivalent ways to configure the budget:
 
@@ -318,10 +331,14 @@ The `tiko:` top-level section is reserved for framework-level config; see
 
 **Precedence:** programmatic > YAML > default 10 seconds.
 
-`Duration.ZERO` skips the graceful wait and calls `shutdownNow()` immediately —
-useful for test harnesses where you don't want to wait on a wedged handler. The
-knob has no effect when you supply your own executor via `TikoOptions.eventExecutor(...)`
-(you own that executor's lifecycle).
+`Duration.ZERO` skips the wait: handlers still queued or running are interrupted at once —
+useful for test harnesses where you don't want to wait on a wedged handler.
+
+The wait in step 3 covers an executor you supply via `TikoOptions.eventExecutor(...)` too. The
+container never shuts that executor down and never interrupts its threads (you own its
+lifecycle), so a handler that outruns the budget there simply keeps running. A supplied executor
+that discards a task without throwing is one the container cannot see finish: `close()` then
+waits out the whole budget.
 
 See [`tiko-examples/09_http_javalin`](../tiko-examples/09_http_javalin) for a
 runnable demo that sources the timeout from `config.yaml`.

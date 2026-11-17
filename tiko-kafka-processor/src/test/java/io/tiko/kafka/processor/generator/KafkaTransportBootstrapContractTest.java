@@ -41,6 +41,14 @@ class KafkaTransportBootstrapContractTest {
                 .contains("if(this.support!=null){return;}this.support=new");
     }
 
+    /** #721: the consumers stop first; the support, and with it the producer, stays until shutdown. */
+    @Test
+    void stopIngestStopsTheConsumersAndKeepsTheSupport() throws IOException {
+        String normalized = generateBootstrapSource().replaceAll("\\s", "");
+
+        assertThat(normalized).contains("publicvoidstopIngest(){if(this.support!=null){this.support.stopIngest();}}");
+    }
+
     private String generateBootstrapSource() throws IOException {
         Compilation compilation = Compiler.javac()
                 .withProcessors(new TikoAnnotationProcessor(), new KafkaAnnotationProcessor())

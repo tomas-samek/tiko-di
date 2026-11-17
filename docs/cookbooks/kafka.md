@@ -188,6 +188,12 @@ event; an `@EventHandler @EventTrigger` does the lookups and returns a `Notifica
 the `@KafkaSink` above forwards it to Kafka. Local `@EventHandler`s run **before** sink
 callbacks, so a sink/broker failure doesn't block local processing.
 
+On `close()` the consumers stop first and the producer stays open until the container has
+finished its async handlers, so the join above sends the notifications for the purchases it had
+already taken in. An event that reaches a sink after the producer closed is routed to the
+`ErrorHandler` as a `KafkaEgressError` whose cause says the container is shutting down. The full
+order is in [Graceful shutdown drain](../events.md#graceful-shutdown-drain).
+
 ## 4. Configuration
 
 Broker settings bind to the `KafkaConfig` record under the `tiko.kafka` prefix, with
