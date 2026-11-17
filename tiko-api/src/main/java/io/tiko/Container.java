@@ -158,8 +158,10 @@ public interface Container extends AutoCloseable {
     /**
      * Shuts down the container gracefully.
      * <p>
-     * Invokes {@code @PreDestroy} methods on all singleton beans in reverse
-     * construction order and releases all resources.
+     * Transports stop taking work in, {@code ApplicationEndingEvent} is published, and the
+     * container waits for its async event handlers, for at most its shutdown timeout. It then
+     * stops delivering events, closes the transports, invokes {@code @PreDestroy} methods on
+     * all singleton beans in reverse construction order, and releases all resources.
      */
     void shutdown();
 

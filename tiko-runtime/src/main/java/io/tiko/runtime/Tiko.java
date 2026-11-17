@@ -184,18 +184,25 @@ public final class Tiko {
                         descriptorName);
                 handle = container;
             } else {
-                // Single module: Direct instantiation (does NOT call start yet)
+                // Single module: Direct instantiation (does NOT call start yet). The container
+                // holds its own copy of the options, as an aggregate does: the closing container
+                // reaches the transports of this boot through it (#721).
                 var ownedThreads = new OwnedThreads();
+                var containerOptions = options.forOneContainer();
                 container = createSingleModuleContainer(
                         eventBus,
                         errorHandler,
                         effectiveShutdownTimeout,
-                        options,
+                        containerOptions,
                         descriptors,
                         classLoader,
                         ownedThreads);
                 handle = new BootHandle(
-                        container, java.util.List.of(), ownedThreads, options.threadsOutlivingCloseHandler());
+                        container,
+                        java.util.List.of(),
+                        ownedThreads,
+                        options.threadsOutlivingCloseHandler(),
+                        containerOptions);
             }
 
             // 4. Inject config singletons before start(), so @PostConstruct can use them.
@@ -353,7 +360,7 @@ public final class Tiko {
         // single-module boot is already wrapped; it gains the transports instead of a second layer.
         BootHandle wrapper = container instanceof BootHandle booted
                 ? booted.withTransports(bootstraps)
-                : new BootHandle(container, bootstraps, null, null);
+                : new BootHandle(container, bootstraps, null, null, optionsHeldBy(container));
         int started = 0;
         try {
             for (TransportBootstrap tb : bootstraps) {
@@ -368,9 +375,16 @@ public final class Tiko {
             for (int i = started - 1; i >= 0; i--) {
                 shutdownQuietly(bootstraps.get(i)::shutdown, e);
             }
+            // The started transports are unwound; the closing container must not close them again.
+            wrapper.transportsClosed.set(true);
             shutdownQuietly(container::shutdown, e);
             throw e;
         }
+    }
+
+    /** The options an aggregate works on; {@code null} for a container that is not Tiko's own. */
+    private static TikoOptions optionsHeldBy(Container container) {
+        return container instanceof AggregatingContainer aggregate ? aggregate.options() : null;
     }
 
     /**
@@ -519,8 +533,12 @@ public final class Tiko {
 
     /**
      * The handle {@code Tiko.create(...)} returns when the container needs one: a single-module
-     * boot always, any boot with transports. On {@code shutdown()} it runs every
-     * {@link TransportBootstrap#shutdown()} before the container's own {@code shutdown()}.
+     * boot always, any boot with transports. On {@code shutdown()} it first tells every transport
+     * to stop taking work in ({@link TransportBootstrap#stopIngest()}), then shuts the container
+     * down. The closing container asks for {@link TransportBootstrap#shutdown()} itself, through
+     * {@link TikoOptions#closeTransports()}, once it has stopped delivering events and before its
+     * {@code @PreDestroy} chain (#721). For a container that never asks, one generated before
+     * 0.8.0, the transports are shut down when it has finished.
      *
      * <p>For a single-module boot it also owns the boot's {@link OwnedThreads} (#634): its
      * {@link #threadFactory()} tracks, the container's start and shutdown run bound so teardown
@@ -538,20 +556,38 @@ public final class Tiko {
         private final OwnedThreads threads;
         private final java.util.function.Consumer<java.util.List<Thread>> onThreadsOutlivingClose;
 
+        /** The options the container holds; {@code null} over a container that is not Tiko's own. */
+        private final TikoOptions containerOptions;
+
+        private final java.util.concurrent.atomic.AtomicBoolean ingestStopped =
+                new java.util.concurrent.atomic.AtomicBoolean();
+
+        private final java.util.concurrent.atomic.AtomicBoolean transportsClosed =
+                new java.util.concurrent.atomic.AtomicBoolean();
+
+        /** The first {@link Error} a transport threw while closing; rethrown once the container is down. */
+        private final java.util.concurrent.atomic.AtomicReference<Error> transportError =
+                new java.util.concurrent.atomic.AtomicReference<>();
+
         BootHandle(
                 Container delegate,
                 java.util.List<TransportBootstrap> bootstraps,
                 OwnedThreads threads,
-                java.util.function.Consumer<java.util.List<Thread>> onThreadsOutlivingClose) {
+                java.util.function.Consumer<java.util.List<Thread>> onThreadsOutlivingClose,
+                TikoOptions containerOptions) {
             this.delegate = delegate;
             this.bootstraps = bootstraps;
             this.threads = threads;
             this.onThreadsOutlivingClose = onThreadsOutlivingClose;
+            this.containerOptions = containerOptions;
+            if (containerOptions != null && !bootstraps.isEmpty()) {
+                containerOptions.transportCloser(this::closeTransports);
+            }
         }
 
         /** The same container and thread owner, now also stopping {@code transports} on shutdown. */
         BootHandle withTransports(java.util.List<TransportBootstrap> transports) {
-            return new BootHandle(delegate, transports, threads, onThreadsOutlivingClose);
+            return new BootHandle(delegate, transports, threads, onThreadsOutlivingClose, containerOptions);
         }
 
         @Override
@@ -638,10 +674,9 @@ public final class Tiko {
         @Override
         @SuppressWarnings("java:S1181") // Error included: the thread report runs before it is rethrown.
         public void shutdown() {
-            // Shut transports down BEFORE the container's @PreDestroy chain so their bridge
-            // components are still live. Per-bootstrap throws are isolated so one bad
-            // transport cannot strand another's resources.
-            Error transportError = shutDownTransports();
+            // Nothing new comes in from outside while the container finishes what it has; what
+            // the transports send out stays open until the container asks for it to close (#721).
+            stopIngest();
             Throwable shutdownFailure = null;
             try {
                 // Unlike start(), skip the bound call for a null owner: runBound(null) would hide
@@ -654,9 +689,12 @@ public final class Tiko {
             } catch (Throwable t) {
                 shutdownFailure = t;
             }
-            if (transportError != null) {
+            // A container generated before 0.8.0 never asks for its transports to close.
+            closeTransports();
+            Error transportFailure = transportError.get();
+            if (transportFailure != null) {
                 // The container's own failure wins; the transport's Error travels with it.
-                shutdownFailure = BoundedExecution.retainFailure(shutdownFailure, transportError);
+                shutdownFailure = BoundedExecution.retainFailure(shutdownFailure, transportFailure);
             }
             if (threads != null) {
                 // The report never masks the shutdown failure: a throwing handler is suppressed on it.
@@ -667,31 +705,54 @@ public final class Tiko {
             }
         }
 
+        /** Tells every transport, once, to stop taking work in; one that fails is logged (#721). */
+        @SuppressWarnings("java:S1181") // Error included: the container's teardown must still run.
+        private void stopIngest() {
+            if (!ingestStopped.compareAndSet(false, true)) {
+                return;
+            }
+            for (TransportBootstrap tb : bootstraps) {
+                try {
+                    tb.stopIngest();
+                } catch (Throwable failure) {
+                    transportFailed(tb, "stop taking work in", failure);
+                }
+            }
+        }
+
         /**
-         * Stops every transport and logs each one that fails to stop (#737). Returns the first
-         * {@link Error} a transport threw, for the caller to rethrow once the container itself has
-         * shut down; later ones are suppressed on it.
+         * Shuts every transport down, once, and logs each one that fails (#737). Runs when the
+         * closing container asks for it, or after a container that never asks has shut down.
          */
         @SuppressWarnings("java:S1181") // Error included: the container's teardown must still run.
-        private Error shutDownTransports() {
-            Error first = null;
+        private void closeTransports() {
+            if (!transportsClosed.compareAndSet(false, true)) {
+                return;
+            }
             for (TransportBootstrap tb : bootstraps) {
                 try {
                     tb.shutdown();
                 } catch (Throwable failure) {
-                    TikoLog.log(
-                            LoggerHolder.LOG,
-                            System.Logger.Level.WARNING,
-                            failure,
-                            "Transport {0} failed to shut down: {1}",
-                            tb.getClass().getName(),
-                            failure);
-                    if (failure instanceof Error error) {
-                        first = BoundedExecution.retainFailure(first, error);
-                    }
+                    transportFailed(tb, "shut down", failure);
                 }
             }
-            return first;
+        }
+
+        /**
+         * Logs the failure and keeps the first {@link Error}, for {@link #shutdown()} to rethrow
+         * once the container itself has shut down; later ones are suppressed on it.
+         */
+        private void transportFailed(TransportBootstrap tb, String what, Throwable failure) {
+            TikoLog.log(
+                    LoggerHolder.LOG,
+                    System.Logger.Level.WARNING,
+                    failure,
+                    "Transport {0} failed to " + what + ": {1}",
+                    tb.getClass().getName(),
+                    failure);
+            if (failure instanceof Error error && !transportError.compareAndSet(null, error)) {
+                BoundedExecution.retainFailure(transportError.get(), error);
+            }
         }
 
         @Override

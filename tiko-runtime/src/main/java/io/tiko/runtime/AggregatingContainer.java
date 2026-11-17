@@ -670,6 +670,11 @@ public final class AggregatingContainer implements Container {
             // Bus-impl defect; per-module @PreDestroy must still run.
             LoggerHolder.LOG.log(System.Logger.Level.WARNING, "ApplicationEndingEvent publish threw", t);
         }
+        // Wait for the async handlers that are queued or running before anything they can reach
+        // is torn down; a retry waiting out its backoff is dropped (#721). Then the transports'
+        // way out closes, and the modules stop delivering events as each one shuts down.
+        boolean drained = ownedThreads.awaitDeliveries(System.nanoTime() + shutdownTimeout.toNanos());
+        options.closeTransports();
         // Shutdown in reverse order. Per-module containers no longer shut down the executor
         // themselves (#51): they were constructed with the shared executor, so their internal
         // ownsEventExecutor is false. The aggregator owns the lifecycle below.
@@ -681,8 +686,10 @@ public final class AggregatingContainer implements Container {
         if (ownsEventExecutor) {
             eventExecutor.shutdown();
             try {
-                if (!eventExecutor.awaitTermination(
-                        shutdownTimeout.toNanos(), java.util.concurrent.TimeUnit.NANOSECONDS)) {
+                // A handler that outran the wait above has had its budget: it is interrupted now.
+                if (!drained
+                        || !eventExecutor.awaitTermination(
+                                shutdownTimeout.toNanos(), java.util.concurrent.TimeUnit.NANOSECONDS)) {
                     eventExecutor.shutdownNow();
                 }
             } catch (InterruptedException ie) {

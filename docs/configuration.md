@@ -74,7 +74,7 @@ same pipeline as your records — tiko-config ships the framework's own
 
 ```yaml
 tiko:
-  shutdownTimeout: ${SHUTDOWN_BUDGET:PT5S}   # event-executor graceful drain window; see events.md
+  shutdownTimeout: ${SHUTDOWN_BUDGET:PT5S}   # how long close() waits for async handlers; see events.md
   kafka:                                     # module sections nest under tiko: as well
     bootstrap-servers: localhost:9092
 ```

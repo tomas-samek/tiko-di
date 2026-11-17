@@ -58,6 +58,24 @@ final class OwnedThreads implements ThreadFactory {
     private ScheduledThreadPoolExecutor retryScheduler;
     private boolean retriesStopped;
 
+    private final PendingDeliveries deliveries = new PendingDeliveries();
+
+    /** The async work of this boot that has been handed over and has not finished (#721). */
+    PendingDeliveries deliveries() {
+        return deliveries;
+    }
+
+    /**
+     * Drops the retries still waiting out their backoff ({@link #stopRetries()}), then waits until
+     * nothing is {@linkplain #deliveries() pending} or {@code deadlineNanos} has passed.
+     *
+     * @return whether nothing is pending
+     */
+    boolean awaitDeliveries(long deadlineNanos) {
+        stopRetries();
+        return deliveries.await(deadlineNanos);
+    }
+
     @Override
     public Thread newThread(Runnable task) {
         var thread = Thread.ofPlatform().daemon().unstarted(task);
@@ -81,7 +99,18 @@ final class OwnedThreads implements ThreadFactory {
             if (retryScheduler == null) {
                 retryScheduler = new ScheduledThreadPoolExecutor(1, this::newRetryThread);
             }
-            retryScheduler.schedule(resubmit, delayNanos, TimeUnit.NANOSECONDS);
+            // Pending while it waits out its backoff and while it re-submits (#721).
+            deliveries.retain();
+            retryScheduler.schedule(
+                    () -> {
+                        try {
+                            resubmit.run();
+                        } finally {
+                            deliveries.release();
+                        }
+                    },
+                    delayNanos,
+                    TimeUnit.NANOSECONDS);
             return true;
         }
     }
@@ -109,6 +138,7 @@ final class OwnedThreads implements ThreadFactory {
         var dropped = 0;
         for (var pending : scheduler.getQueue().toArray(new Runnable[0])) {
             if (pending instanceof Future<?> future && future.cancel(false)) {
+                deliveries.release();
                 dropped++;
             }
         }

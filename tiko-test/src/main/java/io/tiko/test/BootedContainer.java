@@ -62,7 +62,14 @@ final class BootedContainer implements ExtensionContext.Store.CloseableResource 
         // The test's own options first, before anything that would need releasing if they fail.
         var builder = TikoOptions.builder();
         testOptions.accept(builder);
-        rejectOwnedSettings(owner, builder.build());
+        var requested = builder.build();
+        rejectOwnedSettings(owner, requested);
+        if (requested.shutdownTimeout() == null) {
+            // A test's container does not wait for async handlers when it closes (#721): the test
+            // is over, and what still runs then is interrupted and, if it stays, reported as a
+            // leak. A test that wants the wait sets shutdownTimeout in its @TikoTestOptions.
+            builder.shutdownTimeout(Duration.ZERO);
+        }
         // Supply a CountingThreadPoolExecutor so awaitAsyncDispatch(Duration) detects drain
         // deterministically (#443). Because it is supplied, the container does not own it —
         // close() shuts it down.

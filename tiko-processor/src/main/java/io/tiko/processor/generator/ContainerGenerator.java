@@ -1586,19 +1586,23 @@ public final class ContainerGenerator {
     }
 
     /**
-     * Creates shutdown method (#47): idempotent, drains in-flight get() calls, then runs
-     * @PreDestroy and shuts down the event executor.
+     * Creates shutdown method (#47): idempotent, waits for the async handlers, drains in-flight
+     * get() calls, then runs @PreDestroy and shuts down the event executor.
      *
-     * <p>Phase order:
+     * <p>Phase order (#721 for the wait and the transports):
      * <ol>
      *   <li>CAS shutdownInvoked false → true. If already true, return immediately.</li>
      *   <li>Publish ApplicationEndingEvent for normal shutdown. get() still works so handlers can read state.</li>
+     *   <li>Wait for the async handlers that are queued or running, for at most
+     *       {@code shutdownTimeout}; events published meanwhile are still delivered. Only the
+     *       application's container waits: a module under an aggregate leaves it to the aggregate.</li>
      *   <li>Set stopped, drain in-flight gets — bounded by the configured
-     *       {@code shutdownTimeout} (same knob as the Phase 5 executor drain), parking
-     *       between polls instead of busy-spinning (#305).</li>
+     *       {@code shutdownTimeout}, parking between polls instead of busy-spinning (#305).</li>
+     *   <li>Ask for the transports to close: nothing is delivered any more.</li>
      *   <li>Run @PreDestroy on each SINGLETON. Thread-local bypass lets PreDestroy
      *       methods call container.get(...) without tripping the gate.</li>
-     *   <li>Shut down the framework-owned event executor (#43 logic, unchanged).</li>
+     *   <li>Shut down the framework-owned event executor (#43); a handler that outran the wait
+     *       is interrupted here.</li>
      * </ol>
      */
     private MethodSpec createShutdownMethod() {
@@ -1641,6 +1645,15 @@ public final class ContainerGenerator {
         method.endControlFlow();
         method.endControlFlow();
 
+        method.addComment("Wait for the async handlers that are queued or running, before anything they can");
+        method.addComment("reach is torn down (#721). Events published meanwhile are still delivered. A module");
+        method.addComment("under an aggregate leaves the wait, and the transports, to the aggregate.");
+        method.addStatement(
+                "boolean __drained = !publishLifecycleEvents || $T.awaitPendingDeliveries(this.eventExecutor, "
+                        + "$T.nanoTime() + this.shutdownTimeout.toNanos())",
+                ClassName.get("io.tiko.runtime", "EventChainContext"),
+                System.class);
+
         method.addComment("Phase 3: gate new get() calls and drain in-flight ones. Lookups register in");
         method.addComment("inFlightGets BEFORE reading the stopped gate (#305), so once this thread observes");
         method.addComment("inFlightGets == 0 after stopped.set(true), every later lookup is rejected — none");
@@ -1658,6 +1671,12 @@ public final class ContainerGenerator {
                 EVENTS_PACKAGE,
                 loggerLevel,
                 "Container shutdown drain timed out with in-flight get() calls: ");
+        method.endControlFlow();
+
+        method.addComment("Nothing is delivered any more, so the transports close: their way out stayed open");
+        method.addComment("for the handlers this shutdown waited for (#721).");
+        method.beginControlFlow(IF_PUBLISH_LIFECYCLE);
+        method.addStatement("this.options.closeTransports()");
         method.endControlFlow();
 
         // Unified topo-sort across SINGLETON @Component beans AND SINGLETON @Produces factory
@@ -1712,8 +1731,11 @@ public final class ContainerGenerator {
         method.beginControlFlow("if (this.ownsEventExecutor)");
         method.addStatement("this.eventExecutor.shutdown()");
         method.beginControlFlow("try");
+        method.addComment("A handler that outran the wait above has had its budget: it is interrupted now.");
         method.beginControlFlow(
-                "if (!this.eventExecutor.awaitTermination(this.shutdownTimeout.toNanos(), $T.NANOSECONDS))", timeUnit);
+                "if (!__drained || !this.eventExecutor.awaitTermination(this.shutdownTimeout.toNanos(), "
+                        + "$T.NANOSECONDS))",
+                timeUnit);
         method.addStatement("this.eventExecutor.shutdownNow()");
         method.endControlFlow();
         method.nextControlFlow("catch ($T __ie)", InterruptedException.class);

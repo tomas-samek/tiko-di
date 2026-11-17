@@ -56,6 +56,26 @@ class ContainerGeneratorShutdownIdempotencyTest {
         assertThat(bypassPos).isGreaterThan(drainPos);
     }
 
+    /**
+     * #721: the container waits for its async handlers before it stops delivering events, asks for
+     * the transports to close only after that, and tears the singletons down last. A handler that
+     * outran the wait is not waited for a second time.
+     */
+    @Test
+    void generatedShutdownWaitsForAsyncWorkBeforeItGatesClosesTransportsAndTearsDown() throws IOException {
+        String content = generateContainerSource();
+
+        assertThat(content)
+                .containsSubsequence(
+                        "eventBus.publish(new ApplicationEndingEvent",
+                        "boolean __drained = !publishLifecycleEvents"
+                                + " || EventChainContext.awaitPendingDeliveries(this.eventExecutor, ",
+                        "stopped.set(true)",
+                        "this.options.closeTransports()",
+                        "inShutdownThread.set(Boolean.TRUE)",
+                        "if (!__drained || !this.eventExecutor.awaitTermination(");
+    }
+
     @Test
     void generated_get_methods_are_gated_and_track_in_flight() throws IOException {
         String content = generateContainerSource();

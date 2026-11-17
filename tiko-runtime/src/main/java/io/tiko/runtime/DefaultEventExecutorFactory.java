@@ -1,6 +1,7 @@
 package io.tiko.runtime;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionHandler;
@@ -148,6 +149,34 @@ public final class DefaultEventExecutorFactory {
         @Override
         public boolean scheduleRetry(Runnable resubmit, long delayNanos) {
             return owner.scheduleRetry(resubmit, delayNanos);
+        }
+
+        @Override
+        public boolean awaitDeliveries(long deadlineNanos) {
+            return owner.awaitDeliveries(deadlineNanos);
+        }
+
+        /** Counts the task as pending until it has run, been dropped, or been refused (#721). */
+        @Override
+        public void execute(Runnable command) {
+            if (command instanceof OverflowRejectionHandler.BlockingTask) {
+                super.execute(command); // a counted task the BLOCK handler offers again
+                return;
+            }
+            var tracked = owner.deliveries().track(command);
+            try {
+                super.execute(tracked);
+            } catch (RuntimeException refused) {
+                tracked.dropped();
+                throw refused;
+            }
+        }
+
+        @Override
+        public List<Runnable> shutdownNow() {
+            var neverRun = super.shutdownNow();
+            neverRun.forEach(PendingDeliveries::dropped);
+            return neverRun;
         }
     }
 

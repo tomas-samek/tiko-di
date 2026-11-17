@@ -17,6 +17,7 @@ import io.tiko.events.ApplicationEndingEvent;
 import io.tiko.events.ApplicationStartedEvent;
 import io.tiko.events.EventEndingEvent;
 import io.tiko.events.EventStartedEvent;
+import io.tiko.runtime.EventChainContext;
 import io.tiko.runtime.TikoOptions;
 import io.tiko.runtime.Unchecked;
 import java.lang.Boolean;
@@ -304,6 +305,10 @@ public final class TikoContainerImpl_4ae99f55 implements Container {
         }
       }
     }
+    // Wait for the async handlers that are queued or running, before anything they can
+    // reach is torn down (#721). Events published meanwhile are still delivered. A module
+    // under an aggregate leaves the wait, and the transports, to the aggregate.
+    boolean __drained = !publishLifecycleEvents || EventChainContext.awaitPendingDeliveries(this.eventExecutor, System.nanoTime() + this.shutdownTimeout.toNanos());
     // Phase 3: gate new get() calls and drain in-flight ones. Lookups register in
     // inFlightGets BEFORE reading the stopped gate (#305), so once this thread observes
     // inFlightGets == 0 after stopped.set(true), every later lookup is rejected — none
@@ -317,11 +322,17 @@ public final class TikoContainerImpl_4ae99f55 implements Container {
     if (inFlightGets.get() > 0) {
       System.getLogger("io.tiko.events").log(System.Logger.Level.WARNING, "Container shutdown drain timed out with in-flight get() calls: " + inFlightGets.get());
     }
+    // Nothing is delivered any more, so the transports close: their way out stayed open
+    // for the handlers this shutdown waited for (#721).
+    if (publishLifecycleEvents) {
+      this.options.closeTransports();
+    }
     // Phase 5: shut down framework-owned event executor (#43); user-supplied executors are not touched
     if (this.ownsEventExecutor) {
       this.eventExecutor.shutdown();
       try {
-        if (!this.eventExecutor.awaitTermination(this.shutdownTimeout.toNanos(), TimeUnit.NANOSECONDS)) {
+        // A handler that outran the wait above has had its budget: it is interrupted now.
+        if (!__drained || !this.eventExecutor.awaitTermination(this.shutdownTimeout.toNanos(), TimeUnit.NANOSECONDS)) {
           this.eventExecutor.shutdownNow();
         }
       } catch (InterruptedException __ie) {

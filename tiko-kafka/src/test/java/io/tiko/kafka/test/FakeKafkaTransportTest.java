@@ -83,6 +83,24 @@ class FakeKafkaTransportTest {
         }
     }
 
+    /** #721: stopping ingest leaves the fake's producer open, as the real transport's stays. */
+    @Test
+    void stopIngestKeepsTheProducerOpenUntilShutdown() {
+        FakeKafkaBroker broker = new FakeKafkaBroker();
+
+        try (Container container = Tiko.create()) {
+            FakeKafkaTransport fake = FakeKafkaTransport.over(topology(), broker);
+            fake.stopIngest(); // before start: nothing to stop
+            fake.start(container);
+
+            fake.stopIngest();
+            container.getEventBus().publish(new OrderPlaced("o-1", 1));
+
+            assertThat(broker.produced("orders-out")).hasSize(1);
+            fake.shutdown();
+        }
+    }
+
     @Test
     void isAKafkaTransportAndDelegatesDescriptorsToTheWrapped() {
         // #432: the fake must itself be a KafkaTransport (type symmetry — so it can be the target of
