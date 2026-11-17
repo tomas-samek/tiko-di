@@ -20,7 +20,7 @@ the constant without updating this document.
 ```json
 {
   "schemaVersion": 1,
-  "module": "io.tiko.generated.TikoContainerImpl_<hash>",
+  "module": "TikoContainerImpl_<hash>",
   "components": [ ... ],
   "factoryMethods": [ ... ],
   "eventHandlers": [ ... ],
@@ -45,6 +45,7 @@ compile round.
 | `interfaces`              | string[]        | FQNs of every directly-declared interface |
 | `isTestComponent`         | boolean         | True when discovered via `@TestComponent` |
 | `requiresProxy`           | boolean         | True when a cross-scope proxy was generated for this component |
+| `proxy`                   | object          | Only on a component with a generated proxy. See below |
 | `exposeSelf`              | boolean         | `@Component(exposeSelf = ...)`, default true |
 | `exposeTypes`             | string[]        | `@Component(expose = {...})`, empty = permissive default |
 | `constructorDependencies` | object[]        | See below |
@@ -66,6 +67,17 @@ compile round.
 | `postConstruct` | string[] | Method names |
 | `preDestroy`    | string[] | Method names |
 | `autoCloseable` | boolean  | True when implicit `close()` runs at scope teardown (no explicit `@PreDestroy`) |
+
+### `proxy`
+
+Written for a component that has a generated cross-scope proxy; other components carry no
+`proxy` field.
+
+| Field            | Type        | Notes |
+| ---------------- | ----------- | ----- |
+| `interface`      | string      | FQN of the interface the proxy implements |
+| `proxiedMethods` | string[]    | Names of that interface's abstract methods, which the proxy forwards |
+| `reason`         | string enum | Why the proxy exists: `SINGLETON_INJECTS_EVENT`. Later versions may add values; readers must tolerate unknown ones |
 
 ## `factoryMethods[]`
 
@@ -134,7 +146,7 @@ Every `@Configuration` record.
 | `fields[].yamlKey` | string | `@Key("...")` override or `fields[].name` |
 | `fields[].type`  | string   | TypeMirror string (e.g. `java.lang.String`, `java.util.List<java.lang.String>`) |
 | `fields[].cardinality` | string enum | `REQUIRED` / `OPTIONAL` / `DEFAULTED` |
-| `fields[].default` | string \| null | Raw `@Default("...")` value, null unless `DEFAULTED` |
+| `fields[].default` | string \| number \| boolean \| null | The `@Default("...")` value, written with the type of the field: a number for an integer or floating-point field, a boolean for a boolean field, a string otherwise. Null unless `DEFAULTED` |
 
 ## Sibling artifact: `wiring-errors.json`
 

@@ -23,7 +23,7 @@ The version comes from the `tiko-bom` import shown in the [README installation s
 Tiko's processor runs in two Maven phases:
 
 - **`compile`** — sees `src/main/java/` sources; generates the main `TikoContainerImpl` + `META-INF/tiko/container.properties` in `target/classes/`.
-- **`test-compile`** — sees `src/test/java/` sources only (Maven's behaviour); generates a standalone `TestContainerImpl` + `META-INF/tiko/test-container.properties` + (if any `@TestComponent` shadows exist) `META-INF/tiko/test-shadows.properties` in `target/test-classes/`.
+- **`test-compile`** — sees `src/test/java/` sources only (Maven's behaviour); generates a standalone container for the test sources + `META-INF/tiko/test-container.properties` + (if any `@TestComponent` shadows exist) `META-INF/tiko/test-shadows.properties` in `target/test-classes/`. The container is named `TestContainerImpl_<hash>` when the test sources hold a `@TestComponent` and the main sources have a container of their own; otherwise it is a `TikoContainerImpl_<hash>` like the main one.
 
 At runtime, a container that opted into test wiring — every `@TikoTest` container, or `Tiko.create(TikoOptions.builder().testWiring(true).build())` — detects the test descriptors and uses `AggregatingContainer` to federate both containers. Without the opt-in, `Tiko.create(...)` ignores them, boots the production wiring and logs a WARNING naming where they came from, so a test-fixtures jar on a production classpath can't swap implementations (#497). Shadow declarations register as runtime overrides on the shared `TikoOptions` — `@TestComponent FakeClock extends Clock` causes every `Clock` injection across both containers to resolve to `FakeClock`.
 
