@@ -2333,8 +2333,7 @@ public final class ContainerGenerator {
     private void visitShutdownDependencies(
             List<DependencyModel> dependencies, Set<String> visited, List<ShutdownTarget> sorted) {
         for (DependencyModel dep : dependencies) {
-            var resolved =
-                    context.findComponentOrFactory(dep.getDependencyKey()).orElse(null);
+            var resolved = context.findProvider(dep).orElse(null);
             if (resolved instanceof ComponentModel c) {
                 if (c.getScope() == Scope.SINGLETON && !c.requiresProxy()) {
                     visitShutdownTarget(new ShutdownTarget.Component(c), visited, sorted);

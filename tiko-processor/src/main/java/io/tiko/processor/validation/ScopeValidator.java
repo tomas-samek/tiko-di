@@ -106,8 +106,7 @@ public final class ScopeValidator {
             return true;
         }
 
-        String depKey = dependency.getDependencyKey();
-        Optional<Object> provider = context.findComponentOrFactory(depKey);
+        Optional<Object> provider = context.findProvider(dependency);
 
         if (provider.isEmpty()) {
             // Missing dependency will be caught by DependencyGraphValidator
@@ -148,9 +147,7 @@ public final class ScopeValidator {
         chain.add("PROTOTYPE '" + displayName(prototype) + "'");
         boolean valid = true;
         for (DependencyModel dependency : dependenciesOf(prototype)) {
-            Optional<Object> provider = dependency.isProvider()
-                    ? Optional.empty()
-                    : context.findComponentOrFactory(dependency.getDependencyKey());
+            Optional<Object> provider = dependency.isProvider() ? Optional.empty() : context.findProvider(dependency);
             if (provider.isEmpty()) {
                 continue;
             }
@@ -276,12 +273,11 @@ public final class ScopeValidator {
      * error inside generated factories (#331).
      */
     private boolean validateProxiedConcreteInjection(Location consumerLocation, DependencyModel dependency) {
-        String depKey = dependency.getDependencyKey();
         // The type the injection point is declared with, not the provider @Pick names: a picked
         // EVENT implementation received through its interface gets the proxy like any other (#745).
         String declaredType =
                 dependency.getUnwrappedType().map(TypeRef::displayName).orElse(dependency.getTypeName());
-        if (!(context.findComponentOrFactory(depKey).orElse(null) instanceof ComponentModel component)
+        if (!(context.findProvider(dependency).orElse(null) instanceof ComponentModel component)
                 || !component.requiresProxy()) {
             return true;
         }

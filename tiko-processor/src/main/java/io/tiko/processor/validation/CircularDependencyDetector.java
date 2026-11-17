@@ -107,7 +107,7 @@ public final class CircularDependencyDetector {
         var needed = new ArrayList<Object>();
         for (DependencyModel dependency : dependenciesOf(provider)) {
             if (!dependency.isProvider()) {
-                resolve(dependency.getDependencyKey()).ifPresent(needed::add);
+                resolve(dependency).ifPresent(needed::add);
             }
         }
         if (provider instanceof FactoryMethodModel factory && !factory.isStatic()) {
@@ -117,13 +117,14 @@ public final class CircularDependencyDetector {
     }
 
     /**
-     * Resolves a dependency key to the active component or factory method that provides it, so
-     * interface- and qualifier-typed edges land on the same node as direct ones (#329). Empty for
+     * Resolves a dependency to the active component or factory method that provides it, so
+     * interface- and qualifier-typed edges land on the same node as direct ones (#329), and a
+     * {@code @Pick} lands on the class it names however that class is exposed (#823). Empty for
      * a missing dependency (reported by DependencyGraphValidator, not here) and for runtime-bound
      * {@code @Configuration} records — leaves for cycle purposes.
      */
-    private Optional<Object> resolve(String key) {
-        return context.findComponentOrFactory(key)
+    private Optional<Object> resolve(DependencyModel dependency) {
+        return context.findProvider(dependency)
                 .filter(provider -> provider instanceof ComponentModel || provider instanceof FactoryMethodModel);
     }
 
