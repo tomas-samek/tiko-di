@@ -52,7 +52,10 @@ class FakeBrokerWarehouseConsumeIT {
                     new JsonKafkaSerializer().serialize(new OrderPlaced("o-7", new BigDecimal("5.00"), Instant.now()));
             broker.produce("orders", payload);
 
-            await().atMost(Duration.ofSeconds(10)).until(() -> Files.exists(probe));
+            // The handler creates the probe file and then writes the line: wait for the line.
+            await().atMost(Duration.ofSeconds(10))
+                    .until(() ->
+                            Files.exists(probe) && !Files.readAllLines(probe).isEmpty());
             assertThat(Files.readAllLines(probe)).containsExactly("o-7");
         } catch (IOException e) {
             throw new AssertionError("probe file could not be read", e);
