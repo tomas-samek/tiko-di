@@ -267,6 +267,28 @@ class PendingDeliveriesTest {
                 .isTrue();
     }
 
+    /** #761: what a generated container reports as {@code pendingAsyncDeliveries()}. */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("executors")
+    void containerReadsTheCountThroughItsExecutor(String name, boolean suppliedExecutor) throws Exception {
+        var pool = suppliedExecutor ? suppliedExecutorView() : frameworkExecutor(OverflowPolicy.CALLER_RUNS);
+        pool.execute(gated());
+        assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
+        owner.scheduleRetry(() -> {}, Duration.ofMinutes(10).toNanos());
+
+        assertThat(EventChainContext.pendingDeliveries(pool))
+                .as("one running task and one retry in its backoff")
+                .isEqualTo(2);
+    }
+
+    @Test
+    void executorFromOutsideABootReportsNothingPending() {
+        supplied = Executors.newSingleThreadExecutor();
+        supplied.execute(gated());
+
+        assertThat(EventChainContext.pendingDeliveries(supplied)).isZero();
+    }
+
     @Test
     void closeWaitGoesThroughTheExecutorTheContainerHolds() throws Exception {
         var pool = frameworkExecutor(OverflowPolicy.CALLER_RUNS);

@@ -242,6 +242,18 @@ public final class EventChainContext {
     }
 
     /**
+     * What a generated container answers {@code Container.pendingAsyncDeliveries()} with (#761):
+     * the tasks handed to its event executor that are queued or running, plus the retries waiting
+     * out their backoff.
+     *
+     * @return the count; {@code 0} for an executor that did not come from a {@code Tiko.create(...)}
+     *     boot, which is not counted
+     */
+    public static int pendingDeliveries(ExecutorService executor) {
+        return executor instanceof RetryScheduling tracked ? tracked.pendingDeliveries() : 0;
+    }
+
+    /**
      * Runs an async {@code @EventHandler} body under a wall-clock timeout (#107). Called
      * exclusively from generated {@code EventRegistry} code for a handler that declared
      * {@code @EventHandler(async = true, timeout = ...)}.
@@ -416,11 +428,22 @@ public final class EventChainContext {
                         outcome.completeExceptionally(unwrapCompletion(throwable));
                     }
                 });
-        return outcome.whenComplete((ignored, throwable) -> {
-            if (throwable != null && unwrapCompletion(throwable) instanceof TimeoutException) {
+        // What follows the outcome, a retry being scheduled for one, runs before the timed-out
+        // worker is interrupted. The interrupted body may return at once, and the delivery must
+        // already count as waiting for its retry by then, or it would look finished in between (#761).
+        CompletableFuture<Void> reported = new CompletableFuture<>();
+        outcome.whenComplete((ignored, throwable) -> {
+            if (throwable == null) {
+                reported.complete(null);
+                return;
+            }
+            Throwable cause = unwrapCompletion(throwable);
+            reported.completeExceptionally(cause);
+            if (cause instanceof TimeoutException) {
                 interruptWorker(worker.get());
             }
         });
+        return reported;
     }
 
     /** Backoff delay before the next retry: constant for FIXED, doubling for EXPONENTIAL. */

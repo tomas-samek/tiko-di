@@ -11,6 +11,7 @@ import io.tiko.EventQueueOverflowException;
 import io.tiko.annotations.BackoffStrategy;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -42,6 +43,94 @@ class EventChainContextRetryTest {
     @AfterEach
     void tearDown() {
         executor.shutdownNow();
+    }
+
+    /** Runs tasks on {@code delegate} and records, without running it, each retry it is asked to schedule. */
+    private static final class RecordingRetryExecutor extends AbstractExecutorService implements RetryScheduling {
+        private final ExecutorService delegate;
+        private final List<String> order;
+
+        RecordingRetryExecutor(ExecutorService delegate, List<String> order) {
+            this.delegate = delegate;
+            this.order = order;
+        }
+
+        @Override
+        public boolean scheduleRetry(Runnable resubmit, long delayNanos) {
+            order.add("retry scheduled");
+            return true;
+        }
+
+        @Override
+        public boolean awaitDeliveries(long deadlineNanos) {
+            return true;
+        }
+
+        @Override
+        public int pendingDeliveries() {
+            return 0;
+        }
+
+        @Override
+        public void execute(Runnable command) {
+            delegate.execute(command);
+        }
+
+        @Override
+        public void shutdown() {
+            delegate.shutdown();
+        }
+
+        @Override
+        public List<Runnable> shutdownNow() {
+            return delegate.shutdownNow();
+        }
+
+        @Override
+        public boolean isShutdown() {
+            return delegate.isShutdown();
+        }
+
+        @Override
+        public boolean isTerminated() {
+            return delegate.isTerminated();
+        }
+
+        @Override
+        public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
+            return delegate.awaitTermination(timeout, unit);
+        }
+    }
+
+    /**
+     * #761: the retry of a timed-out attempt is scheduled before that attempt's worker is
+     * interrupted. The interrupted handler may return at once; were the retry scheduled only after
+     * that, the delivery would look finished for a moment while it still has an attempt to make.
+     */
+    @Test
+    void retryOfATimedOutAttemptIsScheduledBeforeItsWorkerIsInterrupted() throws Exception {
+        List<String> order = new CopyOnWriteArrayList<>();
+        CountDownLatch interrupted = new CountDownLatch(1);
+        var tracked = new RecordingRetryExecutor(executor, order);
+
+        EventChainContext.runAsyncWithRetry(
+                () -> {
+                    try {
+                        new CountDownLatch(1).await();
+                    } catch (InterruptedException e) {
+                        order.add("worker interrupted");
+                        interrupted.countDown();
+                    }
+                },
+                new RetryPolicy(
+                        1, 0L, BackoffStrategy.FIXED, Duration.ofMillis(50).toNanos()),
+                tracked,
+                error -> {},
+                INFO,
+                "evt");
+
+        assertThat(interrupted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(order).containsExactly("retry scheduled", "worker interrupted");
     }
 
     @Test

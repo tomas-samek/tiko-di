@@ -156,6 +156,11 @@ public final class DefaultEventExecutorFactory {
             return owner.awaitDeliveries(deadlineNanos);
         }
 
+        @Override
+        public int pendingDeliveries() {
+            return owner.deliveries().count();
+        }
+
         /** Counts the task as pending until it has run, been dropped, or been refused (#721). */
         @Override
         public void execute(Runnable command) {

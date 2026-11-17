@@ -404,7 +404,12 @@ public final class TikoContainerImpl_7a299740 implements Container {
 
   @Override
   public Optional<ExecutorMetrics> eventExecutorMetrics() {
-    return ownsEventExecutor && eventExecutor instanceof ThreadPoolExecutor tpe ? Optional.of(ExecutorMetrics.from(tpe)) : Optional.empty();
+    return ownsEventExecutor && eventExecutor instanceof ThreadPoolExecutor tpe ? Optional.of(ExecutorMetrics.from(tpe, pendingAsyncDeliveries())) : Optional.empty();
+  }
+
+  @Override
+  public int pendingAsyncDeliveries() {
+    return EventChainContext.pendingDeliveries(this.eventExecutor);
   }
 
   TikoOptions options() {

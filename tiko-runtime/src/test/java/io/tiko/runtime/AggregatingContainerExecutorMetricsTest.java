@@ -37,6 +37,59 @@ class AggregatingContainerExecutorMetricsTest {
         }
     }
 
+    /** #761: the container reports what is pending, and its metrics carry the same number. */
+    @Test
+    void pendingDeliveriesAreReportedByTheContainerAndInItsMetrics() throws Exception {
+        var started = new java.util.concurrent.CountDownLatch(1);
+        var gate = new java.util.concurrent.CountDownLatch(1);
+        try (AggregatingContainer container =
+                new AggregatingContainer(new LocalEventBus(), NOOP_ERROR_HANDLER, /* userEventExecutor= */ null)) {
+            assertThat(container.pendingAsyncDeliveries()).isZero();
+            container.getEventExecutor().execute(() -> {
+                started.countDown();
+                try {
+                    gate.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+            assertThat(started.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+
+            assertThat(container.pendingAsyncDeliveries()).isEqualTo(1);
+            assertThat(container.eventExecutorMetrics().orElseThrow().pendingDeliveries())
+                    .isEqualTo(1);
+            gate.countDown();
+        }
+    }
+
+    /** The handle {@code Tiko.create(...)} returns passes the question on to its container. */
+    @Test
+    void bootHandleDelegatesPendingDeliveriesToItsContainer() {
+        var container = new BootstrapTestContainer() {
+            @Override
+            public int pendingAsyncDeliveries() {
+                return 7;
+            }
+        };
+        io.tiko.TransportBootstrap transport = new io.tiko.TransportBootstrap() {
+            @Override
+            public void start(io.tiko.Container started) {
+                // nothing to start
+            }
+
+            @Override
+            public void shutdown() {
+                // nothing to release
+            }
+        };
+
+        assertThat(Tiko.startTransports(container, java.util.List.of(transport)).pendingAsyncDeliveries())
+                .isEqualTo(7);
+        assertThat(new BootstrapTestContainer().pendingAsyncDeliveries())
+                .as("a container that does not count reports none")
+                .isZero();
+    }
+
     @Test
     void userSuppliedExecutorYieldsEmptyMetrics() {
         // A user-supplied executor — even a ThreadPoolExecutor — is the user's to observe.

@@ -538,8 +538,14 @@ public final class AggregatingContainer implements Container {
         // Only the framework-owned default pool is sampleable (#110). A user-supplied executor —
         // even a ThreadPoolExecutor — is the user's to observe; we report empty for it.
         return ownsEventExecutor && eventExecutor instanceof java.util.concurrent.ThreadPoolExecutor tpe
-                ? java.util.Optional.of(io.tiko.ExecutorMetrics.from(tpe))
+                ? java.util.Optional.of(io.tiko.ExecutorMetrics.from(tpe, pendingAsyncDeliveries()))
                 : java.util.Optional.empty();
+    }
+
+    /** The modules dispatch through one executor, so this is the count for the whole application (#761). */
+    @Override
+    public int pendingAsyncDeliveries() {
+        return ownedThreads.deliveries().count();
     }
 
     @Override

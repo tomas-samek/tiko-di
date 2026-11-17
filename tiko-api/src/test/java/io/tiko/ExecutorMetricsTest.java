@@ -24,6 +24,24 @@ class ExecutorMetricsTest {
         }
     }
 
+    /** #761: the snapshot carries the count of pending deliveries the container hands it. */
+    @Test
+    void fromCarriesTheNumberOfPendingDeliveriesItIsGiven() {
+        try (ThreadPoolExecutor tpe =
+                new ThreadPoolExecutor(2, 6, 60, TimeUnit.SECONDS, new LinkedBlockingQueue<>(16))) {
+            assertThat(ExecutorMetrics.from(tpe, 3).pendingDeliveries()).isEqualTo(3);
+            assertThat(ExecutorMetrics.from(tpe).pendingDeliveries())
+                    .as("the factory a container generated before 0.8.0 calls")
+                    .isZero();
+        }
+    }
+
+    /** The record's shape before 0.8.0 still constructs, for code compiled against it. */
+    @Test
+    void constructorWithoutPendingDeliveriesReadsZero() {
+        assertThat(new ExecutorMetrics(1, 2, 3, 4, 5L, 6, 7)).isEqualTo(new ExecutorMetrics(1, 2, 3, 4, 5L, 6, 7, 0));
+    }
+
     @Test
     void fromReflectsQueuedAndCompletedWork() throws Exception {
         // Single thread, capacity-1 queue: one task occupies the worker, the rest sit in the queue.

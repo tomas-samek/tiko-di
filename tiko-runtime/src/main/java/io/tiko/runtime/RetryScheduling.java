@@ -29,4 +29,7 @@ interface RetryScheduling {
      * @return whether nothing is pending
      */
     boolean awaitDeliveries(long deadlineNanos);
+
+    /** How many tasks handed to this executor are queued or running, plus the retries in backoff. */
+    int pendingDeliveries();
 }

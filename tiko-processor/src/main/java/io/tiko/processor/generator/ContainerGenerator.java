@@ -309,6 +309,7 @@ public final class ContainerGenerator {
         // Add EventExecutor getter
         containerBuilder.addMethod(createGetEventExecutorMethod());
         containerBuilder.addMethod(createEventExecutorMetricsMethod());
+        containerBuilder.addMethod(createPendingAsyncDeliveriesMethod());
 
         // Add package-private options() accessor so generated factories in the same
         // io.tiko.generated package can consult per-call-site overrides without a
@@ -2134,11 +2135,27 @@ public final class ContainerGenerator {
                 .addAnnotation(Override.class)
                 .returns(ParameterizedTypeName.get(optional, executorMetrics))
                 .addStatement(
-                        "return ownsEventExecutor && eventExecutor instanceof $T tpe ? $T.of($T.from(tpe)) : $T.empty()",
+                        "return ownsEventExecutor && eventExecutor instanceof $T tpe"
+                                + " ? $T.of($T.from(tpe, pendingAsyncDeliveries())) : $T.empty()",
                         threadPoolExecutor,
                         optional,
                         executorMetrics,
                         optional)
+                .build();
+    }
+
+    /**
+     * Creates {@code pendingAsyncDeliveries()} (#761): the runtime counts what was handed to the
+     * container's event executor and has not finished, and a retry waiting out its backoff.
+     */
+    private MethodSpec createPendingAsyncDeliveriesMethod() {
+        return MethodSpec.methodBuilder("pendingAsyncDeliveries")
+                .addModifiers(Modifier.PUBLIC)
+                .addAnnotation(Override.class)
+                .returns(int.class)
+                .addStatement(
+                        "return $T.pendingDeliveries(this.eventExecutor)",
+                        ClassName.get("io.tiko.runtime", "EventChainContext"))
                 .build();
     }
 

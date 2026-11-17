@@ -40,6 +40,10 @@ class ContainerGeneratorEventExecutorTest {
         // AggregatingContainer — only when it owns a ThreadPoolExecutor, empty otherwise.
         assertThat(content).contains("Optional<ExecutorMetrics> eventExecutorMetrics()");
         assertThat(content).contains("ownsEventExecutor && eventExecutor instanceof ThreadPoolExecutor tpe");
+        // #761: the container reports its pending async deliveries, and the metrics carry them.
+        assertThat(content).contains("public int pendingAsyncDeliveries()");
+        assertThat(content).contains("return EventChainContext.pendingDeliveries(this.eventExecutor)");
+        assertThat(content).contains("ExecutorMetrics.from(tpe, pendingAsyncDeliveries())");
         // Constructor takes EventBus, ErrorHandler, ExecutorService userEventExecutor, ...
         assertThat(content).contains("EventBus eventBus, ErrorHandler errorHandler");
         assertThat(content).contains("ExecutorService userEventExecutor");

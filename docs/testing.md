@@ -190,7 +190,7 @@ void awaitAsyncDispatchBlocksUntilHandlersDrain(EventBus bus, RecordingEventBus 
 }
 ```
 
-The extension wires the container's executor into the recorder during boot, so this works without any setup. If the executor does not drain inside the timeout a `TimeoutException` is thrown with the number of deliveries still in flight — much more informative than a bare `Thread.sleep` that races and flakes.
+The extension wires the container into the recorder during boot, so this works without any setup. The wait covers a handler that is queued, running, or waiting out the backoff before a retry (`@EventHandler(retries = ...)`), so a handler that succeeds on its third attempt has made all three when the call returns. If the work does not settle inside the timeout a `TimeoutException` is thrown with the number of deliveries still pending — much more informative than a bare `Thread.sleep` that races and flakes.
 
 Wait in the test, not at its end: a `@TikoTest` container does not wait for async handlers when it closes. An application's container does, for up to its `shutdownTimeout` (see [Graceful shutdown drain](./events.md#graceful-shutdown-drain)); a test's container closes at once, and a handler still running then is interrupted and, if it stays, fails the test as a leaked thread. A test of the shutdown wait itself sets the timeout: `options.shutdownTimeout(Duration.ofSeconds(5))` in a `@TikoTestOptions` method.
 
