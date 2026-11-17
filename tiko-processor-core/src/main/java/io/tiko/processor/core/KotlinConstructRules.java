@@ -343,7 +343,7 @@ public final class KotlinConstructRules {
     }
 
     /** Whether generated Java source can call a method by this name: a Java identifier, not a keyword. */
-    static boolean isJavaIdentifier(String name) {
+    public static boolean isJavaIdentifier(String name) {
         if (name.isEmpty() || JAVA_KEYWORDS.contains(name) || !Character.isJavaIdentifierStart(name.charAt(0))) {
             return false;
         }

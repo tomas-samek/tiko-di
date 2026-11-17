@@ -221,14 +221,8 @@ public final class ConfigurationValidator {
             };
         }
         var declared = TypeRefs.declared(type);
-        if (declared.isPresent()) {
-            try {
-                return Class.forName(declared.get().qualifiedName());
-            } catch (ClassNotFoundException e) {
-                return null;
-            }
-        }
-        return null;
+        return declared.map(decl -> ConfigSupportedTypes.loadWithoutInitializing(decl.qualifiedName()))
+                .orElse(null);
     }
 
     /** A primitive's keyword ({@code int}), a declared type's simple name, else its rendering. */

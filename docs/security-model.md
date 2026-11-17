@@ -7,7 +7,8 @@ the security of applications built on it (authentication, authorization and the 
 plug-ins). Disclosure policy lives in [`SECURITY.md`](../SECURITY.md).
 
 Facts verified against the code on 2026-10-07 (periodic audit). Each anchor names a file and a symbol; line
-numbers are a convenience and drift.
+numbers are a convenience and drift. On 2026-11-17, SEC-2, SEC-4, SEC-5, SEC-8, SEC-10 and SEC-12
+were extended to the places the 0.7.0 release gate listed (#810); each was reproduced first.
 
 ---
 
@@ -40,7 +41,8 @@ constructor; `new Yaml()` without a constructor argument; a `Constructor` / cust
 ### SEC-2 — configuration values stay out of framework logs
 
 **Surface.** `tiko-config` coercion and validation messages, logged by the default error
-handler (`DefaultErrorHandler`, `ConfigurationFailure` case, one WARNING per issue).
+handler (`DefaultErrorHandler`, `ConfigurationFailure` case, one WARNING per issue), and the
+startup failures of a module that checks its own settings (`tiko-kafka` over `tiko.kafka.*`).
 
 **Threat.** Secrets placed in configuration (passwords, tokens) appearing in logs.
 
@@ -54,6 +56,9 @@ value is wrong, never the value itself.
 - The `Set<X>` coercer (`CompositeCoercers`) logs a duplicate's list index, not the element.
 - `ConfigValuesStayOutOfMessagesTest` checks, with a secret-shaped input, that each scalar
   rejection path, the anchored type-mismatch issue and the duplicate warning omit the value.
+- `tiko-kafka` startup: `IngestErrorPolicy.parse` (`tiko.kafka.poison-record-policy`) and
+  `KafkaBootstrapSupport.resolveSerializer` (`tiko.kafka.serializer`) name the key and what is
+  accepted. `KafkaStartupMessagesTest` checks both with a secret-shaped value.
 
 **Status.** Holds. Coercion, binding and the duplicate warning were fixed in #474, before
 which the duplicate warning and type-mismatch messages quoted the value. #493 fixed two more
@@ -79,8 +84,13 @@ handle` and cuts the name. A character YAML does not allow (a control character 
 is reported by its code point and position, never with the text around it (#765). The same
 test covers both tag forms.
 
+#810 found the same shape in `tiko-kafka`: the exceptions for an unknown
+`tiko.kafka.poison-record-policy` and an unknown `tiko.kafka.serializer` repeated the value they
+rejected. A value that reaches the wrong key through `${...}` can be a secret; both messages
+now name the key only.
+
 **Violation looks like.** A log call or exception message that concatenates a resolved
-configuration value.
+configuration value, in `tiko-config` or in a module that validates its own settings at startup.
 
 ---
 
@@ -134,10 +144,13 @@ checks the whole printed stack trace. Since #549 that exception is an
 the same test asserts the type and the missing cause. A user-supplied `KafkaSerializer`
 controls its own messages; the `EventSerializer.deserialize` contract asks it to keep payload
 values out of them. Since #516 the log line names the record (`orders-3@1042`) so an operator can find it.
+The field path in that message names declared fields and list indexes. A key of a `Map`-typed
+field comes from the payload, so the path says `[key]` for it (#810;
+`JsonKafkaSerializerPayloadLeakTest.mapKeyFromThePayloadIsNotNamedInThePath`).
 
 **Violation looks like.** A payload/`byte[]` component added to `KafkaIngestError`, a log
 call that renders `record.value()` or a `KafkaEgressError` (its `toString()`), a `location()`
-built from a header or event value, or a
+built from a header or event value, a field path that prints a map key, or a
 deserializer exception message passed to a log line unfiltered.
 
 ---
@@ -155,13 +168,19 @@ resource the runtime reads back.
 
 **Rule.** String values reach generated code as escaped Java literals — through JavaPoet `$S`,
 or, where a literal is assembled by hand, through `CodeLiterals.javaString` (the #333 fix).
-`$L` carries only identifiers, numbers and code assembled from escaped pieces.
+`$L` carries only identifiers, numbers and code assembled from escaped pieces. An annotation
+string that names a member (`partitionKey`) is written as code only after it was checked to be
+a Java identifier. A name taken from the source and written to a generated resource is escaped
+for that format, like annotation text.
 
 **Enforced by.** Code, per call site (check every generator in both processors, not one):
 - `KafkaTransportBootstrapGenerator` emits topics and names via `$S` (descriptor
   `list.add(new $T($S, $S, …))` statements). `$L` carries method names, plus `partitionKey`,
-  an annotation string that is safe only because `PartitionKeyValidator`
-  (`KafkaAnnotationProcessor`) rejects anything but an accessor chain before generation.
+  an annotation string that is safe only because `PartitionKeyValidator` rejects, before
+  generation, a key that is not a Java identifier (`KotlinConstructRules.isJavaIdentifier`) or
+  that names no zero-argument accessor of the payload type. Pinned by
+  `KspKafkaBridgeTest.partitionKeyThatIsNotAJavaIdentifierIsRejected`: the JVM name of a Kotlin
+  function in backticks can match a key that is not an identifier (#810).
 - `ContainerGenerator` (qualifier lookups) and `ComponentFactoryGenerator` (qualifier
   arguments) build quoted strings by hand but escape them with `CodeLiterals.javaString`.
 - `ConfigBinderGenerator.quotedJoin` joins the `@Key` values as `$S` code blocks; the joined
@@ -177,12 +196,24 @@ or, where a literal is assembled by hand, through `CodeLiterals.javaString` (the
   - `ConfigSchemaWriter` escapes `@Default` strings with `JsonWriter.escape`, and writes numeric
     defaults from the parsed value, or as a string when not finite. Pinned by
     `ConfigSchemaDefaultsJsonTest`, which parses the schema as JSON.
+  - `JsonSchemaTypeMapper` escapes the names of enum constants and of a nested record's members
+    the same way. A Java identifier needs no escaping; a Kotlin name in backticks can hold a
+    quote. Pinned by `KspConfigSchemaNamesTest` (#810).
+
+Names as code. A class, parameter or property name is source of the module being compiled, not
+a value: whoever writes it already runs code in that build, so a name is outside this rule's
+threat. What the processors still owe is a clear failure. `KotlinConstructRules.uncallableJvmName`
+rejects a method Tiko calls whose JVM name Java can't write. Class names, constructor parameter
+names and `@Configuration` property names are written as they are, and a name Java can't use
+there fails inside generated code (#831).
 
 **Status.** Holds. Generated Java was fixed in #479; before it, a crafted `@Key` compiled into
 extra statements in the generated binder. Resources were fixed in #496. Before it, a `prefix`
 containing a line break added lines to `configs.txt`, which `AggregatingContainer` reads back
 with `Class.forName`. `@Default` control characters, and `NaN`, `Infinity`, `+1`, `1d` or hex
-`double` defaults, produced invalid `config-schema.json`.
+`double` defaults, produced invalid `config-schema.json`. #810 added the identifier check on
+`partitionKey` and the escaping of names in `config-schema.json`; before it, a Kotlin name with
+a quote produced invalid JSON there.
 
 **Violation looks like.** `$L` with an annotation string value, or hand-built quoting
 (`"\"" + value + "\""`) without `CodeLiterals.javaString`, in an `addStatement` / `addCode`
@@ -243,19 +274,27 @@ argument resolved into a path outside the root.
 ### SEC-8 — no class loading driven by external input
 
 **Surface.** `tiko-runtime` container bootstrap and aggregation; `tiko-kafka` serializer
-selection and client configuration.
+selection and client configuration; `tiko-processor` looking up the type of a `@Configuration`
+field at compile time.
 
-**Threat.** Attacker-chosen classes loaded or instantiated at runtime.
+**Threat.** Attacker-chosen classes loaded or instantiated at runtime, or a class's static
+initializer running inside the compiler.
 
 **Rule.** Reflection and `Class.forName` take names only from the application's own
 classpath (processor-generated resources, `ServiceLoader`), never from configuration values,
-messages or network input.
+messages or network input. A processor may look a class up by a name from the source it
+compiles, and never initializes it.
 
 **Enforced by.** Code: `AggregatingContainer` and `Tiko` load generated container, registry
 and index classes named by build-generated resources; transports are discovered through
 `ServiceLoader<TransportBootstrap>`. `KafkaBootstrapSupport` instantiates the serializer class
 named by the `@KafkaSource` / `@KafkaSink` annotation, and `tiko.kafka.serializer` only picks
-among the serializers `ServiceLoader<NamedKafkaSerializer>` found.
+among the serializers `ServiceLoader<NamedKafkaSerializer>` found. At compile time,
+`ConfigSupportedTypes.loadWithoutInitializing` (also used by `ConfigurationValidator`) loads a
+`@Configuration` field's type with `initialize = false`, only to ask `TypeCoercerRegistry`
+whether a coercer exists for it; `ConfigTypeNotInitializedTest` pins both call sites (#810).
+Before it, a field type the processor's class loader could see had its static initializer run
+in the compiler.
 
 **Status.** Holds. Two inputs are trusted by design rather than enforced:
 - Generated resources: `configs.txt` lines come from annotation text (SEC-5, #496).
@@ -265,7 +304,8 @@ among the serializers `ServiceLoader<NamedKafkaSerializer>` found.
   attacker's.
 
 **Violation looks like.** `Class.forName` / `getDeclaredConstructor().newInstance()` on a
-string from config, a record, or an HTTP request.
+string from config, a record, or an HTTP request; or the one-argument `Class.forName(name)`,
+which initializes the class, in a processor.
 
 ---
 
@@ -300,25 +340,35 @@ the dependency-submission workflow disabled, failing on `main`, or excluding a m
 
 ### SEC-10 — release credentials and workflows are contained
 
-**Surface.** GitHub Actions workflows and release secrets.
+**Surface.** GitHub Actions workflows and release secrets; the executables checked into the
+repository that a workflow runs (the `gradle-wrapper.jar` of each example under
+`tiko-examples-gradle`, run by the `kotlin-gradle` job).
 
-**Threat.** Credential exposure or a compromised third-party action in CI.
+**Threat.** Credential exposure, a compromised third-party action, or a replaced checked-in
+executable running in CI.
 
 **Rule.** Release secrets (`CENTRAL_*`, `GPG_*`, `RELEASE_PUSH_TOKEN`) are referenced only
 in `release.yml`; artifacts are GPG-signed; workflows run with least-privilege
-`permissions`.
+`permissions`. A checked-in executable that CI runs is the upstream release, compared by
+checksum.
 
 **Enforced by.** `.github/workflows/release.yml` (sole user of those secrets);
 `maven-gpg-plugin` in the root `pom.xml` `release` profile. Every third-party action is pinned
 to a full commit SHA with its version in a trailing `# vX.Y.Z` comment;
 `WorkflowActionPinningTest` (in `tiko-archetype`) fails the build on a tag reference or a
 missing version comment, and `.github/dependabot.yml` proposes the updates.
+`GradleWrapperChecksumTest` (same module) compares every `gradle-wrapper.jar` with the checksum
+Gradle published for the version its `gradle-wrapper.properties` names, and requires
+`distributionSha256Sum` there, so the wrapper verifies the distribution it downloads (#810). The
+test fails the build of a change that replaces a jar; it does not stop the `kotlin-gradle` job
+of that same run, which holds no release secret.
 
 **Status.** Holds (fixed in #477; before it, actions were referenced by movable tags such as
 `@v4`).
 
 **Violation looks like.** A release secret in another workflow, `permissions: write-all`,
-or an unpinned/new third-party action.
+an unpinned/new third-party action, or a checked-in jar or script that a workflow runs and no
+test compares with its upstream checksum.
 
 ---
 
@@ -363,7 +413,9 @@ checks, in-memory stores) because a test-component jar landed on the classpath.
 `Tiko.create` select `test-container.properties`, and `AggregatingContainer` reads
 `test-shadows.properties` only for that descriptor. Without the opt-in, test wiring on the
 classpath is ignored with a WARNING naming its URLs. `@TikoTest` opts its container in.
-Processor: a `@TestComponent` whose source is under `src/main/` is a compile error. Tests:
+Processor: a `@TestComponent` whose source is under a production source root is a compile
+error. The roots it recognizes are `src/main/` and a Kotlin Multiplatform source set ending in
+`Main` (`src/jvmMain/`); under any other layout the opt-in above is what holds (#810). Tests:
 `StrayTestWiringTest`, `AggregatingContainerShadowRoutingTest`,
 `TestComponentInProductionSourcesTest`.
 
