@@ -290,7 +290,13 @@ class TikoTestTeardownTest {
     @Test
     void leakIsSuppressedOnTheCloseFailure() throws Exception {
         var release = new CountDownLatch(1);
-        var leaked = Thread.ofPlatform().name("leaked-by-close-fixture").start(() -> awaitIgnoringInterrupts(release));
+        var running = new CountDownLatch(1);
+        var leaked = Thread.ofPlatform().name("leaked-by-close-fixture").start(() -> {
+            running.countDown();
+            awaitIgnoringInterrupts(release);
+        });
+        // The report names the frame the thread is in: wait until it has one.
+        assertThat(running.await(5, TimeUnit.SECONDS)).isTrue();
         try {
             var executor = CountingThreadPoolExecutor.withFrameworkDefaults();
             var boot =

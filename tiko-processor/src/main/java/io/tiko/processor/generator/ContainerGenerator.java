@@ -1158,6 +1158,7 @@ public final class ContainerGenerator {
     private static final ClassName APP_STARTED = ClassName.get(EVENTS_PACKAGE, "ApplicationStartedEvent");
     private static final ClassName APP_ENDING = ClassName.get(EVENTS_PACKAGE, "ApplicationEndingEvent");
     private static final ClassName BOUNDED_EXECUTION = ClassName.get("io.tiko.runtime", "BoundedExecution");
+    private static final ClassName EVENT_CHAIN_CONTEXT = ClassName.get("io.tiko.runtime", "EventChainContext");
     private static final ClassName CONTAINER_SHUT_DOWN = ClassName.get(TIKO_PACKAGE, "ContainerShutDownException");
     /** The lambda head that makes a resolution lazy: a {@code Provider} and an override fallback. */
     private static final String LAZY = "() -> ";
@@ -1434,8 +1435,7 @@ public final class ContainerGenerator {
         method.beginControlFlow("try");
         method.addStatement("errorHandler.onError($L)", errorContext);
         method.nextControlFlow("catch ($T __inner)", Exception.class);
-        method.addStatement(
-                "$T.logErrorHandlerFailure(__inner)", ClassName.get("io.tiko.runtime", "EventChainContext"));
+        method.addStatement("$T.logErrorHandlerFailure(__inner)", EVENT_CHAIN_CONTEXT);
         method.endControlFlow();
     }
 
@@ -1652,7 +1652,7 @@ public final class ContainerGenerator {
         method.addStatement(
                 "boolean __drained = !publishLifecycleEvents || $T.awaitPendingDeliveries(this.eventExecutor, "
                         + "$T.nanoTime() + this.shutdownTimeout.toNanos())",
-                ClassName.get("io.tiko.runtime", "EventChainContext"),
+                EVENT_CHAIN_CONTEXT,
                 System.class);
 
         method.addComment("Phase 3: gate new get() calls and drain in-flight ones. Lookups register in");
@@ -2153,9 +2153,7 @@ public final class ContainerGenerator {
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
                 .returns(int.class)
-                .addStatement(
-                        "return $T.pendingDeliveries(this.eventExecutor)",
-                        ClassName.get("io.tiko.runtime", "EventChainContext"))
+                .addStatement("return $T.pendingDeliveries(this.eventExecutor)", EVENT_CHAIN_CONTEXT)
                 .build();
     }
 
