@@ -16,7 +16,7 @@ Design: `docs/superpowers/specs/2026-10-05-github-pages-landing-design.md`.
 
 | What | Where |
 |---|---|
-| Page, styles, icon | `site/index.html`, `site/style.css`, `site/favicon.svg` (no JS, no web fonts, no tracking) |
+| Page, styles, icon, link-preview image | `site/index.html`, `site/style.css`, `site/favicon.svg`, `site/logo.png` (a copy of the root `logo.png`, named by `og:image`; `SiteInSyncTest` keeps the two identical). No JS, no web fonts, no tracking |
 | Deploy | `.github/workflows/pages.yml`, which runs on pushes to `main` that touch `site/**` or itself, plus `workflow_dispatch` |
 | Compile-error demo guard | `tiko-processor/.../SiteCompileErrorDemoTest` compiles the page's `OrderService` / `PaymentGateway` and compares the shown error |
 | Version / JDK / URL guard | `tiko-archetype/.../SiteInSyncTest`: BOM version = README, JDK list = CI `build` matrix = README badge, no root-relative URLs |

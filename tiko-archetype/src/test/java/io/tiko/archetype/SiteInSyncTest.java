@@ -103,6 +103,22 @@ class SiteInSyncTest {
                 .isEmpty();
     }
 
+    /**
+     * The link-preview image has to be an absolute URL. It points under the page's own address, at a
+     * file the site deploys, and that file is the repository's logo.
+     */
+    @Test
+    void previewImageIsTheLogoDeployedWithThePage() throws IOException {
+        var page = Files.readString(PAGE);
+        var canonical = firstGroup(Pattern.compile("<link rel=\"canonical\" href=\"([^\"]+)\""), page);
+        var image = firstGroup(Pattern.compile("<meta property=\"og:image\" content=\"([^\"]+)\""), page);
+
+        assertThat(image).startsWith(canonical);
+        assertThat(PAGE.resolveSibling(image.substring(canonical.length())))
+                .exists()
+                .hasSameBinaryContentAs(Path.of("..", "logo.png"));
+    }
+
     /** The page states the JDK list in the hero first, then in the install section. */
     private static String pageJdkRowName(int index) {
         var where =
