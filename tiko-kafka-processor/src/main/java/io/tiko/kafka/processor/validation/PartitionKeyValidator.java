@@ -2,6 +2,7 @@ package io.tiko.kafka.processor.validation;
 
 import io.tiko.kafka.processor.model.KafkaSinkDescriptor;
 import io.tiko.processor.core.Diagnostics;
+import io.tiko.processor.core.KotlinConstructRules;
 import io.tiko.processor.core.model.MethodDecl;
 import io.tiko.processor.core.model.Visibility;
 import java.util.List;
@@ -11,7 +12,8 @@ import java.util.List;
  * non-{@code void} method (typically a record component accessor) on the bridge's return type —
  * the shape the generated {@code KafkaTransportBootstrap} key extractor calls. A non-public or
  * {@code void} accessor is reported on the sink method rather than left to surface as a raw javac
- * error inside generated code (#418).
+ * error inside generated code (#418). The key itself must be a Java identifier: the generator
+ * writes it into the bootstrap as code.
  */
 public final class PartitionKeyValidator {
 
@@ -23,6 +25,19 @@ public final class PartitionKeyValidator {
         boolean ok = true;
         for (KafkaSinkDescriptor s : sinks) {
             if (s.partitionKey().isEmpty()) continue;
+            if (!KotlinConstructRules.isJavaIdentifier(s.partitionKey())) {
+                // The generator writes the key as a method call, so it must be a name and nothing
+                // else (SEC-5). A Kotlin function in backticks can carry a JVM name that is not one.
+                diagnostics.error(
+                        s.method().location(),
+                        KEY_PREFIX
+                                + s.partitionKey()
+                                + "' is not a name Java can call: the generated bootstrap calls the"
+                                + " accessor by that name. Point partitionKey at an accessor with a Java"
+                                + " name, or give a Kotlin function one with @JvmName(\"...\").");
+                ok = false;
+                continue;
+            }
             var returnDecl = s.producedPayloadType().declaration();
             if (returnDecl.isEmpty()) {
                 diagnostics.error(

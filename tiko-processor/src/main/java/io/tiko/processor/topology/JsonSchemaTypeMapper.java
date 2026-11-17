@@ -1,5 +1,6 @@
 package io.tiko.processor.topology;
 
+import io.tiko.processor.core.JsonWriter;
 import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.DeclKind;
 import io.tiko.processor.core.model.TypeRef;
@@ -84,7 +85,8 @@ public final class JsonSchemaTypeMapper {
         var first = true;
         for (var constant : el.enumConstants()) {
             if (!first) sb.append(',');
-            sb.append('"').append(constant).append('"');
+            // A Kotlin name can hold a quote; escape it like every other string in the file (SEC-5).
+            sb.append('"').append(JsonWriter.escape(constant)).append('"');
             first = false;
         }
         sb.append("]}");
@@ -96,7 +98,7 @@ public final class JsonSchemaTypeMapper {
         var first = true;
         for (var member : recordDecl.recordComponents()) {
             if (!first) sb.append(',');
-            sb.append('"').append(member.name()).append("\":");
+            sb.append('"').append(JsonWriter.escape(member.name())).append("\":");
             sb.append(mapType(member.type()));
             first = false;
         }

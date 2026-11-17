@@ -235,7 +235,7 @@ components) opts in itself:
 try (Container c = Tiko.create(TikoOptions.builder().testWiring(true).build())) { ... }
 ```
 
-A `@TestComponent` in `src/main/` is a compile error — it would ship test wiring in the jar.
+A `@TestComponent` in `src/main/` (or in a Kotlin Multiplatform source set ending in `Main`) is a compile error — it would ship test wiring in the jar.
 
 **Kotlin (Gradle + KSP).** Put the processor on the test compile and add `tiko-test`:
 

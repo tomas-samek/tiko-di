@@ -18,13 +18,14 @@ Everything here is driven by the registry [`docs/security-model.md`](../../docs/
 | `tiko-kafka/**/runtime/**`, `KafkaIngestError`, `KafkaEgressError` | SEC-3, SEC-4, SEC-11 |
 | `KafkaConfig`, `KafkaBootstrapSupport`, Kafka client properties | SEC-8, SEC-11 |
 | `tiko-processor/**`, `tiko-kafka-processor/**` (generators, `CodeLiterals`, generated resource writers) | SEC-5 |
+| `tiko-processor/**` or `tiko-kafka-processor/**` looking a class up by name (`Class.forName`) | SEC-8 |
 | generated EVENT teardown (`ContainerGenerator` scope methods), `ErrorHandler` call sites | SEC-14 |
 | test mode, `@TestComponent`, `test-*.properties`, `AggregatingContainer` overrides | SEC-12 |
 | any log call, `TikoLog` | SEC-6 |
 | `tiko-mcp/**` | SEC-7 |
 | `tiko-runtime/**` (`Class.forName`, `ServiceLoader`, `TikoOptions`) | SEC-8, SEC-11 |
 | `pom.xml`, `tiko-bom/pom.xml`, any `<dependency>` / shade config (incl. `tiko-mcp`) | SEC-9 |
-| `.github/workflows/**` | SEC-10 |
+| `.github/workflows/**`, `tiko-examples-gradle/**/gradle/wrapper/**` | SEC-10 |
 | `tiko-archetype/**` (template, `.mcp.json`, bundled agent files) | SEC-13 |
 
 ## Mode 1 — PR review

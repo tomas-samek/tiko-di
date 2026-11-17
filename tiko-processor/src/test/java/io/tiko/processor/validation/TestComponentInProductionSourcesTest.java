@@ -9,12 +9,14 @@ import io.tiko.processor.TikoAnnotationProcessor;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import javax.tools.JavaFileObject;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /**
  * #497: a {@code @TestComponent} compiled from production sources would ship test wiring in a
- * jar, so a source file under {@code src/main/} is a compile error. Test sources are unaffected.
+ * jar, so a source file under a production source root is a compile error. Test sources are
+ * unaffected.
  */
 class TestComponentInProductionSourcesTest {
 
@@ -42,18 +44,21 @@ class TestComponentInProductionSourcesTest {
     @TempDir
     Path project;
 
-    @Test
-    void testComponentInProductionSourcesIsACompileError() throws Exception {
-        Compilation c = compileFakeGreeterFrom("src/main/java");
+    /** {@code src/main} and the Kotlin Multiplatform production source sets, which end in {@code Main} (#810). */
+    @ParameterizedTest
+    @ValueSource(strings = {"src/main/java", "src/jvmMain/java", "src/commonMain/java"})
+    void testComponentInProductionSourcesIsACompileError(String sourceRoot) throws Exception {
+        Compilation c = compileFakeGreeterFrom(sourceRoot);
 
         assertThat(c).failed();
         assertThat(c).hadErrorContaining("@TestComponent FakeGreeter is in production sources");
         assertThat(c).hadErrorContaining("Move FakeGreeter under src/test/java");
     }
 
-    @Test
-    void testComponentInTestSourcesCompiles() throws Exception {
-        assertThat(compileFakeGreeterFrom("src/test/java")).succeeded();
+    @ParameterizedTest
+    @ValueSource(strings = {"src/test/java", "src/jvmTest/java", "src/testFixtures/java", "src/integrationTest/java"})
+    void testComponentInTestSourcesCompiles(String sourceRoot) throws Exception {
+        assertThat(compileFakeGreeterFrom(sourceRoot)).succeeded();
     }
 
     private Compilation compileFakeGreeterFrom(String sourceRoot) throws Exception {

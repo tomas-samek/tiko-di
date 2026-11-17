@@ -406,6 +406,41 @@ class KspKafkaBridgeTest {
                 .doesNotContain("KafkaTransportBootstrap.java");
     }
 
+    /**
+     * #810: the key is written into the generated bootstrap as a method call, so it has to be a name
+     * Java can call. A Kotlin function in backticks can match a key that is not one.
+     */
+    @Test
+    void partitionKeyThatIsNotAJavaIdentifierIsRejected() {
+        var source = KspCompiler.kotlin(
+                "Sinks.kt",
+                "package demo",
+                "",
+                "import io.tiko.Scope",
+                "import io.tiko.annotations.Component",
+                "import io.tiko.kafka.annotations.KafkaSink",
+                "",
+                "class OrderPlaced(val id: String) {",
+                "    fun `order id`(): String = id",
+                "}",
+                "",
+                "@Component(scope = Scope.SINGLETON)",
+                "class OrderPublisher {",
+                "    @KafkaSink(topic = \"orders\", partitionKey = \"order id\")",
+                "    fun toKafka(placed: OrderPlaced): OrderPlaced = placed",
+                "}");
+
+        var result = KspCompiler.compile(
+                List.of(new TikoSymbolProcessorProvider(), new KafkaSymbolProcessorProvider()), Map.of(), source);
+
+        assertThat(result.exitCode()).as(result.messages()).isEqualTo(KotlinCompilation.ExitCode.COMPILATION_ERROR);
+        assertThat(result.messages())
+                .as("located Tiko error")
+                .contains("Sinks.kt:")
+                .contains("@KafkaSink partitionKey 'order id' is not a name Java can call")
+                .doesNotContain("KafkaTransportBootstrap.java");
+    }
+
     private static com.tschuchort.compiletesting.SourceFile jvmRecordSink(String partitionKey) {
         return KspCompiler.kotlin(
                 "Sinks.kt",

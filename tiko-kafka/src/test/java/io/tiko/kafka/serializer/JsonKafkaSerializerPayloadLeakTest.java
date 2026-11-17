@@ -8,6 +8,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -20,6 +21,8 @@ import org.junit.jupiter.params.provider.MethodSource;
 class JsonKafkaSerializerPayloadLeakTest {
 
     record Payment(String id, int amount) {}
+
+    record Tagged(String id, java.util.Map<String, Integer> counts) {}
 
     private static final String SECRET = "SSN-123-45-6789";
 
@@ -49,5 +52,22 @@ class JsonKafkaSerializerPayloadLeakTest {
                 .as("the typed decode signal (#549) carries no payload either: no cause, value-free message")
                 .isInstanceOf(UndecodablePayloadException.class)
                 .hasNoCause();
+    }
+
+    /**
+     * #810: a key of a {@code Map} field comes from the payload, unlike the name of a declared
+     * field, so the path names the field and says {@code [key]} for the entry.
+     */
+    @Test
+    void mapKeyFromThePayloadIsNotNamedInThePath() {
+        var payload = "{\"id\":\"t1\",\"counts\":{\"" + SECRET + "\":\"not a number\"}}";
+
+        var failure = catchThrowable(
+                () -> new JsonKafkaSerializer().deserialize(payload.getBytes(StandardCharsets.UTF_8), Tagged.class));
+
+        var logged = new StringWriter();
+        failure.printStackTrace(new PrintWriter(logged));
+        assertThat(logged.toString()).contains("Tagged").doesNotContain(SECRET);
+        assertThat(failure.getMessage()).contains("counts.[key]");
     }
 }

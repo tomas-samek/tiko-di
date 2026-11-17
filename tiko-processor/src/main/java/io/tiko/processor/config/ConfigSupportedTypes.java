@@ -42,12 +42,21 @@ public final class ConfigSupportedTypes {
             return true; // element-type validation happens in ConfigurationValidator
         }
 
-        // Bundled scalars: ask the runtime registry directly using Class.forName.
+        // Bundled scalars: ask the runtime registry directly.
+        Class<?> c = loadWithoutInitializing(fqn);
+        return c != null && TypeCoercerRegistry.isSupported(c);
+    }
+
+    /**
+     * The class of that name as the processor sees it, or {@code null} when it has none. The class
+     * is not initialized: the name comes from the source being compiled, and its static initializer
+     * has no business running inside the compiler (SEC-8).
+     */
+    static Class<?> loadWithoutInitializing(String fqn) {
         try {
-            Class<?> c = Class.forName(fqn);
-            return TypeCoercerRegistry.isSupported(c);
-        } catch (ClassNotFoundException e) {
-            return false;
+            return Class.forName(fqn, false, ConfigSupportedTypes.class.getClassLoader());
+        } catch (ClassNotFoundException | LinkageError e) {
+            return null;
         }
     }
 

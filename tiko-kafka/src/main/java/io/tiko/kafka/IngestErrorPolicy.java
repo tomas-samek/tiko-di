@@ -34,7 +34,8 @@ public enum IngestErrorPolicy {
     /**
      * Parses the configured value case-insensitively. Throws {@link IllegalArgumentException}
      * with the valid set on an unknown value, so a typo fails fast at startup rather than
-     * silently falling back to a default the operator did not choose.
+     * silently falling back to a default the operator did not choose. The message names the key,
+     * not the value: a configured value stays out of messages (SEC-2).
      */
     public static IngestErrorPolicy parse(String raw) {
         if (raw != null) {
@@ -45,6 +46,6 @@ public enum IngestErrorPolicy {
             }
         }
         throw new IllegalArgumentException(
-                "Unknown tiko.kafka.poison-record-policy '" + raw + "'. Valid values: SEEK, SKIP.");
+                "Unknown value for tiko.kafka.poison-record-policy. Valid values: SEEK, SKIP.");
     }
 }

@@ -99,7 +99,7 @@ public final class ComponentCollector {
             var name = decl.className().simpleName();
             errors.error(
                     decl.location(),
-                    "@TestComponent " + name + " is in production sources (src/main). Test components"
+                    "@TestComponent " + name + " is in production sources. Test components"
                             + " only apply in a container that opts into test wiring; compiled here"
                             + " they ship in the jar as test wiring (#497).",
                     "Move " + name + " under src/test/java",
@@ -110,12 +110,28 @@ public final class ComponentCollector {
     }
 
     /**
-     * {@code true} when the class's source file sits under a {@code src/main/} directory — the
-     * Maven/Gradle production source root. Unknown locations (in-memory sources, a compiler that
-     * doesn't report the file) count as not production, so the check never fires without evidence.
+     * {@code true} when the class's source file sits under a production source root: Maven's and
+     * Gradle's {@code src/main/}, or a Kotlin Multiplatform source set ending in {@code Main}
+     * ({@code src/jvmMain/}). Unknown locations (in-memory sources, a compiler that doesn't report
+     * the file) and other layouts count as not production, so the check never fires without
+     * evidence; the test-wiring opt-in at run time is what holds for every layout (SEC-12).
      */
     private static boolean isInProductionSources(ClassDecl decl) {
-        return decl.sourcePath().filter(path -> path.contains("/src/main/")).isPresent();
+        return decl.sourcePath()
+                .filter(ComponentCollector::isUnderProductionRoot)
+                .isPresent();
+    }
+
+    /** Whether a directory {@code main} or {@code <name>Main} directly under a {@code src} holds the file. */
+    private static boolean isUnderProductionRoot(String path) {
+        var segments = path.split("/");
+        for (int i = 0; i + 2 < segments.length; i++) {
+            var sourceSet = segments[i + 1];
+            if (segments[i].equals("src") && (sourceSet.equals("main") || sourceSet.endsWith("Main"))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Builds a ComponentModel from a {@code @Component} class; {@code null} when an error was reported. */

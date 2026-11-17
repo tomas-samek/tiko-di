@@ -227,11 +227,11 @@ public final class KafkaBootstrapSupport {
         }
         KafkaSerializer impl = named.get(config.serializer());
         if (impl == null) {
-            throw new ContainerInitializationException("tiko.kafka.serializer = '"
-                    + config.serializer()
-                    + "' but no NamedKafkaSerializer with that name was found via ServiceLoader. "
-                    + "Known names: "
-                    + named.keySet());
+            // The key and what is accepted, not the configured value (SEC-2).
+            throw new ContainerInitializationException(
+                    "tiko.kafka.serializer names a serializer that no NamedKafkaSerializer found via"
+                            + " ServiceLoader provides. Known names: "
+                            + named.keySet());
         }
         return impl;
     }

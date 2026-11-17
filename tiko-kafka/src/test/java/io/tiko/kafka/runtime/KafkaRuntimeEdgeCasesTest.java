@@ -280,7 +280,7 @@ class KafkaRuntimeEdgeCasesTest {
                     countingConsumers(broker, openConsumers),
                     config -> new ClosingProducer(broker.producerClient(), producerClosed));
 
-            assertThatThrownBy(support::start).hasMessageContaining("SKIPP");
+            assertThatThrownBy(support::start).hasMessageContaining("tiko.kafka.poison-record-policy");
 
             assertThat(openConsumers).hasValue(0);
             assertThat(producerClosed).isTrue();

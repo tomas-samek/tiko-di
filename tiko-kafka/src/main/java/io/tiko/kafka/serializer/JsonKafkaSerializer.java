@@ -9,6 +9,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.tiko.UndecodablePayloadException;
 import io.tiko.kafka.KafkaSerializer;
 import java.io.IOException;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -58,7 +59,8 @@ public final class JsonKafkaSerializer implements KafkaSerializer {
 
     /**
      * The kind of failure, the field path and the position in the document: everything about
-     * the failure except the input itself.
+     * the failure except the input itself. A key of a {@code Map} field is input too, so the path
+     * says {@code [key]} for it.
      */
     private static String describeWithoutValue(IOException e) {
         var description = new StringBuilder(e.getClass().getSimpleName());
@@ -66,7 +68,7 @@ public final class JsonKafkaSerializer implements KafkaSerializer {
             description
                     .append(" at ")
                     .append(mapping.getPath().stream()
-                            .map(ref -> ref.getFieldName() != null ? ref.getFieldName() : "[" + ref.getIndex() + "]")
+                            .map(JsonKafkaSerializer::pathSegment)
                             .collect(Collectors.joining(".")));
         }
         if (e instanceof JsonProcessingException processing && processing.getLocation() != null) {
@@ -78,5 +80,15 @@ public final class JsonKafkaSerializer implements KafkaSerializer {
                     .append(')');
         }
         return description.toString();
+    }
+
+    /** A declared field's name, an element's index, or {@code [key]} for an entry of a {@code Map}. */
+    private static String pathSegment(JsonMappingException.Reference ref) {
+        if (ref.getFieldName() == null) {
+            return "[" + ref.getIndex() + "]";
+        }
+        Object from = ref.getFrom();
+        boolean mapEntry = from instanceof Map || (from instanceof Class<?> type && Map.class.isAssignableFrom(type));
+        return mapEntry ? "[key]" : ref.getFieldName();
     }
 }
