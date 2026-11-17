@@ -1,5 +1,6 @@
 package io.tiko.test;
 
+import io.tiko.Container;
 import io.tiko.EventBus;
 import io.tiko.EventCallback;
 import io.tiko.Subscription;
@@ -37,18 +38,30 @@ public final class RecordingEventBus implements EventBus {
     // AtomicReference, not a volatile field: wired in after construction and read from other
     // threads, so it needs safe publication without S3077's volatile-on-a-mutable-object smell.
     private final AtomicReference<ExecutorService> eventExecutor = new AtomicReference<>();
+    private final AtomicReference<Container> container = new AtomicReference<>();
 
     public RecordingEventBus(EventBus delegate) {
         this.delegate = delegate;
     }
 
     /**
-     * Wires the container's event executor in after construction. Called by the JUnit
-     * extension once {@code Tiko.create(...)} returns. Required for
-     * {@link #awaitAsyncDispatch(Duration)} to function.
+     * Wires an event executor in after construction, for a recorder used without a container:
+     * {@link #awaitAsyncDispatch(Duration)} then waits for that executor to drain. Under
+     * {@code @TikoTest} the extension wires the container itself ({@link #setContainer}).
      */
     public void setEventExecutor(ExecutorService executor) {
         this.eventExecutor.set(executor);
+    }
+
+    /**
+     * Wires the booted container in after construction. Called by the JUnit extension once
+     * {@code Tiko.create(...)} returns. {@link #awaitAsyncDispatch(Duration)} then waits for what
+     * {@link Container#pendingAsyncDeliveries()} reports, which covers a retry waiting out its
+     * backoff as well as what is queued or running (#761).
+     */
+    public void setContainer(Container container) {
+        this.container.set(container);
+        this.eventExecutor.set(container.getEventExecutor());
     }
 
     @Override
@@ -121,11 +134,14 @@ public final class RecordingEventBus implements EventBus {
     }
 
     /**
-     * Blocks until the wired event executor has drained (active count zero, empty queue), or the
-     * timeout elapses. Useful for tests that exercise {@code @EventHandler(async = true)} paths.
+     * Blocks until no async handler is queued, running, or waiting out the backoff before a retry,
+     * or the timeout elapses. Useful for tests that exercise {@code @EventHandler(async = true)}
+     * paths. Without a wired container it waits for the wired executor to drain instead (active
+     * count zero, empty queue), which does not see a retry in its backoff.
      *
-     * @throws IllegalStateException if {@link #setEventExecutor(ExecutorService)} has not been called
-     * @throws TimeoutException if the executor does not drain within {@code timeout}
+     * @throws IllegalStateException if neither {@link #setContainer(Container)} nor
+     *     {@link #setEventExecutor(ExecutorService)} has been called
+     * @throws TimeoutException if the work does not settle within {@code timeout}
      */
     public void awaitAsyncDispatch(Duration timeout) throws TimeoutException {
         var exec = this.eventExecutor.get();
@@ -134,10 +150,22 @@ public final class RecordingEventBus implements EventBus {
                     "awaitAsyncDispatch requires the event executor to be wired (setEventExecutor). "
                             + "Under @TikoTest this happens automatically; outside @TikoTest call setEventExecutor first.");
         }
+        var booted = this.container.get();
         if (exec instanceof CountingThreadPoolExecutor cte) {
             // Deterministic: in-flight is counted at submit time, so a task is never uncounted
             // while it sits between the queue and a worker lock — the window that flaked #443.
-            pollUntilDrained(() -> cte.inFlight() > 0, () -> "inFlight=" + cte.inFlight(), timeout);
+            // The container adds the retries that wait out a backoff, which no executor holds (#761).
+            pollUntilDrained(
+                    () -> cte.inFlight() > 0 || pendingDeliveries(booted) > 0,
+                    () -> "inFlight=" + cte.inFlight() + ", pendingDeliveries=" + pendingDeliveries(booted),
+                    timeout);
+            return;
+        }
+        if (booted != null) {
+            pollUntilDrained(
+                    () -> booted.pendingAsyncDeliveries() > 0,
+                    () -> "pendingDeliveries=" + booted.pendingAsyncDeliveries(),
+                    timeout);
             return;
         }
         if (exec instanceof ThreadPoolExecutor tpe) {
@@ -180,6 +208,10 @@ public final class RecordingEventBus implements EventBus {
                 break;
             }
         }
+    }
+
+    private static int pendingDeliveries(Container booted) {
+        return booted == null ? 0 : booted.pendingAsyncDeliveries();
     }
 
     private String summary() {

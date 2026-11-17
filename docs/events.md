@@ -166,7 +166,9 @@ container.eventExecutorMetrics().ifPresent(m ->
         meterRegistry.gauge("tiko.events.queue", m.queueSize()));
 ```
 
-`eventExecutorMetrics()` returns `Optional<ExecutorMetrics>` — a record exposing `activeCount`, `poolSize`, `queueSize`, `queueRemainingCapacity`, `completedTaskCount`, `corePoolSize`, and `maxPoolSize`. It is **empty** when you supply your own executor (its metrics are yours to expose, not the framework's).
+`eventExecutorMetrics()` returns `Optional<ExecutorMetrics>` — a record exposing `activeCount`, `poolSize`, `queueSize`, `queueRemainingCapacity`, `completedTaskCount`, `corePoolSize`, `maxPoolSize`, and `pendingDeliveries`. It is **empty** when you supply your own executor (its metrics are yours to expose, not the framework's).
+
+`container.pendingAsyncDeliveries()` is that last number on its own, and it counts with every executor, a supplied one included: the async deliveries that are queued, running, or waiting out the backoff before a retry. It is what `close()` waits for (see [Graceful shutdown drain](#graceful-shutdown-drain)), and a backlog gauge that still reads when the executor is yours.
 
 Workloads with extreme throughput or latency requirements can supply their own executor instead:
 

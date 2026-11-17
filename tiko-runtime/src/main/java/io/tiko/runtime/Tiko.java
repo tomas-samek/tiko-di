@@ -662,6 +662,11 @@ public final class Tiko {
         }
 
         @Override
+        public int pendingAsyncDeliveries() {
+            return delegate.pendingAsyncDeliveries();
+        }
+
+        @Override
         public io.tiko.ErrorHandler getErrorHandler() {
             return delegate.getErrorHandler();
         }

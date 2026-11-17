@@ -220,6 +220,22 @@ public interface Container extends AutoCloseable {
     }
 
     /**
+     * The number of async event deliveries this container has taken on and not finished:
+     * queued, running, or waiting out the backoff before a retry (#761). It counts with every
+     * executor, the framework's and one supplied via {@code TikoOptions.eventExecutor(...)},
+     * and is what {@link #shutdown()} waits for.
+     *
+     * <p>A sample of a live system: use it to wait for async work to settle or to watch a
+     * backlog, not as an exact ledger. The default implementation returns {@code 0}, so
+     * user-supplied {@code Container} implementations remain source-compatible.
+     *
+     * @return how many async deliveries are pending
+     */
+    default int pendingAsyncDeliveries() {
+        return 0;
+    }
+
+    /**
      * Returns the error handler configured for this container.
      *
      * <p>Transports (e.g., Kafka) use this to route errors through the same handler

@@ -85,8 +85,8 @@ final class BootedContainer implements ExtensionContext.Store.CloseableResource 
         Container container = null;
         try {
             container = Tiko.create(options);
-            // Wire the executor in so RecordingEventBus.awaitAsyncDispatch(Duration) works.
-            ((RecordingEventBus) container.getEventBus()).setEventExecutor(container.getEventExecutor());
+            // Wire the container in so RecordingEventBus.awaitAsyncDispatch(Duration) works.
+            ((RecordingEventBus) container.getEventBus()).setContainer(container);
         } catch (Throwable bootFailure) {
             releaseAfterFailedBoot(container, executor, bootFailure);
             leakError(owner, reported, executor).ifPresent(bootFailure::addSuppressed);

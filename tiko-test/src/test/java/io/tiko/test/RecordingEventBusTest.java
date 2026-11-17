@@ -3,6 +3,7 @@ package io.tiko.test;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.tiko.Container;
 import io.tiko.EventBus;
 import io.tiko.EventCallback;
 import io.tiko.Subscription;
@@ -16,6 +17,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 class RecordingEventBusTest {
@@ -140,6 +142,35 @@ class RecordingEventBusTest {
         assertThatThrownBy(() -> rec.awaitAsyncDispatch(Duration.ofMillis(10)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("setEventExecutor");
+    }
+
+    /** A container that reports {@code pending} deliveries and holds {@code executor}; nothing else is asked of it. */
+    private static Container containerReporting(AtomicInteger pending, ExecutorService executor) {
+        return (Container) java.lang.reflect.Proxy.newProxyInstance(
+                Container.class.getClassLoader(),
+                new Class<?>[] {Container.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "pendingAsyncDeliveries" -> pending.get();
+                    case "getEventExecutor" -> executor;
+                    default -> throw new UnsupportedOperationException(method.getName());
+                });
+    }
+
+    /** #761: with a container wired, the wait is for what the container reports, not for the executor. */
+    @Test
+    void awaitAsyncDispatchWaitsForWhatTheContainerReportsPending() throws Exception {
+        var rec = newRec();
+        var pending = new AtomicInteger(1);
+        try (ExecutorService idle = Executors.newSingleThreadExecutor()) {
+            rec.setContainer(containerReporting(pending, idle));
+
+            assertThatThrownBy(() -> rec.awaitAsyncDispatch(Duration.ofMillis(100)))
+                    .isInstanceOf(TimeoutException.class)
+                    .hasMessageContaining("pendingDeliveries=1");
+
+            pending.set(0);
+            rec.awaitAsyncDispatch(Duration.ofSeconds(2));
+        }
     }
 
     @Test
