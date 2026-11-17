@@ -312,7 +312,9 @@ production code path branching on whether tests are running.
 **Statement.** An async `@EventHandler` runs in its own fresh EVENT unit, created by saving,
 clearing, and restoring the publisher's frame around the dispatch — detachment, not nesting.
 The public scope API (`runInEventScope` / `supplyInEventScope`) keeps throwing on re-entry, so
-the single-frame rule of ARCH-5 is unaffected.
+the single-frame rule of ARCH-5 is unaffected. An async handler of a framework lifecycle event
+(`io.tiko.events.*`) gets no unit: it runs on the executor without one, because it observes
+units, and a unit opened for it would publish the event it handles.
 
 **Rationale.** Codifies the model shipped by #220. An async handler must not observe or mutate
 the publisher's EVENT-scoped beans: the detached unit publishes its own lifecycle events and
@@ -361,6 +363,12 @@ Module containers follow it too (#537): each module's `container.properties`,
 `components.txt` and `configs.txt` also live under `META-INF/tiko/modules/<container>/`, and a
 generated `io.tiko.TikoModule` listed in `META-INF/services` points at them. The fixed-name
 copies remain only so modules built by an older processor keep booting.
+
+`META-INF/tiko/defaults.yaml` is a fixed-name resource that several jars may ship; `tiko-kafka`
+ships one. It is within the rule because nothing relies on finding every copy: the runtime
+layers the copies the classpath holds under the user's configuration, and a module's binder
+binds without its own copy: every `KafkaConfig` field carries its default itself for that
+reason (#531).
 
 **Violation looks like.** A new module-shipped `META-INF/tiko/` resource that the runtime reads
 from every jar to find each module's contribution; or a library module shipping a

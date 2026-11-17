@@ -13,9 +13,9 @@ Transcribed from source. Import from this table — never from memory.
 | `@Component` `@Inject` `@Named` `@Pick` `@Produces` `@PostConstruct` `@PreDestroy` `@EventHandler` `@EventTrigger` `@EventTriggers` `@Configuration` `@Default` `@Key` `BackoffStrategy` | `io.tiko.annotations` |
 | `@KafkaSource` `@KafkaSink` | `io.tiko.kafka.annotations` — **NOT** `io.tiko.annotations` |
 | `Container` `EventBus` `EventCallback` `Subscription` `Scope` `Provider` `TransportBootstrap` `ErrorHandler` `ConfigSource` `EventSerializer` `UndecodablePayloadException` | `io.tiko` |
-| `Tiko` `TikoOptions` `TikoDaemon` | `io.tiko.runtime` |
+| `Tiko` `TikoOptions` `TikoDaemon` `DefaultErrorHandler` | `io.tiko.runtime` |
 | `ConfigSources` | `io.tiko.config` |
-| `KafkaTransport` `KafkaSerializer` `KafkaConfig` `KafkaIngestError` `KafkaIngestErrorDecider` `IngestDecision` `KafkaRecordDeadLettered` | `io.tiko.kafka` |
+| `KafkaTransport` `KafkaSerializer` `KafkaConfig` `KafkaIngestError` `KafkaIngestErrorDecider` `IngestDecision` `KafkaRecordDeadLettered` `KafkaContext` | `io.tiko.kafka` |
 | `JsonKafkaSerializer` | `io.tiko.kafka.serializer` |
 | `FakeKafkaBroker` `FakeKafkaTransport` | `io.tiko.kafka.test` |
 

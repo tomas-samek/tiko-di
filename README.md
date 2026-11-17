@@ -280,7 +280,7 @@ The honest reading: the dominant axis is **lazy vs eager init**, not "compile-ti
 | `tiko-archetype`        | Maven archetype that scaffolds a runnable single-module Tiko project in seconds.                                                                   |
 | `tiko-bom`              | Bill-of-materials for version-aligned dependency management.                                                                                       |
 
-Event abstractions (`EventBus`, `EventCallback`, `Subscription`, `@EventHandler`, `@EventTrigger`, `Event<T>`) live in `tiko-api`; the in-memory implementation lives in `tiko-runtime`. Kafka ships as a separate, opt-in module pair (`tiko-kafka` + `tiko-kafka-processor`); further transports (RabbitMQ, JMS) are planned under Phase 8.
+Event abstractions (`EventBus`, `EventCallback`, `Subscription`, `@EventHandler`, `@EventTrigger`, `Event<T>`) live in `tiko-api`; the in-memory implementation lives in `tiko-runtime`. Kafka ships as a separate, opt-in module pair (`tiko-kafka` + `tiko-kafka-processor`); further transports (RabbitMQ, JMS) are unscheduled — see the [roadmap](./docs/roadmap.md#planned).
 
 ## Logging
 
@@ -324,13 +324,15 @@ policy — a different layer than framework logging.
 
 - **Phase 1 — Alpha completion.** ✅ Closed. Core DI, scopes, lifecycle events, `@EventTrigger` chains, multi-module aggregation.
 - **Phase 2 — Configuration & distributed events.** ✅ Closed. `@Configuration` v1 + nested records + `Set<X>` + YAML source anchors, Kafka transport, `ErrorContext` hook, async event executor + shutdown timeout, `System.Logger` migration.
-- **Phase 3 — Onboarding & tooling.** ✅ Closed (30/30 issues, a week ahead of due date). AI-assistant-aware archetype, `tiko-test` JUnit 5 module, machine-readable topology + nine-tool MCP server, plus the QA pass #1 follow-ups: examples README cleanup, slf4j routing fix, `@PreDestroy` LIFO contract honoured across `@Component` and `@Produces`, project-wide `maven-failsafe-plugin` wiring, dotted-prefix `@Configuration` now binds naturally-nested YAML. QA discipline codified in [qa-playbook.md](./docs/qa-playbook.md) + [issue-fix-playbook.md](./docs/issue-fix-playbook.md).
-- **Phase 4 — Runtime hardening (in progress).** Structured `RuntimeException` subtypes, checked-exception propagation through `@Produces` / `@PostConstruct` (✅), framework-managed JVM shutdown hook, JaCoCo coverage + SonarCloud static analysis. AOP / metrics / GraalVM dropped from scope until a concrete driver appears.
-- **Phase 5 — Publish to Maven Central.** POM metadata, GPG signing, sources/javadoc jars, `central-publishing-maven-plugin` + CI deploy, and the `@Named` vs `@Pick` API decision. Pulled early so a lean, validated core ships before the heavier feature work.
-- **Phase 6 — MCP enrichment.** `get_generated_artifact`, a lifecycle-hook query tool, and richer proxy topology — deeper introspection of the compile-time graph.
-- **Phase 7 — Resiliency layer.** Timeouts, retries, bounded-queue backpressure, executor pool knobs, DLQ for failed/timed-out events.
-- **Phase 8 — Distributed transports.** RabbitMQ + JMS adapters, `TransportBootstrap` SPI audit, pluggable serializer SPI.
-- **Phase 9 — Examples & docs polish.** Advanced-feature examples still to be written (`@EventTriggers`, scoped suppliers, origin chain, `TikoOptions`) plus public-docs tightening.
+- **Phase 3 — Onboarding & tooling.** ✅ Closed (30/30 issues, a week ahead of due date). AI-assistant-aware archetype, `tiko-test` JUnit 5 module, machine-readable topology + MCP server (13 tools today), plus the QA pass #1 follow-ups: examples README cleanup, slf4j routing fix, `@PreDestroy` LIFO contract honoured across `@Component` and `@Produces`, project-wide `maven-failsafe-plugin` wiring, dotted-prefix `@Configuration` now binds naturally-nested YAML. QA discipline codified in [qa-playbook.md](./docs/qa-playbook.md) + [issue-fix-playbook.md](./docs/issue-fix-playbook.md).
+- **Phase 4 — Runtime hardening.** ✅ Closed, shipped in 0.1.0. Typed `RuntimeException` subtypes, checked-exception propagation through `@Produces` / `@PostConstruct`, framework-managed JVM shutdown hook, JaCoCo coverage + SonarCloud static analysis.
+- **Phase 5 — Publish to Maven Central.** ✅ Closed. On Maven Central since 0.1.0 (2026-06-04) as `io.github.tomas-samek:tiko-*`: POM metadata, GPG signing, sources/javadoc jars, CI release deploy.
+- **Phase 6 — MCP enrichment.** ✅ Closed, shipped in 0.2.0. `get_generated_artifact`, `list_lifecycle_hooks`, `explain_proxy`, `topology_overview`.
+- **Phase 7 — Resiliency layer.** ✅ Closed, shipped in 0.3.0. Handler timeouts, retries with backoff, bounded-queue backpressure (`OverflowPolicy`), executor pool settings, dead-letter routing.
+- **Phase 8 — Distributed transports.** ✅ Closed. The pluggable serializer SPI (`EventSerializer`) shipped in 0.4.0; RabbitMQ and JMS adapters are unscheduled.
+- **Phase 9 — Examples & docs polish.** ✅ Closed. Profiles demo, strict-mode config demo, advanced-feature examples (`@EventTriggers`, scoped suppliers, origin chain, `TikoOptions`).
+- **Since then.** 0.4.0 (Kafka test seam), 0.5.0 (async handlers own their unit of work), 0.6.0 (hardening), 0.7.0 (Kotlin on Gradle and KSP2).
+- **Planned.** 0.8.0 together with Kotlin K2 — coroutines.
 
 Full detail in [docs/roadmap.md](./docs/roadmap.md).
 

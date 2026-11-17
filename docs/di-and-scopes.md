@@ -97,12 +97,20 @@ Resources bind to the current unit only; sharing one across units is a non-goal.
 A batch that needs one transaction across its items is one unit of work, not many:
 
 ```java
-public interface TransactionContext { String getTransactionId(); }
+public interface TransactionContext {
+    String getTransactionId();
+    void begin();
+    void commit();
+    void rollback();
+}
 
 @Component(scope = Scope.EVENT)
 public class TransactionContextImpl implements TransactionContext {
     private final String txId = UUID.randomUUID().toString();
     public String getTransactionId() { return txId; }
+    public void begin() { /* open the transaction */ }
+    public void commit() { /* commit it */ }
+    public void rollback() { /* roll it back */ }
 }
 
 container.runInEventScope(() -> {
@@ -203,7 +211,7 @@ public class DatabaseConnection {
     private Connection connection;
 
     @PostConstruct
-    public void connect() {
+    public void connect() throws SQLException {
         this.connection = DriverManager.getConnection("jdbc:...");
     }
 

@@ -1,8 +1,8 @@
 # Roadmap & status
 
-**Current status: Alpha — Phase 1, Phase 2, and Phase 3 closed.** Core DI, configuration injection (records, nested types, `Set<X>`, YAML source anchors, naturally-nested dotted-prefix YAML), lifecycle events, `@EventTrigger` chains, the in-memory event bus with handler-isolation + bounded async executor, the universal Kafka transport, and the full AI-assistant-aware tooling stack (`tiko-test` JUnit 5 extension, archetype with AGENTS / Copilot / Junie pointer files, machine-readable topology + nine-tool MCP server) are all functional end-to-end. The annotation processor generates factories, a container implementation per module, and proxies for cross-scope injection. `@PreDestroy` honours LIFO across `@Component` and `@Produces` factory beans. Each shipped capability below is covered by tests in `tiko-examples/` plus the framework's own modules, with project-wide `maven-failsafe-plugin` wiring so `*IT` integration tests actually run on `mvn verify`.
+**Current status: on Maven Central, latest release 0.7.0. The nine phases of the original plan are closed.** Core DI, configuration injection (records, nested types, `Set<X>`, YAML source anchors, naturally-nested dotted-prefix YAML), lifecycle events, `@EventTrigger` chains, the in-memory event bus with handler-isolation + bounded async executor, the universal Kafka transport, and the full AI-assistant-aware tooling stack (`tiko-test` JUnit 5 extension, archetype with AGENTS / Copilot / Junie pointer files, machine-readable topology + 13-tool MCP server) are all functional end-to-end. The annotation processor generates factories, a container implementation per module, and proxies for cross-scope injection. `@PreDestroy` honours LIFO across `@Component` and `@Produces` factory beans. Each shipped capability below is covered by tests in `tiko-examples/` plus the framework's own modules, with project-wide `maven-failsafe-plugin` wiring so `*IT` integration tests actually run on `mvn verify`.
 
-The framework is suitable for early-adopter experimentation. **Production use should wait for Phase 4 (runtime hardening) and Phase 7 (resiliency)** — see below.
+The framework is suitable for early-adopter experimentation. Runtime hardening (Phase 4) and the resiliency layer (Phase 7), which this page used to ask production users to wait for, shipped in 0.1.0 and 0.3.0 — see below.
 
 ## What ships today
 
@@ -35,7 +35,7 @@ The framework is suitable for early-adopter experimentation. **Production use sh
 - ✅ `TikoOptions.shutdownTimeout(Duration)` + `tiko.shutdownTimeout` YAML key — graceful drain window for the framework-owned event executor; default 10s, `Duration.ZERO` skips the wait. Precedence: programmatic > YAML > default. `09_http_javalin` example sources the value from `config.yaml` end-to-end: stopping the HTTP server does not interrupt in-flight async event handlers; they finish within the configured budget before `container.close()` returns. (Closes #48.)
 - ✅ Internal logging via `java.lang.System.Logger` — framework, codegen, and example handlers now use the JDK-standard `System.Logger` SPI. Default routing stays JUL (zero-config "just works"); users plug in slf4j or log4j2 by adding the appropriate `LoggerFinder` bridge to their classpath. New `tiko-examples/11_custom_logger` demonstrates the slf4j recipe end-to-end. (Closes #74.)
 
-## Planned
+## Phases of the original plan
 
 ### Phase 1 — Alpha completion
 
@@ -81,90 +81,87 @@ QA pass #1 + post-batch follow-ups (24 additional issues, all closed):
 - ✅ **`@Configuration(prefix = "tiko.kafka")` binds naturally-nested user YAML** — `tiko: kafka:` form now works (previously required the literal `"tiko.kafka":` flat-dotted key — a UX bug ConfigBootstrap's literal-key match had been hiding). `tiko-kafka`'s `defaults.yaml` reshaped to nested form so layered deep-merge unifies with user overrides ([#149](https://github.com/tomas-samek/tiko-di/issues/149) investigation).
 - ✅ **QA discipline codified** — [qa-playbook.md](./qa-playbook.md) and [issue-fix-playbook.md](./issue-fix-playbook.md) linked from CLAUDE.md + README.md. The no-speculation-in-issue-bodies rule is baked in: bug reports state symptoms + acceptance only, no "probable cause" or "suggested fix" sections — the implementer analyses the evidence with a clean head.
 
-### Phase 4 — runtime hardening (in progress)
+### Phase 4 — runtime hardening
 
-[Phase 4 milestone](https://github.com/tomas-samek/tiko-di/milestone/4) — 2/19 closed, due 2026-06-14.
+✅ **Closed 2026-05-28, shipped in 0.1.0.** [Phase 4 milestone](https://github.com/tomas-samek/tiko-di/milestone/4) — 24/24 issues done.
 
-Tighten Tiko's behaviour under production conditions: structured error types (no more string-matching on `IllegalStateException` messages), checked-exception propagation that preserves the user's stack trace, framework-managed lifecycle plumbing so adopters don't reinvent JVM shutdown ordering, plus the build-quality infrastructure (coverage + static analysis) that supports the rest of the phase. QA pass #1 added a substantial test-coverage + error-UX cluster — Tiko's compile-time-safety pitch had several validation checks with zero regression nets, and one was hiding a real bug. The previous AOP / metrics / GraalVM theme was speculative and has been dropped — those will get their own milestones if and when they become concrete.
+Tiko's behaviour under production conditions: structured error types (no string-matching on `IllegalStateException` messages), checked-exception propagation that preserves the user's stack trace, framework-managed lifecycle plumbing so adopters don't reinvent JVM shutdown ordering, plus the build-quality infrastructure (coverage + static analysis). QA pass #1 added a test-coverage and error-UX cluster. The earlier AOP / metrics / GraalVM theme was dropped from the phase.
 
-Shipped:
-
-- ✅ `@Produces` and `@PostConstruct` may declare checked exceptions — propagated via sneaky-throw with stack trace preserved at `container.get(...)` ([#97](https://github.com/tomas-samek/tiko-di/issues/97)).
-- ✅ `computeIfAbsent` for REQUEST / EVENT scoped getters, consistent with SINGLETON ([#100](https://github.com/tomas-samek/tiko-di/issues/100)).
-
-Open — original runtime-hardening scope:
-
-- Typed `RuntimeException` subtypes for framework-originated failures ([#98](https://github.com/tomas-samek/tiko-di/issues/98)).
-- Framework-managed JVM shutdown hook — let users subscribe to `ApplicationEndingEvent` instead of wiring their own hook ([#92](https://github.com/tomas-samek/tiko-di/issues/92)).
-- JaCoCo coverage: per-module reports + multi-module aggregation, generated sources excluded ([#124](https://github.com/tomas-samek/tiko-di/issues/124)).
-- SonarCloud integration: static analysis, coverage view (consumes #124), PR decoration; quality gate = "Sonar Way" ([#125](https://github.com/tomas-samek/tiko-di/issues/125)).
-- Flaky 1ms absolute-time assertion in `PostShutdownGetTest` ([#85](https://github.com/tomas-samek/tiko-di/issues/85)).
-
-Open — processor correctness (QA pass #1 follow-ups):
-
-- Missing-interface check for cross-scope proxy injection doesn't fire ([#164](https://github.com/tomas-samek/tiko-di/issues/164)) — real bug that QA's coverage probe surfaced.
-- `@Produces` signature validation missing — bad return type cascades into a stream of generated-code javac errors ([#165](https://github.com/tomas-samek/tiko-di/issues/165)).
-- Processor error messages don't follow CLAUDE.md's "show + explain + suggest" format ([#166](https://github.com/tomas-samek/tiko-di/issues/166)).
-
-Open — test-coverage gaps (QA pass #1 audit):
-
-- `CircularDependencyDetector` coverage (currently zero) ([#158](https://github.com/tomas-samek/tiko-di/issues/158)).
-- Negative tests for missing-interface proxy injection ([#159](https://github.com/tomas-samek/tiko-di/issues/159)).
-- `@Inject` site validation tests ([#160](https://github.com/tomas-samek/tiko-di/issues/160)).
-- Complete cross-scope matrix coverage with focused per-cell tests ([#161](https://github.com/tomas-samek/tiko-di/issues/161)).
-- `@EventTrigger` fires only on successful return — handler-throws suppression ([#162](https://github.com/tomas-samek/tiko-di/issues/162)).
-- `@EventTrigger` edge cases — `spread` on empty/null/Map, guard AND order, `findInChain` not-found ([#163](https://github.com/tomas-samek/tiko-di/issues/163)).
-- Lifecycle event ordering contracts (vs `@PostConstruct`, user `@EventHandler`, async drain) ([#167](https://github.com/tomas-samek/tiko-di/issues/167)).
-- `@Key` annotation coverage — zero tests on a shipped, production-used annotation ([#168](https://github.com/tomas-samek/tiko-di/issues/168)).
-- Config error-UX edge cases — malformed YAML, nested interpolation, invalid `@Default` ([#169](https://github.com/tomas-samek/tiko-di/issues/169)).
+- ✅ Runtime: `@Produces` and `@PostConstruct` may declare checked exceptions ([#97](https://github.com/tomas-samek/tiko-di/issues/97)); typed `RuntimeException` subtypes for framework-originated failures ([#98](https://github.com/tomas-samek/tiko-di/issues/98)); framework-managed JVM shutdown hook ([#92](https://github.com/tomas-samek/tiko-di/issues/92)); `computeIfAbsent` for scoped getters ([#100](https://github.com/tomas-samek/tiko-di/issues/100)); one log line per failed `@PreDestroy` / `close()` ([#116](https://github.com/tomas-samek/tiko-di/issues/116)).
+- ✅ Processor correctness: the missing-interface check for cross-scope proxy injection ([#164](https://github.com/tomas-samek/tiko-di/issues/164)), `@Produces` signature validation ([#165](https://github.com/tomas-samek/tiko-di/issues/165)), error messages in the "show + explain + suggest" format ([#166](https://github.com/tomas-samek/tiko-di/issues/166)).
+- ✅ Test coverage from the QA pass #1 audit: `CircularDependencyDetector` ([#158](https://github.com/tomas-samek/tiko-di/issues/158)), missing-interface proxy injection ([#159](https://github.com/tomas-samek/tiko-di/issues/159)), `@Inject` sites ([#160](https://github.com/tomas-samek/tiko-di/issues/160)), the cross-scope matrix ([#161](https://github.com/tomas-samek/tiko-di/issues/161)), `@EventTrigger` on handler failure and its edge cases ([#162](https://github.com/tomas-samek/tiko-di/issues/162), [#163](https://github.com/tomas-samek/tiko-di/issues/163)), lifecycle event ordering ([#167](https://github.com/tomas-samek/tiko-di/issues/167)), `@Key` ([#168](https://github.com/tomas-samek/tiko-di/issues/168)), config error UX ([#169](https://github.com/tomas-samek/tiko-di/issues/169)).
+- ✅ Build quality: JaCoCo coverage with multi-module aggregation ([#124](https://github.com/tomas-samek/tiko-di/issues/124)), SonarCloud analysis with PR decoration ([#125](https://github.com/tomas-samek/tiko-di/issues/125)).
 
 ### Phase 5 — publish to Maven Central
 
-[Phase 5 milestone](https://github.com/tomas-samek/tiko-di/milestone/5) — due 2026-06-28. Pulled ahead of resiliency and transports: ship a lean, validated core early so adopters get a real artifact (and feedback) sooner, instead of anchoring the first release to the riskiest, least-essential area. Gated only by Phase 4 hardening plus the `@Named` vs `@Pick` API decision — nothing in Phase 7/8 blocks it.
+✅ **Closed 2026-06-05.** [Phase 5 milestone](https://github.com/tomas-samek/tiko-di/milestone/5) — 9/9 issues done. 0.1.0 went to Maven Central on 2026-06-04 as `io.github.tomas-samek:tiko-*`, and every release since is published there.
 
-- Sonatype Central Portal namespace verification for `io.tiko` (one-time account setup).
-- Complete POM metadata required by Central — name, description, url, license, SCM, developers ([#210](https://github.com/tomas-samek/tiko-di/issues/210)).
-- `-sources` + `-javadoc` jars for the published modules ([#211](https://github.com/tomas-samek/tiko-di/issues/211)).
-- GPG signing of all published artifacts ([#212](https://github.com/tomas-samek/tiko-di/issues/212)).
-- `central-publishing-maven-plugin` + GitHub Actions release deploy ([#213](https://github.com/tomas-samek/tiko-di/issues/213)).
-- `@Named` example, or deprecate it from public docs — decision required before the API surface freezes ([#170](https://github.com/tomas-samek/tiko-di/issues/170)).
+- ✅ POM metadata required by Central ([#210](https://github.com/tomas-samek/tiko-di/issues/210)), `-sources` + `-javadoc` jars ([#211](https://github.com/tomas-samek/tiko-di/issues/211)), GPG signing ([#212](https://github.com/tomas-samek/tiko-di/issues/212)), `central-publishing-maven-plugin` + GitHub Actions release deploy ([#213](https://github.com/tomas-samek/tiko-di/issues/213)).
+- ✅ The Maven groupId is `io.github.tomas-samek`, the namespace verified through GitHub ([#257](https://github.com/tomas-samek/tiko-di/issues/257)); Java packages stay `io.tiko.*`.
+- ✅ `@Named` stays in the public API, documented next to `@Pick` ([#170](https://github.com/tomas-samek/tiko-di/issues/170)); the scope model unified to SINGLETON / EVENT / PROTOTYPE before the API surface was published ([#226](https://github.com/tomas-samek/tiko-di/issues/226)).
 
 ### Phase 6 — MCP enrichment
 
-[Phase 6 milestone](https://github.com/tomas-samek/tiko-di/milestone/10) — 0/3 closed. Deepen the "DI by AI for AI" tooling so the compile-time graph is fully introspectable from the MCP server.
+✅ **Closed, shipped in 0.2.0.** [Phase 6 milestone](https://github.com/tomas-samek/tiko-di/milestone/10) — 5/5 issues done. The MCP server registers 13 tools.
 
-- `get_generated_artifact` tool for generated-source pointers ([#148](https://github.com/tomas-samek/tiko-di/issues/148)).
-- Lifecycle-hook query tool ([#147](https://github.com/tomas-samek/tiko-di/issues/147)).
-- Enrich proxy entries with interface methods + scope-boundary reason ([#146](https://github.com/tomas-samek/tiko-di/issues/146)).
+- ✅ `get_generated_artifact` for generated-source pointers ([#148](https://github.com/tomas-samek/tiko-di/issues/148)).
+- ✅ `list_lifecycle_hooks`, the lifecycle-hook query tool ([#147](https://github.com/tomas-samek/tiko-di/issues/147)).
+- ✅ `explain_proxy`: proxy interface, proxied methods and the scope-boundary reason, also written to `topology.json` ([#146](https://github.com/tomas-samek/tiko-di/issues/146)).
+- ✅ `topology_overview` orientation tool ([#280](https://github.com/tomas-samek/tiko-di/issues/280)); `list_components` / `list_events` require filters ([#278](https://github.com/tomas-samek/tiko-di/issues/278)).
 
 ### Phase 7 — resiliency layer
 
-[Phase 7 milestone](https://github.com/tomas-samek/tiko-di/milestone/7) — 0/7 closed. First-party resiliency for the framework-owned async event bus and lifecycle hooks. Supersedes the prior plan to cover resilience via a cookbook; the surface is small enough and load-bearing enough that Tiko ships it directly.
+✅ **Closed, shipped in 0.3.0** (per-component shutdown timeouts already in 0.1.0). [Phase 7 milestone](https://github.com/tomas-samek/tiko-di/milestone/7) — 8/8 issues closed. First-party resiliency for the framework-owned async event bus and lifecycle hooks; every knob is opt-in.
 
-- Per-component shutdown timeouts on `@PreDestroy` + `AutoCloseable.close()` ([#106](https://github.com/tomas-samek/tiko-di/issues/106)).
-- Event handler execution timeouts ([#107](https://github.com/tomas-samek/tiko-di/issues/107)).
-- Event handler retries with backoff ([#108](https://github.com/tomas-samek/tiko-di/issues/108)).
-- Async event bus backpressure — bounded queue + overflow policy ([#109](https://github.com/tomas-samek/tiko-di/issues/109)).
-- Executor pool management knobs + observability hook ([#110](https://github.com/tomas-samek/tiko-di/issues/110)).
-- Dead-letter handling for failed / timed-out events ([#111](https://github.com/tomas-samek/tiko-di/issues/111)).
-- Framework double-logs `@PreDestroy` and `AutoCloseable.close()` failures ([#116](https://github.com/tomas-samek/tiko-di/issues/116) — bug, gates the timeout work).
+- ✅ Per-component shutdown timeouts on `@PreDestroy` + `AutoCloseable.close()` ([#106](https://github.com/tomas-samek/tiko-di/issues/106)).
+- ✅ Event handler execution timeouts ([#107](https://github.com/tomas-samek/tiko-di/issues/107)).
+- ✅ Event handler retries with backoff ([#108](https://github.com/tomas-samek/tiko-di/issues/108)).
+- ✅ Async event bus backpressure — bounded queue + `OverflowPolicy` ([#109](https://github.com/tomas-samek/tiko-di/issues/109)).
+- ✅ Executor pool settings + `eventExecutorMetrics()` ([#110](https://github.com/tomas-samek/tiko-di/issues/110)).
+- ✅ Dead-letter routing for failed / timed-out events ([#111](https://github.com/tomas-samek/tiko-di/issues/111)).
+- ✅ Async events accepted during shutdown are reported instead of vanishing ([#346](https://github.com/tomas-samek/tiko-di/issues/346)).
+- Closed without implementation: keeping a scope alive across an async continuation ([#221](https://github.com/tomas-samek/tiko-di/issues/221)). An async handler owns its unit of work instead (0.5.0).
 
 ### Phase 8 — distributed transports
 
-[Phase 8 milestone](https://github.com/tomas-samek/tiko-di/milestone/8) — 0/4 closed. Second (and beyond) first-party transport implementations behind the `TransportBootstrap` SPI. Composes with the Phase 7 resiliency knobs.
+✅ **Closed.** [Phase 8 milestone](https://github.com/tomas-samek/tiko-di/milestone/8) — 3/3 issues done.
+
+- ✅ Pluggable serializer SPI, `io.tiko.EventSerializer` ([#119](https://github.com/tomas-samek/tiko-di/issues/119)) — shipped in 0.4.0.
+- ✅ Kafka ingest opens an EVENT unit per consumed message ([#347](https://github.com/tomas-samek/tiko-di/issues/347)) — shipped in 0.3.0.
+- ✅ `tiko-kafka` and `tiko-kafka-processor` in `tiko-bom` ([#298](https://github.com/tomas-samek/tiko-di/issues/298)) — shipped in 0.2.2.
+
+The further transports first listed under this phase were taken out of it and are unscheduled: see [Planned](#planned).
+
+### Phase 9 — examples & docs polish
+
+✅ **Closed 2026-08-15.** [Phase 9 milestone](https://github.com/tomas-samek/tiko-di/milestone/9) — 5/5 issues done.
+
+- ✅ `@Component(profiles=...)` demo, `tiko-examples/14_profiles` ([#171](https://github.com/tomas-samek/tiko-di/issues/171)).
+- ✅ Strict-mode config-fail-at-boot demo ([#172](https://github.com/tomas-samek/tiko-di/issues/172)).
+- ✅ Advanced-feature examples — `@EventTriggers`, `supplyInEventScope`, origin chain, `TikoOptions`, MCP walkthrough ([#173](https://github.com/tomas-samek/tiko-di/issues/173)).
+- ✅ The `01_basic_di` and `03_events` examples run again ([#456](https://github.com/tomas-samek/tiko-di/issues/456)); the Kafka end-to-end test is stable with Docker present ([#372](https://github.com/tomas-samek/tiko-di/issues/372)).
+
+## Releases after the phase plan
+
+After 0.3.0 the work is planned per release. Each release's notes are on the [releases page](https://github.com/tomas-samek/tiko-di/releases).
+
+| Release | Date | Headline | Milestones |
+| ------- | ---- | -------- | ---------- |
+| 0.4.0 | 2026-07-09 | The test-seam release: fake-broker Kafka testing (`replaceTransport`, `FakeKafkaTransport`), the serializer SPI, the measured agent-DX overhaul | [Skill & docs accuracy](https://github.com/tomas-samek/tiko-di/milestone/14) |
+| 0.5.0 | 2026-08-15 | Async handlers own their unit of work; Kafka ingest error decisions | [0.5.0](https://github.com/tomas-samek/tiko-di/milestone/15) |
+| 0.6.0 | 2026-10-11 | The hardening release: security hardening and the config pipeline | [0.6.0](https://github.com/tomas-samek/tiko-di/milestone/16) |
+| 0.7.0 | 2026-11-16 | Kotlin on Gradle and KSP2, `tiko-test` on KSP, and the whole-repository review | [0.7.0](https://github.com/tomas-samek/tiko-di/milestone/17), [Kotlin K1](https://github.com/tomas-samek/tiko-di/milestone/18), [Kotlin K1.5](https://github.com/tomas-samek/tiko-di/milestone/19) |
+
+## Planned
+
+- **0.8.0** — [milestone](https://github.com/tomas-samek/tiko-di/milestone/21), due 2026-12-30. Ships together with Kotlin K2.
+- **Kotlin K2 — coroutines** — [milestone](https://github.com/tomas-samek/tiko-di/milestone/20), due 2026-12-30. Units of work carried in the coroutine context, suspend event handlers, a Ktor cookbook + example, suspend Kafka bridges.
+
+### Further transports (unscheduled)
 
 - RabbitMQ transport adapter — `tiko-rabbitmq` + `tiko-rabbitmq-processor` ([#117](https://github.com/tomas-samek/tiko-di/issues/117)).
 - JMS transport adapter — covers ActiveMQ Artemis, IBM MQ, others ([#120](https://github.com/tomas-samek/tiko-di/issues/120)).
 - `TransportBootstrap` SPI audit — surface and fix Kafka-shaped assumptions exposed by a second implementor ([#118](https://github.com/tomas-samek/tiko-di/issues/118)).
-- Pluggable serializer SPI extracted from `tiko-kafka` ([#119](https://github.com/tomas-samek/tiko-di/issues/119)).
-
-### Phase 9 — examples & docs polish
-
-[Phase 9 milestone](https://github.com/tomas-samek/tiko-di/milestone/9) — 0/3 closed. Fill advanced-feature example gaps and tighten public docs once the surface has settled.
-
-- Tracker for advanced-feature gaps — `@EventTriggers`, `supplyIn*Scope`, origin chain, `TikoOptions`, MCP walkthrough ([#173](https://github.com/tomas-samek/tiko-di/issues/173)).
-- Strict-mode config-fail-at-boot demo ([#172](https://github.com/tomas-samek/tiko-di/issues/172)).
-- `@Component(profiles=...)` demo — profile-based selection is shipped but never demoed ([#171](https://github.com/tomas-samek/tiko-di/issues/171)).
 
 ### Kafka follow-ups (unscheduled)
 

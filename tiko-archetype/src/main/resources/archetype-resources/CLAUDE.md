@@ -57,7 +57,7 @@ the interface.
 | Annotation | Purpose |
 |---|---|
 | `@Configuration(prefix)` | YAML-backed config root record. |
-| `@Key("yaml.path")` | Override the YAML key name. |
+| `@Key("pool-size")` | Bind the record component to that one literal YAML key (not a dotted path) instead of its field name. |
 | `@Default("value")` | Default for optional config fields. |
 | `@TikoTest` | JUnit 5 extension; class-level. |
 | `@TestComponent(value, scope, name)` | Shadow a `@Component` in tests. |

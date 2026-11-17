@@ -155,7 +155,7 @@ TikoOptions opts = TikoOptions.builder()
         .build();
 ```
 
-The effective max size must be `>=` the effective core size, or container start fails with `IllegalArgumentException`.
+The effective max size must be `>=` the effective core size, or container start fails: `Tiko.create` throws `ContainerInitializationException`, and the `IllegalArgumentException` that names both sizes is at the end of its cause chain. A multi-module application gets that `IllegalArgumentException` itself.
 
 #### Observing the default executor
 
