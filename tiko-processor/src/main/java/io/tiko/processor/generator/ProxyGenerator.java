@@ -2,6 +2,7 @@ package io.tiko.processor.generator;
 
 import com.palantir.javapoet.*;
 import io.tiko.processor.core.GeneratorAnnotations;
+import io.tiko.processor.core.KotlinConstructRules;
 import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.MethodDecl;
 import io.tiko.processor.core.model.TypeRef;
@@ -198,7 +199,9 @@ public final class ProxyGenerator {
 
         List<String> paramNames = new ArrayList<>();
         method.parameters().forEach(param -> {
-            String paramName = param.name();
+            // A Kotlin parameter name can be a Java keyword or hold a space (#831).
+            String paramName =
+                    KotlinConstructRules.isJavaIdentifier(param.name()) ? param.name() : "__arg" + paramNames.size();
             paramNames.add(paramName);
             methodBuilder.addParameter(signatureType(param.type(), byErasure), paramName);
         });

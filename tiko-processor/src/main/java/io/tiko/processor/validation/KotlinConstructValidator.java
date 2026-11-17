@@ -70,6 +70,7 @@ public final class KotlinConstructValidator {
             for (var decl : env.classesAnnotatedWith(annotation)) {
                 KotlinConstructRules.objectComponent(decl)
                         .or(() -> KotlinConstructRules.valueClassComponent(decl))
+                        .or(() -> KotlinConstructRules.classNotNameableInJava(decl, "component"))
                         .ifPresent(violation -> reject(decl, annotation, violation));
             }
         }

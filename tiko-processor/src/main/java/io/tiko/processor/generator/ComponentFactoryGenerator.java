@@ -153,7 +153,9 @@ public final class ComponentFactoryGenerator {
                     .build());
         }
         for (DependencyModel dependency : component.getDependencies()) {
-            String paramName = dependency.getParameterName();
+            // Named by position, never after the parameter: its name may be one this method uses
+            // itself (container, instance), a Java keyword or no Java identifier at all (#831).
+            String paramName = "__arg" + parameterNames.size();
             parameterNames.add(paramName);
 
             if (dependency.isPicker()) {
