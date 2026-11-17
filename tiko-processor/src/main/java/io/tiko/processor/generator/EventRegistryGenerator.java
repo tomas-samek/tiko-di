@@ -171,7 +171,7 @@ public final class EventRegistryGenerator {
         // uses an explicit try/finally rather than EventChainContext.runWith so we don't
         // have to introduce a lambda — keeps the generated source readable.
         // Recursion guard (#220): handlers of framework lifecycle events must NOT open a unit —
-        // runInDetachedEventScope publishes EventStartedEvent, so wrapping an async
+        // The unit runInDetachedEventScope opens publishes EventStartedEvent, so wrapping an async
         // EventStartedEvent handler would recurse DIRECTLY (new unit -> new started event -> ...).
         // Indirect loops (an observer publishing a business event with an async handler) remain
         // the user's responsibility — documented in docs/events.md.

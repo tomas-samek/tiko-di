@@ -560,6 +560,31 @@ public final class AggregatingContainer implements Container {
     }
 
     /**
+     * Runs {@code task} in a unit of work of its own that is open in every module (#811): the unit
+     * an async event handler runs in, whichever module declares the handler. The lifecycle pair is
+     * published once, inside the innermost frame, as for a unit opened by {@link #runInEventScope}.
+     */
+    void runInDetachedUnit(Runnable task) {
+        runInDetachedFrames(moduleContainers, wrapWithUnitLifecycle(task));
+    }
+
+    /**
+     * Nests a detached frame of every one of {@code modules} around {@code task}. Each module
+     * suspends the frame the thread has open there and restores it afterwards (ARCH-15). A
+     * container generated before 0.8.0 has no detached frame to offer and is passed by: its
+     * EVENT-scoped components stay out of the unit.
+     */
+    static void runInDetachedFrames(java.util.List<Container> modules, Runnable task) {
+        runNested(modules.iterator(), task, (module, inner) -> {
+            if (module instanceof DetachedUnitFrame frame) {
+                frame.runInDetachedFrame(inner, false);
+            } else {
+                inner.run();
+            }
+        });
+    }
+
+    /**
      * Wraps the unit's task with exactly one {@link EventStartedEvent}/{@link EventEndingEvent}
      * pair (#339). Per-module containers are constructed with {@code publishLifecycleEvents=false}
      * so their scope brackets stay silent; the aggregator publishes once, inside the innermost

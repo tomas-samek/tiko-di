@@ -275,12 +275,13 @@ including when `CALLER_RUNS` runs it inline. Concretely:
   thread (`CALLER_RUNS`), the `timeout` budget cannot bound it — the time-box arms only
   after the inline run completes. The unit itself (fresh beans, teardown) still applies.
 
-Multi-module note: in aggregated (multi-module) containers, async units behave exactly as
-single-module ones — correct frames, per-module bean isolation, teardown, **and** one
-`EventStartedEvent`/`EventEndingEvent` pair per dispatch (per retry attempt) on the shared
-bus. The aggregator is not on the async dispatch path, so the per-module container publishes
-its detached unit's lifecycle itself, even though it stays silent for the *sync* units the
-aggregator brackets (resolved in [#433](https://github.com/tomas-samek/tiko-di/issues/433)).
+Multi-module note: in a multi-module application an async handler's unit is open in every
+module, whichever module declares the handler. The handler reaches the EVENT-scoped components
+of all of them, through a `Picker<T>` for one; each module tears down what it created when the
+handler completes; and one `EventStartedEvent`/`EventEndingEvent` pair is published per
+dispatch (per retry attempt) on the shared bus. A module compiled with Tiko before 0.8.0 takes
+part once it is recompiled: until then its async handlers open their unit in that module alone,
+and its EVENT-scoped components are out of reach of the other modules' async handlers.
 
 ## Graceful shutdown drain
 

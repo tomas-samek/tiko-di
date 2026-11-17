@@ -165,7 +165,7 @@ public final class AmbiguityValidator {
      * via {@code @Pick} or {@code @Named}. When every consumer qualifies its lookup,
      * the multiple unnamed providers are not actually ambiguous at any call site —
      * silent first-match-wins dispatch can never happen — and the validator should
-     * not fire.
+     * not fire. A {@code Picker<T>} is not such a consumer: it lists every provider (#812).
      */
     private boolean hasUnqualifiedConsumer(String typeKey) {
         for (ComponentModel component : context.getActiveComponents()) {
@@ -193,7 +193,7 @@ public final class AmbiguityValidator {
     }
 
     private boolean isUnqualified(DependencyModel dep) {
-        return !dep.isPicked() && dep.getQualifier().isEmpty();
+        return !dep.isPicker() && !dep.isPicked() && dep.getQualifier().isEmpty();
     }
 
     private void register(Map<String, List<ProviderInfo>> map, String key, ProviderInfo provider) {

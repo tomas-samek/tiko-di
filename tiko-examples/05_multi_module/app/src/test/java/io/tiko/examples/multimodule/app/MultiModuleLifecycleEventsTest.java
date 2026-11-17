@@ -114,10 +114,9 @@ class MultiModuleLifecycleEventsTest {
 
     @Test
     void asyncHandlerDispatchPublishesExactlyOneLifecyclePairAcrossModules() throws InterruptedException {
-        // #433: async @EventHandler dispatch under an aggregator opens its own EVENT unit on a
-        // per-module container built with publishLifecycleEvents=false. The aggregator is not on
-        // the async dispatch path (generated dispatch calls the module container directly), so the
-        // module container is the sole publisher of the detached unit's pair — exactly one
+        // #433: async @EventHandler dispatch under an aggregator opens its own EVENT unit. The
+        // per-module containers are built with publishLifecycleEvents=false, and the aggregator,
+        // which opens that unit in every module (#811), publishes its pair — exactly one
         // EventStarted/EventEnding pair, one eventId, must reach the shared bus.
         EventBus eventBus = newLocalEventBus();
         List<EventStartedEvent> started = new CopyOnWriteArrayList<>();

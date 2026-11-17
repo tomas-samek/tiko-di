@@ -17,6 +17,7 @@ import io.tiko.events.ApplicationEndingEvent;
 import io.tiko.events.ApplicationStartedEvent;
 import io.tiko.events.EventEndingEvent;
 import io.tiko.events.EventStartedEvent;
+import io.tiko.runtime.DetachedUnitFrame;
 import io.tiko.runtime.EventChainContext;
 import io.tiko.runtime.TikoOptions;
 import io.tiko.runtime.Unchecked;
@@ -55,7 +56,7 @@ import java.util.function.Supplier;
 import javax.annotation.processing.Generated;
 
 @Generated("io.tiko.processor.generator.ContainerGenerator")
-public final class TikoContainerImpl_4ae99f55 implements Container {
+public final class TikoContainerImpl_4ae99f55 implements Container, DetachedUnitFrame {
   private final Map<String, Object> singletons = new ConcurrentHashMap<>();
 
   private final Object singletonLock = new Object();
@@ -189,12 +190,17 @@ public final class TikoContainerImpl_4ae99f55 implements Container {
   }
 
   void runInDetachedEventScope(Runnable task) {
+    this.options.runInDetachedUnit(this, task);
+  }
+
+  @Override
+  public void runInDetachedFrame(Runnable task, boolean __publishLifecycle) {
     Map<String, Object> __savedScope = eventScoped.get();
     Boolean __savedFrameOpen = __unitFrameOpen.get();
     eventScoped.set(new LinkedHashMap<>());
     __unitFrameOpen.set(Boolean.FALSE);
     try {
-      __runInEventScope(task, true);
+      __runInEventScope(task, __publishLifecycle);
     } finally {
       eventScoped.set(__savedScope);
       __unitFrameOpen.set(__savedFrameOpen);

@@ -11,9 +11,9 @@ import io.tiko.annotations.EventHandler;
  *
  * <p>Async dispatch runs the handler in a detached EVENT scope on the shared executor. The
  * per-module container is constructed by the aggregator with {@code publishLifecycleEvents=false}
- * (so sync units, which the aggregator brackets, are not double-published) — yet the aggregator
- * is <em>not</em> on the async dispatch path, so the module container must be the sole publisher
- * of the detached unit's {@code EventStartedEvent}/{@code EventEndingEvent} pair.
+ * (so sync units, which the aggregator brackets, are not double-published). The detached unit is
+ * open in every module, and the aggregator publishes its one
+ * {@code EventStartedEvent}/{@code EventEndingEvent} pair (#811).
  */
 @Component(scope = Scope.SINGLETON)
 public class AsyncUserAuditor {

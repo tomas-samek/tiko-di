@@ -33,19 +33,24 @@ class DetachedEventScopeTest {
                 .orElseThrow(() -> new AssertionError("container not generated"));
         String content = new String(container.openInputStream().readAllBytes(), StandardCharsets.UTF_8);
 
-        // One chain: method present; detachment saves both ThreadLocals (the __savedScope
-        // prefix pins the SAVE, not an incidental getter), clears to a fresh map, delegates to
-        // the scope core with the publish flag forced true (#433 — a detached async unit is its
-        // own sole lifecycle publisher), restores in finally; and the signature stays
-        // package-private.
+        // The method async dispatch calls stays package-private and hands the unit to the
+        // options, which open it in every module of the application (#811).
         assertThat(content)
+                .contains("implements Container, DetachedUnitFrame")
                 .contains("void runInDetachedEventScope(Runnable task)")
+                .contains("this.options.runInDetachedUnit(this, task)")
+                .doesNotContain("public void runInDetachedEventScope");
+        // The container's own frame: detachment saves both ThreadLocals (the __savedScope
+        // prefix pins the SAVE, not an incidental getter), clears to a fresh map, delegates to
+        // the scope core with the publish flag its caller passes (#433 — one publisher of the
+        // unit's lifecycle pair), and restores in finally.
+        assertThat(content)
+                .contains("public void runInDetachedFrame(Runnable task, boolean __publishLifecycle)")
                 .contains("__savedScope = eventScoped.get()")
                 .contains("__savedFrameOpen = __unitFrameOpen.get()")
                 .contains("eventScoped.set(new LinkedHashMap<>())")
-                .contains("__runInEventScope(task, true)")
+                .contains("__runInEventScope(task, __publishLifecycle)")
                 .contains("eventScoped.set(__savedScope)")
-                .contains("__unitFrameOpen.set(__savedFrameOpen)")
-                .doesNotContain("public void runInDetachedEventScope");
+                .contains("__unitFrameOpen.set(__savedFrameOpen)");
     }
 }
