@@ -133,6 +133,22 @@ public final class TikoOptions {
     }
 
     /**
+     * Runs {@code task} in a unit of work of its own (#811). For generated container code, which
+     * calls it to run an async event handler. In a multi-module application the unit is opened in
+     * every module, so the handler reaches the EVENT-scoped components of all of them; a
+     * single-module container opens the unit in itself.
+     *
+     * @param module the container the handler belongs to
+     */
+    public void runInDetachedUnit(DetachedUnitFrame module, Runnable task) {
+        if (applicationContainer.get() instanceof AggregatingContainer application) {
+            application.runInDetachedUnit(task);
+        } else {
+            module.runInDetachedFrame(task, true);
+        }
+    }
+
+    /**
      * The options one container works on: equal to these, but shadow overrides the container adds
      * ({@link #internalAddOverrideIfAbsent}) land in the copy. The caller's object stays as built,
      * so it can boot another container (#734).

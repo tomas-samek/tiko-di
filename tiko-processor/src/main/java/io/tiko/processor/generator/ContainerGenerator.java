@@ -233,6 +233,7 @@ public final class ContainerGenerator {
                 .addAnnotation(GeneratorAnnotations.generatedBy(ContainerGenerator.class));
         containerBuilder.addModifiers(Modifier.PUBLIC, Modifier.FINAL);
         containerBuilder.addSuperinterface(Container.class);
+        containerBuilder.addSuperinterface(DETACHED_UNIT_FRAME);
 
         // Add fields
         containerBuilder.addField(createSingletonStorageField());
@@ -270,6 +271,7 @@ public final class ContainerGenerator {
         containerBuilder.addMethod(createRunInEventScopeMethod());
         containerBuilder.addMethod(createRunInEventScopeCoreMethod());
         containerBuilder.addMethod(createRunInDetachedEventScopeMethod());
+        containerBuilder.addMethod(createRunInDetachedFrameMethod());
         containerBuilder.addMethod(createSupplyInEventScopeMethod());
         containerBuilder.addMethod(createPublishUnitLifecycleMethod());
         containerBuilder.addMethod(createCloseEventScopeMethod());
@@ -1159,6 +1161,7 @@ public final class ContainerGenerator {
     private static final ClassName APP_ENDING = ClassName.get(EVENTS_PACKAGE, "ApplicationEndingEvent");
     private static final ClassName BOUNDED_EXECUTION = ClassName.get("io.tiko.runtime", "BoundedExecution");
     private static final ClassName EVENT_CHAIN_CONTEXT = ClassName.get("io.tiko.runtime", "EventChainContext");
+    private static final ClassName DETACHED_UNIT_FRAME = ClassName.get("io.tiko.runtime", "DetachedUnitFrame");
     private static final ClassName CONTAINER_SHUT_DOWN = ClassName.get(TIKO_PACKAGE, "ContainerShutDownException");
     /** The lambda head that makes a resolution lazy: a {@code Provider} and an override fallback. */
     private static final String LAZY = "() -> ";
@@ -1219,9 +1222,9 @@ public final class ContainerGenerator {
      *
      * <p>Public {@link #createRunInEventScopeMethod()} passes the standing
      * {@code publishLifecycleEvents} flag (sync path: aggregator brackets the unit, module
-     * stays silent). {@link #createRunInDetachedEventScopeMethod()} forces {@code true}: an
-     * async detached unit is bracketed by no one else — the aggregator is not on the async
-     * dispatch path — so the module container is its sole lifecycle publisher.
+     * stays silent). {@link #createRunInDetachedFrameMethod()} takes the flag from its caller: a
+     * single-module container publishes the pair of its async detached unit itself, and under an
+     * aggregator, which opens that unit in every module, the aggregator publishes it (#811).
      */
     private MethodSpec createRunInEventScopeCoreMethod() {
         MethodSpec.Builder method = MethodSpec.methodBuilder("__runInEventScope")
@@ -1249,24 +1252,41 @@ public final class ContainerGenerator {
     }
 
     /**
-     * Creates the package-private {@code runInDetachedEventScope} method (#220). Async
-     * {@code @EventHandler} dispatch runs inside its own EVENT unit; when the overflow policy
-     * runs the task inline on a borrowed publisher thread ({@code CALLER_RUNS}), the caller's
-     * open frame is suspended (saved and cleared) for the duration and restored afterwards —
-     * detachment, not nesting. The public {@code runInEventScope} still throws on re-entry,
-     * so the single-frame invariant (ARCH-5) is untouched.
+     * Creates the package-private {@code runInDetachedEventScope} method (#220), which async
+     * {@code @EventHandler} dispatch runs its handler in: an EVENT unit of the handler's own. The
+     * unit is the application's, so the container hands it to its options: under an aggregator
+     * they open a detached frame in every module, and the handler reaches the EVENT-scoped
+     * components of all of them (#811); a single-module container gets its own frame back.
      */
     private MethodSpec createRunInDetachedEventScopeMethod() {
+        return MethodSpec.methodBuilder("runInDetachedEventScope")
+                .addParameter(Runnable.class, "task")
+                .addStatement("this.options.runInDetachedUnit(this, task)")
+                .build();
+    }
+
+    /**
+     * Creates {@code runInDetachedFrame}, this container's part of a detached unit (#220, #811).
+     * When the overflow policy runs the async task inline on a borrowed publisher thread
+     * ({@code CALLER_RUNS}), the caller's open frame is suspended (saved and cleared) for the
+     * duration and restored afterwards — detachment, not nesting. The public
+     * {@code runInEventScope} still throws on re-entry, so the single-frame invariant (ARCH-5) is
+     * untouched.
+     */
+    private MethodSpec createRunInDetachedFrameMethod() {
         ParameterizedTypeName scopeMapType = ParameterizedTypeName.get(
                 ClassName.get(Map.class), ClassName.get(String.class), ClassName.get(Object.class));
-        MethodSpec.Builder method =
-                MethodSpec.methodBuilder("runInDetachedEventScope").addParameter(Runnable.class, "task");
+        MethodSpec.Builder method = MethodSpec.methodBuilder("runInDetachedFrame")
+                .addModifiers(Modifier.PUBLIC)
+                .addAnnotation(Override.class)
+                .addParameter(Runnable.class, "task")
+                .addParameter(TypeName.BOOLEAN, PUBLISH_LIFECYCLE_PARAM);
         method.addStatement("$T __savedScope = eventScoped.get()", scopeMapType)
                 .addStatement("$T __savedFrameOpen = __unitFrameOpen.get()", Boolean.class)
                 .addStatement("eventScoped.set(new $T<>())", LinkedHashMap.class)
                 .addStatement("__unitFrameOpen.set($T.FALSE)", Boolean.class);
         method.beginControlFlow("try")
-                .addStatement("__runInEventScope(task, true)")
+                .addStatement("__runInEventScope(task, $L)", PUBLISH_LIFECYCLE_PARAM)
                 .nextControlFlow("finally")
                 .addStatement("eventScoped.set(__savedScope)")
                 .addStatement("__unitFrameOpen.set(__savedFrameOpen)")

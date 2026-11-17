@@ -322,17 +322,20 @@ that case is what forces save/restore of the caller's frame rather than a plain 
 ARCH-5 owns the scope count and the single-frame rule; ARCH-15 owns how async dispatch obtains
 its unit without violating either.
 
-**Anchor.** `ContainerGenerator.createRunInDetachedEventScopeMethod` javadoc (`tiko-processor`);
+**Across modules (#811).** In a multi-module application the detached unit is opened in every
+module, whichever one declares the handler. The handler's container hands the unit to
+`TikoOptions.runInDetachedUnit`; the `AggregatingContainer` nests a detached frame of each
+module's container (`DetachedUnitFrame`) around the handler and publishes the one lifecycle
+pair. A container generated before 0.8.0 has no detached frame to offer and stays out of the
+unit.
+
+**Anchor.** `ContainerGenerator.createRunInDetachedFrameMethod` javadoc (`tiko-processor`);
+`AggregatingContainer.runInDetachedFrames` (`tiko-runtime`);
 `docs/superpowers/specs/2026-07-10-issue-220-async-event-scope-design.md`.
 
-**Known limit (#811).** The detached unit is opened on the container of the module that
-declares the handler. In a multi-module application the EVENT-scoped components of the other
-modules are not reachable from it: a `Picker<T>` that lists another module's EVENT-scoped
-implementation fails there with `NoActiveEventScopeException`.
-
-**Violation looks like.** Async dispatch reusing the publisher's open frame; a detached path that
-fails to restore the caller's frame in a `finally`; or `runInEventScope` made re-entrant or
-silently nesting.
+**Violation looks like.** Async dispatch reusing the publisher's open frame, in the handler's
+module or in another one; a detached path that fails to restore the caller's frame in a
+`finally`; or `runInEventScope` made re-entrant or silently nesting.
 
 ---
 

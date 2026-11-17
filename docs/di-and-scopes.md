@@ -319,6 +319,8 @@ public interface Picker<T> {
 }
 ```
 
+The implementations behind a picker need no name. Several unnamed implementations of `T` compile as long as no injection point takes `T` itself unqualified; such an injection point is still a compile error that lists them.
+
 A picker answers for the whole application. In a multi-module application an injected `Picker<T>` asks the container that aggregates the modules, so `list()` returns the impls of every module on the classpath: what `container.getAll(T)` returns, whichever module the component holding the picker is in. `byName` and `byImplClass` look across the modules the same way. A module compiled with Tiko before 0.7.0 keeps a picker that sees only that module until it is recompiled.
 
 ### Decision tree

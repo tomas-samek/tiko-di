@@ -69,12 +69,14 @@ class ContainerGeneratorLifecycleEventGateTest {
     }
 
     @Test
-    void detachedScopeForcesUnitLifecyclePublish() throws IOException {
-        // #433: an async detached unit is bracketed by no aggregator (async dispatch does not
-        // traverse the aggregator's scope path), so the module container is its sole lifecycle
-        // publisher — detached forces the core's publish flag true regardless of the standing flag.
+    void detachedFramePublishesTheUnitLifecycleWhenItsCallerSaysSo() throws IOException {
+        // #433, #811: an async detached unit has one lifecycle publisher, whatever the standing
+        // flag says. The options decide who: a single-module container is told to publish, and
+        // under an aggregator, which opens the unit in every module, the aggregator publishes.
         String content = generateContainerSource();
-        assertThat(content).contains("__runInEventScope(task, true)");
+        assertThat(content)
+                .contains("this.options.runInDetachedUnit(this, task)")
+                .contains("__runInEventScope(task, __publishLifecycle)");
     }
 
     @Test
