@@ -42,6 +42,9 @@ public final class KafkaTransportBootstrapGenerator {
 
     private static final String SERVICE_FILE = "META-INF/services/io.tiko.TransportBootstrap";
 
+    /** The guard of the generated lifecycle methods: there is a support once the transport has started. */
+    private static final String IF_STARTED = "if (this.support != null)";
+
     private final CodeOutput output;
 
     public KafkaTransportBootstrapGenerator(CodeOutput output) {
@@ -98,7 +101,7 @@ public final class KafkaTransportBootstrapGenerator {
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
                 .addParameter(CONTAINER, "container")
-                .beginControlFlow("if (this.support != null)")
+                .beginControlFlow(IF_STARTED)
                 .addStatement("return")
                 .endControlFlow()
                 .addStatement("this.support = new $T(container, sources(), sinks())", KAFKA_BOOTSTRAP_SUPPORT)
@@ -111,7 +114,7 @@ public final class KafkaTransportBootstrapGenerator {
         return MethodSpec.methodBuilder("stopIngest")
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
-                .beginControlFlow("if (this.support != null)")
+                .beginControlFlow(IF_STARTED)
                 .addStatement("this.support.stopIngest()")
                 .endControlFlow()
                 .build();
@@ -121,7 +124,7 @@ public final class KafkaTransportBootstrapGenerator {
         return MethodSpec.methodBuilder("shutdown")
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
-                .beginControlFlow("if (this.support != null)")
+                .beginControlFlow(IF_STARTED)
                 .addStatement("this.support.shutdown()")
                 .addStatement("this.support = null")
                 .endControlFlow()

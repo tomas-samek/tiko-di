@@ -360,12 +360,7 @@ public final class Tiko {
         // single-module boot is already wrapped; it gains the transports instead of a second layer.
         BootHandle wrapper = container instanceof BootHandle booted
                 ? booted.withTransports(bootstraps)
-                : new BootHandle(
-                        container,
-                        bootstraps,
-                        null,
-                        null,
-                        container instanceof AggregatingContainer aggregate ? aggregate.options() : null);
+                : new BootHandle(container, bootstraps, null, null, optionsHeldBy(container));
         int started = 0;
         try {
             for (TransportBootstrap tb : bootstraps) {
@@ -385,6 +380,11 @@ public final class Tiko {
             shutdownQuietly(container::shutdown, e);
             throw e;
         }
+    }
+
+    /** The options an aggregate works on; {@code null} for a container that is not Tiko's own. */
+    private static TikoOptions optionsHeldBy(Container container) {
+        return container instanceof AggregatingContainer aggregate ? aggregate.options() : null;
     }
 
     /**

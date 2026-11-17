@@ -19,6 +19,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.ServiceLoader;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.header.internals.RecordHeaders;
@@ -41,7 +42,8 @@ public final class KafkaBootstrapSupport {
     private final java.util.function.Function<KafkaConfig, KafkaProducerClient> producerFactory;
 
     private final List<KafkaConsumerRunner> runners = new ArrayList<>();
-    private volatile KafkaProducerClient producer;
+    /** The open producer; empty before start, without sinks, and once the transport has shut down. */
+    private final AtomicReference<KafkaProducerClient> producer = new AtomicReference<>();
 
     public KafkaBootstrapSupport(
             Container container, List<GeneratedSourceDescriptor> sources, List<GeneratedSinkDescriptor> sinks) {
@@ -84,8 +86,8 @@ public final class KafkaBootstrapSupport {
         Map<String, KafkaSerializer> named = loadNamedSerializers();
 
         // Outbound — subscribe one callback per @KafkaSink.
-        if (producer == null && !sinks.isEmpty()) {
-            producer = producerFactory.apply(config);
+        if (producer.get() == null && !sinks.isEmpty()) {
+            producer.set(producerFactory.apply(config));
         }
         for (GeneratedSinkDescriptor sink : sinks) {
             KafkaSerializer serializer = resolveSerializer(sink.serializerClass(), config, named);
@@ -144,9 +146,8 @@ public final class KafkaBootstrapSupport {
     /** Stops the consumers, if {@link #stopIngest()} has not, and closes the producer. */
     public void shutdown() {
         stopIngest();
-        var open = producer;
+        var open = producer.getAndSet(null);
         if (open != null) {
-            producer = null;
             try {
                 open.close();
             } catch (Exception ignored) {
@@ -171,7 +172,7 @@ public final class KafkaBootstrapSupport {
                 // The send callback surfaces broker-side failures (record-too-large, topic
                 // authorization, delivery timeout) that never throw synchronously — without
                 // it the rejection is silent egress loss (#342).
-                var open = producer;
+                var open = producer.get();
                 if (open == null) {
                     // The sink stays subscribed after the transport closed (#721).
                     throw new IllegalStateException("The Kafka producer is closed: the container is shutting down, "

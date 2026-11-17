@@ -1,5 +1,7 @@
 package io.tiko.runtime;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
@@ -21,8 +23,8 @@ final class PendingDeliveries {
 
     private final AtomicInteger pending = new AtomicInteger();
 
-    /** How many counted tasks the current thread is inside of; see {@link #await}. */
-    private final ThreadLocal<int[]> runningHere = ThreadLocal.withInitial(() -> new int[1]);
+    /** How many counted tasks each thread is inside of right now; see {@link #await}. */
+    private final Map<Thread, Integer> runningOn = new ConcurrentHashMap<>();
 
     /** A task that stops counting when it is discarded without having run. */
     interface Droppable {
@@ -64,7 +66,7 @@ final class PendingDeliveries {
      * @return whether nothing else is pending
      */
     boolean await(long deadlineNanos) {
-        int own = runningHere.get()[0];
+        int own = runningOn.getOrDefault(Thread.currentThread(), 0);
         boolean interrupted = Thread.interrupted();
         try {
             while (pending.get() > own && System.nanoTime() - deadlineNanos < 0) {
@@ -92,12 +94,12 @@ final class PendingDeliveries {
 
         @Override
         public void run() {
-            int[] running = owner.runningHere.get();
-            running[0]++;
+            var thread = Thread.currentThread();
+            owner.runningOn.merge(thread, 1, Integer::sum);
             try {
                 task.run();
             } finally {
-                running[0]--;
+                owner.runningOn.computeIfPresent(thread, (ignored, depth) -> depth == 1 ? null : depth - 1);
                 releaseOnce();
             }
         }
