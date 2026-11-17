@@ -63,7 +63,7 @@ class KotlinConstructRulesTest {
                         @Component(scope = Scope.SINGLETON) class Service(val repository: Repository)
                         """,
                         "() -> container.getRepository())",
-                        "new Service(repository)"),
+                        "new Service(__arg0)"),
                 supported(
                         "paramUseSiteNamedIsSupported",
                         """
@@ -73,19 +73,16 @@ class KotlinConstructRulesTest {
                         @Component(scope = Scope.SINGLETON) class User(@param:Named("x") val store: Store)
                         """,
                         "() -> container.get(app.Store.class, \"x\"))",
-                        "new User(store)"),
+                        "new User(__arg0)"),
                 supported(
-                        "internalComponentIsSupported",
-                        """
+                        "internalComponentIsSupported", """
                         @Component(scope = Scope.SINGLETON) internal class Repository
                         @Component(scope = Scope.SINGLETON) internal class Service(val repository: Repository)
-                        """,
-                        "() -> container.getRepository())",
-                        "new Service(repository)"),
+                        """, "() -> container.getRepository())", "new Service(__arg0)"),
                 supported("defaultParameterStillInjected", """
                         @Component(scope = Scope.SINGLETON) class B
                         @Component(scope = Scope.SINGLETON) class A(val b: B = B())
-                        """, "() -> container.getB())", "new A(b)"),
+                        """, "() -> container.getB())", "new A(__arg0)"),
                 supported(
                         "jvmOverloadsConstructorInjectsAllParameters",
                         """
@@ -95,17 +92,17 @@ class KotlinConstructRulesTest {
                         """,
                         "() -> container.getB()",
                         "() -> container.getC()",
-                        "new A(b, c)"),
+                        "new A(__arg0, __arg1)"),
                 supported("primaryConstructorInjectedOverSecondary", """
                         @Component(scope = Scope.SINGLETON) class B
                         @Component(scope = Scope.SINGLETON) class A(val b: B) {
                             constructor() : this(B())
                         }
-                        """, "() -> container.getB())", "new A(b)"),
+                        """, "() -> container.getB())", "new A(__arg0)"),
                 supported("internalPrimaryConstructorIsInjected", """
                         @Component(scope = Scope.SINGLETON) class B
                         @Component(scope = Scope.SINGLETON) class A internal constructor(val b: B)
-                        """, "() -> container.getB())", "new A(b)"),
+                        """, "() -> container.getB())", "new A(__arg0)"),
                 rejected(
                         "topLevelProducesRejected",
                         "@Produces fun clock(): Clock = Clock()",

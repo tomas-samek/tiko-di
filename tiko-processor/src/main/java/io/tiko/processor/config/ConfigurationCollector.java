@@ -3,6 +3,7 @@ package io.tiko.processor.config;
 import io.tiko.annotations.Configuration;
 import io.tiko.annotations.Default;
 import io.tiko.annotations.Key;
+import io.tiko.processor.core.KotlinConstructRules;
 import io.tiko.processor.core.ProcessingEnv;
 import io.tiko.processor.core.TypeOracle;
 import io.tiko.processor.core.model.AnnotationRef;
@@ -11,6 +12,7 @@ import io.tiko.processor.core.model.DeclKind;
 import io.tiko.processor.core.model.FieldDecl;
 import io.tiko.processor.core.model.ParamDecl;
 import io.tiko.processor.core.model.SourceLanguage;
+import io.tiko.processor.util.ErrorReporter;
 import io.tiko.processor.util.ProcessorContext;
 import io.tiko.processor.util.TypeRefs;
 import java.util.ArrayList;
@@ -56,6 +58,17 @@ public final class ConfigurationCollector {
                             + " record"
                     : "Change `class` to `record`";
             ctx.getErrorReporter().error(type.location(), "@Configuration must be applied to a record", fix);
+            return;
+        }
+
+        var unnameable = KotlinConstructRules.classNotNameableInJava(type, "configuration");
+        if (unnameable.isPresent()) {
+            ctx.getErrorReporter()
+                    .error(
+                            ErrorReporter.KOTLIN_UNSUPPORTED,
+                            unnameable.get().location(),
+                            unnameable.get().problem(),
+                            unnameable.get().fix());
             return;
         }
 

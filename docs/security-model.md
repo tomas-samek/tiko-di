@@ -202,10 +202,14 @@ for that format, like annotation text.
 
 Names as code. A class, parameter or property name is source of the module being compiled, not
 a value: whoever writes it already runs code in that build, so a name is outside this rule's
-threat. What the processors still owe is a clear failure. `KotlinConstructRules.uncallableJvmName`
-rejects a method Tiko calls whose JVM name Java can't write. Class names, constructor parameter
-names and `@Configuration` property names are written as they are, and a name Java can't use
-there fails inside generated code (#831).
+threat. What the processors owe is generated code that compiles, or a located error:
+- `KotlinConstructRules.uncallableJvmName` rejects a method Tiko calls whose JVM name Java can't
+  write, and `classNotNameableInJava` a component or `@Configuration` class whose qualified name
+  Java can't write.
+- A constructor parameter or `@Configuration` property name never becomes an identifier:
+  `ComponentFactoryGenerator` and `ConfigBinderGenerator` name their locals by position, and
+  `ProxyGenerator` keeps a parameter name only when it is a Java identifier (#831;
+  `SourceNamesAsLocalsTest`, `KspSourceNamesTest`).
 
 **Status.** Holds. Generated Java was fixed in #479; before it, a crafted `@Key` compiled into
 extra statements in the generated binder. Resources were fixed in #496. Before it, a `prefix`

@@ -105,7 +105,9 @@ public final class ConfigBinderGenerator {
             ConfigFieldModel f = cfg.fields().get(i);
             consumedKeys.add(f.yamlKey());
 
-            String varName = f.fieldName();
+            // Named by position, as in a nested record's binder: a component may be called node,
+            // ctx or root like this method's own names, or carry a name Java can't use (#831).
+            String varName = "f_" + i;
             String fullPath = cfg.prefix() + "." + f.yamlKey();
             TypeRef inner = unwrapOptional(f.type());
 

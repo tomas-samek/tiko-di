@@ -7,6 +7,8 @@ import io.tiko.processor.core.model.MethodDecl;
 import io.tiko.processor.core.model.ParamDecl;
 import io.tiko.processor.core.model.PropertyAccessorDecl;
 import io.tiko.processor.core.model.TypeRef;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -330,6 +332,30 @@ public final class KotlinConstructRules {
                         + "', which " + caller.generated() + " can't call: generated Java calls it by that name,"
                         + " and it is not a Java identifier.",
                 "Rename the function, or give it a Java-callable name with @JvmName(\"...\")"));
+    }
+
+    /**
+     * A class generated Java can't name: one of its simple names, or a segment of its package, is a
+     * Java keyword or not a Java identifier (a Kotlin name in backticks). Generated code refers to
+     * the class by name, so it would not compile.
+     *
+     * @param what the kind of declaration, as in "component"
+     */
+    public static Optional<Violation> classNotNameableInJava(ClassDecl decl, String what) {
+        var className = decl.className();
+        var segments = new ArrayList<String>();
+        if (!className.packageName().isEmpty()) {
+            segments.addAll(List.of(className.packageName().split("\\.")));
+        }
+        segments.addAll(className.simpleNames());
+        return segments.stream()
+                .filter(segment -> !isJavaIdentifier(segment))
+                .findFirst()
+                .map(segment -> new Violation(
+                        decl.location(),
+                        "The " + what + " " + className.canonicalName() + " can't be named in Java: '" + segment
+                                + "' is not a Java identifier, and generated Java refers to the class by name.",
+                        "Rename it so that every part of its qualified name is a Java identifier"));
     }
 
     /** Tiko reads DI annotations on functions; an accessor ({@code @get:} / {@code @set:}) is not one. */
