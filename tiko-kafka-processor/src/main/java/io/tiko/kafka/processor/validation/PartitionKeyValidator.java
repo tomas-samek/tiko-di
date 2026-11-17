@@ -6,6 +6,7 @@ import io.tiko.processor.core.KotlinConstructRules;
 import io.tiko.processor.core.model.MethodDecl;
 import io.tiko.processor.core.model.Visibility;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Validates that {@code @KafkaSink(partitionKey = "name")} resolves to a zero-arg, public,
@@ -24,77 +25,50 @@ public final class PartitionKeyValidator {
     public static boolean validate(Diagnostics diagnostics, List<KafkaSinkDescriptor> sinks) {
         boolean ok = true;
         for (KafkaSinkDescriptor s : sinks) {
-            if (s.partitionKey().isEmpty()) continue;
-            if (!KotlinConstructRules.isJavaIdentifier(s.partitionKey())) {
-                // The generator writes the key as a method call, so it must be a name and nothing
-                // else (SEC-5). A Kotlin function in backticks can carry a JVM name that is not one.
-                diagnostics.error(
-                        s.method().location(),
-                        KEY_PREFIX
-                                + s.partitionKey()
-                                + "' is not a name Java can call: the generated bootstrap calls the"
-                                + " accessor by that name. Point partitionKey at an accessor with a Java"
-                                + " name, or give a Kotlin function one with @JvmName(\"...\").");
-                ok = false;
-                continue;
-            }
-            var returnDecl = s.producedPayloadType().declaration();
-            if (returnDecl.isEmpty()) {
-                diagnostics.error(
-                        s.method().location(),
-                        "@KafkaSink(partitionKey = \""
-                                + s.partitionKey()
-                                + "\") cannot be applied to a non-declared return type.");
-                ok = false;
-                continue;
-            }
-            var returnElement = returnDecl.get();
-            MethodDecl accessor = null;
-            for (MethodDecl m : returnElement.allMethods()) {
-                if (m.parameters().isEmpty() && m.jvmName().equals(s.partitionKey())) {
-                    accessor = m;
-                    break;
-                }
-            }
-            if (accessor == null) {
-                diagnostics.error(
-                        s.method().location(),
-                        KEY_PREFIX
-                                + s.partitionKey()
-                                + "' does not resolve to a zero-arg "
-                                + "method on "
-                                + returnElement.qualifiedName()
-                                + ".");
-                ok = false;
-            } else if (accessor.returnType().isVoid()) {
-                diagnostics.error(
-                        s.method().location(),
-                        KEY_PREFIX
-                                + s.partitionKey()
-                                + "' resolves to "
-                                + returnElement.qualifiedName()
-                                + "."
-                                + s.partitionKey()
-                                + "(), which returns void; a partition-key accessor must return a value the "
-                                + "generated bootstrap can turn into a key. Point partitionKey at a non-void "
-                                + "zero-arg accessor (e.g. a record component).");
-                ok = false;
-            } else if (accessor.visibility() != Visibility.PUBLIC) {
-                diagnostics.error(
-                        s.method().location(),
-                        KEY_PREFIX
-                                + s.partitionKey()
-                                + "' resolves to "
-                                + returnElement.qualifiedName()
-                                + "."
-                                + s.partitionKey()
-                                + "(), which is not public; the generated bootstrap calls it from another "
-                                + "package. Make "
-                                + s.partitionKey()
-                                + "() public (record components are public accessors).");
+            var problem = s.partitionKey().isEmpty() ? Optional.<String>empty() : problemWith(s);
+            if (problem.isPresent()) {
+                diagnostics.error(s.method().location(), problem.get());
                 ok = false;
             }
         }
         return ok;
+    }
+
+    /** What is wrong with the sink's partition key, or empty when the generated bootstrap can call it. */
+    private static Optional<String> problemWith(KafkaSinkDescriptor s) {
+        var key = s.partitionKey();
+        if (!KotlinConstructRules.isJavaIdentifier(key)) {
+            // The generator writes the key as a method call, so it must be a name and nothing
+            // else (SEC-5). A Kotlin function in backticks can carry a JVM name that is not one.
+            return Optional.of(KEY_PREFIX + key
+                    + "' is not a name Java can call: the generated bootstrap calls the"
+                    + " accessor by that name. Point partitionKey at an accessor with a Java"
+                    + " name, or give a Kotlin function one with @JvmName(\"...\").");
+        }
+        var returnDecl = s.producedPayloadType().declaration();
+        if (returnDecl.isEmpty()) {
+            return Optional.of(
+                    "@KafkaSink(partitionKey = \"" + key + "\") cannot be applied to a non-declared return type.");
+        }
+        var payload = returnDecl.get().qualifiedName();
+        Optional<MethodDecl> accessor = returnDecl.get().allMethods().stream()
+                .filter(m -> m.parameters().isEmpty() && m.jvmName().equals(key))
+                .findFirst();
+        if (accessor.isEmpty()) {
+            return Optional.of(KEY_PREFIX + key + "' does not resolve to a zero-arg method on " + payload + ".");
+        }
+        var resolvesTo = KEY_PREFIX + key + "' resolves to " + payload + "." + key + "(), which ";
+        if (accessor.get().returnType().isVoid()) {
+            return Optional.of(resolvesTo
+                    + "returns void; a partition-key accessor must return a value the "
+                    + "generated bootstrap can turn into a key. Point partitionKey at a non-void "
+                    + "zero-arg accessor (e.g. a record component).");
+        }
+        if (accessor.get().visibility() != Visibility.PUBLIC) {
+            return Optional.of(resolvesTo
+                    + "is not public; the generated bootstrap calls it from another "
+                    + "package. Make " + key + "() public (record components are public accessors).");
+        }
+        return Optional.empty();
     }
 }
