@@ -19,7 +19,9 @@ fun main(args: Array<String>) {
     val ok =
         Tiko.create(ConfigSources.classpath("application.yaml")).use { container ->
             val port = container.get(HttpConfig::class.java).port
-            val server = embeddedServer(CIO, port = port) { ticketModule(container) }.start(wait = false)
+            val tickets = container.get(TicketService::class.java)
+            // The container is the UnitOfWork the routes open their unit with.
+            val server = embeddedServer(CIO, port = port) { ticketModule(container, tickets) }.start(wait = false)
             try {
                 if ("--smoke" in args) {
                     smokeTest(port)

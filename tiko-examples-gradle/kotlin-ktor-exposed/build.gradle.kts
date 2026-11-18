@@ -20,6 +20,8 @@ dependencies {
     implementation("io.github.tomas-samek:tiko-runtime:$tikoVersion")
     // application.yaml binding (@Configuration); optional in tiko-runtime, so declared here.
     implementation("io.github.tomas-samek:tiko-config:$tikoVersion")
+    // inEventScope: one unit of work for a route's suspending code.
+    implementation("io.github.tomas-samek:tiko-coroutines:$tikoVersion")
     ksp("io.github.tomas-samek:tiko-processor:$tikoVersion")
     kspTest("io.github.tomas-samek:tiko-processor:$tikoVersion")
 

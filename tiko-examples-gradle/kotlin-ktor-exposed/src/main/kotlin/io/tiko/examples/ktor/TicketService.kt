@@ -24,6 +24,13 @@ class TicketService(
 
     fun all(): List<Ticket> = repository.all()
 
+    /** Everyone who has opened a ticket. */
+    fun reporters(): List<String> = repository.all().map { it.reporter }.distinct().sorted()
+
+    /** What [reporter] has opened, counted in the unit of work the caller is in. */
+    fun ticketsOf(reporter: String): ReporterTickets =
+        ReporterTickets(reporter, repository.all().count { it.reporter == reporter }, requestId.value)
+
     /** The id of the request this call runs in. */
     fun requestId(): String = requestId.value
 }
