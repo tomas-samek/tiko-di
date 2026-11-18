@@ -58,6 +58,19 @@ Order is top to bottom. "Needs" names the pieces that must be merged first.
 Piece 11 depends only on piece 1 and is Java and documentation. It can run whenever another
 piece waits for a decision.
 
+### Status
+
+| # | State | Where |
+|---|---|---|
+| 1 | merged 2026-11-18 | PR #835; plan `2026-11-18-k2-piece-1-unit-of-work-interface.md` |
+| 2 | in review | plan `2026-11-18-k2-piece-2-carried-unit.md` |
+
+What piece 3 builds on: `io.tiko.runtime.UnitCarrier.openCarriedUnit(origin)`, implemented by
+the `UnitOfWork` a component is handed, by the container `Tiko.create(...)` returns and by every
+generated container; and `CarriedUnit.install()` / `restore(displaced)` / `close()`. An install
+by the thread that already has the unit changes nothing, which is what a context element needs
+when `withContext` re-installs it on the same thread.
+
 ### Piece 1: injectable unit-of-work interface (#685)
 
 - **Delivers:** a `tiko-api` interface with `runInEventScope` and `supplyInEventScope`.

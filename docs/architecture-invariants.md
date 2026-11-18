@@ -331,13 +331,24 @@ module's container (`DetachedUnitFrame`) around the handler and publishes the on
 pair. A container generated before 0.8.0 has no detached frame to offer and stays out of the
 unit.
 
-**Anchor.** `ContainerGenerator.createRunInDetachedFrameMethod` javadoc (`tiko-processor`);
-`AggregatingContainer.runInDetachedFrames` (`tiko-runtime`);
-`docs/superpowers/specs/2026-07-10-issue-220-async-event-scope-design.md`.
+**Carried between threads (#677).** Work that leaves its thread and resumes on another one keeps
+its unit through a `CarriedUnit`: a unit that is not bound to one `Runnable`. It holds a frame of
+every module, is installed on the thread its work runs on and taken off when the work leaves, and
+is closed once. It goes the way a detached unit goes: the container hands the request to
+`TikoOptions.openCarriedUnit`, the `AggregatingContainer` spans every module and publishes the
+one lifecycle pair, and each generated container swaps the frame through the same `swapFrame`
+that sets the caller's frame aside for a detached unit. The unit is on one thread at a time; a
+second thread that installs it gets an `IllegalStateException`. While it is installed,
+`runInEventScope` on that thread throws, as inside any open unit (ARCH-5).
+
+**Anchor.** `ContainerGenerator.createRunInDetachedFrameMethod` and `createSwapFrameMethod`
+javadoc (`tiko-processor`); `AggregatingContainer.runInDetachedFrames`, `CarriedUnit`
+(`tiko-runtime`); `docs/superpowers/specs/2026-07-10-issue-220-async-event-scope-design.md`.
 
 **Violation looks like.** Async dispatch reusing the publisher's open frame, in the handler's
 module or in another one; a detached path that fails to restore the caller's frame in a
-`finally`; or `runInEventScope` made re-entrant or silently nesting.
+`finally`; `runInEventScope` made re-entrant or silently nesting; a carried unit installed on
+two threads at once, or a second place that saves and sets a container's frame.
 
 ---
 
