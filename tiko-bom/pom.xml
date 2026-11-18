@@ -24,7 +24,8 @@
         Import this BOM with scope "import" in dependencyManagement to align the versions of every
         Tiko module: tiko-api (annotations and interfaces), tiko-processor (compile-time annotation
         processor) with its shared tiko-processor-core, tiko-runtime (container and event bus), tiko-config (YAML-backed typed
-        configuration), tiko-test (JUnit 5 extension and test overrides), tiko-kafka and
+        configuration), tiko-test (JUnit 5 extension and test overrides), tiko-coroutines (a unit of
+        work across Kotlin coroutine suspension), tiko-kafka and
         tiko-kafka-processor (Kafka transport with compile-time-validated @KafkaSource / @KafkaSink
         bridges), and tiko-mcp (MCP server exposing the compiled topology to AI coding agents).
         Documentation: https://github.com/tomas-samek/tiko-di
@@ -110,6 +111,13 @@
             <dependency>
                 <groupId>io.github.tomas-samek</groupId>
                 <artifactId>tiko-kafka</artifactId>
+                <version>${tiko.version}</version>
+            </dependency>
+            <!-- Kotlin coroutine support. kotlinx-coroutines-core is not pinned here: an
+                 application's own coroutine BOM, or the libraries it uses, choose its version. -->
+            <dependency>
+                <groupId>io.github.tomas-samek</groupId>
+                <artifactId>tiko-coroutines</artifactId>
                 <version>${tiko.version}</version>
             </dependency>
             <dependency>
