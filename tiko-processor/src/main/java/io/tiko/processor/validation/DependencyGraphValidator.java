@@ -81,8 +81,9 @@ public final class DependencyGraphValidator {
         for (DependencyModel dependency : dependencies) {
             // Skip dependencies that don't resolve to a single user-declared provider here:
             //  - Picker<T>: its "at least one impl of T" check lives in PickerValidator.
-            //  - EventBus: a built-in, container-provided dependency (#314), not a user bean.
-            if (dependency.isPicker() || dependency.isEventBus()) {
+            //  - EventBus and UnitOfWork: built-in, container-provided dependencies (#314, #685),
+            //    not user beans.
+            if (dependency.isPicker() || dependency.isBuiltIn()) {
                 continue;
             }
             if (context.findProvider(dependency).isEmpty()) {

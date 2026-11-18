@@ -889,6 +889,11 @@ public final class ContainerGenerator {
         if (dependency.isEventBus()) {
             return dependency.isProvider() ? "() -> getEventBus()" : "getEventBus()";
         }
+        // UnitOfWork, the other built-in (#685): a view of this container that only opens units.
+        if (dependency.isUnitOfWork()) {
+            String unitOfWork = "new io.tiko.runtime.ContainerUnitOfWork(this, options)";
+            return dependency.isProvider() ? LAZY + unitOfWork : unitOfWork;
+        }
 
         String typeName = dependency.isProvider()
                 ? dependency.getUnwrappedType().orElseThrow().displayName()
