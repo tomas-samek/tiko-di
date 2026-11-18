@@ -175,9 +175,8 @@ class UnitOfWorkServerStartTest {
             var result = bootOn(taken.getLocalPort(), output);
 
             var failure = (Throwable) result[0];
-            assertThat(failure).as("Tiko.create(...) throws").isNotNull();
+            assertThat(failure).as("Tiko.create(...) throws").isNotNull().hasCauseInstanceOf(BindException.class);
             assertThat(failure.getClass().getName()).isEqualTo(ContainerInitializationException.class.getName());
-            assertThat(failure).hasCauseInstanceOf(BindException.class);
             assertThat(result[3]).as("StartedFirst was shut down").isEqualTo(1);
             assertThat((List<?>) result[4])
                     .as("threads outliving the failed boot")
