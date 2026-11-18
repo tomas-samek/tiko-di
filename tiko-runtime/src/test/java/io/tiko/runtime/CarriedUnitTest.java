@@ -271,33 +271,101 @@ class CarriedUnitTest {
                 .hasMessageContaining("closed");
     }
 
+    /**
+     * A coroutine that moves to another thread is resumed there while the thread it left is still
+     * on its way out: kotlinx installs the context element on the new thread before the old one
+     * has taken it off (about one hand-over in twenty, measured on kotlinx-coroutines 1.11.0).
+     */
     @Test
-    void installOnASecondThreadWhileTheFirstHoldsTheUnitIsRejected() throws InterruptedException {
+    void aSecondThreadCanInstallTheUnitBeforeTheFirstHasTakenItOff() throws InterruptedException {
         var unit = unit(null);
         var held = new CountDownLatch(1);
         var release = new CountDownLatch(1);
-        var holder = new Thread(
+        var leaving = new Thread(
                 () -> {
                     var displaced = unit.install();
-                    a.put("the holder's");
+                    a.put("made before the hand-over");
                     held.countDown();
                     awaitQuietly(release);
                     unit.restore(displaced);
                 },
-                "holding-thread");
-        holder.start();
+                "leaving-thread");
+        leaving.start();
         held.await();
         try {
-            assertThatThrownBy(unit::install)
-                    .isInstanceOf(IllegalStateException.class)
-                    .hasMessageContaining("holding-thread");
-            assertThat(a.frame().scope())
-                    .as("nothing was put on the second thread")
-                    .isEmpty();
+            var displaced = unit.install();
+            var seen = List.copyOf(a.frame().scope().keySet());
+            unit.restore(displaced);
+
+            assertThat(seen)
+                    .as("the unit's instances on the thread it moved to")
+                    .containsExactly("made before the hand-over");
+            assertThat(a.frame().scope()).as("taken off the second thread").isEmpty();
         } finally {
             release.countDown();
-            holder.join();
+            leaving.join();
         }
+        assertThat(unit.isClosed()).isFalse();
+    }
+
+    /** The thread the work ends on closes the unit in place; the one still on its way out only takes it off. */
+    @Test
+    void closeOnOneOfTwoThreadsThatHaveTheUnitTearsItDownThereOnce() throws InterruptedException {
+        var unit = unit(null);
+        var held = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var leaving = new Thread(
+                () -> {
+                    var displaced = unit.install();
+                    held.countDown();
+                    awaitQuietly(release);
+                    unit.restore(displaced);
+                },
+                "leaving-thread");
+        leaving.start();
+        held.await();
+
+        var displaced = unit.install();
+        a.put("x");
+        unit.close();
+        unit.restore(displaced);
+        var afterClose = List.copyOf(log);
+        release.countDown();
+        leaving.join();
+
+        assertThat(afterClose.stream().filter(line -> line.contains("closes")))
+                .containsExactly("b closes []", "a closes [x]");
+        assertThat(log)
+                .as("nothing more when the other thread takes the unit off")
+                .isEqualTo(afterClose);
+    }
+
+    /** Closed from a third thread while two have the unit: the last one to take it off tears it down. */
+    @Test
+    void closeWhileTwoThreadsHaveTheUnitIsDoneByTheLastOneToTakeItOff() throws InterruptedException {
+        var unit = unit(null);
+        var held = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var leaving = new Thread(
+                () -> {
+                    var displaced = unit.install();
+                    held.countDown();
+                    awaitQuietly(release);
+                    unit.restore(displaced);
+                },
+                "leaving-thread");
+        leaving.start();
+        held.await();
+        var displaced = unit.install();
+
+        onAnotherThread(unit::close);
+        unit.restore(displaced);
+        var whileOneStillHasIt = List.copyOf(log);
+        release.countDown();
+        leaving.join();
+
+        assertThat(whileOneStillHasIt).noneMatch(line -> line.contains("closes"));
+        assertThat(log).contains("b closes []", "a closes []");
     }
 
     /** A unit always closes (SEC-14): the thread that has it tears it down when it takes it off. */
