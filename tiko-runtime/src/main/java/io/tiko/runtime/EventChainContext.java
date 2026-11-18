@@ -108,6 +108,11 @@ public final class EventChainContext {
         }
     }
 
+    /** The event the calling thread's work descends from, or {@code null} outside a handler. */
+    public static Event<?> current() {
+        return CURRENT.get();
+    }
+
     /**
      * Pushes {@code wrapper} as the current chain origin and returns the previous value
      * (so the caller can restore it via {@link #exit(Event)}). Designed for generated code

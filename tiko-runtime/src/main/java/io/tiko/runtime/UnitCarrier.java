@@ -18,4 +18,12 @@ public interface UnitCarrier {
      * @param origin the event the unit's work descends from, or {@code null}
      */
     CarriedUnit openCarriedUnit(Event<?> origin);
+
+    /**
+     * Whether a unit of work is open on the calling thread: an ordinary one, opened by
+     * {@code runInEventScope(...)}, or a carried one that is installed there. Whoever opens a
+     * unit that is not bound to one {@code Runnable} asks first, so the single-frame rule holds
+     * for it as it does for {@code runInEventScope}.
+     */
+    boolean hasUnitOpen();
 }

@@ -55,6 +55,8 @@ class DetachedEventScopeTest {
                 .contains("__unitFrameOpen.set(frame.open())")
                 .contains("public void closeFrame()")
                 .contains("public CarriedUnit openCarriedUnit(Event<?> origin)")
+                .contains("public boolean hasUnitOpen()")
+                .contains("return Boolean.TRUE.equals(__unitFrameOpen.get())")
                 .contains("this.options.openCarriedUnit(this, this::__publishGatedUnitLifecycle, origin)");
     }
 }

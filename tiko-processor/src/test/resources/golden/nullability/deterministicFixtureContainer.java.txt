@@ -182,6 +182,11 @@ public final class TikoContainerImpl_7a299740 implements Container, DetachedUnit
     return this.options.openCarriedUnit(this, this::__publishGatedUnitLifecycle, origin);
   }
 
+  @Override
+  public boolean hasUnitOpen() {
+    return Boolean.TRUE.equals(__unitFrameOpen.get());
+  }
+
   private void __publishGatedUnitLifecycle(Object event) {
     if (publishLifecycleEvents) {
       __publishUnitLifecycle(event);

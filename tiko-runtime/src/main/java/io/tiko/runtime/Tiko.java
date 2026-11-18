@@ -635,6 +635,11 @@ public final class Tiko {
             return CarriedUnit.openIn(delegate, origin);
         }
 
+        @Override
+        public boolean hasUnitOpen() {
+            return CarriedUnit.carrierOf(delegate).hasUnitOpen();
+        }
+
         /**
          * Runs bound, like {@link #shutdown()}: a failing generated {@code start()} rolls the module
          * back from inside itself, and that rollback's teardown threads must be tracked too (#651).

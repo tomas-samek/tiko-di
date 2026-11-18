@@ -91,9 +91,21 @@ class CarriedUnitTest {
     }
 
     private static Event<?> currentOrigin() {
-        Event<?> current = EventChainContext.enter(null);
-        EventChainContext.exit(current);
-        return current;
+        return EventChainContext.current();
+    }
+
+    @Test
+    void theCurrentOriginIsWhatTheThreadEntered() {
+        Event<String> origin = EventChainContext.wrap("handled now");
+        var before = EventChainContext.current();
+        var previous = EventChainContext.enter(origin);
+        try {
+            assertThat(EventChainContext.current()).isSameAs(origin);
+        } finally {
+            EventChainContext.exit(previous);
+        }
+        assertThat(before).isNull();
+        assertThat(EventChainContext.current()).isNull();
     }
 
     @Test
