@@ -32,6 +32,16 @@ class DetachedUnitTest {
             task.run();
             log.add(name + " closes");
         }
+
+        @Override
+        public UnitFrame swapFrame(UnitFrame frame) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void closeFrame() {
+            throw new UnsupportedOperationException();
+        }
     }
 
     @Test
