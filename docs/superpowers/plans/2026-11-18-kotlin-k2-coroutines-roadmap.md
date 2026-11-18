@@ -65,7 +65,8 @@ piece waits for a decision.
 | 1 | merged 2026-11-18 | PR #835; plan `2026-11-18-k2-piece-1-unit-of-work-interface.md` |
 | 2 | merged 2026-11-18 | PR #836; plan `2026-11-18-k2-piece-2-carried-unit.md` |
 | 3 | merged 2026-11-18 | PR #838; plan `2026-11-18-k2-piece-3-tiko-coroutines.md` |
-| 4 + 5 | in review, one PR | plan `2026-11-18-k2-piece-4-5-child-coroutines-ktor.md`; #683's acceptance names the Ktor cookbook of #682, so the two close together |
+| 4 + 5 | merged 2026-11-18 | PR #839; plan `2026-11-18-k2-piece-4-5-child-coroutines-ktor.md`; #683's acceptance names the Ktor cookbook of #682, so the two closed together |
+| 6 | in review | plan `2026-11-18-k2-piece-6-coroutine-scope.md` |
 
 Decided for piece 3 (owner, 2026-11-18): D2 `tiko-coroutines`, D3 accepted with the kotlinx
 version left out of the BOM, D4 `inEventScope`.
@@ -198,24 +199,27 @@ opener on to its copies.
   `tiko-runtime`, `docs/events.md`, the Kotlin reference and its archetype copy.
 - **Done when:** the remaining acceptance items of #677 and #678 are covered, including
   cancellation during container shutdown.
-- **Owner decides:** how a resume reaches the executor and whether suspended handlers are capped
-  (D6). This is settled before the piece's plan is written, with a short experiment against the
-  real executor (`DefaultEventExecutorFactory`, `OverflowRejectionHandler`).
+- **Runs on:** the container's coroutine scope of piece 6 (virtual threads), not the async
+  event executor (D6, decided 2026-11-18). The step of `close()` that cancels the container's
+  coroutines becomes user-visible here, so `docs/events.md` ("Graceful shutdown drain") gets it
+  in this piece.
 
 ### Piece 8: backpressure and error routing (#679)
 
-- **Delivers:** a test per `OverflowPolicy` showing a `suspend` handler behaves like an
-  `async = true` handler when the queue is full at submit, `ROUTE_TO_DLQ` included; a handler
-  that already started is never dropped, cancelled or moved to a thread the container does not
-  own when the queue is full at a resume; `EventBus.publish` returns without waiting.
+- **Delivers:** the limit on `suspend` handlers in flight (a handler counts from its submission
+  until its coroutine completes) and a test per `OverflowPolicy` showing what happens at
+  submission when the limit is reached, `ROUTE_TO_DLQ` included; `EventBus.publish` returns
+  without waiting. A handler that already started cannot be refused: its executor has no queue.
+- **Owner decides:** the limit (the existing `queueCapacity`, or a number of its own) and what
+  `CALLER_RUNS` means for a `suspend` handler.
 - **Done when:** the acceptance list of #679 is covered.
 
 ### Piece 9: timeouts and retries (#680)
 
 - **Delivers:** `timeout`, `retries` and `backoff` on `suspend` handlers with cancellation-based
   timeout and a backoff that suspends. Each attempt has its own unit.
-- **Done when:** the acceptance list of #680 is covered, including the single-thread-executor
-  test showing a waiting backoff occupies no thread.
+- **Done when:** the acceptance list of #680 is covered, including a test showing a waiting
+  backoff occupies no thread (it counts the container's live coroutine threads).
 
 ### Piece 10: `suspend` `@KafkaSource` bridges (#681)
 
@@ -246,8 +250,8 @@ owner can answer with a word.
 | D3 | 3 | The design rests on `CopyableThreadContextElement`, which kotlinx marks `@ExperimentalCoroutinesApi` and `@DelicateCoroutinesApi`. No stable API tells `launch` from `withContext`. | Accept it. Pin the kotlinx version in the BOM, name the tested version in the docs, and keep the test class that pins the behaviour. |
 | D4 | 3 | Name of the `suspend` unit function. It cannot be an overload of `runInEventScope`: Kotlin resolves the member taking `Runnable` first. | One generic function, `inEventScope { }`, for both the returning and the non-returning case. |
 | D5 | 4 | A coroutine of another scope that starts inline on the caller's thread (`Dispatchers.Unconfined`, `CoroutineStart.UNDISPATCHED`, nested `runBlocking`) sees the caller's unit until its first suspension. The element has no hook for a coroutine that does not carry it. A Java callback run inline on a thread with an open unit behaves the same today. | Document it next to the child-coroutine rule; no code. |
-| D6 | 7 | How a resume reaches the executor without being rejected, and whether the number of suspended handlers is capped. A suspended handler holds no queue slot, so the queue bound alone does not limit how many are in flight. | Options and measurements come with the experiment before piece 7. |
-| D7 | 6 | Where cancelling the scope sits in `close()`. | Transports stop taking work in, `ApplicationEndingEvent`, wait for pending deliveries (suspended handlers included) up to `tiko.shutdownTimeout`, cancel the scope and wait for the cancelled coroutines to close their units, stop delivering, close transports, `@PreDestroy`. |
+| D6 | 6 | How a resume reaches the executor without being rejected, and whether the number of suspended handlers is capped. | **Decided 2026-11-18.** An extra executor for coroutines that starts a virtual thread per dispatch (the owner's idea; it replaces the spec's dispatcher on the async executor), and a `suspend` handler in flight counts from submission to completion, with `OverflowPolicy` applied at submission. Measurements in the plan of piece 6. |
+| D7 | 6 | Where cancelling the scope sits in `close()`. | **Decided 2026-11-18, as recommended.** Transports stop taking work in, `ApplicationEndingEvent`, wait for pending deliveries (suspended handlers included) up to `tiko.shutdownTimeout`, cancel the scope and wait for the cancelled coroutines to close their units, stop delivering, close transports, `@PreDestroy`. |
 | D8 | 10 | When a Kafka record counts as done. | When the bridge's coroutine completes; the consumer thread, which the runner owns, waits for it. |
 
 ## What stays out of K2

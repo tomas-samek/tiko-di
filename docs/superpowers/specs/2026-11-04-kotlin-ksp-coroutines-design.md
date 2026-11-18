@@ -148,18 +148,29 @@ Owner's decision: Kotlin needs this, as a follow-up step after K1. In K1 the doc
    calls suspend handlers through a small runtime helper, so K2 doesn't require generating
    Kotlin.
 
-   **Dispatch (owner's decision): a `suspend` handler is always async, and it goes through the
-   same machinery as today's async handlers.**
-   - It is launched on a dispatcher backed by the container's async executor.
-   - Backpressure (`queueCapacity` / `OverflowPolicy`, #109) applies at submit time.
+   **Dispatch (owner's decision, changed on 2026-11-18): a `suspend` handler is always async.
+   It runs on an executor of its own, and keeps the guarantees of today's async handlers.**
+   - It is launched in the container's coroutine scope, on a dispatcher that starts a virtual
+     thread the container owns for every dispatch. It does not run on the async event executor.
+   - A `suspend` handler in flight counts from its submission until its coroutine completes;
+     backpressure (`queueCapacity` / `OverflowPolicy`, #109) applies at submit time.
    - Failures route as `EventHandlerError`, including the dead-letter route `ROUTE_TO_DLQ`
      (#111).
    - `@EventTrigger` chaining fires when the coroutine completes successfully.
    - `suspend` combined with an explicit `async = false` is a compile-time error.
 
    The publisher never blocks a thread waiting for a coroutine. That pattern defeats the point
-   of coroutines. Launching a handler outside the bounded queue is also out, because it would
-   silently lose the backpressure guarantee.
+   of coroutines. The backpressure guarantee stays: it moves from the queue of the async
+   executor to the count of `suspend` handlers in flight.
+
+   *Why the executor changed.* The first version of this spec launched a `suspend` handler on a
+   dispatcher backed by the async executor. Measured on 2026-11-18 (kotlinx-coroutines 1.11.0),
+   a coroutine that resumes into that executor while it is full is handled by the overflow
+   policy, which was written for a submission: `CALLER_RUNS` continued the handler on kotlinx's
+   shared timer thread, `BLOCK` blocked that timer thread and with it every `delay` in the
+   process, `DROP` never resumed the handler, `THROW` and `ROUTE_TO_DLQ` cancelled it. An
+   executor that starts a virtual thread per dispatch has no queue to be full. The measurements
+   are in `docs/superpowers/plans/2026-11-18-k2-piece-6-coroutine-scope.md`.
 
 4. **The container owns a `CoroutineScope`.** It's backed by a `SupervisorJob`, created at
    container start and cancelled at shutdown, the same way the async executor's lifecycle

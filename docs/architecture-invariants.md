@@ -350,6 +350,12 @@ so they keep the unit. `launch` and `async` get a copy, so each runs in a unit o
 concurrent child is an asynchronous hop, and ARCH-15's rule for one applies to it. `inEventScope`
 where a unit is open throws (ARCH-5).
 
+**The container's own coroutines (#678).** A coroutine the container launches, a `suspend`
+handler for one, runs in the container's scope (`ContainerCoroutines`) in a unit of its own, and
+is a pending delivery until it has completed and that unit has closed. `close()` waits for it as
+for any delivery. What still runs after the wait is cancelled before the container stops
+delivering events, so a cancelled coroutine closes its unit while its singletons are alive.
+
 **Anchor.** `ContainerGenerator.createRunInDetachedFrameMethod` and `createSwapFrameMethod`
 javadoc (`tiko-processor`); `AggregatingContainer.runInDetachedFrames`, `CarriedUnit`
 (`tiko-runtime`); `UnitOfWorkElement` and `CoroutineContextElementContractTest`
@@ -441,6 +447,8 @@ without the module's suffix.
 
 **Statement.** A thread that the runtime or a transport starts for a container comes from
 `Container.threadFactory()`, or is one of the container's own dispatch and teardown threads.
+The container's coroutines run on virtual threads it creates itself (`tiko-coroutine-N`, through
+`ContainerWork.virtualThreads`), one per dispatch, and those are owned the same way.
 The container reports the threads still running once `close()` has finished its bounded waits
 (`TikoOptions.Builder#onThreadsOutlivingClose`), and `@TikoTest` fails the test that leaked one.
 The JVM shutdown hook of `TikoDaemon` is not such a thread.
@@ -448,8 +456,10 @@ The JVM shutdown hook of `TikoDaemon` is not such a thread.
 **Rationale.** A thread that survives its container cannot be attributed later: in a test suite
 it shows up tests afterwards, as a flaky failure of something unrelated (#637).
 
-**Anchor.** `Container#threadFactory` javadoc (`tiko-api`); `OwnedThreads` (`tiko-runtime`).
-Recorded at the 0.7.0 gate.
+**Anchor.** `Container#threadFactory` javadoc (`tiko-api`); `OwnedThreads`, `ContainerWork`
+(`tiko-runtime`); `ContainerCoroutines` (`tiko-coroutines`). Recorded at the 0.7.0 gate.
 
 **Violation looks like.** Runtime or transport code that calls `new Thread(...)` or builds its
-own executor for work tied to a container, so the thread is invisible to `close()`.
+own executor for work tied to a container, so the thread is invisible to `close()`; a coroutine
+of the container dispatched to `Dispatchers.Default`, `Dispatchers.IO` or the async event
+executor, where a resume can be refused or run on a thread the container does not know.
