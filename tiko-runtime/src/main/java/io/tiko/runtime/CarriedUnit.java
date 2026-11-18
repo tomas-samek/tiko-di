@@ -55,13 +55,11 @@ public final class CarriedUnit {
     private final Consumer<Object> lifecycle;
     private final String eventId = UUID.randomUUID().toString();
 
-    // Guarded by this: which thread has the unit, and how far its close has come.
+    // Guarded by this: which thread has the unit, when it started, and how far its close has come.
     private Thread holder;
-    private boolean started;
+    private Instant startedAt;
     private boolean closeRequested;
     private boolean tornDown;
-
-    private volatile Instant startedAt;
 
     /**
      * @param modules the containers the unit is open in, in the order their frames are installed
@@ -100,7 +98,7 @@ public final class CarriedUnit {
      * @throws IllegalStateException if the unit is closed, or another thread has it
      */
     public Displaced install() {
-        boolean first;
+        Instant firstInstallAt = null;
         synchronized (this) {
             if (closeRequested) {
                 throw new IllegalStateException("This unit of work is closed; it cannot be installed on a thread.");
@@ -114,14 +112,15 @@ public final class CarriedUnit {
                         + "'. A unit of work is single-threaded: it is on one thread at a time.");
             }
             holder = current;
-            first = !started;
-            started = true;
+            if (startedAt == null) {
+                firstInstallAt = Instant.now();
+                startedAt = firstInstallAt;
+            }
         }
         var displaced = swapIn();
-        if (first) {
-            startedAt = Instant.now();
+        if (firstInstallAt != null) {
             try {
-                publish(new EventStartedEvent(eventId, startedAt));
+                publish(new EventStartedEvent(eventId, firstInstallAt));
             } catch (Error e) {
                 // The caller gets no Displaced to restore with, so the unit comes off here: a frame
                 // left on the thread, marked open, would fail every later unit on it (SEC-14).
@@ -177,7 +176,7 @@ public final class CarriedUnit {
                 return;
             }
             closeRequested = true;
-            if (!started) {
+            if (startedAt == null) {
                 tornDown = true;
                 return;
             }
@@ -199,6 +198,10 @@ public final class CarriedUnit {
     /** Whether {@link #close()} has been called. */
     public synchronized boolean isClosed() {
         return closeRequested;
+    }
+
+    private synchronized Instant startedAt() {
+        return startedAt;
     }
 
     /** Whether the holding thread has to tear the unit down: closed, and nobody has done it yet. */
@@ -257,7 +260,7 @@ public final class CarriedUnit {
         Throwable failure = null;
         try {
             var end = Instant.now();
-            publish(new EventEndingEvent(eventId, end, Duration.between(startedAt, end)));
+            publish(new EventEndingEvent(eventId, end, Duration.between(startedAt(), end)));
         } catch (Error e) {
             failure = e;
         }
