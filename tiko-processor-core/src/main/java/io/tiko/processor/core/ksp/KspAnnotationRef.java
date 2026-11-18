@@ -5,6 +5,7 @@ import com.google.devtools.ksp.symbol.KSAnnotated;
 import com.google.devtools.ksp.symbol.KSAnnotation;
 import com.google.devtools.ksp.symbol.KSClassDeclaration;
 import com.google.devtools.ksp.symbol.KSType;
+import com.google.devtools.ksp.symbol.Origin;
 import com.google.devtools.ksp.symbol.Variance;
 import io.tiko.processor.core.model.AnnotationRef;
 import io.tiko.processor.core.model.Location;
@@ -180,6 +181,15 @@ final class KspAnnotationRef implements AnnotationRef {
     }
 
     @Override
+    public boolean isExplicit(String member) {
+        var current = values();
+        if (!current.members.containsKey(member)) {
+            throw new NoSuchElementException("@" + annotationName + " has no member '" + member + "'");
+        }
+        return current.explicit.contains(member);
+    }
+
+    @Override
     public Location location() {
         return new KspLocation(node, enclosingClass);
     }
@@ -198,6 +208,10 @@ final class KspAnnotationRef implements AnnotationRef {
             var member = argument.getName() == null ? VALUE : argument.getName().asString();
             var converted = convert(argument.getValue(), member, read);
             read.members.put(member, converted == UNRESOLVED ? List.of() : converted);
+            // KSP lists the defaults among the arguments and marks the ones it filled in.
+            if (argument.getOrigin() != Origin.SYNTHETIC) {
+                read.explicit.add(member);
+            }
         }
         return read;
     }
@@ -292,6 +306,7 @@ final class KspAnnotationRef implements AnnotationRef {
         final int round;
         final Map<String, Object> members = new LinkedHashMap<>();
         final Set<String> unresolved = new HashSet<>();
+        final Set<String> explicit = new HashSet<>();
 
         Values(int round) {
             this.round = round;

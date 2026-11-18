@@ -55,6 +55,16 @@ record JavacAnnotationRef(AnnotationMirror mirror, Element annotated, String pat
         return !resolvedClass(raw);
     }
 
+    /** javac keeps the values the source wrote apart from the defaults it fills in. */
+    @Override
+    public boolean isExplicit(String member) {
+        if (entry(member).isEmpty()) {
+            throw new NoSuchElementException("@" + annotationName() + " has no member '" + member + "'");
+        }
+        return mirror.getElementValues().keySet().stream()
+                .anyMatch(written -> written.getSimpleName().contentEquals(member));
+    }
+
     private Optional<Map.Entry<? extends ExecutableElement, ? extends AnnotationValue>> entry(String member) {
         return model.elements().getElementValuesWithDefaults(mirror).entrySet().stream()
                 .filter(entry -> entry.getKey().getSimpleName().contentEquals(member))
