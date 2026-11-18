@@ -42,6 +42,37 @@ kotlin { jvmToolchain(21) }
 - **Maven + Kotlin:** may work with any Maven plugin that runs a KSP `SymbolProcessorProvider`;
   untested.
 
+## Coroutines: a unit of work across suspension
+
+`tiko-coroutines` adds `inEventScope` to `UnitOfWork`, the built-in dependency that opens
+units of work:
+
+```kotlin
+dependencies {
+    implementation("io.github.tomas-samek:tiko-coroutines:<version>")
+}
+```
+
+```kotlin
+@Component(scope = Scope.SINGLETON)
+class OrderRoutes(private val unitOfWork: UnitOfWork, private val orders: OrderService) {
+    suspend fun place(request: OrderRequest): Receipt =
+        unitOfWork.inEventScope { orders.place(request) }
+}
+```
+
+- **One unit for the whole block:** the same EVENT-scoped instances before and after every
+  suspension and on every dispatcher (`withContext`). It closes once, before `inEventScope`
+  returns or throws: on completion, failure and cancellation.
+- **`launch` / `async` inside the block run in a unit of their own** and see none of the
+  parent's EVENT-scoped instances: `map { async { ... } }` is one unit per element. Pass the
+  values a child needs to it.
+- **No nesting:** `inEventScope` where a unit is already open throws `IllegalStateException`,
+  like `runInEventScope`.
+- Use `inEventScope` for suspending work. The block of `runInEventScope` /
+  `supplyInEventScope` runs on the calling thread and cannot suspend.
+- Tested with `kotlinx-coroutines-core` 1.11.0; `tiko-bom` does not pin it, your build does.
+
 ## What does not work on KSP
 
 - `suspend` event handlers and `suspend` `@KafkaSource` bridges: rejected until Tiko's

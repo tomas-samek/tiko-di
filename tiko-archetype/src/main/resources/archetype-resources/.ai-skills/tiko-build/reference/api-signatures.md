@@ -14,6 +14,7 @@ Transcribed from source. Import from this table — never from memory.
 | `@KafkaSource` `@KafkaSink` | `io.tiko.kafka.annotations` — **NOT** `io.tiko.annotations` |
 | `Container` `UnitOfWork` `EventBus` `EventCallback` `Subscription` `Scope` `Provider` `TransportBootstrap` `ErrorHandler` `ConfigSource` `EventSerializer` `UndecodablePayloadException` | `io.tiko` |
 | `Tiko` `TikoOptions` `TikoDaemon` `DefaultErrorHandler` | `io.tiko.runtime` |
+| `inEventScope` (Kotlin, `suspend`, extension on `UnitOfWork`) | `io.tiko.coroutines` — artifact `tiko-coroutines` |
 | `ConfigSources` | `io.tiko.config` |
 | `KafkaTransport` `KafkaSerializer` `KafkaConfig` `KafkaIngestError` `KafkaIngestErrorDecider` `IngestDecision` `KafkaRecordDeadLettered` `KafkaContext` | `io.tiko.kafka` |
 | `JsonKafkaSerializer` | `io.tiko.kafka.serializer` |

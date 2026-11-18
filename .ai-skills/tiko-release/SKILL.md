@@ -228,10 +228,11 @@ Tell the user, explicitly:
 On the Portal Deployments page, the user should verify:
 
 - **Artifact count matches the `docs/releasing.md` Published column.**
-  At the time of writing: 12 artifacts (`tiko-parent`, `tiko-bom`,
+  At the time of writing: 13 artifacts (`tiko-parent`, `tiko-bom`,
   `tiko-api`, `tiko-runtime`, `tiko-processor-core`, `tiko-processor`, `tiko-config`,
-  `tiko-mcp`, `tiko-test`, `tiko-archetype`, `tiko-kafka`,
-  `tiko-kafka-processor`). Sonatype's component summary shows duplicate
+  `tiko-mcp`, `tiko-test`, `tiko-coroutines`, `tiko-archetype`, `tiko-kafka`,
+  `tiko-kafka-processor`). `tiko-coroutines` is the one Kotlin module: its javadoc jar
+  comes from Dokka, not from the javadoc plugin. Sonatype's component summary shows duplicate
   entries for `?type=pom` and `?type=maven-archetype` variants — that's
   normal; the unique-artifact count is what matters.
 - **No surprise additions** (e.g. `tiko-kafka-it`, `tiko-coverage`,

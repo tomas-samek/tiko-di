@@ -74,6 +74,8 @@ tiko/
 ├── tiko-kafka-processor/  # Compile-time processor for @KafkaSource / @KafkaSink bridges
 ├── tiko-kafka-it/         # Real-broker integration tests (Testcontainers; needs Docker)
 ├── tiko-test/             # @TikoTest JUnit extension, RecordingEventBus, @TestComponent
+├── tiko-coroutines/       # Kotlin: a unit of work across coroutine suspension (`inEventScope`);
+│                          # the one module written in Kotlin, built by kotlin-maven-plugin
 ├── tiko-mcp/              # MCP introspection server over topology.json / wiring-errors.json
 ├── tiko-archetype/        # Maven archetype for new Tiko services
 ├── tiko-bom/              # Bill of materials (no parent — excluded from spotless aggregate)

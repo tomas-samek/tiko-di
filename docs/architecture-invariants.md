@@ -337,18 +337,29 @@ every module, is installed on the thread its work runs on and taken off when the
 is closed once. It goes the way a detached unit goes: the container hands the request to
 `TikoOptions.openCarriedUnit`, the `AggregatingContainer` spans every module and publishes the
 one lifecycle pair, and each generated container swaps the frame through the same `swapFrame`
-that sets the caller's frame aside for a detached unit. The unit is on one thread at a time; a
-second thread that installs it gets an `IllegalStateException`. While it is installed,
+that sets the caller's frame aside for a detached unit. The unit's work runs on one thread at a
+time. The unit itself can be on two threads for a moment: work that moves to another thread is
+resumed there before the thread it left has taken the unit off. While it is installed,
 `runInEventScope` on that thread throws, as inside any open unit (ARCH-5).
+
+**In a coroutine (#677).** `tiko-coroutines` keeps one carried unit with one coroutine through a
+context element (`UnitOfWorkElement`). The element opens the unit the first time its coroutine
+runs and closes it when the coroutine's `Job` completes; kotlinx installs it on every resume and
+takes it off on every suspension. `withContext` and the other scoping functions keep the element,
+so they keep the unit. `launch` and `async` get a copy, so each runs in a unit of its own: a
+concurrent child is an asynchronous hop, and ARCH-15's rule for one applies to it. `inEventScope`
+where a unit is open throws (ARCH-5).
 
 **Anchor.** `ContainerGenerator.createRunInDetachedFrameMethod` and `createSwapFrameMethod`
 javadoc (`tiko-processor`); `AggregatingContainer.runInDetachedFrames`, `CarriedUnit`
-(`tiko-runtime`); `docs/superpowers/specs/2026-07-10-issue-220-async-event-scope-design.md`.
+(`tiko-runtime`); `UnitOfWorkElement` and `CoroutineContextElementContractTest`
+(`tiko-coroutines`); `docs/superpowers/specs/2026-07-10-issue-220-async-event-scope-design.md`.
 
 **Violation looks like.** Async dispatch reusing the publisher's open frame, in the handler's
 module or in another one; a detached path that fails to restore the caller's frame in a
-`finally`; `runInEventScope` made re-entrant or silently nesting; a carried unit installed on
-two threads at once, or a second place that saves and sets a container's frame.
+`finally`; `runInEventScope` made re-entrant or silently nesting; a second place that saves and
+sets a container's frame; a `launch` or `async` child running in its parent's unit; or a context
+element that carries a unit opened before its coroutine existed.
 
 ---
 

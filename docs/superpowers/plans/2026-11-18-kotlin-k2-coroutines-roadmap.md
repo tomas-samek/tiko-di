@@ -63,13 +63,29 @@ piece waits for a decision.
 | # | State | Where |
 |---|---|---|
 | 1 | merged 2026-11-18 | PR #835; plan `2026-11-18-k2-piece-1-unit-of-work-interface.md` |
-| 2 | in review | plan `2026-11-18-k2-piece-2-carried-unit.md` |
+| 2 | merged 2026-11-18 | PR #836; plan `2026-11-18-k2-piece-2-carried-unit.md` |
+| 3 | in review | plan `2026-11-18-k2-piece-3-tiko-coroutines.md` |
 
-What piece 3 builds on: `io.tiko.runtime.UnitCarrier.openCarriedUnit(origin)`, implemented by
-the `UnitOfWork` a component is handed, by the container `Tiko.create(...)` returns and by every
-generated container; and `CarriedUnit.install()` / `restore(displaced)` / `close()`. An install
-by the thread that already has the unit changes nothing, which is what a context element needs
-when `withContext` re-installs it on the same thread.
+Decided for piece 3 (owner, 2026-11-18): D2 `tiko-coroutines`, D3 accepted with the kotlinx
+version left out of the BOM, D4 `inEventScope`.
+
+Found in piece 3, and what later pieces must keep in mind:
+
+- **A unit can be on two threads during a hand-over.** kotlinx installs a context element on
+  the thread a coroutine is resumed on before the thread it left has taken the element off
+  (8,048 of 159,769 installs in a measurement on kotlinx-coroutines 1.11.0). The single-thread
+  guard of piece 2 rejected that, so it is gone: `CarriedUnit` keeps the set of threads that
+  have it, and a close left to them is run by the last one to take the unit off.
+- **A child's unit closes as part of the child's completion.** Whoever joined the child can
+  resume a moment before the teardown has run. `inEventScope` itself returns only after its unit
+  is closed.
+- **An element handed to a coroutine is copied** (`withContext(element)`, `launch(element)`), and
+  the copy is made when the coroutine is created, also for a `LAZY` one that never starts. A
+  copy must not open anything.
+
+What later pieces build on: `UnitOfWork.inEventScope` (`tiko-coroutines`),
+`UnitCarrier.openCarriedUnit(origin)` and `hasUnitOpen()`, `CarriedUnit.install()` /
+`restore(displaced)` / `close()`, `EventChainContext.current()`.
 
 ### Piece 1: injectable unit-of-work interface (#685)
 

@@ -163,6 +163,26 @@ public class OrderRoutes {
 - **The unit is the application's.** In a multi-module application a unit opened by a component of one module holds the EVENT-scoped components of every module, and its lifecycle events are published once.
 - **The component is part of the container lifecycle.** A server that binds its port in `@PostConstruct` and finds it taken fails `Tiko.create(...)` when the component is constructed at container start, and the container shuts down what it had started (see [When singletons are constructed](#when-singletons-are-constructed)).
 
+### A unit of work in Kotlin coroutines
+
+`runInEventScope` and `supplyInEventScope` take a block that runs to its end on the calling thread. Suspending code takes `inEventScope` from the `tiko-coroutines` module (`io.github.tomas-samek:tiko-coroutines`), an extension on `UnitOfWork`:
+
+```kotlin
+@Component(scope = Scope.SINGLETON)
+class OrderRoutes(private val unitOfWork: UnitOfWork, private val orders: OrderService) {
+
+    suspend fun place(request: OrderRequest): Receipt =
+        unitOfWork.inEventScope { orders.place(request) }
+}
+```
+
+- **One unit for the whole block.** The EVENT-scoped instances are the same before and after every suspension, and on every dispatcher the block moves to with `withContext`. A thread the block has left has nothing of the unit on it.
+- **The unit closes once, before `inEventScope` returns or throws:** when the block completes, when it fails, and when its coroutine is cancelled. Cleanup that still runs after a cancellation, a `finally` block or `withContext(NonCancellable)`, is still in the unit.
+- **A `launch` or `async` started in the block runs in a unit of work of its own.** A unit of work is single-threaded, and concurrent work is a new unit, as it is for an async event handler. The child sees none of the parent's EVENT-scoped instances, so `map { async { ... } }` opens one unit per element; pass the values a child needs to it. The child's unit closes when the child completes. `withContext`, `coroutineScope` and the other scoping functions are the same work and keep the unit.
+- **A unit of work does not nest.** `inEventScope` called where a unit is already open throws `IllegalStateException`, as `runInEventScope` does.
+
+`tiko-coroutines` is built and tested with `kotlinx-coroutines-core` 1.11.0. `tiko-bom` manages `tiko-coroutines` and leaves the version of `kotlinx-coroutines-core` to your build, where a coroutine BOM or a library such as Ktor usually sets it. The unit travels in the coroutine context through kotlinx's `CopyableThreadContextElement`, an API kotlinx marks experimental; a test in the module states the behaviour Tiko needs from it, so a kotlinx release that changes it fails Tiko's build before it reaches yours.
+
 ## Constructor injection
 
 The preferred and recommended form. All dependencies are wired before the constructor body runs, so initialization belongs there.
