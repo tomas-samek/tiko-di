@@ -147,12 +147,23 @@ class CoroutineContextElementContractTest {
             }.join()
         }
 
-        val calls = log.filter { it.startsWith("unit ") }
-        val installs = calls.count { it.startsWith("unit installed") }
-        assertThat(installs).`as`("the start and two resumes").isGreaterThanOrEqualTo(3)
-        assertThat(calls.count { it.startsWith("unit taken off") }).isEqualTo(installs)
-        calls.chunked(2).forEach { (installed, takenOff) ->
-            assertThat(takenOff.removePrefix("unit taken off ")).isEqualTo(installed.removePrefix("unit installed on "))
+        // The thread a coroutine left takes the element off on its way out, which can be after
+        // the coroutine has been resumed elsewhere, and after whoever joined it has gone on.
+        fun calls() = log.filter { it.startsWith("unit ") }
+        fun installs() = calls().count { it.startsWith("unit installed") }
+        runBlocking {
+            withTimeout(10_000) {
+                while (calls().count { it.startsWith("unit taken off") } != installs()) {
+                    delay(1)
+                }
+            }
+        }
+
+        assertThat(installs()).`as`("the start and two resumes").isGreaterThanOrEqualTo(3)
+        calls().groupBy { it.substringAfter("thread ") }.forEach { (thread, onThread) ->
+            assertThat(onThread.map { it.substringBefore(" thread") })
+                .`as`("on thread $thread every install is followed by its take-off")
+                .isEqualTo(List(onThread.size) { if (it % 2 == 0) "unit installed on" else "unit taken off" })
         }
     }
 

@@ -91,21 +91,41 @@ class CarriedUnitTest {
     }
 
     private static Event<?> currentOrigin() {
-        return EventChainContext.current();
+        Event<?> current = EventChainContext.enter(null);
+        EventChainContext.exit(current);
+        return current;
     }
 
+    /** A coroutine's unit is opened where the coroutine first runs, not where it was started. */
     @Test
-    void theCurrentOriginIsWhatTheThreadEntered() {
-        Event<String> origin = EventChainContext.wrap("handled now");
-        var before = EventChainContext.current();
+    void aCarriedUnitOpenerKeepsTheOriginOfTheThreadThatMadeIt() throws InterruptedException {
+        Event<String> origin = EventChainContext.wrap("handled where the work was started");
+        var asked = new java.util.ArrayList<Event<?>>();
+        UnitCarrier carrier = new UnitCarrier() {
+            @Override
+            public CarriedUnit openCarriedUnit(Event<?> from) {
+                asked.add(from);
+                return unit(from);
+            }
+
+            @Override
+            public boolean hasUnitOpen() {
+                return false;
+            }
+        };
         var previous = EventChainContext.enter(origin);
+        java.util.function.Supplier<CarriedUnit> opener;
         try {
-            assertThat(EventChainContext.current()).isSameAs(origin);
+            opener = EventChainContext.carriedUnitOpener(carrier);
         } finally {
             EventChainContext.exit(previous);
         }
-        assertThat(before).isNull();
-        assertThat(EventChainContext.current()).isNull();
+
+        onAnotherThread(opener::get);
+
+        assertThat(asked)
+                .as("opened later, on a thread with no origin of its own")
+                .containsExactly(origin);
     }
 
     @Test
