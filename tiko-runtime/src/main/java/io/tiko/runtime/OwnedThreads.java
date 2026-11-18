@@ -140,15 +140,23 @@ final class OwnedThreads implements ThreadFactory {
      * stopped once and given until {@code deadlineNanos}, and at least {@link #WORK_STOP_GRACE}: a
      * cancelled coroutine needs time to run its cleanup even when the wait before used up the
      * shutdown timeout. An instance that throws does not keep the others from being stopped.
+     *
+     * <p>What the stopped work handed over on its way out, an event a cancelled coroutine published
+     * to an async handler for one, is then waited for until {@code deadlineNanos}.
+     *
+     * @return whether nothing is pending afterwards
      */
-    void stopWork(long deadlineNanos) {
+    boolean stopWork(long deadlineNanos) {
         List<ContainerWork.Stoppable> toStop;
         synchronized (workLock) {
             if (workStopped) {
-                return;
+                return deliveries.count() == 0;
             }
             workStopped = true;
             toStop = new ArrayList<>(work.values());
+        }
+        if (toStop.isEmpty()) {
+            return deliveries.count() == 0;
         }
         long earliest = System.nanoTime() + WORK_STOP_GRACE.toNanos();
         long deadline = deadlineNanos - earliest < 0 ? earliest : deadlineNanos;
@@ -159,6 +167,7 @@ final class OwnedThreads implements ThreadFactory {
                 LoggerHolder.LOG.log(System.Logger.Level.WARNING, "Stopping the container's work threw", e);
             }
         }
+        return deliveries.await(deadlineNanos);
     }
 
     /**

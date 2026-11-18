@@ -253,6 +253,23 @@ public final class EventChainContext {
     }
 
     /**
+     * The step of {@code close()} that follows {@link #awaitPendingDeliveries} (#678). Called from
+     * generated container code with the container's event executor: what other Tiko modules run
+     * for the container, its coroutines, is stopped. What is still running is cancelled and gets
+     * until {@code deadlineNanos}, and at least a second, to finish, so a cancelled coroutine
+     * closes its unit of work while events are still delivered and before any singleton is
+     * destroyed.
+     *
+     * @return whether nothing is pending afterwards; always {@code true} for an executor that did
+     *     not come from a {@code Tiko.create(...)} boot
+     */
+    public static boolean stopContainerWork(ExecutorService executor, long deadlineNanos) {
+        return !(executor instanceof RetryScheduling tracked)
+                || tracked.owner() == null
+                || tracked.owner().stopWork(deadlineNanos);
+    }
+
+    /**
      * What a generated container answers {@code Container.pendingAsyncDeliveries()} with (#761):
      * the tasks handed to its event executor that are queued or running, plus the retries waiting
      * out their backoff.

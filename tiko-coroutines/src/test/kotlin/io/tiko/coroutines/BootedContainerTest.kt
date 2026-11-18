@@ -7,6 +7,7 @@ import io.tiko.coroutines.fixtures.Requests
 import io.tiko.events.EventEndingEvent
 import io.tiko.events.EventStartedEvent
 import io.tiko.runtime.Tiko
+import io.tiko.runtime.TikoOptions
 import io.tiko.runtime.UnitCarrier
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.delay
@@ -31,9 +32,12 @@ abstract class BootedContainerTest {
     /** `started <id>` and `ending <id>` for every unit of work, in publishing order. */
     protected val lifecycle = CopyOnWriteArrayList<String>()
 
+    /** The options the container is booted with; a subclass that needs others overrides it. */
+    protected open fun options(): TikoOptions = TikoOptions.builder().build()
+
     @BeforeEach
     fun boot() {
-        container = Tiko.create()
+        container = Tiko.create(options())
         container.eventBus.subscribe(EventStartedEvent::class.java) { lifecycle += "started ${it.eventId()}" }
         container.eventBus.subscribe(EventEndingEvent::class.java) { lifecycle += "ending ${it.eventId()}" }
         requests = container.get(Requests::class.java)

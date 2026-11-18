@@ -68,8 +68,11 @@ class ContainerGeneratorShutdownIdempotencyTest {
         assertThat(content)
                 .containsSubsequence(
                         "eventBus.publish(new ApplicationEndingEvent",
-                        "boolean __drained = !publishLifecycleEvents"
-                                + " || EventChainContext.awaitPendingDeliveries(this.eventExecutor, ",
+                        "__drained = EventChainContext.awaitPendingDeliveries(this.eventExecutor, __drainDeadlineNanos)",
+                        // #678: the container's coroutines are cancelled after the wait, while events
+                        // are still delivered and before any singleton is destroyed.
+                        "__drained = EventChainContext.stopContainerWork(this.eventExecutor, __drainDeadlineNanos)"
+                                + " && __drained",
                         "stopped.set(true)",
                         "this.options.closeTransports()",
                         "inShutdownThread.set(Boolean.TRUE)",
