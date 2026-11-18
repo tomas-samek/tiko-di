@@ -1,9 +1,11 @@
 package io.tiko.runtime;
 
 /**
- * A module's container as one part of a detached unit of work: the unit an async event handler
- * runs in (#220). In a multi-module application that unit is open in every module (#811), so the
- * application asks each module's container for a frame of its own.
+ * A module's container as one part of a unit of work that is opened off the calling thread's own
+ * frame. There are two such units: the detached unit an async event handler runs in (#220), and a
+ * {@link CarriedUnit}, which is put on a thread and taken off again (#677). In a multi-module
+ * application either one is open in every module (#811), so the application asks each module's
+ * container for its frame.
  *
  * <p>Generated containers implement this; applications don't call it. A unit of work is opened
  * with {@code container.runInEventScope(...)}.
@@ -20,4 +22,18 @@ public interface DetachedUnitFrame {
      *     publishes it for the whole application
      */
     void runInDetachedFrame(Runnable task, boolean publishLifecycle);
+
+    /**
+     * Makes {@code frame} this container's EVENT frame on the calling thread.
+     *
+     * @return the frame it replaced, for the caller to swap back in
+     */
+    UnitFrame swapFrame(UnitFrame frame);
+
+    /**
+     * Tears down the frame that is this container's on the calling thread: the destroy hooks of
+     * its EVENT-scoped components run in reverse creation order, and the frame ends empty with no
+     * unit open in it.
+     */
+    void closeFrame();
 }
