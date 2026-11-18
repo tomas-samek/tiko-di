@@ -704,7 +704,11 @@ public final class Tiko {
             } catch (Throwable t) {
                 shutdownFailure = t;
             }
-            // A container generated before 0.8.0 never asks for its transports to close.
+            // A container generated before 0.8.0 never asks for its coroutines to stop or for
+            // its transports to close. For one that did, neither call does anything.
+            if (threads != null) {
+                threads.stopWork(System.nanoTime());
+            }
             closeTransports();
             Error transportFailure = transportError.get();
             if (transportFailure != null) {

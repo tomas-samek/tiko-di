@@ -743,7 +743,11 @@ public final class AggregatingContainer implements Container, UnitCarrier {
         // Wait for the async handlers that are queued or running before anything they can reach
         // is torn down; a retry waiting out its backoff is dropped (#721). Then the transports'
         // way out closes, and the modules stop delivering events as each one shuts down.
-        boolean drained = ownedThreads.awaitDeliveries(System.nanoTime() + shutdownTimeout.toNanos());
+        long drainDeadline = System.nanoTime() + shutdownTimeout.toNanos();
+        boolean drained = ownedThreads.awaitDeliveries(drainDeadline);
+        // What is still running beside the event executor, the application's coroutines, is
+        // cancelled now and closes its units of work, while events are still delivered (#678).
+        drained = ownedThreads.stopWork(drainDeadline) && drained;
         options.closeTransports();
         // Shutdown in reverse order. Per-module containers no longer shut down the executor
         // themselves (#51): they were constructed with the shared executor, so their internal

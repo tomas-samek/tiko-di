@@ -343,7 +343,14 @@ public final class TikoContainerImpl_4ae99f55 implements Container, DetachedUnit
     // Wait for the async handlers that are queued or running, before anything they can
     // reach is torn down (#721). Events published meanwhile are still delivered. A module
     // under an aggregate leaves the wait, and the transports, to the aggregate.
-    boolean __drained = !publishLifecycleEvents || EventChainContext.awaitPendingDeliveries(this.eventExecutor, System.nanoTime() + this.shutdownTimeout.toNanos());
+    boolean __drained = true;
+    if (publishLifecycleEvents) {
+      long __drainDeadlineNanos = System.nanoTime() + this.shutdownTimeout.toNanos();
+      __drained = EventChainContext.awaitPendingDeliveries(this.eventExecutor, __drainDeadlineNanos);
+      // What still runs beside the event executor, the container's coroutines, is cancelled
+      // now and closes its units of work, while events are still delivered (#678).
+      __drained = EventChainContext.stopContainerWork(this.eventExecutor, __drainDeadlineNanos) && __drained;
+    }
     // Phase 3: gate new get() calls and drain in-flight ones. Lookups register in
     // inFlightGets BEFORE reading the stopped gate (#305), so once this thread observes
     // inFlightGets == 0 after stopped.set(true), every later lookup is rejected — none

@@ -1762,11 +1762,17 @@ public final class ContainerGenerator {
         method.addComment("Wait for the async handlers that are queued or running, before anything they can");
         method.addComment("reach is torn down (#721). Events published meanwhile are still delivered. A module");
         method.addComment("under an aggregate leaves the wait, and the transports, to the aggregate.");
+        method.addStatement("boolean __drained = true");
+        method.beginControlFlow(IF_PUBLISH_LIFECYCLE);
+        method.addStatement("long __drainDeadlineNanos = $T.nanoTime() + this.shutdownTimeout.toNanos()", System.class);
         method.addStatement(
-                "boolean __drained = !publishLifecycleEvents || $T.awaitPendingDeliveries(this.eventExecutor, "
-                        + "$T.nanoTime() + this.shutdownTimeout.toNanos())",
-                EVENT_CHAIN_CONTEXT,
-                System.class);
+                "__drained = $T.awaitPendingDeliveries(this.eventExecutor, __drainDeadlineNanos)", EVENT_CHAIN_CONTEXT);
+        method.addComment("What still runs beside the event executor, the container's coroutines, is cancelled");
+        method.addComment("now and closes its units of work, while events are still delivered (#678).");
+        method.addStatement(
+                "__drained = $T.stopContainerWork(this.eventExecutor, __drainDeadlineNanos) && __drained",
+                EVENT_CHAIN_CONTEXT);
+        method.endControlFlow();
 
         method.addComment("Phase 3: gate new get() calls and drain in-flight ones. Lookups register in");
         method.addComment("inFlightGets BEFORE reading the stopped gate (#305), so once this thread observes");
