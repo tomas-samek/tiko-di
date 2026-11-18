@@ -119,16 +119,20 @@ public final class CarriedUnit {
         }
         var displaced = swapIn();
         if (firstInstallAt != null) {
+            boolean published = false;
             try {
                 publish(new EventStartedEvent(eventId, firstInstallAt));
-            } catch (Error e) {
-                // The caller gets no Displaced to restore with, so the unit comes off here: a frame
-                // left on the thread, marked open, would fail every later unit on it (SEC-14).
-                swapOut(displaced);
-                synchronized (this) {
-                    holder = null;
+                published = true;
+            } finally {
+                if (!published) {
+                    // An Error of a handler is on its way out, and the caller gets no Displaced to
+                    // restore with. The unit comes off here: a frame left on the thread, marked
+                    // open, would fail every later unit on it (SEC-14).
+                    swapOut(displaced);
+                    synchronized (this) {
+                        holder = null;
+                    }
                 }
-                throw e;
             }
         }
         return displaced;
@@ -254,28 +258,38 @@ public final class CarriedUnit {
     /**
      * Ends the unit while it is installed on the calling thread. Every module's frame is torn
      * down whatever the ending publish or another module's teardown throws (SEC-14); the first
-     * failure is rethrown afterwards, with the later ones suppressed on it.
+     * exception of a module is rethrown afterwards, with the later ones suppressed on it.
      */
     private void tearDown() {
-        Throwable failure = null;
         try {
             var end = Instant.now();
             publish(new EventEndingEvent(eventId, end, Duration.between(startedAt(), end)));
-        } catch (Error e) {
-            failure = e;
+        } finally {
+            closeFrames(frames.length - 1, null);
         }
-        for (int i = frames.length - 1; i >= 0; i--) {
-            try {
-                modules.get(i).closeFrame();
-            } catch (RuntimeException | Error e) {
-                failure = BoundedExecution.retainFailure(failure, e);
+    }
+
+    /**
+     * Closes the frame of module {@code index} and then of every module before it. The rest is
+     * closed from a {@code finally}, so an {@code Error} out of one module does not skip the
+     * others.
+     *
+     * @param earlier the failure of a module closed before this one, or {@code null}
+     */
+    private void closeFrames(int index, RuntimeException earlier) {
+        if (index < 0) {
+            if (earlier != null) {
+                throw earlier;
             }
+            return;
         }
-        if (failure instanceof Error error) {
-            throw error;
-        }
-        if (failure instanceof RuntimeException exception) {
-            throw exception;
+        RuntimeException failure = earlier;
+        try {
+            modules.get(index).closeFrame();
+        } catch (RuntimeException e) {
+            failure = BoundedExecution.retainFailure(failure, e);
+        } finally {
+            closeFrames(index - 1, failure);
         }
     }
 
