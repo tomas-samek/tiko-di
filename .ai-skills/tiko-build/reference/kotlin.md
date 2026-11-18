@@ -71,12 +71,17 @@ class OrderRoutes(private val unitOfWork: UnitOfWork, private val orders: OrderS
   like `runInEventScope`.
 - Use `inEventScope` for suspending work. The block of `runInEventScope` /
   `supplyInEventScope` runs on the calling thread and cannot suspend.
+- The upstream of `flowOn` is a child too (a unit of its own); a flow collected without it runs
+  in the collector's unit. A coroutine of another scope is not part of the unit.
 - Tested with `kotlinx-coroutines-core` 1.11.0; `tiko-bom` does not pin it, your build does.
+- Ktor routes: [`docs/cookbooks/ktor.md`](../../../docs/cookbooks/ktor.md) (one unit per
+  request, blocking JDBC on `Dispatchers.IO` inside it, client disconnects, parallel work).
 
 ## What does not work on KSP
 
-- `suspend` event handlers and `suspend` `@KafkaSource` bridges: rejected until Tiko's
-  coroutine support.
+- `suspend` event handlers and `suspend` `@KafkaSource` bridges: rejected, because the
+  container calls a handler or a bridge outside a coroutine. Suspending code runs in
+  `inEventScope` (above).
 
 ## Where KSP differs from javac
 
@@ -114,7 +119,7 @@ One that would add new DI semantics is rejected at compile time with error kind
 | `@Produces` / `@EventHandler` inside a `companion object` | Rejected. | Move it to the enclosing `@Component` class. |
 | `@Produces` (or other DI function annotation) on an extension function | Rejected: Tiko injects parameters only, not a receiver. | Declare a regular `fun` taking the receiver as a parameter. |
 | `@get:` / `@set:` DI annotation on a property (`@get:Produces`, `@set:PostConstruct`, ...) | Rejected: Tiko reads DI annotations on functions. | Declare a `fun` instead. |
-| `suspend` `@EventHandler` | Rejected until coroutine support. | Make it a regular `fun`. |
+| `suspend` `@EventHandler` | Rejected: the container calls a handler outside a coroutine. | Make it a regular `fun`. |
 | `suspend` `@Produces` / `@PostConstruct` / `@PreDestroy` | Rejected: the container calls them outside a coroutine. | Drop `suspend`. |
 | `suspend` member of an interface an EVENT-scoped bean is injected through (proxied) | Rejected: the proxy calls it outside a coroutine. | Drop `suspend`. |
 | Value class (`@JvmInline value class`) as a component, injected type, `@Produces` return or parameter, handler event, or a member of an interface Tiko proxies (EVENT impl injected into a SINGLETON) | Rejected: on the JVM it is passed as its underlying value under a mangled function name, so generated Java can't use it. | Use a regular class (a `data class` keeps value semantics). |
@@ -122,7 +127,7 @@ One that would add new DI semantics is rejected at compile time with error kind
 | DI function whose JVM name Java can't call (e.g. `fun new()`) | Rejected. | Rename it, or set a callable name with `@JvmName`. |
 | `@KafkaSource` / `@KafkaSink` on a top-level function, or inside an `object` / `companion object` | Rejected: no component instance to call it on. | Move it into (or, from a companion, to the enclosing) `@Component` class. |
 | `@KafkaSource` / `@KafkaSink` on an extension function | Rejected: the bootstrap passes only the payload (and `KafkaContext`). | Declare a regular `fun` taking the receiver as a parameter. |
-| `suspend` `@KafkaSource` | Rejected until coroutine support. | Make it a regular `fun`. |
+| `suspend` `@KafkaSource` | Rejected: the bridge is called outside a coroutine. | Make it a regular `fun`. |
 | `suspend` `@KafkaSink`, or a value class in a bridge's signature | Rejected. | Drop `suspend`; use a regular class. |
 | Plain `data class` (no `@JvmRecord`) as a `@KafkaSource` parameter or `@KafkaSink` return payload, with the default `serializer` | Rejected (a located compile error): the default JSON serializer can't build it, because its constructor has no parameter names Jackson can read. A `@JvmRecord data class`, a Java record or a Java POJO works as a payload. The check covers the payload's top-level type only, so a data class nested inside a payload or inside a collection is yours to annotate; a data class whose parameters all have defaults is rejected too. | Annotate it `@JvmRecord`, or set an explicit `serializer = YourSerializer::class` on the annotation, which turns the rule off. |
 

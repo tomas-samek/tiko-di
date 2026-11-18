@@ -275,6 +275,13 @@ including when `CALLER_RUNS` runs it inline. Concretely:
   thread (`CALLER_RUNS`), the `timeout` budget cannot bound it — the time-box arms only
   after the inline run completes. The unit itself (fresh beans, teardown) still applies.
 
+Kotlin coroutines follow the same rule. Inside a unit opened with `inEventScope`
+(`tiko-coroutines`), a `launch` or `async` is an asynchronous hop like an async handler: it runs
+in its own fresh EVENT unit, publishes its own `EventStartedEvent` / `EventEndingEvent` pair, and
+events it publishes keep the origin chain of the work that started it. `withContext` is not a
+hop and keeps the unit. See
+[A unit of work in Kotlin coroutines](./di-and-scopes.md#a-unit-of-work-in-kotlin-coroutines).
+
 Multi-module note: in a multi-module application an async handler's unit is open in every
 module, whichever module declares the handler. The handler reaches the EVENT-scoped components
 of all of them, through a `Picker<T>` for one; each module tears down what it created when the
