@@ -66,6 +66,11 @@
         </dependency>
         <dependency>
             <groupId>io.github.tomas-samek</groupId>
+            <artifactId>tiko-coroutines</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-kafka</artifactId>
             <version>${project.version}</version>
         </dependency>
