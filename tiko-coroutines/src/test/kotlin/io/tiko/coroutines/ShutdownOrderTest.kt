@@ -42,7 +42,7 @@ class ShutdownOrderTest : BootedContainerTest() {
     private fun closeWhile(block: suspend CoroutineScope.(started: () -> Unit) -> Unit): Pair<Job, Long> {
         val started = CompletableDeferred<Unit>()
         val log = order // resolved now: the container refuses lookups once it is closing
-        container.eventBus.subscribe(EventEndingEvent::class.java) { log.record("unit ended") }
+        container.eventBus.subscribe(EventEndingEvent::class.java) { log.note("unit ended") }
         val job = launch { block { started.complete(Unit) } }
         runBlocking { started.await() }
         val before = System.nanoTime()
@@ -55,7 +55,7 @@ class ShutdownOrderTest : BootedContainerTest() {
         val (job, _) = closeWhile { started ->
             started()
             delay(100)
-            order.record("coroutine finished")
+            order.note("coroutine finished")
         }
 
         assertThat(job.isCancelled).isFalse()
@@ -70,7 +70,7 @@ class ShutdownOrderTest : BootedContainerTest() {
                 started()
                 delay(60_000)
             } finally {
-                order.record("coroutine cancelled")
+                order.note("coroutine cancelled")
             }
         }
 
@@ -106,7 +106,7 @@ class ShutdownOrderTest : BootedContainerTest() {
                 started()
                 Thread.sleep(60_000) // cancellation does not reach blocking code
             } finally {
-                order.record("blocked coroutine interrupted")
+                order.note("blocked coroutine interrupted")
             }
         }
         runBlocking { eventually("the interrupted coroutine's unit closes") { order.seen().contains("unit ended") } }
