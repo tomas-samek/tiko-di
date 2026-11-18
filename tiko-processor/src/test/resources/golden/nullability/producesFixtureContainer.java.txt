@@ -7,6 +7,7 @@ import demo.Service;
 import io.tiko.Container;
 import io.tiko.ContainerShutDownException;
 import io.tiko.ErrorHandler;
+import io.tiko.Event;
 import io.tiko.EventBus;
 import io.tiko.ExecutorMetrics;
 import io.tiko.NoActiveEventScopeException;
@@ -17,10 +18,13 @@ import io.tiko.events.ApplicationEndingEvent;
 import io.tiko.events.ApplicationStartedEvent;
 import io.tiko.events.EventEndingEvent;
 import io.tiko.events.EventStartedEvent;
+import io.tiko.runtime.CarriedUnit;
 import io.tiko.runtime.DetachedUnitFrame;
 import io.tiko.runtime.EventChainContext;
 import io.tiko.runtime.TikoOptions;
 import io.tiko.runtime.Unchecked;
+import io.tiko.runtime.UnitCarrier;
+import io.tiko.runtime.UnitFrame;
 import java.lang.Boolean;
 import java.lang.Class;
 import java.lang.Exception;
@@ -56,7 +60,7 @@ import java.util.function.Supplier;
 import javax.annotation.processing.Generated;
 
 @Generated("io.tiko.processor.generator.ContainerGenerator")
-public final class TikoContainerImpl_4ae99f55 implements Container, DetachedUnitFrame {
+public final class TikoContainerImpl_4ae99f55 implements Container, DetachedUnitFrame, UnitCarrier {
   private final Map<String, Object> singletons = new ConcurrentHashMap<>();
 
   private final Object singletonLock = new Object();
@@ -195,15 +199,35 @@ public final class TikoContainerImpl_4ae99f55 implements Container, DetachedUnit
 
   @Override
   public void runInDetachedFrame(Runnable task, boolean __publishLifecycle) {
-    Map<String, Object> __savedScope = eventScoped.get();
-    Boolean __savedFrameOpen = __unitFrameOpen.get();
-    eventScoped.set(new LinkedHashMap<>());
-    __unitFrameOpen.set(Boolean.FALSE);
+    UnitFrame __previous = swapFrame(UnitFrame.closed());
     try {
       __runInEventScope(task, __publishLifecycle);
     } finally {
-      eventScoped.set(__savedScope);
-      __unitFrameOpen.set(__savedFrameOpen);
+      swapFrame(__previous);
+    }
+  }
+
+  @Override
+  public UnitFrame swapFrame(UnitFrame frame) {
+    UnitFrame __previous = new UnitFrame(eventScoped.get(), __unitFrameOpen.get());
+    eventScoped.set(frame.scope());
+    __unitFrameOpen.set(frame.open());
+    return __previous;
+  }
+
+  @Override
+  public void closeFrame() {
+    __closeEventScope();
+  }
+
+  @Override
+  public CarriedUnit openCarriedUnit(Event<?> origin) {
+    return this.options.openCarriedUnit(this, this::__publishGatedUnitLifecycle, origin);
+  }
+
+  private void __publishGatedUnitLifecycle(Object event) {
+    if (publishLifecycleEvents) {
+      __publishUnitLifecycle(event);
     }
   }
 

@@ -234,6 +234,7 @@ public final class ContainerGenerator {
         containerBuilder.addModifiers(Modifier.PUBLIC, Modifier.FINAL);
         containerBuilder.addSuperinterface(Container.class);
         containerBuilder.addSuperinterface(DETACHED_UNIT_FRAME);
+        containerBuilder.addSuperinterface(UNIT_CARRIER);
 
         // Add fields
         containerBuilder.addField(createSingletonStorageField());
@@ -272,6 +273,10 @@ public final class ContainerGenerator {
         containerBuilder.addMethod(createRunInEventScopeCoreMethod());
         containerBuilder.addMethod(createRunInDetachedEventScopeMethod());
         containerBuilder.addMethod(createRunInDetachedFrameMethod());
+        containerBuilder.addMethod(createSwapFrameMethod());
+        containerBuilder.addMethod(createCloseFrameMethod());
+        containerBuilder.addMethod(createOpenCarriedUnitMethod());
+        containerBuilder.addMethod(createPublishGatedUnitLifecycleMethod());
         containerBuilder.addMethod(createSupplyInEventScopeMethod());
         containerBuilder.addMethod(createPublishUnitLifecycleMethod());
         containerBuilder.addMethod(createCloseEventScopeMethod());
@@ -1167,6 +1172,9 @@ public final class ContainerGenerator {
     private static final ClassName BOUNDED_EXECUTION = ClassName.get("io.tiko.runtime", "BoundedExecution");
     private static final ClassName EVENT_CHAIN_CONTEXT = ClassName.get("io.tiko.runtime", "EventChainContext");
     private static final ClassName DETACHED_UNIT_FRAME = ClassName.get("io.tiko.runtime", "DetachedUnitFrame");
+    private static final ClassName UNIT_CARRIER = ClassName.get("io.tiko.runtime", "UnitCarrier");
+    private static final ClassName UNIT_FRAME = ClassName.get("io.tiko.runtime", "UnitFrame");
+    private static final ClassName CARRIED_UNIT = ClassName.get("io.tiko.runtime", "CarriedUnit");
     private static final ClassName CONTAINER_SHUT_DOWN = ClassName.get(TIKO_PACKAGE, "ContainerShutDownException");
     /** The lambda head that makes a resolution lazy: a {@code Provider} and an override fallback. */
     private static final String LAZY = "() -> ";
@@ -1273,28 +1281,90 @@ public final class ContainerGenerator {
     /**
      * Creates {@code runInDetachedFrame}, this container's part of a detached unit (#220, #811).
      * When the overflow policy runs the async task inline on a borrowed publisher thread
-     * ({@code CALLER_RUNS}), the caller's open frame is suspended (saved and cleared) for the
-     * duration and restored afterwards — detachment, not nesting. The public
-     * {@code runInEventScope} still throws on re-entry, so the single-frame invariant (ARCH-5) is
-     * untouched.
+     * ({@code CALLER_RUNS}), the caller's open frame is set aside for the duration (a closed,
+     * empty frame is swapped in for it) and swapped back afterwards — detachment, not nesting.
+     * The public {@code runInEventScope} still throws on re-entry, so the single-frame invariant
+     * (ARCH-5) is untouched.
      */
     private MethodSpec createRunInDetachedFrameMethod() {
-        ParameterizedTypeName scopeMapType = ParameterizedTypeName.get(
-                ClassName.get(Map.class), ClassName.get(String.class), ClassName.get(Object.class));
         MethodSpec.Builder method = MethodSpec.methodBuilder("runInDetachedFrame")
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
                 .addParameter(Runnable.class, "task")
                 .addParameter(TypeName.BOOLEAN, PUBLISH_LIFECYCLE_PARAM);
-        method.addStatement("$T __savedScope = eventScoped.get()", scopeMapType)
-                .addStatement("$T __savedFrameOpen = __unitFrameOpen.get()", Boolean.class)
-                .addStatement("eventScoped.set(new $T<>())", LinkedHashMap.class)
-                .addStatement("__unitFrameOpen.set($T.FALSE)", Boolean.class);
+        method.addStatement("$T __previous = swapFrame($T.closed())", UNIT_FRAME, UNIT_FRAME);
         method.beginControlFlow("try")
                 .addStatement("__runInEventScope(task, $L)", PUBLISH_LIFECYCLE_PARAM)
                 .nextControlFlow("finally")
-                .addStatement("eventScoped.set(__savedScope)")
-                .addStatement("__unitFrameOpen.set(__savedFrameOpen)")
+                .addStatement("swapFrame(__previous)")
+                .endControlFlow();
+        return method.build();
+    }
+
+    /**
+     * Creates {@code swapFrame}: the one place that sets this container's EVENT frame on a thread
+     * aside for another one. A detached unit swaps a closed frame in around an async handler
+     * (#220); a carried unit swaps its own frame in wherever its work runs and the thread's frame
+     * back when the work leaves (#677). Both ThreadLocals travel together: the instances and
+     * whether a unit is open.
+     */
+    private MethodSpec createSwapFrameMethod() {
+        return MethodSpec.methodBuilder("swapFrame")
+                .addModifiers(Modifier.PUBLIC)
+                .addAnnotation(Override.class)
+                .addParameter(UNIT_FRAME, "frame")
+                .returns(UNIT_FRAME)
+                .addStatement(
+                        "$T __previous = new $T(eventScoped.get(), __unitFrameOpen.get())", UNIT_FRAME, UNIT_FRAME)
+                .addStatement("eventScoped.set(frame.scope())")
+                .addStatement("__unitFrameOpen.set(frame.open())")
+                .addStatement("return __previous")
+                .build();
+    }
+
+    /**
+     * Creates {@code closeFrame}: the teardown of the frame installed on the calling thread, for
+     * a carried unit (#677). It is the teardown every unit of work ends with, so the destroy
+     * order and the error routing of a carried unit are those of {@code runInEventScope}.
+     */
+    private MethodSpec createCloseFrameMethod() {
+        return MethodSpec.methodBuilder("closeFrame")
+                .addModifiers(Modifier.PUBLIC)
+                .addAnnotation(Override.class)
+                .addStatement("__closeEventScope()")
+                .build();
+    }
+
+    /**
+     * Creates {@code openCarriedUnit} (#677). The unit is the application's, so the container
+     * hands the request to its options, as it does for a detached unit: under an aggregator the
+     * unit spans every module and the aggregator publishes its lifecycle pair; a single-module
+     * container gets a unit over its own frame, and publishes through its own gate.
+     */
+    private MethodSpec createOpenCarriedUnitMethod() {
+        return MethodSpec.methodBuilder("openCarriedUnit")
+                .addModifiers(Modifier.PUBLIC)
+                .addAnnotation(Override.class)
+                .addParameter(
+                        ParameterizedTypeName.get(
+                                ClassName.get(TIKO_PACKAGE, "Event"), WildcardTypeName.subtypeOf(Object.class)),
+                        "origin")
+                .returns(CARRIED_UNIT)
+                .addStatement("return this.options.openCarriedUnit(this, this::__publishGatedUnitLifecycle, origin)")
+                .build();
+    }
+
+    /**
+     * Creates {@code __publishGatedUnitLifecycle}: a unit lifecycle publish under the container's
+     * standing {@code publishLifecycleEvents} flag, for a unit whose bracket is not one of the
+     * scope methods here (a carried unit, #677). A module under an aggregator stays silent.
+     */
+    private MethodSpec createPublishGatedUnitLifecycleMethod() {
+        MethodSpec.Builder method = MethodSpec.methodBuilder("__publishGatedUnitLifecycle")
+                .addModifiers(Modifier.PRIVATE)
+                .addParameter(Object.class, "event");
+        method.beginControlFlow(IF_PUBLISH_LIFECYCLE)
+                .addStatement("__publishUnitLifecycle(event)")
                 .endControlFlow();
         return method.build();
     }

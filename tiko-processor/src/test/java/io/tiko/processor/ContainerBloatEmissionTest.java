@@ -87,8 +87,9 @@ class ContainerBloatEmissionTest {
 
         assertThat(source).contains("private void __closeEventScope()");
         assertThat(countOccurrences(source, "__closeEventScope();"))
-                .as("runInEventScope and supplyInEventScope both delegate to the shared teardown helper")
-                .isEqualTo(2);
+                .as("runInEventScope, supplyInEventScope and a carried unit's closeFrame (#677) all delegate"
+                        + " to the shared teardown helper")
+                .isEqualTo(3);
     }
 
     @Test
