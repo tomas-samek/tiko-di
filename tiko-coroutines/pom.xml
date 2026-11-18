@@ -15,6 +15,11 @@
     <name>Tiko :: Coroutines</name>
     <description>Kotlin coroutine support for Tiko: a unit of work that lasts across suspension points and dispatcher changes.</description>
 
+    <properties>
+        <!-- The shared KSP test-support sources live in tiko-processor-core and are analysed there. -->
+        <sonar.tests>src/test/java,src/test/kotlin</sonar.tests>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>io.github.tomas-samek</groupId>
@@ -50,6 +55,24 @@
             <artifactId>kotlinx-coroutines-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Suspend handlers are Kotlin, so their tests compile Kotlin with KSP2 in the test and
+             boot the result: KspCompiler from tiko-processor-core's test-support sources, over
+             kctfork, as in tiko-processor. -->
+        <dependency>
+            <groupId>com.google.devtools.ksp</groupId>
+            <artifactId>symbol-processing-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>dev.zacsweers.kctfork</groupId>
+            <artifactId>core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>dev.zacsweers.kctfork</groupId>
+            <artifactId>ksp</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
@@ -67,6 +90,25 @@
         <sourceDirectory>src/main/kotlin</sourceDirectory>
 
         <plugins>
+            <!-- Adds tiko-processor-core's shared KSP test helpers as a test source root (#703). -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>add-ksp-test-support</id>
+                        <phase>generate-test-sources</phase>
+                        <goals>
+                            <goal>add-test-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>${project.basedir}/../tiko-processor-core/src/test-support/java</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.jetbrains.kotlin</groupId>
                 <artifactId>kotlin-maven-plugin</artifactId>

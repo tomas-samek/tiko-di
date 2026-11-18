@@ -521,6 +521,17 @@ public final class EventChainContext {
     }
 
     /**
+     * Routes the failure of a handler that ran off the publisher's thread, once, the way async
+     * dispatch does: an exception goes to {@code errorHandler} as an {@link EventHandlerError}, an
+     * {@link Error} is logged. For {@code tiko-coroutines}, which runs {@code suspend} handlers
+     * (#677).
+     */
+    public static void routeHandlerFailure(
+            Throwable cause, ErrorHandler errorHandler, EventHandlerInfo info, Object event) {
+        reportAsyncHandlerFailure(cause, errorHandler, info, event, 1);
+    }
+
+    /**
      * Submits an async dispatch via {@code submitAction} (which calls the executor and may throw
      * {@link DlqOverflowSignal} synchronously on a {@code ROUTE_TO_DLQ} overflow). On overflow it
      * routes an {@link EventDispatchRejected} and returns {@code null}, so the caller skips its
