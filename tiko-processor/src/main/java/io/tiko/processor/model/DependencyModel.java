@@ -19,6 +19,14 @@ public final class DependencyModel {
      */
     public static final String EVENT_BUS_TYPE = "io.tiko.EventBus";
 
+    /**
+     * FQN of the interface that opens units of work, the second built-in dependency (#685). It
+     * is the one thing a component may legitimately want from the container besides the bus: an
+     * HTTP server or a scheduler opens a unit per request or job. Generated code hands over a
+     * view that does only that, so {@code io.tiko.Container} stays out of constructors.
+     */
+    public static final String UNIT_OF_WORK_TYPE = "io.tiko.UnitOfWork";
+
     private final ParamDecl parameter;
     private final TypeRef type;
     private final String typeName;
@@ -92,7 +100,25 @@ public final class DependencyModel {
      * so it falls through to the normal missing-dependency path.
      */
     public boolean isEventBus() {
-        return !isPicker && pickedTypeName == null && EVENT_BUS_TYPE.equals(getDependencyKey());
+        return isBuiltIn(EVENT_BUS_TYPE);
+    }
+
+    /**
+     * True when this is a plain injection of the built-in {@link #UNIT_OF_WORK_TYPE}: {@code
+     * UnitOfWork} directly or {@code Provider<UnitOfWork>}, unqualified and not {@code @Pick}ed,
+     * under the same rule as {@link #isEventBus()}.
+     */
+    public boolean isUnitOfWork() {
+        return isBuiltIn(UNIT_OF_WORK_TYPE);
+    }
+
+    /** True for a dependency the container provides itself, with no user-declared provider behind it. */
+    public boolean isBuiltIn() {
+        return isEventBus() || isUnitOfWork();
+    }
+
+    private boolean isBuiltIn(String type) {
+        return !isPicker && pickedTypeName == null && type.equals(getDependencyKey());
     }
 
     /**

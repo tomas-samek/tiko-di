@@ -149,6 +149,9 @@ public final class NullabilityValidator {
         if (dependency.isEventBus()) {
             return Optional.of(new Provider("the container's EventBus", false, null));
         }
+        if (dependency.isUnitOfWork()) {
+            return Optional.of(new Provider("the container's UnitOfWork", false, null));
+        }
         return context.findProvider(dependency).map(NullabilityValidator::describe);
     }
 

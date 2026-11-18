@@ -254,6 +254,11 @@ public final class ComponentFactoryGenerator {
         if (dependency.isEventBus()) {
             return "container.getEventBus()";
         }
+        // UnitOfWork is the other built-in (#685): a view of the container that only opens units,
+        // so the component never holds the container itself.
+        if (dependency.isUnitOfWork()) {
+            return "new io.tiko.runtime.ContainerUnitOfWork(container, container.options())";
+        }
 
         String typeName = dependency.isProvider()
                 ? dependency.getUnwrappedType().orElseThrow().displayName()
