@@ -149,6 +149,24 @@ public final class TikoOptions {
     }
 
     /**
+     * Opens a unit of work that can be carried between threads (#677). For generated container
+     * code. As with {@link #runInDetachedUnit}, in a multi-module application the unit is the
+     * application's: it is open in every module, and the application publishes its lifecycle
+     * pair. A single-module container opens the unit over itself.
+     *
+     * @param module the container that was asked
+     * @param moduleLifecycle publishes one unit lifecycle event of {@code module}, if it publishes them
+     * @param origin the event the unit's work descends from, or {@code null}
+     */
+    public CarriedUnit openCarriedUnit(
+            DetachedUnitFrame module, java.util.function.Consumer<Object> moduleLifecycle, io.tiko.Event<?> origin) {
+        if (applicationContainer.get() instanceof AggregatingContainer application) {
+            return application.openCarriedUnit(origin);
+        }
+        return new CarriedUnit(java.util.List.of(module), origin, moduleLifecycle);
+    }
+
+    /**
      * The options one container works on: equal to these, but shadow overrides the container adds
      * ({@link #internalAddOverrideIfAbsent}) land in the copy. The caller's object stays as built,
      * so it can boot another container (#734).

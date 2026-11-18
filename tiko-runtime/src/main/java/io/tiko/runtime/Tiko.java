@@ -550,7 +550,7 @@ public final class Tiko {
      * but the identity of the returned object. We cannot use {@code Container} as a sealed type
      * because user-supplied implementations are not on the radar of this module.
      */
-    private static final class BootHandle implements Container {
+    private static final class BootHandle implements Container, UnitCarrier {
         private final Container delegate;
         private final java.util.List<TransportBootstrap> bootstraps;
         private final OwnedThreads threads;
@@ -628,6 +628,11 @@ public final class Tiko {
         @Override
         public <T> T supplyInEventScope(java.util.function.Supplier<T> s) {
             return delegate.supplyInEventScope(s);
+        }
+
+        @Override
+        public CarriedUnit openCarriedUnit(io.tiko.Event<?> origin) {
+            return CarriedUnit.openIn(delegate, origin);
         }
 
         /**

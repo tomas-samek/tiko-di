@@ -31,7 +31,7 @@ import java.util.function.Supplier;
  *
  * <p>Thread-safe and supports all standard container operations across multiple modules.</p>
  */
-public final class AggregatingContainer implements Container {
+public final class AggregatingContainer implements Container, UnitCarrier {
 
     /** Default descriptor name used when callers don't override (production / multi-module). */
     static final String DEFAULT_DESCRIPTOR = "META-INF/tiko/container.properties";
@@ -582,6 +582,30 @@ public final class AggregatingContainer implements Container {
                 inner.run();
             }
         });
+    }
+
+    /**
+     * Opens a unit of work that can be carried between threads (#677), over every module. Its
+     * lifecycle pair is published once, by this container.
+     */
+    @Override
+    public CarriedUnit openCarriedUnit(io.tiko.Event<?> origin) {
+        return openCarriedUnit(moduleContainers, origin, this::publishUnitLifecycle);
+    }
+
+    /**
+     * A carried unit over the frames of {@code modules}. A container generated before 0.8.0 has no
+     * frame to offer and is passed by, as in {@link #runInDetachedFrames}.
+     */
+    static CarriedUnit openCarriedUnit(
+            java.util.List<Container> modules, io.tiko.Event<?> origin, java.util.function.Consumer<Object> lifecycle) {
+        var frames = new ArrayList<DetachedUnitFrame>();
+        for (Container module : modules) {
+            if (module instanceof DetachedUnitFrame frame) {
+                frames.add(frame);
+            }
+        }
+        return new CarriedUnit(frames, origin, lifecycle);
     }
 
     /**
