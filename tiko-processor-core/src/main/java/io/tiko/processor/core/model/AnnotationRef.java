@@ -57,6 +57,15 @@ public interface AnnotationRef {
      */
     boolean isUnresolved(String member);
 
+    /**
+     * Whether the source wrote a value for the member, as opposed to leaving it to the annotation
+     * type's default. A written value that equals the default is explicit: {@code @EventHandler}
+     * and {@code @EventHandler(async = false)} read the same {@code async} and differ here.
+     *
+     * @throws NoSuchElementException when the annotation has no such member
+     */
+    boolean isExplicit(String member);
+
     /** {@code Class} values; a single (non-array) value comes back as a one-element list. */
     default List<TypeRef> types(String member) {
         return listOf(member, TypeRef.class);

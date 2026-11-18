@@ -108,6 +108,30 @@ class JavacModelTest {
                             assertThat(pick.types("value").get(0).erasedName()).isEqualTo("p.Foo");
                         })),
                 Arguments.of(
+                        "isExplicitTellsAWrittenValueFromADefault",
+                        source(
+                                "p.Modes",
+                                "package p;",
+                                "@interface Mode { boolean async() default false; String name() default \"n\"; }",
+                                "public class Modes {",
+                                "    @Mode static class Defaulted {}",
+                                "    @Mode(async = false) static class WrittenLikeTheDefault {}",
+                                "    @Mode(async = true) static class Written {}",
+                                "}"),
+                        Check.model(env -> {
+                            Function<String, AnnotationRef> mode = nested -> find(env, "p.Modes." + nested)
+                                    .annotation("p.Mode")
+                                    .orElseThrow();
+                            assertThat(mode.apply("Defaulted").isExplicit("async"))
+                                    .isFalse();
+                            assertThat(mode.apply("Defaulted").bool("async")).isFalse();
+                            assertThat(mode.apply("WrittenLikeTheDefault").isExplicit("async"))
+                                    .isTrue();
+                            assertThat(mode.apply("Written").isExplicit("async"))
+                                    .isTrue();
+                            assertThat(mode.apply("Written").isExplicit("name")).isFalse();
+                        })),
+                Arguments.of(
                         "singleClassValueReadsAsType",
                         source(
                                 "p.Bar",
