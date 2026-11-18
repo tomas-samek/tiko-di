@@ -14,7 +14,7 @@ public class ShutdownOrder {
 
     private final List<String> seen = new CopyOnWriteArrayList<>();
 
-    public void record(String what) {
+    public void note(String what) {
         seen.add(what);
     }
 
