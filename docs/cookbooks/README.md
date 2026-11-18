@@ -10,6 +10,8 @@ example proves it compiles, runs, and stays green under CI.
 - [Persistence (raw JDBC + HikariCP)](persistence.md) — `tiko-examples/10_persistence_jdbc/`. One JDBC transaction per unit of work (EVENT scope), wrapping both an HTTP entry point and a batch flow with shared repositories. Demonstrates the auto-proxy mechanism on a JDK interface (`java.sql.Connection`).
 - [Kafka transport](kafka.md) — `tiko-examples/08_kafka_order_warehouse/`. The `tiko-kafka` source/sink bridges: a topic in via a non-void source + sibling event trigger, an event out via a sink keyed by a payload accessor, broker config under `tiko.kafka.*`, and the poison-record story. *(Draft — see the PR; a couple of points are flagged for maintainer verification.)*
 
+- [Ktor (one unit of work per request)](ktor.md) — `tiko-examples-gradle/kotlin-ktor-exposed/`. Kotlin routes that run their work in one unit of work across suspension with `inEventScope` from `tiko-coroutines`: blocking JDBC on `Dispatchers.IO` inside the unit, what a client disconnect does, and parallel work in a request (`async` children are units of their own).
+
 ## Planned
 
 - **Security** — auth/authz at the HTTP boundary. Likely leverages whatever HTTP server you've picked (Javalin in `09_http_javalin`).

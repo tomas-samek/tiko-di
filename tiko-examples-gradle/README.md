@@ -30,9 +30,14 @@ and Tiko holding the components in between.
   `application.yaml`.
 - `TicketService` is plain business logic. It stores the ticket and publishes `TicketOpened`;
   `TicketNotifications` handles the event.
-- Each request runs as one unit of work (`Container.unitOfWork` in `Routes.kt`), so the
-  EVENT-scoped `RequestId` is fresh per request. The service, a SINGLETON, reads it through a
-  generated proxy.
+- Each request runs as one unit of work across suspension (`inEventScope` from
+  `tiko-coroutines`, in `Routes.kt`), so the EVENT-scoped `RequestId` is fresh per request and
+  the same on every dispatcher the route moves to. The service, a SINGLETON, reads it through a
+  generated proxy. The blocking JDBC work runs on `Dispatchers.IO`, inside the unit.
+- `GET /tickets/summary` counts each reporter's tickets with `map { async { ... } }`: concurrent
+  work, so each count runs in a unit of work of its own, with its own `RequestId`.
+- The module installs Ktor's `HttpRequestLifecycle` with `cancelCallOnClose`, so a client that
+  disconnects cancels the route and the request's unit of work closes.
 - `TicketApiTest` drives the routes in Ktor's `testApplication` against a `@TikoTest` container
   and swaps the `Notifier` for a recording one with `@TestComponent(Notifier::class)`. Its
   `@TikoTestOptions` method points the container at `application-test.yaml`.
@@ -46,9 +51,8 @@ curl localhost:8080/tickets
 ./gradlew run --args=--smoke      # opens and lists one ticket over HTTP, then exits
 ```
 
-Tiko does not support coroutines yet: components and handlers are blocking code, and the EVENT
-scope is bound to a thread. `unitOfWork` runs the blocking part on `Dispatchers.IO` inside one
-scope; read the request before it and respond after it.
+The pattern is written up in the [Ktor cookbook](../docs/cookbooks/ktor.md). Event handlers in
+this example are regular functions; the routes are where the suspending code is.
 
 ## kotlin-kafka-consumer &nbsp;<sub>[`kotlin-kafka-consumer/`](./kotlin-kafka-consumer)</sub>
 
