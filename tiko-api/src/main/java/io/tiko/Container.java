@@ -29,8 +29,11 @@ package io.tiko;
  *     }
  * } // Automatic shutdown
  * }</pre>
+ *
+ * <p>The container is not injectable. A component that opens units of work takes
+ * {@link UnitOfWork}, the part of the container that does only that.
  */
-public interface Container extends AutoCloseable {
+public interface Container extends UnitOfWork, AutoCloseable {
 
     /**
      * Retrieves an instance of the specified type from the container.
@@ -114,32 +117,6 @@ public interface Container extends AutoCloseable {
     default <T> PickBuilder<T> pick(Class<T> type) {
         return new DefaultPickBuilder<>(this, type);
     }
-
-    /**
-     * Executes the given runnable within an EVENT scope (one unit of work).
-     * <p>
-     * EVENT-scoped beans created during execution are destroyed when the scope exits
-     * (LIFO {@code @PreDestroy}). EVENT is single-frame in {@code 0.x.0}: calling this
-     * method while a unit is already open throws {@link IllegalStateException}.
-     *
-     * @param runnable the code to execute in event scope
-     * @throws IllegalStateException if a unit of work is already open on the current thread
-     */
-    void runInEventScope(Runnable runnable);
-
-    /**
-     * Executes the given supplier within an EVENT scope (one unit of work) and returns its result.
-     * <p>
-     * EVENT-scoped beans created during execution are destroyed when the scope exits.
-     * EVENT is single-frame in {@code 0.x.0}: calling this method while a unit is
-     * already open throws {@link IllegalStateException}.
-     *
-     * @param supplier the code to execute in event scope
-     * @param <T>      the return type
-     * @return the result of the supplier
-     * @throws IllegalStateException if a unit of work is already open on the current thread
-     */
-    <T> T supplyInEventScope(java.util.function.Supplier<T> supplier);
 
     /**
      * Starts the container and publishes {@link io.tiko.events.ApplicationStartedEvent}
