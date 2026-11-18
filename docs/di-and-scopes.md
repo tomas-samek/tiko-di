@@ -135,6 +135,34 @@ EVENT unit (per attempt, when retries are configured), so EVENT-scoped dependenc
 async handler resolve to that unit and are torn down when it ends. The publishing side's
 unit — if any — is left behind at the async hop.
 
+### Opening a unit of work from a component
+
+A component that receives the application's inbound work itself, such as an HTTP server registering its routes or a scheduler running its jobs, opens one unit per request or job. It takes `UnitOfWork`, a built-in dependency like `EventBus`:
+
+```java
+@Component(scope = Scope.SINGLETON)
+public class OrderRoutes {
+    private final UnitOfWork unitOfWork;
+    private final OrderService orders;
+
+    @Inject
+    public OrderRoutes(UnitOfWork unitOfWork, OrderService orders) {
+        this.unitOfWork = unitOfWork;
+        this.orders = orders;
+    }
+
+    public Receipt place(OrderRequest request) {
+        return unitOfWork.supplyInEventScope(() -> orders.place(request));
+    }
+}
+```
+
+`UnitOfWork` has the two methods `runInEventScope` and `supplyInEventScope`, with the contract they have on the container: calling one while a unit is already open on the thread throws `IllegalStateException`. A `@Produces` method can take it as a parameter, and `Provider<UnitOfWork>` works too.
+
+- **The container stays out of constructors.** `Container` is not injectable, because a component that holds it can look anything up. `UnitOfWork` gives a component the one thing it needs from the container here. A `Container` is a `UnitOfWork`, so `main` or a test can pass the container wherever the interface is expected.
+- **The unit is the application's.** In a multi-module application a unit opened by a component of one module holds the EVENT-scoped components of every module, and its lifecycle events are published once.
+- **The component is part of the container lifecycle.** A server that binds its port in `@PostConstruct` and finds it taken fails `Tiko.create(...)` when the component is constructed at container start, and the container shuts down what it had started (see [When singletons are constructed](#when-singletons-are-constructed)).
+
 ## Constructor injection
 
 The preferred and recommended form. All dependencies are wired before the constructor body runs, so initialization belongs there.
