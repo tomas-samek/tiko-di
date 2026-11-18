@@ -1,6 +1,8 @@
 package io.tiko.coroutines
 
 import io.tiko.Container
+import io.tiko.Event
+import io.tiko.runtime.CarriedUnit
 import io.tiko.runtime.ContainerWork
 import io.tiko.runtime.EventChainContext
 import io.tiko.runtime.UnitCarrier
@@ -8,6 +10,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.function.Supplier
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -51,15 +54,34 @@ internal class ContainerCoroutines(private val work: ContainerWork) : ContainerW
         carrier: UnitCarrier,
         onFailure: (Throwable) -> Unit,
         block: suspend CoroutineScope.() -> Unit,
-    ): Job {
+    ): Job =
         // Read here, on the caller's thread: the unit is opened later, on a thread of its own.
-        val openUnit = EventChainContext.carriedUnitOpener(carrier)
+        launchInUnit(EventChainContext.carriedUnitOpener(carrier), onFailure, block)
+
+    /** As above, with the unit opened by [openUnit]: a handler's unit descends from the event it handles. */
+    fun launchInUnit(
+        openUnit: Supplier<CarriedUnit>,
+        onFailure: (Throwable) -> Unit,
+        block: suspend CoroutineScope.() -> Unit,
+    ): Job = launchCounted(onFailure) {
+        // withContext returns once the unit has closed, so this coroutine, and with it the
+        // delivery, ends after the unit's teardown and never before it.
+        withContext(UnitOfWorkElement(openUnit), block)
+    }
+
+    /**
+     * Launches [block] with no unit of work, for a handler of a framework lifecycle event: such an
+     * event is a signal about units and opens none. Events [block] publishes descend from [origin].
+     */
+    fun launchWithoutUnit(
+        origin: Event<*>?,
+        onFailure: (Throwable) -> Unit,
+        block: suspend CoroutineScope.() -> Unit,
+    ): Job = launchCounted(onFailure) { withContext(OriginElement(origin), block) }
+
+    private fun launchCounted(onFailure: (Throwable) -> Unit, block: suspend CoroutineScope.() -> Unit): Job {
         val release = work.retainDelivery()
-        val job = scope.launch(CoroutineExceptionHandler { _, failure -> onFailure(failure) }) {
-            // withContext returns once the unit has closed, so this coroutine, and with it the
-            // delivery, ends after the unit's teardown and never before it.
-            withContext(UnitOfWorkElement(openUnit), block)
-        }
+        val job = scope.launch(CoroutineExceptionHandler { _, failure -> onFailure(failure) }, block = block)
         job.invokeOnCompletion { release.run() }
         return job
     }

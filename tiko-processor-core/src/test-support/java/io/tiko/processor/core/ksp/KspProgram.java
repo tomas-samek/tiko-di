@@ -121,6 +121,26 @@ public final class KspProgram implements AutoCloseable {
     }
 
     /**
+     * Runs a public static no-argument method of the compiled program in a loader of its own and
+     * returns what it answers. For a program that boots its container itself, with the options
+     * it needs, and reports what it saw in JDK types.
+     */
+    public static Object run(KspResult result, String typeName, String method) {
+        var thread = Thread.currentThread();
+        var previous = thread.getContextClassLoader();
+        try (var loader = new URLClassLoader(classpath(result.outputRoots()), ClassLoader.getPlatformClassLoader())) {
+            thread.setContextClassLoader(loader);
+            return loader.loadClass(typeName).getMethod(method).invoke(null);
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(typeName + "." + method + "() failed", unwrap(e));
+        } catch (java.io.IOException closing) {
+            throw new java.io.UncheckedIOException(closing);
+        } finally {
+            thread.setContextClassLoader(previous);
+        }
+    }
+
+    /**
      * Puts one record on the fake broker's {@code topic}. The fake stores a payload without a key,
      * so {@code key} only documents the record the test means to send.
      */

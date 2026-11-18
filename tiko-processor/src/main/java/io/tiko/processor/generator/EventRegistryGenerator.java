@@ -292,8 +292,9 @@ public final class EventRegistryGenerator {
             typeWitness = CodeBlock.of(
                     "<$T>", handler.getMethod().returnType().javaPoet().box());
         }
-        method.addStatement(
-                "$T.$Llaunch(container, __asyncWrapper, $L, __continuation -> $L, $L, __err, HANDLER_INFO_$L, event)",
+        // Not addStatement: the trigger lambda holds statements of its own, as an async body does.
+        method.addCode(
+                "$T.$Llaunch(container, __asyncWrapper, $L, __continuation -> $L, $L, __err, HANDLER_INFO_$L, event);\n",
                 SUSPEND_HANDLERS,
                 typeWitness,
                 plan.detachedUnit(),
