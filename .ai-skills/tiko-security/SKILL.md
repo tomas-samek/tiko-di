@@ -19,7 +19,7 @@ Everything here is driven by the registry [`docs/security-model.md`](../../docs/
 | `KafkaConfig`, `KafkaBootstrapSupport`, Kafka client properties | SEC-8, SEC-11 |
 | `tiko-processor/**`, `tiko-kafka-processor/**` (generators, `CodeLiterals`, generated resource writers) | SEC-5 |
 | `tiko-processor/**` or `tiko-kafka-processor/**` looking a class up by name (`Class.forName`) | SEC-8 |
-| generated EVENT teardown (`ContainerGenerator` scope methods), `ErrorHandler` call sites, a unit carried between threads (`CarriedUnit`, `swapFrame` / `closeFrame`) | SEC-14 |
+| generated EVENT teardown (`ContainerGenerator` scope methods), `ErrorHandler` call sites, a unit carried between threads (`CarriedUnit`, `swapFrame` / `closeFrame`), the coroutine element (`tiko-coroutines`, `UnitOfWorkElement`) | SEC-14 |
 | test mode, `@TestComponent`, `test-*.properties`, `AggregatingContainer` overrides | SEC-12 |
 | any log call, `TikoLog` | SEC-6 |
 | `tiko-mcp/**` | SEC-7 |
