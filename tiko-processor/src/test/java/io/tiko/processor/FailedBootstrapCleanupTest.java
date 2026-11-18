@@ -223,7 +223,8 @@ class FailedBootstrapCleanupTest {
         compileModule(output, probe, resource, failsTeardown, failsStartup);
     }
 
-    private static void compileModule(Path output, JavaFileObject... sources) throws IOException {
+    /** Compiles {@code sources} with the DI processor and writes the class output under {@code output}. */
+    static void compileModule(Path output, JavaFileObject... sources) throws IOException {
         var compilation = Compiler.javac()
                 .withOptions("--release", "21")
                 .withProcessors(new TikoAnnotationProcessor())

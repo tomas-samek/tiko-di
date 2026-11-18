@@ -7,6 +7,13 @@ import io.tiko.annotations.Component;
 @Component(scope = Scope.EVENT)
 public class LocalNote implements UnitNote {
 
+    private final String id = java.util.UUID.randomUUID().toString();
+
+    @Override
+    public String id() {
+        return id;
+    }
+
     @Override
     public String origin() {
         return "module-a";
