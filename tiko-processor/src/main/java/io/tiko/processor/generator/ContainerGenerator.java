@@ -276,6 +276,7 @@ public final class ContainerGenerator {
         containerBuilder.addMethod(createSwapFrameMethod());
         containerBuilder.addMethod(createCloseFrameMethod());
         containerBuilder.addMethod(createOpenCarriedUnitMethod());
+        containerBuilder.addMethod(createHasUnitOpenMethod());
         containerBuilder.addMethod(createPublishGatedUnitLifecycleMethod());
         containerBuilder.addMethod(createSupplyInEventScopeMethod());
         containerBuilder.addMethod(createPublishUnitLifecycleMethod());
@@ -1354,6 +1355,20 @@ public final class ContainerGenerator {
                         "origin")
                 .returns(CARRIED_UNIT)
                 .addStatement("return this.options.openCarriedUnit(this, this::__publishGatedUnitLifecycle, origin)")
+                .build();
+    }
+
+    /**
+     * Creates {@code hasUnitOpen} (#677): whether a unit of work is open in this container on the
+     * calling thread. It reads the flag the single-frame guard of {@code runInEventScope} reads,
+     * so whoever asks sees what that guard would see.
+     */
+    private MethodSpec createHasUnitOpenMethod() {
+        return MethodSpec.methodBuilder("hasUnitOpen")
+                .addModifiers(Modifier.PUBLIC)
+                .addAnnotation(Override.class)
+                .returns(TypeName.BOOLEAN)
+                .addStatement("return $T.TRUE.equals(__unitFrameOpen.get())", Boolean.class)
                 .build();
     }
 

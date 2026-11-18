@@ -593,6 +593,21 @@ public final class AggregatingContainer implements Container, UnitCarrier {
         return openCarriedUnit(moduleContainers, origin, this::publishUnitLifecycle);
     }
 
+    @Override
+    public boolean hasUnitOpen() {
+        return hasUnitOpen(moduleContainers);
+    }
+
+    /** Whether any of {@code modules} has a unit of work open on the calling thread. */
+    static boolean hasUnitOpen(java.util.List<Container> modules) {
+        for (Container module : modules) {
+            if (module instanceof UnitCarrier carrier && carrier.hasUnitOpen()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * A carried unit over the frames of {@code modules}. A container generated before 0.8.0 has no
      * frame to offer and is passed by, as in {@link #runInDetachedFrames}.

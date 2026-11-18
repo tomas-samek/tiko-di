@@ -51,11 +51,17 @@ class CarriedUnitOpeningTest {
     private static final class CarryingContainer extends BootstrapTestContainer implements UnitCarrier {
         final List<Event<?>> askedWith = new ArrayList<>();
         final CarriedUnit unit = new CarriedUnit(List.of(), null, event -> {});
+        boolean unitOpen;
 
         @Override
         public CarriedUnit openCarriedUnit(Event<?> origin) {
             askedWith.add(origin);
             return unit;
+        }
+
+        @Override
+        public boolean hasUnitOpen() {
+            return unitOpen;
         }
     }
 
@@ -143,6 +149,38 @@ class CarriedUnitOpeningTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining(BootstrapTestContainer.class.getName())
                 .hasMessageContaining("0.8.0");
+        assertThatThrownBy(unitOfWork::hasUnitOpen)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining(BootstrapTestContainer.class.getName());
+    }
+
+    /** A unit of work is the application's, so it is open when any module has it open. */
+    @Test
+    void anApplicationHasAUnitOpenWhenAnyModuleHasOne() {
+        var first = new CarryingContainer();
+        var second = new CarryingContainer();
+        List<Container> modules = List.of(first, new BootstrapTestContainer(), second);
+
+        boolean none = AggregatingContainer.hasUnitOpen(modules);
+        second.unitOpen = true;
+        boolean one = AggregatingContainer.hasUnitOpen(modules);
+
+        assertThat(none).as("no module has a unit open").isFalse();
+        assertThat(one).as("one module has").isTrue();
+    }
+
+    @Test
+    void theUnitOfWorkAComponentHoldsAnswersForTheApplication() {
+        var application = new CarryingContainer();
+        var options = TikoOptions.builder().build();
+        options.applicationContainer(application);
+        var unitOfWork = new ContainerUnitOfWork(new BootstrapTestContainer(), options);
+
+        boolean before = unitOfWork.hasUnitOpen();
+        application.unitOpen = true;
+
+        assertThat(before).isFalse();
+        assertThat(unitOfWork.hasUnitOpen()).isTrue();
     }
 
     /** {@code Tiko.create()} hands out a handle over the container; the handle carries units if the container does. */

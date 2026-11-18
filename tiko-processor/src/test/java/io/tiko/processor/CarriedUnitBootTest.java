@@ -191,6 +191,22 @@ class CarriedUnitBootTest {
                         }
                     }
 
+                    /** Whether a unit is open: outside one, in an ordinary one, under a carried one, after it is taken off. */
+                    public static Object[] whetherAUnitIsOpen() {
+                        try (Container container = Tiko.create()) {
+                            var carrier = (UnitCarrier) container;
+                            boolean outside = carrier.hasUnitOpen();
+                            boolean inOrdinary = container.supplyInEventScope(carrier::hasUnitOpen);
+                            var unit = carrier.openCarriedUnit(null);
+                            var displaced = unit.install();
+                            boolean underCarried = carrier.hasUnitOpen();
+                            unit.restore(displaced);
+                            boolean takenOff = carrier.hasUnitOpen();
+                            unit.close();
+                            return new Object[] {outside, inOrdinary, underCarried, takenOff};
+                        }
+                    }
+
                     /** A thread inside a unit of its own: its unit, the carried one, its unit again. */
                     public static Object[] aroundAThreadsOwnUnit() {
                         try (Container container = Tiko.create()) {
@@ -270,6 +286,15 @@ class CarriedUnitBootTest {
         assertThat(seen[0]).as("the unit's instance on the first thread").isNotNull();
         assertThat(seen[1]).as("the same instance on the second thread").isSameAs(seen[0]);
         assertThat(seen[2]).as("a thread the unit is not on").isEqualTo("no unit of work");
+    }
+
+    @Test
+    void theContainerTellsWhetherAUnitIsOpenOnTheThread(@TempDir Path output) throws Exception {
+        var seen = probe("whetherAUnitIsOpen", output);
+
+        assertThat(seen)
+                .as("outside a unit, in an ordinary one, under a carried one, after it is taken off")
+                .containsExactly(false, true, true, false);
     }
 
     @Test

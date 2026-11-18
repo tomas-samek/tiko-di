@@ -55,4 +55,9 @@ public final class ContainerUnitOfWork implements UnitOfWork, UnitCarrier {
     public CarriedUnit openCarriedUnit(Event<?> origin) {
         return CarriedUnit.openIn(application(), origin);
     }
+
+    @Override
+    public boolean hasUnitOpen() {
+        return CarriedUnit.carrierOf(application()).hasUnitOpen();
+    }
 }
