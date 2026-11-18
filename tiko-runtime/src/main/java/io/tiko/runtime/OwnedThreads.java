@@ -4,9 +4,13 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.WeakHashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
@@ -14,6 +18,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
@@ -41,6 +46,9 @@ final class OwnedThreads implements ThreadFactory {
     /** How long {@code close()} waits, after its bounded waits, for tracked threads to exit. */
     static final Duration THREAD_EXIT_GRACE = Duration.ofSeconds(1);
 
+    /** The least time the work of {@link #stopWork} gets to stop in. */
+    static final Duration WORK_STOP_GRACE = Duration.ofSeconds(1);
+
     private static final ThreadLocal<OwnedThreads> BOUND = new ThreadLocal<>();
 
     private static final class LoggerHolder {
@@ -59,6 +67,17 @@ final class OwnedThreads implements ThreadFactory {
     private boolean retriesStopped;
 
     private final PendingDeliveries deliveries = new PendingDeliveries();
+
+    /** The virtual threads of {@link #virtualThreads} that are running their task right now (#678). */
+    private final Set<Thread> runningVirtualThreads = ConcurrentHashMap.newKeySet();
+
+    /** Guards {@link #work} and {@link #workStopped}. */
+    private final Object workLock = new Object();
+
+    /** What other Tiko modules keep for this boot, by type, in the order it was created. */
+    private final Map<Class<?>, ContainerWork.Stoppable> work = new LinkedHashMap<>();
+
+    private boolean workStopped;
 
     /** The async work of this boot that has been handed over and has not finished (#721). */
     PendingDeliveries deliveries() {
@@ -81,6 +100,65 @@ final class OwnedThreads implements ThreadFactory {
         var thread = Thread.ofPlatform().daemon().unstarted(task);
         threads.add(thread);
         return thread;
+    }
+
+    /**
+     * A factory of virtual threads named {@code namePrefix} + a number (#678). A coroutine
+     * dispatcher starts one for every resume, so they are short-lived and many: each is known here
+     * only while it runs its task, which is all {@link #stillAlive} needs.
+     */
+    ThreadFactory virtualThreads(String namePrefix) {
+        var unnamed = Thread.ofVirtual().name(namePrefix, 1).factory();
+        return task -> unnamed.newThread(() -> {
+            var self = Thread.currentThread();
+            runningVirtualThreads.add(self);
+            try {
+                task.run();
+            } finally {
+                runningVirtualThreads.remove(self);
+            }
+        });
+    }
+
+    /**
+     * The one instance of {@code type} kept for this boot, created on first use (#678).
+     *
+     * @return the instance, or empty once {@link #stopWork} has run
+     */
+    <T extends ContainerWork.Stoppable> Optional<T> work(Class<T> type, Supplier<T> create) {
+        synchronized (workLock) {
+            if (workStopped) {
+                return Optional.empty();
+            }
+            return Optional.of(type.cast(work.computeIfAbsent(type, ignored -> create.get())));
+        }
+    }
+
+    /**
+     * Stops what other Tiko modules run for this boot (#678): {@code close()} calls it after its
+     * wait for the pending deliveries, and before it stops delivering events. Each instance is
+     * stopped once and given until {@code deadlineNanos}, and at least {@link #WORK_STOP_GRACE}: a
+     * cancelled coroutine needs time to run its cleanup even when the wait before used up the
+     * shutdown timeout. An instance that throws does not keep the others from being stopped.
+     */
+    void stopWork(long deadlineNanos) {
+        List<ContainerWork.Stoppable> toStop;
+        synchronized (workLock) {
+            if (workStopped) {
+                return;
+            }
+            workStopped = true;
+            toStop = new ArrayList<>(work.values());
+        }
+        long earliest = System.nanoTime() + WORK_STOP_GRACE.toNanos();
+        long deadline = deadlineNanos - earliest < 0 ? earliest : deadlineNanos;
+        for (var stoppable : toStop) {
+            try {
+                stoppable.stop(deadline);
+            } catch (RuntimeException e) {
+                LoggerHolder.LOG.log(System.Logger.Level.WARNING, "Stopping the container's work threw", e);
+            }
+        }
     }
 
     /**
@@ -164,6 +242,7 @@ final class OwnedThreads implements ThreadFactory {
         synchronized (threads) {
             snapshot = new ArrayList<>(threads);
         }
+        snapshot.addAll(runningVirtualThreads);
         snapshot.sort(Comparator.comparingLong(Thread::threadId));
         var deadline = System.nanoTime() + grace.toNanos();
         var current = Thread.currentThread();

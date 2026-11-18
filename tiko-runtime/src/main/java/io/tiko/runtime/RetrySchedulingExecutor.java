@@ -43,6 +43,11 @@ final class RetrySchedulingExecutor extends AbstractExecutorService implements R
         return owner.deliveries().count();
     }
 
+    @Override
+    public OwnedThreads owner() {
+        return owner;
+    }
+
     /**
      * Counts the task as pending until it has run or the supplied executor has refused it (#721).
      * A supplied executor that discards a task without throwing leaves it counted.

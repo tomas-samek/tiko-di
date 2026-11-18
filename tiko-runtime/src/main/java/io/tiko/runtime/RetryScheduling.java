@@ -32,4 +32,7 @@ interface RetryScheduling {
 
     /** How many tasks handed to this executor are queued or running, plus the retries in backoff. */
     int pendingDeliveries();
+
+    /** The boot this executor dispatches for: its threads, its pending deliveries, its work (#678). */
+    OwnedThreads owner();
 }
