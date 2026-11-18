@@ -26,6 +26,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
@@ -36,6 +37,7 @@ import org.junit.jupiter.params.provider.MethodSource
  * this class states what Tiko needs from it. A kotlinx release that changes one of these fails
  * the build here, with the construct named, before it changes when a unit of work opens or closes.
  */
+@Timeout(60)
 class CoroutineContextElementContractTest {
 
     /**
