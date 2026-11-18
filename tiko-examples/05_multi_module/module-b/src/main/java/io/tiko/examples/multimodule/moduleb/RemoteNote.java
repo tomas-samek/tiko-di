@@ -8,6 +8,13 @@ import io.tiko.examples.multimodule.modulea.UnitNote;
 @Component(scope = Scope.EVENT)
 public class RemoteNote implements UnitNote {
 
+    private final String id = java.util.UUID.randomUUID().toString();
+
+    @Override
+    public String id() {
+        return id;
+    }
+
     @Override
     public String origin() {
         return "module-b";
