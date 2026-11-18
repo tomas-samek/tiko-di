@@ -21,7 +21,32 @@ genuinely need the container — e.g. plain route handlers that aren't component
 it into a hand-constructed class after bootstrap, as `OrderHttpRoutes` does in
 [`tiko-examples/10_persistence_jdbc`](../../../tiko-examples/10_persistence_jdbc)
 (`HttpEntry` builds it with `new OrderHttpRoutes(container)`). Prefer injecting
-`EventBus` (or the specific collaborators) over reaching for `Container`.
+`EventBus`, `UnitOfWork` (or the specific collaborators) over reaching for `Container`.
+
+## Opening a unit of work from a component
+
+**To open a unit of work from inside a component, inject `UnitOfWork`** — the other built-in
+dependency. A component that takes requests or runs jobs itself (an HTTP route, a scheduler)
+opens one unit per piece of work:
+
+```java
+@Component(scope = Scope.SINGLETON)
+public class OrderRoutes {
+    private final UnitOfWork unitOfWork;
+    private final OrderService orders;
+    @Inject public OrderRoutes(UnitOfWork unitOfWork, OrderService orders) {
+        this.unitOfWork = unitOfWork;
+        this.orders = orders;
+    }
+    public Receipt place(OrderRequest r) {
+        return unitOfWork.supplyInEventScope(() -> orders.place(r));
+    }
+}
+```
+
+It has `runInEventScope(Runnable)` and `supplyInEventScope(Supplier<T>)` only, with the
+container's contract: a call inside an open unit throws `IllegalStateException`. `Container`
+extends it, so `main` and tests can pass the container where a `UnitOfWork` is expected.
 
 ## Subscribing with `@EventHandler`
 
