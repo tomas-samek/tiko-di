@@ -82,7 +82,7 @@ public final class KotlinConstructValidator {
         for (var annotation : List.of(PRODUCES, EVENT_HANDLER, POST_CONSTRUCT, PRE_DESTROY)) {
             for (var method : env.methodsAnnotatedWith(annotation)) {
                 reject(method, KotlinConstructRules.extension(method, annotation, CONTAINER));
-                reject(method, suspendViolation(method, annotation));
+                reject(method, suspendViolation(method, annotation, env));
                 reject(method, KotlinConstructRules.valueClassInSignature(method, annotation, CONTAINER));
                 reject(method, KotlinConstructRules.uncallableJvmName(method, annotation, CONTAINER));
             }
@@ -164,11 +164,18 @@ public final class KotlinConstructValidator {
         return valid;
     }
 
-    /** Suspend handlers come with K2; every other DI method is called directly, without a coroutine. */
-    private static Optional<Violation> suspendViolation(MethodDecl method, String annotation) {
-        return annotation.equals(EVENT_HANDLER)
-                ? KotlinConstructRules.suspendUntilK2(method, annotation, "handlers")
-                : KotlinConstructRules.suspendCalledDirectly(method, annotation, CONTAINER);
+    /** A suspend handler runs as a coroutine (#677); every other DI method is called directly, without one. */
+    private static Optional<Violation> suspendViolation(MethodDecl method, String annotation, ProcessingEnv env) {
+        if (!annotation.equals(EVENT_HANDLER)) {
+            return KotlinConstructRules.suspendCalledDirectly(method, annotation, CONTAINER);
+        }
+        return method.annotation(EVENT_HANDLER)
+                .flatMap(handler -> KotlinConstructRules.suspendHandler(
+                        method,
+                        handler,
+                        env.types()
+                                .findClass(KotlinConstructRules.SUSPEND_HANDLERS_TYPE)
+                                .isPresent()));
     }
 
     private void reject(ClassDecl decl, String componentAnnotation, Violation violation) {

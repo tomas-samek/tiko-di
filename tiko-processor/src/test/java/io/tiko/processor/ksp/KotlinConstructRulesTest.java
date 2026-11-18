@@ -234,16 +234,59 @@ class KotlinConstructRulesTest {
                         ErrorReporter.KIND_MISSING_DEPENDENCY,
                         "Cannot inject Kotlin 'Boolean', which compiles to the primitive 'boolean'",
                         "class On(val value: Boolean)"),
+                // #677: a suspend handler is accepted. This module has no tiko-coroutines on its
+                // classpath, which is the first thing such a handler needs.
                 rejected(
-                        "suspendEventHandlerRejectedUntilK2",
+                        "suspendEventHandlerNeedsTikoCoroutines",
                         """
                         @Component(scope = Scope.SINGLETON) class Listener {
                             @EventHandler suspend fun onPing(event: Ping) {}
                         }
                         """,
                         ErrorReporter.KOTLIN_UNSUPPORTED,
-                        "suspend @EventHandler is not supported yet",
-                        "make it a regular fun, or wait for coroutine support (K2)"),
+                        "suspend @EventHandler 'Listener.onPing' runs as a coroutine",
+                        "tiko-coroutines is not on the classpath",
+                        "Add the dependency io.github.tomas-samek:tiko-coroutines"),
+                rejected(
+                        "suspendEventHandlerWithAsyncTrueStillNeedsTikoCoroutines",
+                        """
+                        @Component(scope = Scope.SINGLETON) class Listener {
+                            @EventHandler(async = true) suspend fun onPing(event: Ping) {}
+                        }
+                        """,
+                        ErrorReporter.KOTLIN_UNSUPPORTED,
+                        "tiko-coroutines is not on the classpath"),
+                rejected(
+                        "suspendEventHandlerAsyncFalseRejected",
+                        """
+                        @Component(scope = Scope.SINGLETON) class Listener {
+                            @EventHandler(async = false) suspend fun onPing(event: Ping) {}
+                        }
+                        """,
+                        ErrorReporter.KOTLIN_UNSUPPORTED,
+                        "@EventHandler(async = false) on 'Listener.onPing', which is a suspend fun",
+                        "a suspend handler always runs as a coroutine of its own",
+                        "Remove async = false"),
+                rejected(
+                        "suspendEventHandlerTimeoutRejected",
+                        """
+                        @Component(scope = Scope.SINGLETON) class Listener {
+                            @EventHandler(timeout = "PT5S") suspend fun onPing(event: Ping) {}
+                        }
+                        """,
+                        ErrorReporter.KOTLIN_UNSUPPORTED,
+                        "timeout on 'Listener.onPing', which is a suspend fun",
+                        "Remove timeout"),
+                rejected(
+                        "suspendEventHandlerRetriesRejected",
+                        """
+                        @Component(scope = Scope.SINGLETON) class Listener {
+                            @EventHandler(retries = 2) suspend fun onPing(event: Ping) {}
+                        }
+                        """,
+                        ErrorReporter.KOTLIN_UNSUPPORTED,
+                        "retries on 'Listener.onPing', which is a suspend fun",
+                        "Remove retries"),
                 rejected(
                         "suspendProducesRejected",
                         """

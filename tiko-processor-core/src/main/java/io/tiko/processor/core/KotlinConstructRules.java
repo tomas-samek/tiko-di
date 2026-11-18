@@ -1,5 +1,6 @@
 package io.tiko.processor.core;
 
+import io.tiko.processor.core.model.AnnotationRef;
 import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.DeclKind;
 import io.tiko.processor.core.model.Location;
@@ -193,6 +194,57 @@ public final class KotlinConstructRules {
                         + "' is a suspend fun, and suspend " + plural + " arrive with Tiko's coroutine support"
                         + " (K2).",
                 "Drop the suspend modifier: make it a regular fun, or wait for coroutine support (K2)"));
+    }
+
+    /** The class generated code calls to run a {@code suspend} handler; it is in {@code tiko-coroutines}. */
+    public static final String SUSPEND_HANDLERS_TYPE = "io.tiko.coroutines.SuspendHandlers";
+
+    /**
+     * What a {@code suspend} event handler (#677) must not declare, and what it needs. A
+     * {@code suspend} handler always runs as a coroutine of its own, so {@code async = false}
+     * contradicts it; {@code timeout} and {@code retries} are not there for it yet (#680); and the
+     * code that runs it is in {@code tiko-coroutines}, which the module must have on its classpath.
+     *
+     * @param handler the handler's {@code @EventHandler}
+     * @param coroutinesOnClasspath whether {@link #SUSPEND_HANDLERS_TYPE} resolves
+     */
+    public static Optional<Violation> suspendHandler(
+            MethodDecl method, AnnotationRef handler, boolean coroutinesOnClasspath) {
+        if (!method.isSuspend()) {
+            return Optional.empty();
+        }
+        var name = "'" + qualifiedMethodName(method) + "'";
+        if (handler.isExplicit("async") && !handler.bool("async")) {
+            return Optional.of(
+                    new Violation(
+                            method.location(),
+                            "@EventHandler(async = false) on " + name + ", which is a suspend fun: a suspend handler"
+                                    + " always runs as a coroutine of its own, off the publisher's thread.",
+                            "Remove async = false, or drop the suspend modifier to handle the event on the publisher's thread"));
+        }
+        var timeout = handler.string("timeout");
+        if (timeout != null && !timeout.isBlank()) {
+            return Optional.of(suspendHandlerResilience(method, name, "timeout"));
+        }
+        if (handler.integer("retries") > 0) {
+            return Optional.of(suspendHandlerResilience(method, name, "retries"));
+        }
+        if (!coroutinesOnClasspath) {
+            return Optional.of(new Violation(
+                    method.location(),
+                    "suspend @EventHandler " + name + " runs as a coroutine, and tiko-coroutines is not on the"
+                            + " classpath: the generated event registry calls " + SUSPEND_HANDLERS_TYPE + ".",
+                    "Add the dependency io.github.tomas-samek:tiko-coroutines, or drop the suspend modifier"));
+        }
+        return Optional.empty();
+    }
+
+    private static Violation suspendHandlerResilience(MethodDecl method, String name, String member) {
+        return new Violation(
+                method.location(),
+                "@EventHandler " + member + " on " + name + ", which is a suspend fun: " + member
+                        + " applies to regular async handlers.",
+                "Remove " + member + ", or drop the suspend modifier and set async = true");
     }
 
     /** A {@code suspend} function generated Java calls directly, outside any coroutine. */

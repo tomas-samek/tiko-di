@@ -66,8 +66,14 @@ public final class EventHandlerModel {
         return eventTypeName;
     }
 
+    /** Whether the handler runs off the publisher's thread: declared {@code async}, or a {@code suspend fun}. */
     public boolean isAsync() {
-        return async;
+        return async || isSuspend();
+    }
+
+    /** A Kotlin {@code suspend fun} (#677): it runs as a coroutine in the container's scope. */
+    public boolean isSuspend() {
+        return method.isSuspend();
     }
 
     public boolean hasEventWrapper() {

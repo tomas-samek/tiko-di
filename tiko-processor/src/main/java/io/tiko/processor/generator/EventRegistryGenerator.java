@@ -37,6 +37,9 @@ public final class EventRegistryGenerator {
     private static final String RUNTIME_PACKAGE = "io.tiko.runtime";
     private static final ClassName CHAIN_CONTEXT = ClassName.get(RUNTIME_PACKAGE, "EventChainContext");
 
+    /** In {@code tiko-coroutines}; referenced only by a module that has a {@code suspend} handler (#677). */
+    private static final ClassName SUSPEND_HANDLERS = ClassName.get("io.tiko.coroutines", "SuspendHandlers");
+
     private final ProcessorContext context;
 
     public EventRegistryGenerator(ProcessorContext context) {
@@ -192,7 +195,9 @@ public final class EventRegistryGenerator {
                         ? "__handler." + handler.getMethod().jvmName() + "(event, __wrapper)"
                         : "__handler." + handler.getMethod().jvmName() + "(event)");
 
-        if (handler.isAsync()) {
+        if (handler.isSuspend()) {
+            emitSuspendDispatch(method, handler, index, plan);
+        } else if (handler.isAsync()) {
             emitAsyncDispatch(method, handler, index, plan);
         } else {
             emitSyncDispatch(method, handler, index, plan);
@@ -244,6 +249,58 @@ public final class EventRegistryGenerator {
             String getterName,
             boolean captureResult,
             String invocation) {}
+
+    /**
+     * Emits the dispatch of a {@code suspend} handler (#677): one call into {@code tiko-coroutines},
+     * which runs the handler as a coroutine in the container's scope, in a unit of work of its
+     * own, and routes what it throws to the {@code ErrorHandler}. Generated code stays Java: a
+     * Kotlin {@code suspend () -> T} is a function of the {@code Continuation} on the JVM, so the
+     * handler call is a Java lambda that passes its continuation on.
+     *
+     * <p>A handler of a framework lifecycle event runs without a unit, as an async one does. Its
+     * component is then resolved here, on the publishing thread, like an async handler's.
+     */
+    private void emitSuspendDispatch(
+            MethodSpec.Builder method, EventHandlerModel handler, int index, DispatchPlan plan) {
+        ClassName errorHandler = ClassName.get("io.tiko", "ErrorHandler");
+        method.addStatement("$T __err = container.getErrorHandler()", errorHandler);
+        String target = "container." + plan.getterName() + "()";
+        if (!plan.detachedUnit()) {
+            method.addStatement("final $T __handler", plan.declaringClass());
+            method.beginControlFlow("try");
+            method.addStatement("__handler = container.$L()", plan.getterName());
+            method.nextControlFlow("catch ($T __t)", Exception.class);
+            emitRouteToErrorHandler(method, "__err", index);
+            method.addStatement("return");
+            method.endControlFlow();
+            target = "__handler";
+        }
+        method.addStatement("final $T<?> __asyncWrapper = __wrapper", Event.class);
+
+        String call = target + "." + handler.getMethod().jvmName()
+                + (handler.hasEventWrapper() ? "(event, __asyncWrapper, __continuation)" : "(event, __continuation)");
+        CodeBlock onSuccess = CodeBlock.of("null");
+        CodeBlock typeWitness = CodeBlock.of("");
+        if (plan.captureResult()) {
+            CodeBlock.Builder triggers = CodeBlock.builder();
+            for (EventTriggerModel trigger : handler.getEventTriggers()) {
+                emitTriggerInto(triggers, trigger, index);
+            }
+            onSuccess = CodeBlock.builder()
+                    .add("__result -> {\n$>$L$<}", triggers.build())
+                    .build();
+            typeWitness = CodeBlock.of(
+                    "<$T>", handler.getMethod().returnType().javaPoet().box());
+        }
+        method.addStatement(
+                "$T.$Llaunch(container, __asyncWrapper, $L, __continuation -> $L, $L, __err, HANDLER_INFO_$L, event)",
+                SUSPEND_HANDLERS,
+                typeWitness,
+                plan.detachedUnit(),
+                call,
+                onSuccess,
+                index);
+    }
 
     /**
      * Emits the async dispatch body: submit the handler invocation to the container's event
