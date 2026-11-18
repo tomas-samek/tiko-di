@@ -38,5 +38,5 @@ public suspend fun <T> UnitOfWork.inEventScope(block: suspend CoroutineScope.() 
                 "component is handed, or the container Tiko.create(...) returns.",
         )
     check(!carrier.hasUnitOpen()) { UNIT_ALREADY_OPEN }
-    return withContext(UnitOfWorkElement(carrier, EventChainContext.current()), block)
+    return withContext(UnitOfWorkElement(EventChainContext.carriedUnitOpener(carrier)), block)
 }

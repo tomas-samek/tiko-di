@@ -108,9 +108,15 @@ public final class EventChainContext {
         }
     }
 
-    /** The event the calling thread's work descends from, or {@code null} outside a handler. */
-    public static Event<?> current() {
-        return CURRENT.get();
+    /**
+     * What opens a carried unit of work that descends from the calling thread's current work
+     * (#677). The origin is read now; the unit is opened when the result is asked, on whichever
+     * thread that is. A coroutine's unit is opened the first time the coroutine runs, usually on
+     * another thread than the one that started it.
+     */
+    public static Supplier<CarriedUnit> carriedUnitOpener(UnitCarrier carrier) {
+        Event<?> origin = CURRENT.get();
+        return () -> carrier.openCarriedUnit(origin);
     }
 
     /**

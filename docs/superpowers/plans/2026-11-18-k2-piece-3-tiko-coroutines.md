@@ -195,7 +195,7 @@ My own choices, listed so the owner can overrule them:
 
 **Interfaces:**
 - Consumes: `UnitCarrier.openCarriedUnit`, `hasUnitOpen`, `CarriedUnit.install` / `restore` /
-  `close`, `EventChainContext.current()`.
+  `close`, `EventChainContext.carriedUnitOpener(carrier)` (the first version of this plan had a public `current()`; its `Event<?>` return type is what Sonar rule S1452 rejects).
 - Produces:
   ```kotlin
   /**

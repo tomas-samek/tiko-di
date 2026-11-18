@@ -2,9 +2,8 @@
 
 package io.tiko.coroutines
 
-import io.tiko.Event
 import io.tiko.runtime.CarriedUnit
-import io.tiko.runtime.UnitCarrier
+import java.util.function.Supplier
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CopyableThreadContextElement
 import kotlinx.coroutines.DelicateCoroutinesApi
@@ -30,8 +29,8 @@ import kotlinx.coroutines.Job
  * `CoroutineContextElementContractTest` pins the kotlinx behaviour this relies on.
  */
 internal class UnitOfWorkElement(
-    private val carrier: UnitCarrier,
-    private val origin: Event<*>?,
+    /** Opens a unit that descends from the work that called [inEventScope]; a child's unit descends from it too. */
+    private val openUnit: Supplier<CarriedUnit>,
 ) : CopyableThreadContextElement<CarriedUnit.Displaced> {
 
     companion object Key : CoroutineContext.Key<UnitOfWorkElement>
@@ -53,14 +52,14 @@ internal class UnitOfWorkElement(
         val job = checkNotNull(context[Job]) {
             "A unit of work needs a coroutine with a Job: the unit closes when the Job completes."
         }
-        val opened = carrier.openCarriedUnit(origin)
+        val opened = openUnit.get()
         unit = opened
         job.invokeOnCompletion { opened.close() }
         return opened
     }
 
     override fun copyForChild(): CopyableThreadContextElement<CarriedUnit.Displaced> =
-        UnitOfWorkElement(carrier, origin)
+        UnitOfWorkElement(openUnit)
 
     /**
      * Reached when a coroutine that has a unit is handed another element of this kind, which only

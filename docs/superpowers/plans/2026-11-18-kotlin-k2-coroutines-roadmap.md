@@ -85,7 +85,9 @@ Found in piece 3, and what later pieces must keep in mind:
 
 What later pieces build on: `UnitOfWork.inEventScope` (`tiko-coroutines`),
 `UnitCarrier.openCarriedUnit(origin)` and `hasUnitOpen()`, `CarriedUnit.install()` /
-`restore(displaced)` / `close()`, `EventChainContext.current()`.
+`restore(displaced)` / `close()`, `EventChainContext.carriedUnitOpener(carrier)`. A child
+coroutine's unit already descends from the origin its parent's unit has: the element passes its
+opener on to its copies.
 
 ### Piece 1: injectable unit-of-work interface (#685)
 
