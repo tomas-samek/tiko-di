@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.tschuchort.compiletesting.KotlinCompilation;
 import io.tiko.processor.core.ksp.KspCompiler;
 import io.tiko.processor.core.ksp.KspProgram;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /** #685 on KSP: a Kotlin component takes {@code UnitOfWork} and opens a unit per call. */
@@ -55,8 +56,8 @@ class KspUnitOfWorkInjectionTest {
         try (var program = KspProgram.boot(result)) {
             var routes = program.get("app.Routes");
             var handle = routes.getClass().getMethod("handle");
-            var first = (java.util.List<?>) handle.invoke(routes);
-            var second = (java.util.List<?>) handle.invoke(routes);
+            var first = (List<?>) handle.invoke(routes);
+            var second = (List<?>) handle.invoke(routes);
 
             assertThat(first.get(0)).as("one unit, one instance").isSameAs(first.get(1));
             assertThat(second.get(0)).as("another call, another unit").isNotSameAs(first.get(0));
