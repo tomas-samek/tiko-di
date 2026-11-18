@@ -1164,6 +1164,9 @@ public final class ContainerGenerator {
     /** JavaPoet statement format for {@code throw new <Type>("<literal>")} guards. */
     private static final String THROW_TYPE_WITH_MESSAGE = "throw new $T($S)";
 
+    /** The call that ends a unit of work in this container: the EVENT teardown, shared by every way a unit closes. */
+    private static final String CLOSE_EVENT_SCOPE = "__closeEventScope()";
+
     private static final String EVENTS_PACKAGE = "io.tiko.events";
     private static final ClassName EVENT_STARTED = ClassName.get(EVENTS_PACKAGE, "EventStartedEvent");
     private static final ClassName EVENT_ENDING = ClassName.get(EVENTS_PACKAGE, "EventEndingEvent");
@@ -1260,7 +1263,7 @@ public final class ContainerGenerator {
                 .nextControlFlow("finally")
                 .addStatement("$T __eventEnd = $T.now()", Instant.class, Instant.class);
         emitGatedUnitEndingPublish(method, PUBLISH_LIFECYCLE_PARAM);
-        method.addStatement("__closeEventScope()").endControlFlow();
+        method.addStatement(CLOSE_EVENT_SCOPE).endControlFlow();
         return method.build();
     }
 
@@ -1331,7 +1334,7 @@ public final class ContainerGenerator {
         return MethodSpec.methodBuilder("closeFrame")
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
-                .addStatement("__closeEventScope()")
+                .addStatement(CLOSE_EVENT_SCOPE)
                 .build();
     }
 
@@ -1399,7 +1402,7 @@ public final class ContainerGenerator {
                 .nextControlFlow("finally")
                 .addStatement("$T __eventEnd = $T.now()", Instant.class, Instant.class);
         emitGatedUnitEndingPublish(method, PUBLISH_LIFECYCLE_FIELD);
-        method.addStatement("__closeEventScope()").endControlFlow();
+        method.addStatement(CLOSE_EVENT_SCOPE).endControlFlow();
         return method.build();
     }
 
