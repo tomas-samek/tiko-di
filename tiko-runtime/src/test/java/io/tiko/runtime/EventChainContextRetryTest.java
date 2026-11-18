@@ -72,6 +72,11 @@ class EventChainContextRetryTest {
         }
 
         @Override
+        public OwnedThreads owner() {
+            return null;
+        }
+
+        @Override
         public void execute(Runnable command) {
             delegate.execute(command);
         }
