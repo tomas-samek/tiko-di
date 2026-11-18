@@ -1,6 +1,7 @@
 package io.tiko.runtime;
 
 import io.tiko.Container;
+import io.tiko.Event;
 import io.tiko.UnitOfWork;
 import java.util.function.Supplier;
 
@@ -19,7 +20,7 @@ import java.util.function.Supplier;
  * name the container that aggregates the modules, and the unit is opened there, in every module.
  * A single-module container is the application, and opens the unit itself.
  */
-public final class ContainerUnitOfWork implements UnitOfWork {
+public final class ContainerUnitOfWork implements UnitOfWork, UnitCarrier {
 
     private final Container container;
     private final TikoOptions options;
@@ -47,5 +48,11 @@ public final class ContainerUnitOfWork implements UnitOfWork {
     @Override
     public <T> T supplyInEventScope(Supplier<T> supplier) {
         return application().supplyInEventScope(supplier);
+    }
+
+    /** The application's unit, as the other two methods open it (#677). */
+    @Override
+    public CarriedUnit openCarriedUnit(Event<?> origin) {
+        return CarriedUnit.openIn(application(), origin);
     }
 }
