@@ -10,7 +10,7 @@ interface RequestId {
 }
 
 /**
- * EVENT scope: a fresh instance per unit of work, and [unitOfWork] opens one per request.
+ * EVENT scope: a fresh instance per unit of work, and each route opens one per request.
  * [TicketService] is a SINGLETON, so it gets a generated proxy that resolves the current
  * request's instance on every call.
  */
