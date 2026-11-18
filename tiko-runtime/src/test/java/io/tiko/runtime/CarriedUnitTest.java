@@ -20,7 +20,7 @@ import org.junit.jupiter.api.Test;
 class CarriedUnitTest {
 
     /** A module's container reduced to its EVENT frame: a thread-local, as in a generated container. */
-    private static final class FrameModule implements DetachedUnitFrame {
+    private static class FrameModule implements DetachedUnitFrame {
         private final String name;
         private final List<String> log;
         private final ThreadLocal<UnitFrame> current =
@@ -345,6 +345,67 @@ class CarriedUnitTest {
         unit.restore(displaced);
 
         assertThat(log).containsExactly("a closes []");
+    }
+
+    /**
+     * The application's lifecycle publish lets an {@code Error} of a handler through. The thread
+     * must not keep a frame that is marked open (SEC-14): every later unit on it would fail.
+     */
+    @Test
+    void anErrorFromTheStartedPublishLeavesTheThreadAsItWas() {
+        var error = new AssertionError("a handler of EventStartedEvent failed");
+        var before = List.of(a.frame(), b.frame());
+        var unit = new CarriedUnit(List.of(a, b), null, event -> {
+            if (event instanceof EventStartedEvent) {
+                throw error;
+            }
+        });
+
+        assertThatThrownBy(unit::install).isSameAs(error);
+
+        assertThat(List.of(a.frame(), b.frame())).as("the thread's own frames").isEqualTo(before);
+        assertThat(currentOrigin()).isNull();
+        unit.close();
+        assertThat(log).as("the unit that did start is still torn down").containsExactly("b closes []", "a closes []");
+        assertThat(List.of(a.frame(), b.frame()))
+                .as("and the thread is as it was")
+                .isEqualTo(before);
+    }
+
+    @Test
+    void anErrorFromTheEndingPublishStillTearsTheFramesDown() {
+        var error = new AssertionError("a handler of EventEndingEvent failed");
+        var unit = new CarriedUnit(List.of(a, b), null, event -> {
+            if (event instanceof EventEndingEvent) {
+                throw error;
+            }
+        });
+        var displaced = unit.install();
+        a.put("x");
+
+        assertThatThrownBy(unit::close).isSameAs(error);
+        unit.restore(displaced);
+
+        assertThat(log).containsExactly("b closes []", "a closes [x]");
+    }
+
+    @Test
+    void anErrorFromOneModulesTeardownDoesNotStopTheOthers() {
+        var error = new AssertionError("b failed to close");
+        var failing = new FrameModule("failing", log) {
+            @Override
+            public void closeFrame() {
+                super.closeFrame();
+                throw error;
+            }
+        };
+        var unit = new CarriedUnit(List.of(a, failing), null, event -> {});
+        var displaced = unit.install();
+
+        assertThatThrownBy(unit::close).isSameAs(error);
+        unit.restore(displaced);
+
+        assertThat(log).containsExactly("failing closes []", "a closes []");
     }
 
     private static void awaitQuietly(CountDownLatch latch) {

@@ -120,7 +120,17 @@ public final class CarriedUnit {
         var displaced = swapIn();
         if (first) {
             startedAt = Instant.now();
-            publish(new EventStartedEvent(eventId, startedAt));
+            try {
+                publish(new EventStartedEvent(eventId, startedAt));
+            } catch (Error e) {
+                // The caller gets no Displaced to restore with, so the unit comes off here: a frame
+                // left on the thread, marked open, would fail every later unit on it (SEC-14).
+                swapOut(displaced);
+                synchronized (this) {
+                    holder = null;
+                }
+                throw e;
+            }
         }
         return displaced;
     }
@@ -238,24 +248,39 @@ public final class CarriedUnit {
         }
     }
 
-    /** Ends the unit while it is installed on the calling thread; a failing module does not stop the others. */
+    /**
+     * Ends the unit while it is installed on the calling thread. Every module's frame is torn
+     * down whatever the ending publish or another module's teardown throws (SEC-14); the first
+     * failure is rethrown afterwards, with the later ones suppressed on it.
+     */
     private void tearDown() {
-        var end = Instant.now();
-        publish(new EventEndingEvent(eventId, end, Duration.between(startedAt, end)));
-        RuntimeException failure = null;
+        Throwable failure = null;
+        try {
+            var end = Instant.now();
+            publish(new EventEndingEvent(eventId, end, Duration.between(startedAt, end)));
+        } catch (Error e) {
+            failure = e;
+        }
         for (int i = frames.length - 1; i >= 0; i--) {
             try {
                 modules.get(i).closeFrame();
-            } catch (RuntimeException e) {
+            } catch (RuntimeException | Error e) {
                 failure = BoundedExecution.retainFailure(failure, e);
             }
         }
-        if (failure != null) {
-            throw failure;
+        if (failure instanceof Error error) {
+            throw error;
+        }
+        if (failure instanceof RuntimeException exception) {
+            throw exception;
         }
     }
 
-    /** A failing lifecycle publish, a bus decorator or a handler, must not keep the unit from running or closing. */
+    /**
+     * A failing lifecycle publish, a bus decorator or a handler, must not keep the unit from
+     * running or closing. An {@code Error} is let through, as the containers' own lifecycle
+     * publishes let it through; the callers here keep the thread and the frames in order first.
+     */
     private void publish(Object event) {
         try {
             lifecycle.accept(event);
