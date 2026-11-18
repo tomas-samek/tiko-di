@@ -51,6 +51,12 @@ abstract class BootedContainerTest {
 
     protected fun unitsStarted(): Int = lifecycle.count { it.startsWith("started ") }
 
+    /** The ids of the units of work that have published both their started and their ending event. */
+    protected fun unitsEnded(): Set<String> {
+        val started = lifecycle.filter { it.startsWith("started ") }.map { it.substringAfter(' ') }.toSet()
+        return lifecycle.filter { it.startsWith("ending ") }.map { it.substringAfter(' ') }.filter { it in started }.toSet()
+    }
+
     /**
      * Waits for [condition]. A child coroutine's unit closes as part of the child's completion,
      * which whoever joined the child can see a moment before the unit's teardown has run.

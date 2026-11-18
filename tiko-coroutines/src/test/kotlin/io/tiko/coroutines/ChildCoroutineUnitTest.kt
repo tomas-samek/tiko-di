@@ -1,5 +1,9 @@
 package io.tiko.coroutines
 
+import io.tiko.NoActiveEventScopeException
+import io.tiko.coroutines.fixtures.Note
+import io.tiko.coroutines.fixtures.NoteOrigins
+import io.tiko.runtime.EventChainContext
 import java.util.stream.Stream
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -9,10 +13,15 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -126,6 +135,95 @@ class ChildCoroutineUnitTest : BootedContainerTest() {
         runBlocking { eventually("the child's unit closes") { closeLog.closed() == listOf(parent, before) } }
     }
 
+    /** #683: the origin chain carries over into a child, as it does into an async handler. */
+    @Test
+    fun eventsPublishedInAUnitAndInItsChildDescendFromTheCallersOrigin() {
+        val origins = container.get(NoteOrigins::class.java)
+        val previous = EventChainContext.enter(EventChainContext.wrap("the caller's work"))
+        try {
+            runBlocking {
+                unitOfWork.inEventScope {
+                    container.eventBus.publish(Note("in the unit"))
+                    async(Dispatchers.Default) { container.eventBus.publish(Note("in a child")) }.await()
+                }
+            }
+        } finally {
+            EventChainContext.exit(previous)
+        }
+
+        assertThat(origins.seen())
+            .containsExactly("in the unit <- the caller's work", "in a child <- the caller's work")
+    }
+
+    /** A child's unit is a unit like any other: it publishes its own started and ending events. */
+    @Test
+    fun aChildsUnitPublishesItsOwnLifecyclePair() {
+        runBlocking {
+            unitOfWork.inEventScope { async { requests.currentId() }.await() }
+            eventually("both units have ended") { unitsEnded().size == 2 }
+        }
+
+        assertThat(lifecycle).`as`("a started and an ending event for the parent and for the child").hasSize(4)
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("waysAChildEnds")
+    fun aChildThatEndsClosesItsOwnUnitOnly(ends: String, endedChild: suspend CoroutineScope.(suspend () -> String) -> String) {
+        runBlocking {
+            unitOfWork.inEventScope {
+                val parent = requests.currentId()
+                val child = endedChild { requests.currentId() }
+
+                eventually("the unit of a child that $ends closes") { closeLog.closed().contains(child) }
+                assertThat(closeLog.closed()).`as`("the parent's unit is still open").doesNotContain(parent)
+                assertThat(requests.currentId()).isEqualTo(parent)
+            }
+        }
+    }
+
+    /** `flowOn` moves the upstream into a coroutine of its own, so into a unit of its own. */
+    @Test
+    fun theUpstreamOfFlowOnRunsInAUnitOfItsOwn() {
+        val (collector, upstream, upstreamOnAnotherDispatcher) = runBlocking {
+            unitOfWork.inEventScope {
+                val ids = flow { emit(requests.currentId()) }
+                Triple(requests.currentId(), ids.first(), ids.flowOn(Dispatchers.IO).first())
+            }
+        }
+
+        assertThat(upstream).`as`("a flow collected in the unit runs in it").isEqualTo(collector)
+        assertThat(upstreamOnAnotherDispatcher).`as`("the upstream of flowOn").isNotEqualTo(collector)
+    }
+
+    /**
+     * A coroutine that is not given the unit's context is not part of the unit. While it runs on
+     * a thread the unit is installed on, started inline by code in the unit, it sees that unit as
+     * any function called there does. Wherever it runs later, it has none.
+     */
+    @Test
+    fun aCoroutineOfAnotherScopeIsNotPartOfTheUnit() {
+        val otherScope = CoroutineScope(SupervisorJob())
+        val startedInline = CompletableDeferred<String>()
+        val theUnitIsOver = CompletableDeferred<Unit>()
+        val later = CompletableDeferred<Throwable?>()
+
+        val caller = runBlocking {
+            unitOfWork.inEventScope {
+                otherScope.launch(Dispatchers.Unconfined) {
+                    startedInline.complete(requests.currentId())
+                    theUnitIsOver.await()
+                    later.complete(runCatching { requests.currentId() }.exceptionOrNull())
+                }
+                requests.currentId()
+            }
+        }
+        theUnitIsOver.complete(Unit)
+
+        val (inline, afterTheUnit) = runBlocking { startedInline.await() to later.await() }
+        assertThat(inline).`as`("started inline on the caller's thread, it sees the caller's unit").isEqualTo(caller)
+        assertThat(afterTheUnit).isInstanceOf(NoActiveEventScopeException::class.java)
+    }
+
     @Test
     fun aLazyChildThatNeverRunsOpensNoUnit() {
         runBlocking {
@@ -153,6 +251,29 @@ class ChildCoroutineUnitTest : BootedContainerTest() {
             case("async on another dispatcher") { id -> async(Dispatchers.IO) { id() }.await() },
             case("async, UNDISPATCHED") { id -> async(start = CoroutineStart.UNDISPATCHED) { id() }.await() },
             case("async, Unconfined") { id -> async(Dispatchers.Unconfined) { id() }.await() },
+        )
+
+        @JvmStatic
+        fun waysAChildEnds(): Stream<Arguments> = Stream.of(
+            case("throws") { id ->
+                supervisorScope {
+                    val seen = CompletableDeferred<String>()
+                    val child = async {
+                        seen.complete(id())
+                        error("the child failed")
+                    }
+                    assertThat(runCatching { child.await() }.exceptionOrNull()).hasMessage("the child failed")
+                    seen.await()
+                }
+            },
+            case("is cancelled") { id ->
+                val seen = CompletableDeferred<String>()
+                val child = launch {
+                    seen.complete(id())
+                    delay(60_000)
+                }
+                seen.await().also { child.cancelAndJoin() }
+            },
         )
 
         @JvmStatic
