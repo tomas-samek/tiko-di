@@ -6,7 +6,9 @@ import io.tiko.events.EventEndingEvent;
 import io.tiko.events.EventStartedEvent;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -17,9 +19,12 @@ import java.util.function.Consumer;
  * coroutine, keeps its unit this way: the same EVENT-scoped instances and the same origin chain
  * wherever it runs.
  *
- * <p>A unit of work is single-threaded. The unit is on one thread at a time: a second thread that
- * installs it while a first one has it gets an {@link IllegalStateException}. The thread that has
- * it may install it again; that changes nothing and is undone by its own {@code restore}.
+ * <p>A unit of work is single-threaded: its work runs on one thread at a time. The unit itself
+ * can be on two threads for a moment. Work that moves to another thread is resumed there while
+ * the thread it left is still on its way out, so the new thread installs the unit before the old
+ * one has taken it off (kotlinx-coroutines does this in about one hand-over in twenty). Both then
+ * have the same frames; the old thread only puts its own back. The thread that has the unit may
+ * also install it again; that changes nothing and is undone by its own {@code restore}.
  *
  * <p>The unit publishes one {@code EventStartedEvent} / {@code EventEndingEvent} pair, the first
  * when it is first installed and the second when it closes, both while it is installed, so a
@@ -55,8 +60,8 @@ public final class CarriedUnit {
     private final Consumer<Object> lifecycle;
     private final String eventId = UUID.randomUUID().toString();
 
-    // Guarded by this: which thread has the unit, when it started, and how far its close has come.
-    private Thread holder;
+    // Guarded by this: which threads have the unit, when it started, and how far its close has come.
+    private final Set<Thread> holders = new HashSet<>();
     private Instant startedAt;
     private boolean closeRequested;
     private boolean tornDown;
@@ -104,7 +109,7 @@ public final class CarriedUnit {
      * origin the current one. The first install publishes {@code EventStartedEvent}.
      *
      * @return what the thread had, to hand to {@link #restore} on the same thread
-     * @throws IllegalStateException if the unit is closed, or another thread has it
+     * @throws IllegalStateException if the unit is closed
      */
     public Displaced install() {
         Instant firstInstallAt = null;
@@ -112,15 +117,9 @@ public final class CarriedUnit {
             if (closeRequested) {
                 throw new IllegalStateException("This unit of work is closed; it cannot be installed on a thread.");
             }
-            var current = Thread.currentThread();
-            if (holder == current) {
+            if (!holders.add(Thread.currentThread())) {
                 return Displaced.NOTHING;
             }
-            if (holder != null) {
-                throw new IllegalStateException("This unit of work is installed on thread '" + holder.getName()
-                        + "'. A unit of work is single-threaded: it is on one thread at a time.");
-            }
-            holder = current;
             if (startedAt == null) {
                 firstInstallAt = Instant.now();
                 startedAt = firstInstallAt;
@@ -137,10 +136,7 @@ public final class CarriedUnit {
                     // An Error of a handler is on its way out, and the caller gets no Displaced to
                     // restore with. The unit comes off here: a frame left on the thread, marked
                     // open, would fail every later unit on it (SEC-14).
-                    swapOut(displaced);
-                    synchronized (this) {
-                        holder = null;
-                    }
+                    takeOff(displaced);
                 }
             }
         }
@@ -149,26 +145,22 @@ public final class CarriedUnit {
 
     /**
      * Takes the unit off the calling thread and puts back what {@code displaced} holds. If the
-     * unit was closed from another thread meanwhile, it is torn down here first.
+     * unit was closed from another thread meanwhile and this is the last thread that has it, it is
+     * torn down here.
      *
      * @param displaced what {@link #install()} returned on this thread
      */
     public void restore(Displaced displaced) {
-        if (displaced == Displaced.NOTHING) {
-            return;
+        if (displaced != Displaced.NOTHING) {
+            takeOff(displaced);
         }
-        boolean closedMeanwhile = claimTeardown();
-        try {
-            if (closedMeanwhile) {
-                tearDown();
-            }
-        } finally {
-            swapOut(displaced);
-            if (!release()) {
-                // close() arrived between the check above and the release: it left the teardown to
-                // this thread, which still counts as having the unit.
-                tearDownOnThisThread();
-            }
+    }
+
+    private void takeOff(Displaced displaced) {
+        swapOut(displaced);
+        if (!release()) {
+            // close() left the teardown to the last thread that has the unit: this one.
+            tearDownOnThisThread();
         }
     }
 
@@ -176,11 +168,11 @@ public final class CarriedUnit {
      * Closes the unit: publishes {@code EventEndingEvent} and tears down the EVENT-scoped
      * components of every module, last module first. Only the first call does anything.
      *
-     * <p>Called on the thread that has the unit, the teardown runs in place and the caller still
+     * <p>Called on a thread that has the unit, the teardown runs in place and the caller still
      * {@linkplain #restore restores}. Called while no thread has it, the unit is installed for the
-     * teardown and taken off again. Called while another thread has it, the teardown is left to
-     * that thread, which runs it when it takes the unit off. A unit that was never installed has
-     * nothing to tear down.
+     * teardown and taken off again. Called while only other threads have it, the teardown is left
+     * to the last of them to take the unit off. A unit that was never installed has nothing to
+     * tear down.
      */
     public void close() {
         boolean inPlace;
@@ -194,12 +186,12 @@ public final class CarriedUnit {
                 return;
             }
             var current = Thread.currentThread();
-            if (holder != null && holder != current) {
-                return; // the thread that has the unit tears it down in restore()
+            inPlace = holders.contains(current);
+            if (!inPlace && !holders.isEmpty()) {
+                return; // the last thread to take the unit off tears it down in restore()
             }
             tornDown = true;
-            inPlace = holder == current;
-            holder = current;
+            holders.add(current);
         }
         if (inPlace) {
             tearDown();
@@ -217,22 +209,20 @@ public final class CarriedUnit {
         return startedAt;
     }
 
-    /** Whether the holding thread has to tear the unit down: closed, and nobody has done it yet. */
-    private synchronized boolean claimTeardown() {
-        if (closeRequested && !tornDown) {
-            tornDown = true;
-            return true;
-        }
-        return false;
-    }
-
-    /** Gives the unit up, unless a teardown was left to this thread meanwhile. */
+    /**
+     * Gives the unit up. The last thread to do so keeps it when a close was left to it: closed,
+     * and nobody has torn it down yet.
+     *
+     * @return whether the unit was given up
+     */
     private synchronized boolean release() {
-        if (closeRequested && !tornDown) {
+        var current = Thread.currentThread();
+        holders.remove(current);
+        if (holders.isEmpty() && closeRequested && !tornDown) {
             tornDown = true;
+            holders.add(current);
             return false;
         }
-        holder = null;
         return true;
     }
 
@@ -244,7 +234,7 @@ public final class CarriedUnit {
         } finally {
             swapOut(displaced);
             synchronized (this) {
-                holder = null;
+                holders.remove(Thread.currentThread());
             }
         }
     }
