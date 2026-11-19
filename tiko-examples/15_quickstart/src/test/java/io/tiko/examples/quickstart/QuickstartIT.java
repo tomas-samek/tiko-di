@@ -4,10 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.javalin.Javalin;
 import io.tiko.Container;
 import io.tiko.config.ConfigSources;
 import io.tiko.runtime.Tiko;
+import io.tiko.runtime.TikoOptions;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -18,6 +18,7 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Duration;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,7 +28,8 @@ import org.junit.jupiter.api.Test;
  * End-to-end: real container, real Javalin on a random port, real HTTP. The
  * assertions prove the orchestrator chain — POST → JDBC row → event delivered
  * to {@link NoteAuditor} — works without any wrapper between the user code
- * and Hikari / Javalin.
+ * and Hikari / Javalin. The container starts the server: the test only reads
+ * its port.
  */
 class QuickstartIT {
 
@@ -35,16 +37,13 @@ class QuickstartIT {
     private static final String JDBC_URL = "jdbc:h2:mem:quickstart;DB_CLOSE_DELAY=-1;MODE=PostgreSQL";
 
     private Container container;
-    private Javalin app;
     private int port;
     private HttpClient client;
 
     @BeforeEach
     void setUp() {
-        container = Tiko.create(ConfigSources.classpath("application.yml"));
-        app = container.get(Javalin.class);
-        app.start(0);
-        port = app.port();
+        container = Tiko.create(onPort(0).build());
+        port = container.get(HttpServer.class).port();
         client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
     }
 
@@ -82,6 +81,37 @@ class QuickstartIT {
         // EventBus.publish on a non-async handler delivers synchronously, so the
         // auditor count is already incremented by the time POST returns 201.
         assertThat(container.get(NoteAuditor.class).count()).isEqualTo(1);
+    }
+
+    @Test
+    void twoRequestsRunInTwoUnits() throws Exception {
+        HttpResponse<String> first = post("{\"text\":\"first\"}");
+        HttpResponse<String> second = post("{\"text\":\"second\"}");
+
+        String firstUnit = first.headers().firstValue("X-Request-Id").orElseThrow();
+        String secondUnit = second.headers().firstValue("X-Request-Id").orElseThrow();
+        assertThat(firstUnit).isNotEqualTo(secondUnit);
+        // The auditor handles NoteCreated synchronously, inside the request's unit, so it reads
+        // the same RequestId instance the route read.
+        assertThat(container.get(NoteAuditor.class).requestIds()).containsExactly(firstUnit, secondUnit);
+    }
+
+    /** The application's config with the server on {@code port}; {@code 0} lets the OS pick one. */
+    static TikoOptions.Builder onPort(int port) {
+        return TikoOptions.builder()
+                .configSource(ConfigSources.layered(
+                        ConfigSources.classpath("application.yml"),
+                        ConfigSources.fromMap(Map.of("app", Map.of("server", Map.of("port", port))))));
+    }
+
+    private HttpResponse<String> post(String json) throws Exception {
+        return client.send(
+                HttpRequest.newBuilder()
+                        .uri(URI.create("http://localhost:" + port + "/notes"))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(json))
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
     }
 
     @Test
