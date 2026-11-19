@@ -1829,15 +1829,12 @@ public final class ContainerGenerator {
             for (int i = shutdownTargets.size() - 1; i >= 0; i--) {
                 ShutdownTarget target = shutdownTargets.get(i);
                 switch (target) {
-                    case ShutdownTarget.Component(var component) -> {
-                        if (component.hasDestroyHook()) {
-                            emitComponentDestroy(method, component);
-                        }
-                    }
-                    case ShutdownTarget.Factory(var factory) -> {
-                        if (factory.mayBeAutoCloseable()) {
-                            emitFactoryDestroy(method, factory);
-                        }
+                    case ShutdownTarget.Component(var component)
+                    when component.hasDestroyHook() -> emitComponentDestroy(method, component);
+                    case ShutdownTarget.Factory(var factory)
+                    when factory.mayBeAutoCloseable() -> emitFactoryDestroy(method, factory);
+                    default -> {
+                        // Nothing to tear down for this target.
                     }
                 }
             }
