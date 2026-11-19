@@ -8,10 +8,12 @@ import io.tiko.runtime.EventChainContext
 import io.tiko.runtime.UnitCarrier
 import java.util.function.Consumer
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 
 /**
  * Runs `suspend` event handlers (#677). For generated event-registry code, which calls [launch]
- * once for every delivery to a `suspend` `@EventHandler`; applications don't call it.
+ * or [launchWithoutUnit] once for every delivery to a `suspend` `@EventHandler`; applications
+ * don't call it.
  */
 public object SuspendHandlers {
 
@@ -21,9 +23,8 @@ public object SuspendHandlers {
      * - The coroutine runs in the container's own scope, on a thread the container made, and is a
      *   pending delivery until it has completed: `close()` waits for it, and cancels it when it
      *   outruns the shutdown timeout.
-     * - With [inUnit] it runs in a unit of work of its own, which closes when the coroutine
-     *   completes, fails or is cancelled. Without it, for a handler of a framework lifecycle
-     *   event, it runs with no unit of work.
+     * - It runs in a unit of work of its own, which closes when the coroutine completes, fails or
+     *   is cancelled.
      * - Events the handler publishes descend from [origin], the event it handles.
      * - [onSuccess] gets the handler's result after the handler returned, still in the handler's
      *   unit: it publishes the handler's `@EventTrigger` events.
@@ -38,29 +39,61 @@ public object SuspendHandlers {
     public fun <T> launch(
         container: Container,
         origin: Event<*>,
-        inUnit: Boolean,
         handler: suspend () -> T,
         onSuccess: Consumer<T>?,
         errorHandler: ErrorHandler,
         info: EventHandlerInfo,
         event: Any,
     ) {
+        val reporter = Reporter(errorHandler, info, event)
+        deliver(container, event, handler, onSuccess, reporter) { coroutines, onFailure, delivery ->
+            coroutines.launchInUnit({ (container as UnitCarrier).openCarriedUnit(origin) }, onFailure, delivery)
+        }
+    }
+
+    /**
+     * As [launch], with no unit of work: for a handler of a framework lifecycle event
+     * (`io.tiko.events.*`). Such an event is a signal about units of work and opens none.
+     */
+    @JvmStatic
+    public fun <T> launchWithoutUnit(
+        container: Container,
+        origin: Event<*>,
+        handler: suspend () -> T,
+        onSuccess: Consumer<T>?,
+        errorHandler: ErrorHandler,
+        info: EventHandlerInfo,
+        event: Any,
+    ) {
+        val reporter = Reporter(errorHandler, info, event)
+        deliver(container, event, handler, onSuccess, reporter) { coroutines, onFailure, delivery ->
+            coroutines.launchWithoutUnit(origin, onFailure, delivery)
+        }
+    }
+
+    /** Routes a handler's failure to the `ErrorHandler`, as its `EventHandlerError`. */
+    private class Reporter(val errorHandler: ErrorHandler, val info: EventHandlerInfo, val event: Any) {
+        fun report(failure: Throwable) {
+            EventChainContext.routeHandlerFailure(failure, errorHandler, info, event)
+        }
+    }
+
+    private fun <T> deliver(
+        container: Container,
+        event: Any,
+        handler: suspend () -> T,
+        onSuccess: Consumer<T>?,
+        reporter: Reporter,
+        start: (ContainerCoroutines, (Throwable) -> Unit, suspend CoroutineScope.() -> Unit) -> Job,
+    ) {
         val coroutines = ContainerCoroutines.of(container)
         if (coroutines == null) {
             EventChainContext.logDroppedDuringShutdown(event)
             return
         }
-        val delivery: suspend CoroutineScope.() -> Unit = {
+        val job = start(coroutines, reporter::report) {
             val result = handler()
             onSuccess?.accept(result)
-        }
-        val onFailure = { failure: Throwable ->
-            EventChainContext.routeHandlerFailure(failure, errorHandler, info, event)
-        }
-        val job = if (inUnit) {
-            coroutines.launchInUnit({ (container as UnitCarrier).openCarriedUnit(origin) }, onFailure, delivery)
-        } else {
-            coroutines.launchWithoutUnit(origin, onFailure, delivery)
         }
         if (job.isCancelled) {
             // close() stopped the scope between the check above and the launch: nothing ran.

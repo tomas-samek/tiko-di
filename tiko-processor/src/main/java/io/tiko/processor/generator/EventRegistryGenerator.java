@@ -37,7 +37,8 @@ public final class EventRegistryGenerator {
     private static final String RUNTIME_PACKAGE = "io.tiko.runtime";
     private static final ClassName CHAIN_CONTEXT = ClassName.get(RUNTIME_PACKAGE, "EventChainContext");
 
-    private static final ClassName ERROR_HANDLER = ClassName.get("io.tiko", "ErrorHandler");
+    private static final String API_PACKAGE = "io.tiko";
+    private static final ClassName ERROR_HANDLER = ClassName.get(API_PACKAGE, "ErrorHandler");
     private static final String DECLARE_ERROR_HANDLER = "$T __err = container.getErrorHandler()";
 
     /** In {@code tiko-coroutines}; referenced only by a module that has a {@code suspend} handler (#677). */
@@ -72,7 +73,7 @@ public final class EventRegistryGenerator {
 
         registry.addMethod(createRegisterMethod(eventHandlers));
 
-        ClassName eventHandlerInfo = ClassName.get("io.tiko", "EventHandlerInfo");
+        ClassName eventHandlerInfo = ClassName.get(API_PACKAGE, "EventHandlerInfo");
 
         // Emit one HANDLER_INFO_<n> static constant per handler
         for (int i = 0; i < eventHandlers.size(); i++) {
@@ -285,10 +286,10 @@ public final class EventRegistryGenerator {
         }
         // Not addStatement: the trigger lambda holds statements of its own, as an async body does.
         method.addCode(
-                "$T.$Llaunch(container, __asyncWrapper, $L, __continuation -> $L, $L, __err, HANDLER_INFO_$L, event);\n",
+                "$T.$L$L(container, __asyncWrapper, __continuation -> $L, $L, __err, HANDLER_INFO_$L, event);\n",
                 SUSPEND_HANDLERS,
                 typeWitness,
-                plan.detachedUnit(),
+                plan.detachedUnit() ? "launch" : "launchWithoutUnit",
                 call,
                 onSuccess,
                 index);
@@ -451,7 +452,7 @@ public final class EventRegistryGenerator {
         method.addStatement(
                 "$L.onError(new $T(HANDLER_INFO_$L, event, __t))",
                 errorHandlerVariable,
-                ClassName.get("io.tiko", "EventHandlerError"),
+                ClassName.get(API_PACKAGE, "EventHandlerError"),
                 index);
         method.nextControlFlow("catch ($T __inner)", Exception.class);
         method.addStatement("$T.logErrorHandlerFailure(__inner)", CHAIN_CONTEXT);
