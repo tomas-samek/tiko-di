@@ -3,12 +3,15 @@ package io.tiko.runtime;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.tiko.ErrorContext;
+import io.tiko.EventDispatchRejected;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
@@ -50,6 +53,54 @@ class ContainerWorkTest {
         } finally {
             supplied.shutdown();
         }
+    }
+
+    /** #679: the limit and the policy a module applies to work of its own are the boot's. */
+    @Test
+    void tellsTheBootsQueueCapacityAndOverflowPolicy() {
+        var limited = ContainerWork.of(new RetrySchedulingExecutor(supplied, new OwnedThreads(3, OverflowPolicy.DROP)));
+        var defaults = TikoOptions.builder().build();
+
+        assertThat(limited.queueCapacity()).isEqualTo(3);
+        assertThat(limited.onOverflow()).isEqualTo(OverflowPolicy.DROP);
+        assertThat(work.queueCapacity()).isEqualTo(defaults.queueCapacity());
+        assertThat(work.onOverflow()).isEqualTo(defaults.onOverflow());
+        supplied.shutdown();
+    }
+
+    /** #679: a publish from a thread of the boot must not wait for work of that same boot (#727). */
+    @Test
+    void aThreadTheBootCreatedIsItsOwn() throws InterruptedException {
+        var onVirtual = new AtomicBoolean();
+        var onPlatform = new AtomicBoolean();
+        var virtual = work.virtualThreads("own-").newThread(() -> onVirtual.set(work.isOwnThread()));
+        var platform = owner.newThread(() -> onPlatform.set(work.isOwnThread()));
+
+        virtual.start();
+        platform.start();
+        virtual.join();
+        platform.join();
+
+        assertThat(onVirtual).as("a virtual thread of the boot, while it runs").isTrue();
+        assertThat(onPlatform)
+                .as("a platform thread of the boot: an async worker")
+                .isTrue();
+        assertThat(work.isOwnThread()).as("the test's thread").isFalse();
+        supplied.shutdown();
+    }
+
+    /** #679: an event that meets the limit under ROUTE_TO_DLQ is handed over as async dispatch does it. */
+    @Test
+    void aRejectedDispatchReachesTheErrorHandlerAsEventDispatchRejected() {
+        var seen = new ArrayList<ErrorContext>();
+
+        EventChainContext.routeDispatchRejected("an event", seen::add);
+        EventChainContext.routeDispatchRejected("another", context -> {
+            throw new IllegalStateException("the error handler failed");
+        });
+
+        assertThat(seen).containsExactly(new EventDispatchRejected("an event"));
+        supplied.shutdown();
     }
 
     @Test
