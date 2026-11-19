@@ -26,6 +26,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.errors.InterruptException;
 import org.apache.kafka.common.errors.WakeupException;
 import org.apache.kafka.common.header.internals.RecordHeaders;
 
@@ -64,6 +65,9 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
     // HashMap is safe.
     private final Map<TopicPartition, Attempt> attempts = new HashMap<>();
 
+    /** How long a suspend bridge cancelled at shutdown gets to run its cleanup (#681). */
+    private static final Duration CANCEL_GRACE = Duration.ofSeconds(1);
+
     private record Attempt(long offset, int count) {}
 
     // Partitions paused after a SEEK, mapped to the System.nanoTime() at which they resume (#478).
@@ -71,6 +75,11 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
     private final Map<TopicPartition, Long> resumeAt = new HashMap<>();
 
     private final AtomicBoolean running = new AtomicBoolean(false);
+
+    // True while the consumer thread is inside a dispatcher that opens its own unit (#681): a
+    // suspend bridge, which runs as a coroutine on that thread and is cancelled by interrupting it.
+    private volatile boolean cancellableDispatch;
+
     private Thread thread; // guarded by this
     private CountDownLatch loopExited = new CountDownLatch(0);
     private final AtomicBoolean closed = new AtomicBoolean(false);
@@ -163,7 +172,8 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
         try {
             // shutdown-timeout bounds the loop exiting (a bridge may be stuck); the close that
             // follows is bounded by the consumer's own close timeout, as before.
-            if (loopExited.await(config.shutdownTimeout().toMillis(), TimeUnit.MILLISECONDS)) {
+            if (loopExited.await(config.shutdownTimeout().toMillis(), TimeUnit.MILLISECONDS)
+                    || cancelSuspendedBridge()) {
                 thread.join();
             }
         } catch (InterruptedException e) {
@@ -171,11 +181,29 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
         }
     }
 
+    /**
+     * Cancels a suspend bridge that is still running after the shutdown timeout (#681), by
+     * interrupting the consumer thread that runs its coroutine, and gives it {@link #CANCEL_GRACE}
+     * to run its cleanup and close its unit. A regular bridge is not interrupted, as before.
+     *
+     * @return whether the loop has exited
+     */
+    private boolean cancelSuspendedBridge() throws InterruptedException {
+        if (!cancellableDispatch) {
+            return false;
+        }
+        thread.interrupt();
+        return loopExited.await(CANCEL_GRACE.toMillis(), TimeUnit.MILLISECONDS);
+    }
+
     private void runAndClose() {
         try {
             run();
         } finally {
             loopExited.countDown();
+            // stop() may have interrupted this thread to cancel a suspend bridge (#681). That
+            // interrupt has done its work; the client's close must not be cut short by it.
+            Thread.interrupted();
             closeConsumer();
         }
     }
@@ -241,6 +269,9 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
             } catch (WakeupException wakeup) {
                 throw wakeup; // orderly shutdown — handled by run()
             } catch (Exception ex) {
+                if (interruptedByStop(ex)) {
+                    return; // the record stays uncommitted and is delivered again
+                }
                 if (!handleIngestFailure(tp, r, ex)) return;
             } catch (Error fatal) {
                 stopOn(new KafkaIngestError(r.topic(), r.partition(), r.offset(), r.headers(), fatal));
@@ -249,11 +280,32 @@ public final class ThreadPerTopicRunner implements KafkaConsumerRunner {
         }
     }
 
+    /**
+     * Whether {@code failure} is the interrupt {@link #stop()} sends to cancel a suspend bridge
+     * (#681): the cancelled bridge throws it as an {@link InterruptedException}, and a commit it
+     * lands in after the bridge returned throws Kafka's {@link InterruptException}. Either way the
+     * runner is stopping, so it is no ingest failure.
+     */
+    private boolean interruptedByStop(Exception failure) {
+        return !running.get() && (failure instanceof InterruptedException || failure instanceof InterruptException);
+    }
+
     /** Decodes one record, runs its bridge and publishes the bridge's event, all in one unit of work. */
     private void publish(ConsumerRecord<String, byte[]> r) {
         Object payload = serializer.deserialize(r.value(), source.payloadType());
         KafkaContext ctx = new KafkaContext(
                 r.topic(), r.partition(), r.offset(), Instant.ofEpochMilli(r.timestamp()), r.headers());
+        if (source.opensItsUnit()) {
+            // A suspend bridge (#681): its dispatcher runs it as a coroutine on this thread, in a
+            // unit that travels with the coroutine, and publishes its event inside that unit.
+            cancellableDispatch = true;
+            try {
+                source.dispatcher().dispatch(container, payload, ctx);
+            } finally {
+                cancellableDispatch = false;
+            }
+            return;
+        }
         // Each consumed message is one unit of work (#347): open a fresh EVENT scope so
         // EVENT-scoped beans resolve and tear down per message and unit lifecycle events
         // publish. The scope closes (teardown runs) BEFORE commit, so per-unit resources
