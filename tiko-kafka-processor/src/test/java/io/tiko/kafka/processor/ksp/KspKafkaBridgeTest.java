@@ -217,7 +217,7 @@ class KspKafkaBridgeTest {
                         """,
                         List.of("@KafkaSink on a top-level function 'toKafka'", "move it into a @Component class")),
                 Arguments.of(
-                        "suspendSourceRejectedUntilK2",
+                        "suspendSourceNeedsTikoCoroutines",
                         """
                         @Component(scope = Scope.SINGLETON)
                         class OrderConsumer {
@@ -226,9 +226,9 @@ class KspKafkaBridgeTest {
                         }
                         """,
                         List.of(
-                                "suspend @KafkaSource is not supported yet",
-                                "'OrderConsumer.fromKafka' is a suspend fun",
-                                "coroutine support (K2)")),
+                                "suspend @KafkaSource 'OrderConsumer.fromKafka' runs as a coroutine",
+                                "tiko-coroutines is not on the classpath",
+                                "Add the dependency io.github.tomas-samek:tiko-coroutines")),
                 Arguments.of(
                         "suspendSinkRejected",
                         """

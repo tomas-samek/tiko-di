@@ -124,11 +124,16 @@ public final class KspProgram implements AutoCloseable {
      * Runs a public static no-argument method of the compiled program in a loader of its own and
      * returns what it answers. For a program that boots its container itself, with the options
      * it needs, and reports what it saw in JDK types.
+     *
+     * <p>The program is the application's only module: a directory of the test's classpath that
+     * holds a Tiko container of its own, the test's compiled fixtures for one, is left out. With
+     * it the program would boot as a second module of a multi-module application.
      */
     public static Object run(KspResult result, String typeName, String method) {
         var thread = Thread.currentThread();
         var previous = thread.getContextClassLoader();
-        try (var loader = new URLClassLoader(classpath(result.outputRoots()), ClassLoader.getPlatformClassLoader())) {
+        var urls = classpath(result.outputRoots(), KspProgram::isAnotherModule);
+        try (var loader = new URLClassLoader(urls, ClassLoader.getPlatformClassLoader())) {
             thread.setContextClassLoader(loader);
             return loader.loadClass(typeName).getMethod(method).invoke(null);
         } catch (ReflectiveOperationException e) {
@@ -250,18 +255,31 @@ public final class KspProgram implements AutoCloseable {
 
     /** The output roots, then every entry of the test's classpath. */
     private static URL[] classpath(List<Path> outputRoots) {
+        return classpath(outputRoots, entry -> false);
+    }
+
+    /** The output roots, then every entry of the test's classpath that {@code leftOut} does not match. */
+    private static URL[] classpath(List<Path> outputRoots, java.util.function.Predicate<Path> leftOut) {
         var urls = new ArrayList<URL>();
         try {
             for (var root : outputRoots) {
                 urls.add(root.toUri().toURL());
             }
             for (var entry : System.getProperty("java.class.path").split(File.pathSeparator)) {
-                urls.add(Path.of(entry).toUri().toURL());
+                var path = Path.of(entry);
+                if (!leftOut.test(path)) {
+                    urls.add(path.toUri().toURL());
+                }
             }
         } catch (MalformedURLException e) {
             throw new IllegalStateException(e);
         }
         return urls.toArray(URL[]::new);
+    }
+
+    /** A classpath directory with a Tiko container of its own, as the generated {@code container.properties} marks it. */
+    private static boolean isAnotherModule(Path entry) {
+        return java.nio.file.Files.isRegularFile(entry.resolve("META-INF/tiko/container.properties"));
     }
 
     private static Throwable unwrap(ReflectiveOperationException e) {
