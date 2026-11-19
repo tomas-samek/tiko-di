@@ -10,6 +10,9 @@ data class PaymentReceived(val paymentId: String, val orderId: String, val amoun
 /** What the ledger made of a payment. [firstDelivery] is false for a redelivered payment. */
 data class PaymentRecorded(val payment: PaymentReceived, val firstDelivery: Boolean)
 
+/** A payment seen for the first time, which gets a receipt. */
+data class PaymentAccepted(val payment: PaymentReceived)
+
 /** A record on the `receipts` topic, keyed by [orderId]. */
 @JvmRecord
 data class Receipt(val paymentId: String, val orderId: String, val amountCents: Long)

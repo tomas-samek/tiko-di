@@ -192,6 +192,10 @@ Owner's decision: Kotlin needs this, as a follow-up step after K1. In K1 the doc
      It is not a `tiko-ktor` module, matching how HTTP integrations are handled today (09).
    - **Kafka:** `@KafkaSource` bridge methods may be `suspend`, each record running in its own
      unit, with the existing ingest-error and SEEK / backoff semantics (#313, #478) intact.
+     Decided on 2026-11-19 (D8, D13): the consumer thread runs the bridge's coroutine itself and
+     waits for it; a record is done once the bridge returned, its event was published to its
+     synchronous handlers and the unit closed, and then its offset is committed. At shutdown a
+     suspended bridge gets `tiko.kafka.shutdown-timeout`, then is cancelled.
 
 ## Non-goals
 
@@ -257,7 +261,7 @@ Owner's decision: Kotlin needs this, as a follow-up step after K1. In K1 the doc
   Whichever is picked must not create the anti-goal "silent escape".
 - **Cancellation versus `ApplicationEndingEvent` / `@PreDestroy` ordering** at shutdown.
 - **Kafka suspend bridges:** what "record done" means for offset commit when the bridge
-  suspends.
+  suspends. Settled on 2026-11-19, see item 6.
 
 ## Left to the builder
 

@@ -69,7 +69,8 @@ piece waits for a decision.
 | 6 | merged 2026-11-18 | PR #840; plan `2026-11-18-k2-piece-6-coroutine-scope.md` |
 | 7 | merged 2026-11-19 | PR #841; plan `2026-11-18-k2-piece-7-suspend-handlers.md` |
 | 8 | merged 2026-11-19 | PR #842; plan `2026-11-19-k2-piece-8-suspend-backpressure.md` |
-| 9 | in review | plan `2026-11-19-k2-piece-9-suspend-timeouts-retries.md` |
+| 9 | merged 2026-11-19 | PR #843; plan `2026-11-19-k2-piece-9-suspend-timeouts-retries.md` |
+| 10 | in review | plan `2026-11-19-k2-piece-10-suspend-kafka-source.md` |
 
 Decided for piece 3 (owner, 2026-11-18): D2 `tiko-coroutines`, D3 accepted with the kotlinx
 version left out of the BOM, D4 `inEventScope`.
@@ -255,11 +256,12 @@ owner can answer with a word.
 | D5 | 4 | A coroutine of another scope that starts inline on the caller's thread (`Dispatchers.Unconfined`, `CoroutineStart.UNDISPATCHED`, nested `runBlocking`) sees the caller's unit until its first suspension. The element has no hook for a coroutine that does not carry it. A Java callback run inline on a thread with an open unit behaves the same today. | Document it next to the child-coroutine rule; no code. |
 | D6 | 6 | How a resume reaches the executor without being rejected, and whether the number of suspended handlers is capped. | **Decided 2026-11-18.** An extra executor for coroutines that starts a virtual thread per dispatch (the owner's idea; it replaces the spec's dispatcher on the async executor), and a `suspend` handler in flight counts from submission to completion, with `OverflowPolicy` applied at submission. Measurements in the plan of piece 6. |
 | D7 | 6 | Where cancelling the scope sits in `close()`. | **Decided 2026-11-18, as recommended.** Transports stop taking work in, `ApplicationEndingEvent`, wait for pending deliveries (suspended handlers included) up to `tiko.shutdownTimeout`, cancel the scope and wait for the cancelled coroutines to close their units, stop delivering, close transports, `@PreDestroy`. |
-| D8 | 10 | When a Kafka record counts as done. | When the bridge's coroutine completes; the consumer thread, which the runner owns, waits for it. |
+| D8 | 10 | When a Kafka record counts as done. | **Decided 2026-11-19, as recommended.** When the bridge's coroutine has completed, its event has been published to its synchronous handlers and the unit has closed. The consumer thread runs the coroutine itself (`runBlocking`) and commits after it. |
 | D9 | 8 | The limit on `suspend` handlers in flight. | **Decided 2026-11-19.** The existing `queueCapacity`. An option of its own that falls back to it may come later. |
 | D10 | 8 | What `CALLER_RUNS` means for a `suspend` handler. | **Decided 2026-11-19, as recommended.** The publisher's thread runs the handler up to its first suspension; the rest runs on the container's threads. The limit then slows the publisher and does not cap the handlers in flight; `BLOCK` and the other policies cap. |
 | D11 | 9 | A `suspend` handler waits out a backoff when `close()` begins. | **Decided 2026-11-19, as recommended.** Its retry is dropped at once with a `WARNING`, as an async handler's is; `close()` does not wait for a backoff. |
 | D12 | 9 | Whether a handler that waits out a backoff keeps its place under the limit of #679. | **Decided 2026-11-19, as recommended.** Yes: it is in flight, and a pending delivery, from the publish until its last attempt has finished. |
+| D13 | 10 | `close()` begins while a `suspend` bridge is suspended. | **Decided 2026-11-19, as recommended.** It gets `tiko.kafka.shutdown-timeout` to finish, then is cancelled by interrupting the consumer thread; its record stays uncommitted. |
 
 ## What stays out of K2
 

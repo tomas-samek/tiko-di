@@ -97,10 +97,16 @@ suspend fun onOpened(event: TicketOpened) { notifier.send(...) }   // notifier.s
   its first suspension and does not cap the number; `BLOCK` holds the publisher and does.
 - In tests, `bus.awaitAsyncDispatch(Duration.ofSeconds(5))` waits for it.
 
-## What does not work on KSP
+### `suspend` `@KafkaSource` bridges
 
-- `suspend` `@KafkaSource` bridges: rejected, because the bridge is called outside a
-  coroutine.
+- Need `tiko-coroutines` next to `tiko-kafka`. The consumer thread runs the bridge's coroutine
+  and waits for it: one record at a time, in a unit of work of its own across suspension points.
+- The offset is committed after the bridge returned and its event's synchronous handlers ran; a
+  failure is an ingest error (`SEEK` by default), as for a regular bridge.
+- At shutdown a suspended bridge gets `tiko.kafka.shutdown-timeout`, then is cancelled; its
+  record is delivered again.
+
+## What does not work on KSP
 
 ## Where KSP differs from javac
 
@@ -146,7 +152,7 @@ One that would add new DI semantics is rejected at compile time with error kind
 | DI function whose JVM name Java can't call (e.g. `fun new()`) | Rejected. | Rename it, or set a callable name with `@JvmName`. |
 | `@KafkaSource` / `@KafkaSink` on a top-level function, or inside an `object` / `companion object` | Rejected: no component instance to call it on. | Move it into (or, from a companion, to the enclosing) `@Component` class. |
 | `@KafkaSource` / `@KafkaSink` on an extension function | Rejected: the bootstrap passes only the payload (and `KafkaContext`). | Declare a regular `fun` taking the receiver as a parameter. |
-| `suspend` `@KafkaSource` | Rejected: the bridge is called outside a coroutine. | Make it a regular `fun`. |
+| `suspend` `@KafkaSource` | Accepted with `tiko-coroutines` on the classpath: the consumer thread runs it as a coroutine, one record at a time, each in its own unit. | Add the `tiko-coroutines` dependency. |
 | `suspend` `@KafkaSink`, or a value class in a bridge's signature | Rejected. | Drop `suspend`; use a regular class. |
 | Plain `data class` (no `@JvmRecord`) as a `@KafkaSource` parameter or `@KafkaSink` return payload, with the default `serializer` | Rejected (a located compile error): the default JSON serializer can't build it, because its constructor has no parameter names Jackson can read. A `@JvmRecord data class`, a Java record or a Java POJO works as a payload. The check covers the payload's top-level type only, so a data class nested inside a payload or inside a collection is yours to annotate; a data class whose parameters all have defaults is rejected too. | Annotate it `@JvmRecord`, or set an explicit `serializer = YourSerializer::class` on the annotation, which turns the rule off. |
 

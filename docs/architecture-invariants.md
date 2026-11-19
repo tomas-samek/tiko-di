@@ -361,7 +361,10 @@ publish that finds none free gets the `OverflowPolicy` (#679, `ContainerCoroutin
 `CALLER_RUNS` the handler starts on the publisher's thread, in its own unit, and that thread's
 unit is put back when the handler suspends. With a timeout or retries (#680) the delivery is
 still one coroutine: it runs its attempts one after another, each in a unit of its own, and
-suspends for the backoff in between.
+suspends for the backoff in between. A `suspend` `@KafkaSource` bridge (#681) is no coroutine of
+the container: the consumer thread runs it (`SuspendBridges.run`), in a unit that travels with
+the coroutine, and the runner, told by `GeneratedSourceDescriptor.opensItsUnit`, opens none of its
+own. The record is committed after the unit has closed.
 
 **Anchor.** `ContainerGenerator.createRunInDetachedFrameMethod` and `createSwapFrameMethod`
 javadoc (`tiko-processor`); `AggregatingContainer.runInDetachedFrames`, `CarriedUnit`
