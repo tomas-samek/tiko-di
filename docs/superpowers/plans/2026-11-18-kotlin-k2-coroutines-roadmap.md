@@ -68,7 +68,8 @@ piece waits for a decision.
 | 4 + 5 | merged 2026-11-18 | PR #839; plan `2026-11-18-k2-piece-4-5-child-coroutines-ktor.md`; #683's acceptance names the Ktor cookbook of #682, so the two closed together |
 | 6 | merged 2026-11-18 | PR #840; plan `2026-11-18-k2-piece-6-coroutine-scope.md` |
 | 7 | merged 2026-11-19 | PR #841; plan `2026-11-18-k2-piece-7-suspend-handlers.md` |
-| 8 | in review | plan `2026-11-19-k2-piece-8-suspend-backpressure.md` |
+| 8 | merged 2026-11-19 | PR #842; plan `2026-11-19-k2-piece-8-suspend-backpressure.md` |
+| 9 | in review | plan `2026-11-19-k2-piece-9-suspend-timeouts-retries.md` |
 
 Decided for piece 3 (owner, 2026-11-18): D2 `tiko-coroutines`, D3 accepted with the kotlinx
 version left out of the BOM, D4 `inEventScope`.
@@ -257,6 +258,8 @@ owner can answer with a word.
 | D8 | 10 | When a Kafka record counts as done. | When the bridge's coroutine completes; the consumer thread, which the runner owns, waits for it. |
 | D9 | 8 | The limit on `suspend` handlers in flight. | **Decided 2026-11-19.** The existing `queueCapacity`. An option of its own that falls back to it may come later. |
 | D10 | 8 | What `CALLER_RUNS` means for a `suspend` handler. | **Decided 2026-11-19, as recommended.** The publisher's thread runs the handler up to its first suspension; the rest runs on the container's threads. The limit then slows the publisher and does not cap the handlers in flight; `BLOCK` and the other policies cap. |
+| D11 | 9 | A `suspend` handler waits out a backoff when `close()` begins. | **Decided 2026-11-19, as recommended.** Its retry is dropped at once with a `WARNING`, as an async handler's is; `close()` does not wait for a backoff. |
+| D12 | 9 | Whether a handler that waits out a backoff keeps its place under the limit of #679. | **Decided 2026-11-19, as recommended.** Yes: it is in flight, and a pending delivery, from the publish until its last attempt has finished. |
 
 ## What stays out of K2
 

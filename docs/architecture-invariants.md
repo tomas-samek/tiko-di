@@ -359,7 +359,9 @@ delivering events, so a cancelled coroutine closes its unit while its singletons
 A `suspend` handler holds one of `queueCapacity` places until its coroutine has completed, and a
 publish that finds none free gets the `OverflowPolicy` (#679, `ContainerCoroutines.admit`). Under
 `CALLER_RUNS` the handler starts on the publisher's thread, in its own unit, and that thread's
-unit is put back when the handler suspends.
+unit is put back when the handler suspends. With a timeout or retries (#680) the delivery is
+still one coroutine: it runs its attempts one after another, each in a unit of its own, and
+suspends for the backoff in between.
 
 **Anchor.** `ContainerGenerator.createRunInDetachedFrameMethod` and `createSwapFrameMethod`
 javadoc (`tiko-processor`); `AggregatingContainer.runInDetachedFrames`, `CarriedUnit`

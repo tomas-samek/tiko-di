@@ -148,6 +148,10 @@ public @interface EventHandler {
      * is a compile-time error. When the executor runs an async handler inline under
      * {@code CALLER_RUNS}, the invocation completes before the timeout can take effect.
      *
+     * <p>A Kotlin {@code suspend} handler may have a timeout without {@code async = true}: it
+     * always runs as a coroutine. Its timeout cancels the coroutine, which takes effect at the
+     * handler's next suspension point; a thread the handler blocks is not interrupted.
+     *
      * <p>Default: {@code ""} (no timeout — opt-in).
      *
      * @return an ISO-8601 duration string, or empty for no timeout
@@ -167,6 +171,9 @@ public @interface EventHandler {
      * a retry on a synchronous handler is a compile-time error. If both {@code timeout} and
      * {@code retries} are set, each attempt is time-boxed and a timed-out attempt counts as a
      * failed attempt. Errors (as opposed to exceptions) are never retried.
+     *
+     * <p>A Kotlin {@code suspend} handler may have retries without {@code async = true}. Its
+     * backoff suspends: the handler waits on no thread.
      *
      * <p><strong>Idempotency is the handler's responsibility</strong> — a retried handler may run
      * its side effects more than once.

@@ -89,6 +89,9 @@ suspend fun onOpened(event: TicketOpened) { notifier.send(...) }   // notifier.s
 - Failures go to the `ErrorHandler` as `EventHandlerError`; `@EventTrigger` fires after the
   handler completed.
 - `close()` waits for it up to `shutdownTimeout`, then cancels it.
+- `timeout`, `retries` and `backoff` work as on an async handler, without `async = true`. A
+  timeout cancels the coroutine at its next suspension point and does not interrupt blocking
+  code (use `runInterruptible { }` for that); a backoff holds no thread.
 - At most `queueCapacity` `suspend` handlers are in flight; a publish past that gets
   `onOverflow`. The default `CALLER_RUNS` starts the handler on the publisher's thread up to
   its first suspension and does not cap the number; `BLOCK` holds the publisher and does.
@@ -98,7 +101,6 @@ suspend fun onOpened(event: TicketOpened) { notifier.send(...) }   // notifier.s
 
 - `suspend` `@KafkaSource` bridges: rejected, because the bridge is called outside a
   coroutine.
-- `timeout` and `retries` on a `suspend` `@EventHandler`: a compile error.
 
 ## Where KSP differs from javac
 
@@ -136,7 +138,7 @@ One that would add new DI semantics is rejected at compile time with error kind
 | `@Produces` / `@EventHandler` inside a `companion object` | Rejected. | Move it to the enclosing `@Component` class. |
 | `@Produces` (or other DI function annotation) on an extension function | Rejected: Tiko injects parameters only, not a receiver. | Declare a regular `fun` taking the receiver as a parameter. |
 | `@get:` / `@set:` DI annotation on a property (`@get:Produces`, `@set:PostConstruct`, ...) | Rejected: Tiko reads DI annotations on functions. | Declare a `fun` instead. |
-| `suspend` `@EventHandler` | Accepted with `tiko-coroutines` on the classpath: it runs as a coroutine in its own unit. `async = false`, `timeout` and `retries` on it are compile errors. | Add the `tiko-coroutines` dependency. |
+| `suspend` `@EventHandler` | Accepted with `tiko-coroutines` on the classpath: it runs as a coroutine in its own unit. `async = false` on it is a compile error; `timeout` and `retries` work without `async = true`. | Add the `tiko-coroutines` dependency. |
 | `suspend` `@Produces` / `@PostConstruct` / `@PreDestroy` | Rejected: the container calls them outside a coroutine. | Drop `suspend`. |
 | `suspend` member of an interface an EVENT-scoped bean is injected through (proxied) | Rejected: the proxy calls it outside a coroutine. | Drop `suspend`. |
 | Value class (`@JvmInline value class`) as a component, injected type, `@Produces` return or parameter, handler event, or a member of an interface Tiko proxies (EVENT impl injected into a SINGLETON) | Rejected: on the JVM it is passed as its underlying value under a mangled function name, so generated Java can't use it. | Use a regular class (a `data class` keeps value semantics). |

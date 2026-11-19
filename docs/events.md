@@ -197,7 +197,7 @@ If the handler runs longer than the budget, its worker thread is interrupted, th
 
 - **Opt-in:** the default is no timeout.
 - **Counts running time:** the budget starts when a worker starts the handler. Time an event waits in the queue does not count, and an event that never reaches a worker (dropped by the overflow policy or at shutdown) is logged as dropped, not reported as a timeout.
-- **Async-only:** `timeout` requires `async = true`. A timeout on a synchronous handler is a **compile-time error**. An invocation that the executor runs inline under `CALLER_RUNS` also runs to completion before the timeout can take effect.
+- **Async-only:** `timeout` requires `async = true`, or a Kotlin [`suspend` handler](#suspend-handlers-kotlin). A timeout on a synchronous handler is a **compile-time error**. An invocation that the executor runs inline under `CALLER_RUNS` also runs to completion before the timeout can take effect.
 - **Best-effort:** interruption can only stop a handler that respects `Thread.interrupt()` (e.g. is blocked on I/O or checks the flag). A handler running a tight uninterruptible loop will keep going — the timeout is reported, but Java cannot force-stop the thread.
 
 ### Retries with backoff
@@ -214,7 +214,7 @@ public void onPayment(PaymentEvent event) {
 `retries = 3` means one initial call plus up to three retries (four attempts total). The first attempt that returns normally wins — no error is routed. Once the budget is exhausted, a **single** `EventHandlerError` is routed whose `attempts()` is the total number of attempts made (here, `4`). Backoff is `FIXED` (constant delay) or `EXPONENTIAL` (doubling) and is *scheduled*, so it never ties up an executor thread while waiting.
 
 - **Opt-in:** the default is no retries (`retries = 0`).
-- **Async-only:** `retries` requires `async = true` (a **compile-time error** otherwise) — retrying waits for the backoff between attempts, which would block the publisher's thread.
+- **Async-only:** `retries` requires `async = true` or a Kotlin [`suspend` handler](#suspend-handlers-kotlin) (a **compile-time error** otherwise) — retrying waits for the backoff between attempts, which would block the publisher's thread.
 - **ISO-8601 backoff:** `backoff` is a `Duration` string (`"PT0.1S"`), like `timeout`.
 - **Composes with `timeout`:** if both are set, each attempt is time-boxed and a timed-out attempt counts as a failed attempt to be retried.
 - **Errors are not retried:** an `Error` (vs an `Exception`) stops the loop and is logged, never retried.
@@ -312,7 +312,10 @@ class TicketNotifications(private val notifier: Notifier) {
 - **Failures** reach the `ErrorHandler` as an `EventHandlerError`, with the exception as thrown; an `Error` is logged, as for async handlers.
 - **`@EventTrigger`** fires after the handler has completed, with the value it returned; a handler that fails triggers nothing.
 - **Pending deliveries.** A `suspend` handler counts in `pendingAsyncDeliveries()` from the publish until its unit has closed, also while it is suspended and holds no thread. `RecordingEventBus.awaitAsyncDispatch(...)` waits for it.
-- **Timeouts and retries.** `timeout`, `retries` and `backoff` on a `suspend` handler are a compile error; they are tracked in [#680](https://github.com/tomas-samek/tiko-di/issues/680).
+- **Timeouts and retries.** `timeout`, `retries`, `backoff` and `backoffStrategy` work on a `suspend` handler, without `async = true`, and are reported as an async handler's are: an overrun is an `EventHandlerError` whose `cause()` is a `TimeoutException`, and once the retries are used up one `EventHandlerError` carries the number of `attempts()`. Each attempt runs in a unit of work of its own. Three things differ from an async Java handler:
+  - A timeout **cancels the coroutine**; it does not interrupt a thread. It takes effect at the handler's next suspension point, so code that blocks a thread runs on to the end of that call and the error is routed then. Wrap blocking code in `runInterruptible { }` to have it interrupted.
+  - A backoff **suspends**: the handler waits on no thread. It stays a pending delivery and keeps its place under `queueCapacity` until its last attempt has finished.
+  - A `CancellationException` the handler throws while nothing cancelled its delivery, a `withTimeout` of its own running out for one, is a failure like any other: it is retried or reported.
 
 **Backpressure.** At most `queueCapacity` (default 1024) `suspend` handlers hold a place at a time, from the publish until the coroutine has completed, suspended ones included. The count is separate from the async executor's queue. A publish that finds no place free gets what `onOverflow(...)` says:
 
@@ -337,7 +340,8 @@ before it tears anything down. In order:
    `shutdownTimeout`. That includes `suspend` handlers, also the ones that are suspended. Events
    published during the wait, by a handler that is finishing or by an `ApplicationEndingEvent`
    handler, are still delivered and waited for, and a `@KafkaSink` still sends them. A retry that
-   is waiting out its backoff is dropped with a `WARNING`: `close()` does not wait for a backoff.
+   is waiting out its backoff, an async handler's or a `suspend` handler's, is dropped with a
+   `WARNING`: `close()` does not wait for a backoff.
 4. **`suspend` handlers that are still running are cancelled.** They get what is left of
    `shutdownTimeout`, and at least one second, to run their `finally` blocks, and their units of
    work close. One that is blocked in code cancellation does not reach is interrupted after that.
