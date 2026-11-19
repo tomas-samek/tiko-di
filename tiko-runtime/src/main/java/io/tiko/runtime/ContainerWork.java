@@ -25,6 +25,13 @@ public final class ContainerWork {
          * @param deadlineNanos until when to wait, as a {@link System#nanoTime()} value
          */
         void stop(long deadlineNanos);
+
+        /**
+         * Called once when {@code close()} begins to wait for the pending deliveries, at the
+         * moment async retries that wait out a backoff are dropped (#680). Work that only waits
+         * ends its wait here. An instance created later is told as it is created.
+         */
+        default void closeBegan() {}
     }
 
     private final OwnedThreads owner;
@@ -92,6 +99,14 @@ public final class ContainerWork {
      */
     public boolean isOwnThread() {
         return owner.isOwnThread();
+    }
+
+    /**
+     * How many of the boot's {@linkplain #virtualThreads virtual threads} are running their task
+     * right now (#680). Work that is suspended holds none.
+     */
+    public int virtualThreadsRunning() {
+        return owner.virtualThreadsRunning();
     }
 
     /**
