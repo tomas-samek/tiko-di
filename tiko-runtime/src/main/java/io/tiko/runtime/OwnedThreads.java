@@ -115,6 +115,9 @@ final class OwnedThreads implements ThreadFactory {
 
     private boolean workStopped;
 
+    /** Whether {@code close()} has begun its wait for the pending deliveries; guarded by {@link #workLock}. */
+    private boolean closeBegan;
+
     /** The async work of this boot that has been handed over and has not finished (#721). */
     PendingDeliveries deliveries() {
         return deliveries;
@@ -128,7 +131,35 @@ final class OwnedThreads implements ThreadFactory {
      */
     boolean awaitDeliveries(long deadlineNanos) {
         stopRetries();
+        tellCloseBegan();
         return deliveries.await(deadlineNanos);
+    }
+
+    /** Tells the work other Tiko modules run for this boot, once, that {@code close()} began (#680). */
+    private void tellCloseBegan() {
+        List<ContainerWork.Stoppable> toTell;
+        synchronized (workLock) {
+            if (closeBegan) {
+                return;
+            }
+            closeBegan = true;
+            toTell = new ArrayList<>(work.values());
+        }
+        toTell.forEach(OwnedThreads::tellCloseBegan);
+    }
+
+    private static void tellCloseBegan(ContainerWork.Stoppable stoppable) {
+        try {
+            stoppable.closeBegan();
+        } catch (RuntimeException e) {
+            LoggerHolder.LOG.log(
+                    System.Logger.Level.WARNING, "Telling the container's work that close() began threw", e);
+        }
+    }
+
+    /** How many of this boot's {@linkplain #virtualThreads virtual threads} are running their task now. */
+    int virtualThreadsRunning() {
+        return runningVirtualThreads.size();
     }
 
     @Override
@@ -166,7 +197,16 @@ final class OwnedThreads implements ThreadFactory {
             if (workStopped) {
                 return Optional.empty();
             }
-            return Optional.of(type.cast(work.computeIfAbsent(type, ignored -> create.get())));
+            var existing = work.get(type);
+            if (existing != null) {
+                return Optional.of(type.cast(existing));
+            }
+            var created = create.get();
+            work.put(type, created);
+            if (closeBegan) {
+                tellCloseBegan(created);
+            }
+            return Optional.of(created);
         }
     }
 

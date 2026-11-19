@@ -3,8 +3,12 @@ package io.tiko.runtime;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.tiko.DeliveryFailureKind;
 import io.tiko.ErrorContext;
 import io.tiko.EventDispatchRejected;
+import io.tiko.EventHandlerError;
+import io.tiko.EventHandlerInfo;
+import io.tiko.annotations.BackoffStrategy;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -14,6 +18,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 /**
  * #678: what a Tiko module that runs work of its own for a booted container, coroutines for one,
@@ -24,6 +30,12 @@ class ContainerWorkTest {
     /** State of a module that notes when the boot stops it, and until when. */
     private static class Recorded implements ContainerWork.Stoppable {
         final List<Long> stoppedWithNanosLeft = new ArrayList<>();
+        int toldCloseBegan;
+
+        @Override
+        public void closeBegan() {
+            toldCloseBegan++;
+        }
 
         @Override
         public void stop(long deadlineNanos) {
@@ -34,6 +46,11 @@ class ContainerWorkTest {
     private static final class Other extends Recorded {}
 
     private static final class Failing implements ContainerWork.Stoppable {
+        @Override
+        public void closeBegan() {
+            throw new IllegalStateException("this module failed when close began");
+        }
+
         @Override
         public void stop(long deadlineNanos) {
             throw new IllegalStateException("this module failed to stop");
@@ -100,6 +117,81 @@ class ContainerWorkTest {
         });
 
         assertThat(seen).containsExactly(new EventDispatchRejected("an event"));
+        supplied.shutdown();
+    }
+
+    /** #680: a module learns that close() began at the moment async retries are dropped, before the wait. */
+    @Test
+    void closeBeganIsToldOnceBeforeTheWaitForDeliveries() {
+        work.stoppedAtClose(Failing.class, Failing::new);
+        var early = work.stoppedAtClose(Recorded.class, Recorded::new).orElseThrow();
+
+        owner.awaitDeliveries(System.nanoTime() + 20_000_000L);
+        owner.awaitDeliveries(System.nanoTime() + 20_000_000L);
+        var late = work.stoppedAtClose(Other.class, Other::new).orElseThrow();
+
+        assertThat(early.toldCloseBegan)
+                .as("once, whatever another module threw")
+                .isEqualTo(1);
+        assertThat(early.stoppedWithNanosLeft).as("not stopped yet").isEmpty();
+        assertThat(late.toldCloseBegan)
+                .as("created after close began: told as it is created")
+                .isEqualTo(1);
+        supplied.shutdown();
+    }
+
+    /** #680: what shows that work which waits holds no thread. */
+    @Test
+    void countsTheVirtualThreadsThatAreRunning() throws InterruptedException {
+        var running = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var blocked = work.virtualThreads("counted-").newThread(() -> {
+            running.countDown();
+            try {
+                release.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+
+        int before = work.virtualThreadsRunning();
+        blocked.start();
+        running.await();
+        int during = work.virtualThreadsRunning();
+        release.countDown();
+        blocked.join();
+
+        assertThat(List.of(before, during, work.virtualThreadsRunning())).containsExactly(0, 1, 0);
+        supplied.shutdown();
+    }
+
+    /** #680: a retried suspend handler reports its attempts as an async one does. */
+    @Test
+    void aFailureIsRoutedWithItsAttemptCount() {
+        var seen = new ArrayList<ErrorContext>();
+        var info = new EventHandlerInfo(ContainerWorkTest.class, "onText", String.class, true);
+        var cause = new IllegalStateException("the handler failed");
+
+        EventChainContext.routeHandlerFailure(cause, seen::add, info, "an event", 3);
+        EventChainContext.routeHandlerFailure(cause, seen::add, info, "an event", 1);
+
+        assertThat(seen)
+                .containsExactly(
+                        new EventHandlerError(info, "an event", cause, 3),
+                        new EventHandlerError(info, "an event", cause, 1));
+        assertThat(seen)
+                .extracting(context -> ((EventHandlerError) context).kind())
+                .containsExactly(DeliveryFailureKind.EXHAUSTED, DeliveryFailureKind.EXCEPTION);
+        supplied.shutdown();
+    }
+
+    @ParameterizedTest(name = "{0}, before retry {1}: {2} ns")
+    @CsvSource({"FIXED, 0, 100", "FIXED, 3, 100", "EXPONENTIAL, 0, 100", "EXPONENTIAL, 1, 200", "EXPONENTIAL, 3, 800"})
+    void backoffDelayIsConstantForFixedAndDoublesForExponential(
+            BackoffStrategy strategy, int attemptIndex, long expectedNanos) {
+        var policy = new RetryPolicy(5, 100L, strategy, 0L);
+
+        assertThat(EventChainContext.backoffDelayNanos(policy, attemptIndex)).isEqualTo(expectedNanos);
         supplied.shutdown();
     }
 

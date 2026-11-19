@@ -489,8 +489,13 @@ public final class EventChainContext {
         return reported;
     }
 
-    /** Backoff delay before the next retry: constant for FIXED, doubling for EXPONENTIAL. */
-    private static long backoffDelayNanos(RetryPolicy policy, int attemptIndex) {
+    /**
+     * Backoff delay before the next retry: constant for FIXED, doubling for EXPONENTIAL. Public for
+     * {@code tiko-coroutines}, which retries {@code suspend} handlers with the same delays (#680).
+     *
+     * @param attemptIndex the attempt that just failed, counted from 0
+     */
+    public static long backoffDelayNanos(RetryPolicy policy, int attemptIndex) {
         long base = policy.backoffNanos();
         if (base <= 0) {
             return 0L;
@@ -544,6 +549,17 @@ public final class EventChainContext {
     public static void routeHandlerFailure(
             Throwable cause, ErrorHandler errorHandler, EventHandlerInfo info, Object event) {
         reportAsyncHandlerFailure(cause, errorHandler, info, event, 1);
+    }
+
+    /**
+     * As {@link #routeHandlerFailure(Throwable, ErrorHandler, EventHandlerInfo, Object)}, for a
+     * handler that was retried (#680).
+     *
+     * @param attempts how many attempts ran, the initial one included
+     */
+    public static void routeHandlerFailure(
+            Throwable cause, ErrorHandler errorHandler, EventHandlerInfo info, Object event, int attempts) {
+        reportAsyncHandlerFailure(cause, errorHandler, info, event, attempts);
     }
 
     /**
