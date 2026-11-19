@@ -44,7 +44,7 @@ import org.junit.jupiter.params.provider.EnumSource
 class SuspendHandlerOverflowTest {
 
     /** How a handler that holds a place ends. */
-    enum class Ending { COMPLETES, FAILS, IS_CANCELLED }
+    enum class Ending { COMPLETES, FAILS, THROWS_A_CANCELLATION }
 
     private lateinit var container: Container
     private val errors = CopyOnWriteArrayList<ErrorContext>()
@@ -73,7 +73,7 @@ class SuspendHandlerOverflowTest {
     }
 
     private fun publish(event: String, handler: suspend () -> Unit) {
-        SuspendHandlers.launch(container, EventChainContext.wrap(event), handler, null, errorHandler, info, event)
+        SuspendHandlers.launch(container, EventChainContext.wrap(event), handler, null, errorHandler, info, null)
     }
 
     /** Two handlers take the two places and stay suspended until [gate] opens. */
@@ -320,7 +320,7 @@ class SuspendHandlerOverflowTest {
 
     @ParameterizedTest
     @EnumSource(Ending::class)
-    fun aPlaceIsFreeAgainAfterAHandlerCompletedFailedOrWasCancelled(ending: Ending) {
+    fun aPlaceIsFreeAgainAfterAHandlerCompletedFailedOrThrewACancellation(ending: Ending) {
         boot(OverflowPolicy.DROP)
         val end = CompletableDeferred<Unit>()
         repeat(2) { n ->
@@ -329,7 +329,7 @@ class SuspendHandlerOverflowTest {
                 when (ending) {
                     Ending.COMPLETES -> Unit
                     Ending.FAILS -> error("the handler failed")
-                    Ending.IS_CANCELLED -> throw CancellationException("the handler was cancelled")
+                    Ending.THROWS_A_CANCELLATION -> throw CancellationException("thrown by the handler itself")
                 }
             }
         }
@@ -342,7 +342,7 @@ class SuspendHandlerOverflowTest {
 
         assertThat(secondRound).`as`("two places again, and the third publish is dropped")
             .containsExactlyInAnyOrder("ran 0", "ran 1")
-        assertThat(errors).hasSize(if (ending == Ending.FAILS) 2 else 0)
+        assertThat(errors).`as`("a cancellation the handler threw itself is a failure").hasSize(if (ending == Ending.COMPLETES) 0 else 2)
     }
 
     @Test
@@ -362,7 +362,7 @@ class SuspendHandlerOverflowTest {
                 null,
                 errorHandler,
                 info,
-                event,
+                null,
             )
         }
         assertThat(holding.await(5, TimeUnit.SECONDS)).isTrue()
@@ -379,11 +379,13 @@ class SuspendHandlerOverflowTest {
     fun afterTheCoroutinesWereStoppedAPublishAtTheLimitRunsNothing() {
         boot(OverflowPolicy.CALLER_RUNS)
         val stuck = CompletableDeferred<Unit>()
+        val holding = CountDownLatch(2)
         val cancelled = CountDownLatch(2)
         val ran = AtomicBoolean()
         repeat(2) {
             publish("holder") {
                 try {
+                    holding.countDown()
                     gate.await()
                 } finally {
                     // Keeps its place past the cancellation, as a handler blocked in cleanup does.
@@ -392,6 +394,8 @@ class SuspendHandlerOverflowTest {
                 }
             }
         }
+        // A coroutine that is cancelled before it has started never runs, and so has no finally.
+        assertThat(holding.await(5, TimeUnit.SECONDS)).`as`("both holders run").isTrue()
         val stopper = thread { ContainerCoroutines.of(container)!!.stop(System.nanoTime() + TimeUnit.SECONDS.toNanos(3)) }
         assertThat(cancelled.await(5, TimeUnit.SECONDS)).`as`("the coroutines are being stopped").isTrue()
 
