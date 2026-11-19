@@ -81,9 +81,13 @@ public final class EventChainContext {
      * @param event the event whose delivery was skipped
      */
     public static void logDroppedDuringShutdown(Object event) {
+        logDropped(event, "the container is shutting down.");
+    }
+
+    /** The one {@code WARNING} every dropped event gets: its type, and {@code why} it was dropped. */
+    private static void logDropped(Object event, String why) {
         String type = event == null ? "null" : event.getClass().getName();
-        LoggerHolder.LOG.log(
-                System.Logger.Level.WARNING, "Event of type " + type + " was dropped: the container is shutting down.");
+        LoggerHolder.LOG.log(System.Logger.Level.WARNING, "Event of type " + type + " was dropped: " + why);
     }
 
     /**
@@ -94,11 +98,7 @@ public final class EventChainContext {
      * @param why what made it a drop, ending the sentence: the policy, or an interrupted wait
      */
     public static void logDroppedAtTheLimit(Object event, String why) {
-        String type = event == null ? "null" : event.getClass().getName();
-        LoggerHolder.LOG.log(
-                System.Logger.Level.WARNING,
-                "Event of type " + type + " was dropped: the limit of suspend handlers in flight is reached and "
-                        + why);
+        logDropped(event, "the limit of suspend handlers in flight is reached and " + why);
     }
 
     /**
@@ -593,11 +593,7 @@ public final class EventChainContext {
      * {@link #logDroppedDuringShutdown(Object)}.
      */
     private static void logDroppedRetryOverflow(Object event) {
-        String type = event == null ? "null" : event.getClass().getName();
-        LoggerHolder.LOG.log(
-                System.Logger.Level.WARNING,
-                "Event of type " + type + " was dropped: an async retry re-submission overflowed the "
-                        + "event queue (overflow policy = THROW).");
+        logDropped(event, "an async retry re-submission overflowed the event queue (overflow policy = THROW).");
     }
 
     /**
