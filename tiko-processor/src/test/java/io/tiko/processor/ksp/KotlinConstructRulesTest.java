@@ -267,26 +267,18 @@ class KotlinConstructRulesTest {
                         "@EventHandler(async = false) on 'Listener.onPing', which is a suspend fun",
                         "a suspend handler always runs as a coroutine of its own",
                         "Remove async = false"),
+                // #680: a timeout and retries are accepted on a suspend handler, so what such a
+                // handler is told here is the same as any other: the dependency it needs.
                 rejected(
-                        "suspendEventHandlerTimeoutRejected",
+                        "suspendEventHandlerWithATimeoutAndRetriesNeedsTikoCoroutines",
                         """
                         @Component(scope = Scope.SINGLETON) class Listener {
-                            @EventHandler(timeout = "PT5S") suspend fun onPing(event: Ping) {}
+                            @EventHandler(timeout = "PT5S", retries = 2) suspend fun onPing(event: Ping) {}
                         }
                         """,
                         ErrorReporter.KOTLIN_UNSUPPORTED,
-                        "timeout on 'Listener.onPing', which is a suspend fun",
-                        "Remove timeout"),
-                rejected(
-                        "suspendEventHandlerRetriesRejected",
-                        """
-                        @Component(scope = Scope.SINGLETON) class Listener {
-                            @EventHandler(retries = 2) suspend fun onPing(event: Ping) {}
-                        }
-                        """,
-                        ErrorReporter.KOTLIN_UNSUPPORTED,
-                        "retries on 'Listener.onPing', which is a suspend fun",
-                        "Remove retries"),
+                        "suspend @EventHandler 'Listener.onPing' runs as a coroutine",
+                        "tiko-coroutines is not on the classpath"),
                 rejected(
                         "suspendProducesRejected",
                         """
