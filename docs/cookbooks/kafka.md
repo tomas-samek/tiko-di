@@ -102,6 +102,36 @@ public class ReferenceData {
 }
 ```
 
+### A `suspend` bridge (Kotlin)
+
+In Kotlin the bridge may be a `suspend fun`, with `tiko-coroutines`
+(`io.github.tomas-samek:tiko-coroutines`) next to `tiko-kafka`:
+
+```kotlin
+@KafkaSource(topic = "payments")
+@EventTrigger(eventName = "PaymentRecorded")
+suspend fun fromKafka(payment: PaymentReceived): PaymentRecorded =
+    PaymentRecorded(payment, firstDelivery = ledger.record(payment))   // ledger.record suspends
+```
+
+- **One record at a time, on the consumer thread.** The consumer thread runs the bridge's
+  coroutine itself and waits for it; it polls nothing meanwhile. The bridge's code runs on
+  `tiko-kafka-consumer-<topic>` until it switches dispatcher, and a long suspension is a long
+  time between polls, as a slow regular bridge is (`max.poll.interval.ms`).
+- **One unit of work per record, across suspension points.** The record's EVENT-scoped
+  instances are the same before and after every suspension, also inside
+  `withContext(Dispatchers.IO) { }`. The event the bridge returns is published inside that unit,
+  on the consumer thread, so its synchronous handlers see the same instances.
+- **When a record is done.** Once the bridge has returned, its event's synchronous handlers have
+  run and the unit has closed. Then the offset is committed, as for a regular bridge. A failure
+  takes the same path as a regular bridge's ([below](#which-failures-redeliver-a-record)).
+- **At shutdown** a suspended bridge gets `tiko.kafka.shutdown-timeout` to finish. After that it
+  is cancelled: its `finally` blocks run, its unit closes, its record stays uncommitted and is
+  delivered again, and the consumer thread ends.
+- `suspend` `@KafkaSink` methods are a compile error.
+
+The [`kotlin-kafka-consumer`](../../tiko-examples-gradle/kotlin-kafka-consumer) example uses one.
+
 ### Which failures redeliver a record
 
 The bridge and the sync handlers of its event run in one unit of work, but they don't fail

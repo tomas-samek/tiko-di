@@ -60,10 +60,11 @@ The pattern is written up in the [Ktor cookbook](../docs/cookbooks/ktor.md).
 
 A Kafka consumer: `payments` in, `receipts` out.
 
-- `PaymentConsumer` bridges the `payments` topic into `PaymentReceived` events with `@KafkaSource`.
-- `PaymentHandler` records each payment in the `Ledger`. Kafka delivers at least once, so a
-  redelivered payment comes back marked as a duplicate, and the `FirstDeliveryOnly` guard stops
-  it from going further.
+- `PaymentConsumer` bridges the `payments` topic with `@KafkaSource`. Its bridge is a `suspend fun`
+  that records each payment in the `Ledger`, a suspending call, and publishes `PaymentRecorded`.
+  Tiko runs it on the consumer thread in a unit of work of its own and commits the offset after it.
+- `PaymentHandler` lets each payment through once. Kafka delivers at least once, so a redelivered
+  payment comes back marked as a duplicate, and the `FirstDeliveryOnly` guard stops it.
 - `ReceiptPublisher` sends one `Receipt` per new payment to `receipts` with `@KafkaSink`, keyed
   by order.
 - Payloads are `@JvmRecord data class`es. A plain `data class` payload is a compile error under

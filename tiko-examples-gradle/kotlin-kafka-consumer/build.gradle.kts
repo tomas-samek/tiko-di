@@ -17,6 +17,8 @@ dependencies {
     implementation("io.github.tomas-samek:tiko-runtime:$tikoVersion")
     implementation("io.github.tomas-samek:tiko-config:$tikoVersion")
     implementation("io.github.tomas-samek:tiko-kafka:$tikoVersion")
+    // Runs the suspend @KafkaSource bridge.
+    implementation("io.github.tomas-samek:tiko-coroutines:$tikoVersion")
     ksp("io.github.tomas-samek:tiko-processor:$tikoVersion")
     ksp("io.github.tomas-samek:tiko-kafka-processor:$tikoVersion")
     kspTest("io.github.tomas-samek:tiko-processor:$tikoVersion")
