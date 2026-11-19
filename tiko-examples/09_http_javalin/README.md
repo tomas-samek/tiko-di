@@ -22,7 +22,7 @@ finishes — async side effects keep running on Tiko's framework executor.
 
 ## One unit of work per request (the middleware)
 
-Every route is registered via `TikoJavalin.scoped(container, handler)`, a
+Every route is registered via `TikoJavalin.scoped(unitOfWork, handler)`, a
 tiny `Handler` decorator that opens one unit of work (an EVENT scope) around the entire
 delegate body — including body parsing, the handler, the event publish, and
 **response serialization** (so a custom Jackson serializer needing DI can
@@ -34,13 +34,22 @@ This gives the example three things for free:
   request. `RequestTimer` subscribes to demonstrate per-request observability
   with zero per-route boilerplate.
 - EVENT-scoped beans (here: `RequestIdImpl`) are reachable from inside the
-  handler chain. The bridge resolves `RequestId` per-request via
-  `container.get(RequestId.class)` from inside the open scope, and stamps
+  handler chain. The bridge, a SINGLETON, takes `RequestId` in its constructor
+  and gets a proxy that resolves the current request's instance; it stamps
   each request's UUID onto the published `TicketCreated` event.
 - Sync `@EventHandler` subscribers run inside the same unit and can read
   EVENT-scoped beans directly. Async subscribers run on a different thread in
   their own fresh unit, so they don't see the request's beans and read whatever
   they need from the event payload.
+
+## The container owns the server
+
+`TicketHttpServer` is a SINGLETON `@Component` that takes the route group and
+`HttpSettings`. The container builds it when it starts, and it binds its port in
+`@PostConstruct`: a port already in use fails `Tiko.create(...)`. It stops on
+`ApplicationEndingEvent`, which `close()` publishes before it waits for async
+handlers, so the drain `Main` demonstrates runs with no new request coming in.
+The [HTTP cookbook](../../docs/cookbooks/http.md) explains the shape.
 
 ## Build and run
 
@@ -56,20 +65,21 @@ curl -X POST http://localhost:8080/tickets \
 curl http://localhost:8080/tickets/<id-from-the-previous-response>
 ```
 
-Default port is `8080`; override with `TIKO_HTTP_PORT=9090 java -jar ...`.
+Default port is `8080` (`http.port` in `config.yaml`); override with
+`TIKO_HTTP_PORT=9090 java -jar ...`.
 
 ## Files at a glance
 
 - `TicketService` — business logic. Pure Tiko bean, **no HTTP imports**.
-- `TicketHttpRoutes` — bridge. The only file in the module that imports both
-  `io.tiko` and `io.javalin`. Plain straight-line handlers; the
-  `runInEventScope` lives in the decorator, not here.
-- `TikoJavalin` — `Handler scoped(Container, Handler)`. The middleware.
+- `TicketHttpRoutes` — bridge, a SINGLETON `@Component`. Plain straight-line
+  handlers; `register(RoutesConfig)` wraps each in the decorator, so the
+  `runInEventScope` lives there, not in the handlers.
+- `TicketHttpServer` — the HTTP server the container starts and stops;
+  `HttpSettings` — its port.
+- `TikoJavalin` — `Handler scoped(UnitOfWork, Handler)`. The middleware.
 - `RequestIdImpl` — EVENT-scoped `@Component` implementing `RequestId`.
-  Resolved per-request via `container.get(RequestId.class)` from inside the
-  scope opened by `TikoJavalin.scoped`. (Tiko's auto-proxy mechanism for
-  injecting EVENT-scoped beans into SINGLETONs is demonstrated in `01_basic_di`; this example
-  uses container-lookup because the bridge isn't a `@Component`.)
+  `TicketHttpRoutes` takes `RequestId` and gets Tiko's auto-proxy, which
+  resolves the instance of the unit `TikoJavalin.scoped` opened.
 - `RequestTimer` — `@EventHandler` on `EventStartedEvent` /
   `EventEndingEvent`. Demonstrates the framework's lifecycle events.
 - `AuditLogger`, `MetricsCounter`, `NotificationSender` — the three
@@ -78,7 +88,7 @@ Default port is `8080`; override with `TIKO_HTTP_PORT=9090 java -jar ...`.
   every published `TicketCreated` so the integration test can assert per-request
   `requestId` distinctness. Lives in main sources so the annotation processor
   wires it like any other subscriber.
-- `Main` — bootstrap.
+- `Main` — bootstrap and the drain demo.
 
 ## What this example deliberately does NOT show
 

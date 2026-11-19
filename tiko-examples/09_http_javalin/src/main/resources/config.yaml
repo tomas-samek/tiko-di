@@ -3,3 +3,7 @@
 # ISO-8601 (PT5S = 5 seconds) or the friendly form (5s).
 tiko:
   shutdownTimeout: ${TIKO_SHUTDOWN:PT5S}
+
+# The HTTP server's port (HttpSettings); 0 lets the OS pick a free one.
+http:
+  port: ${TIKO_HTTP_PORT:8080}
