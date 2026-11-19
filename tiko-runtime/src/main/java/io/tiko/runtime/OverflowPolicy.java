@@ -6,6 +6,12 @@ package io.tiko.runtime;
  * executor — a user-supplied {@code TikoOptions.eventExecutor(...)} brings its own queue and
  * rejection policy.
  *
+ * <p>The same policy governs {@code suspend} event handlers (Kotlin, {@code tiko-coroutines}),
+ * whichever executor is in use: at most {@code queueCapacity} of them are in flight, from the
+ * publish until the coroutine has completed, and a publish past that gets the policy (#679). There
+ * {@code CALLER_RUNS} runs the handler on the publisher's thread up to its first suspension, and
+ * {@code BLOCK} holds the publisher until a handler in flight completes.
+ *
  * <p>Every policy degrades to a logged drop once the executor is shutting down, so a backpressure
  * policy can never hang or fail shutdown (the {@code ShutdownAwareCallerRunsPolicy} contract, #346).
  */

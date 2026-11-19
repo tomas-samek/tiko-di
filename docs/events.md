@@ -180,7 +180,7 @@ TikoOptions opts = TikoOptions.builder()
 try (Container container = Tiko.create(opts)) { ... }
 ```
 
-When you supply your own executor, **you own its lifecycle** — `Container.shutdown()` does not stop it; `queueCapacity` / `onOverflow` and the pool-size knobs have no effect (your executor brings its own queue, rejection policy, and sizing); and `eventExecutorMetrics()` returns empty. Async handler exceptions still route to the configured `ErrorHandler` regardless of which executor is in use.
+When you supply your own executor, **you own its lifecycle** — `Container.shutdown()` does not stop it; `queueCapacity` / `onOverflow` and the pool-size knobs have no effect on `async = true` handlers (your executor brings its own queue, rejection policy, and sizing; the first two still govern [`suspend` handlers](#suspend-handlers-kotlin)); and `eventExecutorMetrics()` returns empty. Async handler exceptions still route to the configured `ErrorHandler` regardless of which executor is in use.
 
 ### Execution timeouts
 
@@ -312,7 +312,19 @@ class TicketNotifications(private val notifier: Notifier) {
 - **Failures** reach the `ErrorHandler` as an `EventHandlerError`, with the exception as thrown; an `Error` is logged, as for async handlers.
 - **`@EventTrigger`** fires after the handler has completed, with the value it returned; a handler that fails triggers nothing.
 - **Pending deliveries.** A `suspend` handler counts in `pendingAsyncDeliveries()` from the publish until its unit has closed, also while it is suspended and holds no thread. `RecordingEventBus.awaitAsyncDispatch(...)` waits for it.
-- **Timeouts and retries.** `timeout`, `retries` and `backoff` on a `suspend` handler are a compile error; they are tracked in [#680](https://github.com/tomas-samek/tiko-di/issues/680). The limit on handlers in flight is [#679](https://github.com/tomas-samek/tiko-di/issues/679).
+- **Timeouts and retries.** `timeout`, `retries` and `backoff` on a `suspend` handler are a compile error; they are tracked in [#680](https://github.com/tomas-samek/tiko-di/issues/680).
+
+**Backpressure.** At most `queueCapacity` (default 1024) `suspend` handlers hold a place at a time, from the publish until the coroutine has completed, suspended ones included. The count is separate from the async executor's queue. A publish that finds no place free gets what `onOverflow(...)` says:
+
+| `OverflowPolicy` | A publish with no place free |
+|------------------|------------------------------|
+| `CALLER_RUNS`    | Default. The handler starts on the publisher's thread, in its own unit of work, and runs there up to its first suspension; the rest runs on `tiko-coroutine-N` threads. This slows the publisher by that first part. It does not cap the handlers in flight: a handler that suspends at once holds the publisher for almost no time. |
+| `BLOCK`          | The publisher waits until a handler in flight completes, so at most `queueCapacity` are in flight. A handler that publishes from one of the container's own threads does not wait: it starts the handler as `CALLER_RUNS` does. |
+| `DROP`           | The event is not delivered to this handler and a `WARNING` is logged. |
+| `THROW`          | `publish(...)` throws `io.tiko.EventQueueOverflowException`, after the event's other handlers got it. |
+| `ROUTE_TO_DLQ`   | Your `ErrorHandler` gets the event as an `EventDispatchRejected`. See [Dead-letter handling](#dead-letter-handling). |
+
+Choose `BLOCK`, `DROP`, `THROW` or `ROUTE_TO_DLQ` when the number of handlers in flight must stay at `queueCapacity`. `queueCapacity` and `onOverflow` govern `suspend` handlers also when you supply your own `eventExecutor(...)`, because a `suspend` handler never runs on it; under `BLOCK`, that executor's threads wait for a place like any other publisher.
 
 ## Graceful shutdown drain
 

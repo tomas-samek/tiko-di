@@ -356,6 +356,10 @@ runs in the container's scope (`ContainerCoroutines`) in a unit of its own, and
 is a pending delivery until it has completed and that unit has closed. `close()` waits for it as
 for any delivery. What still runs after the wait is cancelled before the container stops
 delivering events, so a cancelled coroutine closes its unit while its singletons are alive.
+A `suspend` handler holds one of `queueCapacity` places until its coroutine has completed, and a
+publish that finds none free gets the `OverflowPolicy` (#679, `ContainerCoroutines.admit`). Under
+`CALLER_RUNS` the handler starts on the publisher's thread, in its own unit, and that thread's
+unit is put back when the handler suspends.
 
 **Anchor.** `ContainerGenerator.createRunInDetachedFrameMethod` and `createSwapFrameMethod`
 javadoc (`tiko-processor`); `AggregatingContainer.runInDetachedFrames`, `CarriedUnit`

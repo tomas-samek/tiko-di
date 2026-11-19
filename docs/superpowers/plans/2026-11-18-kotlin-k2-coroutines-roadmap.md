@@ -67,7 +67,8 @@ piece waits for a decision.
 | 3 | merged 2026-11-18 | PR #838; plan `2026-11-18-k2-piece-3-tiko-coroutines.md` |
 | 4 + 5 | merged 2026-11-18 | PR #839; plan `2026-11-18-k2-piece-4-5-child-coroutines-ktor.md`; #683's acceptance names the Ktor cookbook of #682, so the two closed together |
 | 6 | merged 2026-11-18 | PR #840; plan `2026-11-18-k2-piece-6-coroutine-scope.md` |
-| 7 | in review | plan `2026-11-18-k2-piece-7-suspend-handlers.md` |
+| 7 | merged 2026-11-19 | PR #841; plan `2026-11-18-k2-piece-7-suspend-handlers.md` |
+| 8 | in review | plan `2026-11-19-k2-piece-8-suspend-backpressure.md` |
 
 Decided for piece 3 (owner, 2026-11-18): D2 `tiko-coroutines`, D3 accepted with the kotlinx
 version left out of the BOM, D4 `inEventScope`.
@@ -211,8 +212,8 @@ opener on to its copies.
   until its coroutine completes) and a test per `OverflowPolicy` showing what happens at
   submission when the limit is reached, `ROUTE_TO_DLQ` included; `EventBus.publish` returns
   without waiting. A handler that already started cannot be refused: its executor has no queue.
-- **Owner decides:** the limit (the existing `queueCapacity`, or a number of its own) and what
-  `CALLER_RUNS` means for a `suspend` handler.
+- **Owner decided (2026-11-19):** D9, the limit is the existing `queueCapacity`; D10,
+  `CALLER_RUNS` runs the handler on the publisher's thread up to its first suspension.
 - **Done when:** the acceptance list of #679 is covered.
 
 ### Piece 9: timeouts and retries (#680)
@@ -254,6 +255,8 @@ owner can answer with a word.
 | D6 | 6 | How a resume reaches the executor without being rejected, and whether the number of suspended handlers is capped. | **Decided 2026-11-18.** An extra executor for coroutines that starts a virtual thread per dispatch (the owner's idea; it replaces the spec's dispatcher on the async executor), and a `suspend` handler in flight counts from submission to completion, with `OverflowPolicy` applied at submission. Measurements in the plan of piece 6. |
 | D7 | 6 | Where cancelling the scope sits in `close()`. | **Decided 2026-11-18, as recommended.** Transports stop taking work in, `ApplicationEndingEvent`, wait for pending deliveries (suspended handlers included) up to `tiko.shutdownTimeout`, cancel the scope and wait for the cancelled coroutines to close their units, stop delivering, close transports, `@PreDestroy`. |
 | D8 | 10 | When a Kafka record counts as done. | When the bridge's coroutine completes; the consumer thread, which the runner owns, waits for it. |
+| D9 | 8 | The limit on `suspend` handlers in flight. | **Decided 2026-11-19.** The existing `queueCapacity`. An option of its own that falls back to it may come later. |
+| D10 | 8 | What `CALLER_RUNS` means for a `suspend` handler. | **Decided 2026-11-19, as recommended.** The publisher's thread runs the handler up to its first suspension; the rest runs on the container's threads. The limit then slows the publisher and does not cap the handlers in flight; `BLOCK` and the other policies cap. |
 
 ## What stays out of K2
 

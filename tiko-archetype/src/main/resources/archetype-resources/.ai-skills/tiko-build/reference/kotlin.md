@@ -89,6 +89,9 @@ suspend fun onOpened(event: TicketOpened) { notifier.send(...) }   // notifier.s
 - Failures go to the `ErrorHandler` as `EventHandlerError`; `@EventTrigger` fires after the
   handler completed.
 - `close()` waits for it up to `shutdownTimeout`, then cancels it.
+- At most `queueCapacity` `suspend` handlers are in flight; a publish past that gets
+  `onOverflow`. The default `CALLER_RUNS` starts the handler on the publisher's thread up to
+  its first suspension and does not cap the number; `BLOCK` holds the publisher and does.
 - In tests, `bus.awaitAsyncDispatch(Duration.ofSeconds(5))` waits for it.
 
 ## What does not work on KSP
