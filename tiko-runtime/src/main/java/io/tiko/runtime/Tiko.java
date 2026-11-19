@@ -187,7 +187,7 @@ public final class Tiko {
                 // Single module: Direct instantiation (does NOT call start yet). The container
                 // holds its own copy of the options, as an aggregate does: the closing container
                 // reaches the transports of this boot through it (#721).
-                var ownedThreads = new OwnedThreads();
+                var ownedThreads = new OwnedThreads(options.queueCapacity(), options.onOverflow());
                 var containerOptions = options.forOneContainer();
                 container = createSingleModuleContainer(
                         eventBus,

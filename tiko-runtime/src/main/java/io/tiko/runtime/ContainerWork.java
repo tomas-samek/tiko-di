@@ -73,6 +73,28 @@ public final class ContainerWork {
     }
 
     /**
+     * How much accepted work of one kind the boot lets wait, {@code TikoOptions.queueCapacity()}
+     * (#679). A module that runs work of its own applies it to that work.
+     */
+    public int queueCapacity() {
+        return owner.queueCapacity();
+    }
+
+    /** What the boot does with work past {@link #queueCapacity()}: {@code TikoOptions.onOverflow()} (#679). */
+    public OverflowPolicy onOverflow() {
+        return owner.overflowPolicy();
+    }
+
+    /**
+     * Whether the calling thread is one the boot created: a worker of its default event executor or
+     * one of its {@linkplain #virtualThreads virtual threads}. Such a thread must not wait for work
+     * of the same boot to finish: that work may be waiting for it (#727).
+     */
+    public boolean isOwnThread() {
+        return owner.isOwnThread();
+    }
+
+    /**
      * The boot's one instance of {@code type}, created on first use and stopped by {@code close()}.
      *
      * @return the instance, or empty once {@code close()} has begun stopping the boot's work

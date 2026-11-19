@@ -59,7 +59,7 @@ public final class AggregatingContainer implements Container, UnitCarrier {
      */
     private final java.util.concurrent.ExecutorService dispatchExecutor;
     // Every thread this container starts, for the report of those outliving shutdown() (#634).
-    private final OwnedThreads ownedThreads = new OwnedThreads();
+    private final OwnedThreads ownedThreads;
     private final Duration shutdownTimeout;
     private final TikoOptions options;
     private final String descriptorName;
@@ -159,6 +159,7 @@ public final class AggregatingContainer implements Container, UnitCarrier {
             String descriptorName) {
         this.sharedEventBus = eventBus;
         this.errorHandler = errorHandler;
+        this.ownedThreads = new OwnedThreads(options.queueCapacity(), options.onOverflow());
         this.eventExecutor = userEventExecutor != null
                 ? userEventExecutor
                 : DefaultEventExecutorFactory.create(

@@ -68,6 +68,42 @@ final class OwnedThreads implements ThreadFactory {
 
     private final PendingDeliveries deliveries = new PendingDeliveries();
 
+    private final int queueCapacity;
+    private final OverflowPolicy overflowPolicy;
+
+    /** The threads of a boot with the default {@code queueCapacity} and overflow policy. */
+    OwnedThreads() {
+        this(DefaultEventExecutorFactory.DEFAULT_QUEUE_CAPACITY, OverflowPolicy.CALLER_RUNS);
+    }
+
+    /**
+     * @param queueCapacity the boot's {@code TikoOptions.queueCapacity()}
+     * @param overflowPolicy the boot's {@code TikoOptions.onOverflow()}
+     */
+    OwnedThreads(int queueCapacity, OverflowPolicy overflowPolicy) {
+        this.queueCapacity = queueCapacity;
+        this.overflowPolicy = overflowPolicy;
+    }
+
+    /** How much accepted work of one kind this boot lets wait: {@code TikoOptions.queueCapacity()}. */
+    int queueCapacity() {
+        return queueCapacity;
+    }
+
+    /** What this boot does with work past {@link #queueCapacity()}: {@code TikoOptions.onOverflow()}. */
+    OverflowPolicy overflowPolicy() {
+        return overflowPolicy;
+    }
+
+    /**
+     * Whether the calling thread is one this boot created: a worker of its default event executor,
+     * its retry thread, or one of its {@linkplain #virtualThreads virtual threads} while it runs.
+     */
+    boolean isOwnThread() {
+        var current = Thread.currentThread();
+        return current.isVirtual() ? runningVirtualThreads.contains(current) : threads.contains(current);
+    }
+
     /** The virtual threads of {@link #virtualThreads} that are running their task right now (#678). */
     private final Set<Thread> runningVirtualThreads = ConcurrentHashMap.newKeySet();
 

@@ -87,6 +87,21 @@ public final class EventChainContext {
     }
 
     /**
+     * Records an event that was not delivered to a {@code suspend} handler because as many of them
+     * were in flight as {@code queueCapacity} allows and the overflow policy is {@code DROP} (#679).
+     * For {@code tiko-coroutines}.
+     *
+     * @param event the event that was dropped
+     */
+    public static void logDroppedAtTheLimit(Object event) {
+        String type = event == null ? "null" : event.getClass().getName();
+        LoggerHolder.LOG.log(
+                System.Logger.Level.WARNING,
+                "Event of type " + type + " was dropped: the limit of suspend handlers in flight is reached "
+                        + "(overflow policy = DROP).");
+    }
+
+    /**
      * Wraps {@code payload} in an {@link Event}, chaining its origin to the wrapper currently
      * being delivered on this thread (if any).
      */
@@ -589,8 +604,11 @@ public final class EventChainContext {
      * Routes a queue-overflow rejection to the {@code ErrorHandler} as an {@link EventDispatchRejected}
      * dead-letter context (#111, {@code ROUTE_TO_DLQ}). No handler ran, so there is no
      * {@link EventHandlerInfo} and no cause; a throwing handler is logged as a last resort.
+     *
+     * <p>Public for {@code tiko-coroutines}, which routes an event that meets the limit of
+     * {@code suspend} handlers in flight the same way (#679).
      */
-    private static void routeDispatchRejected(Object event, ErrorHandler errorHandler) {
+    public static void routeDispatchRejected(Object event, ErrorHandler errorHandler) {
         try {
             errorHandler.onError(new EventDispatchRejected(event));
         } catch (Exception inner) {
