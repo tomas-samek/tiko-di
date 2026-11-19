@@ -30,9 +30,10 @@ class TakenPortIT {
                     .hasStackTraceContaining("Port already in use");
 
             assertThat(outlivingClose).as("threads the container started").isEmpty();
-            // A closed pool's threads end shortly after close() returns, so the check waits a little.
+            // A closed pool's threads end shortly after close() returns. Javalin 7.2.3 starts a thread
+            // with every instance that sleeps 5 s, then warns when the server never started, and ends.
             await().pollInSameThread()
-                    .atMost(Duration.ofSeconds(5))
+                    .atMost(Duration.ofSeconds(10))
                     .untilAsserted(() -> assertThat(Thread.getAllStackTraces().keySet())
                             .as("threads started by the failed boot, Javalin's and Jetty's included")
                             .filteredOn(thread -> !before.contains(thread) && thread.isAlive())
