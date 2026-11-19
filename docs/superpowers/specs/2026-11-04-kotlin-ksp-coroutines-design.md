@@ -159,9 +159,13 @@ Owner's decision: Kotlin needs this, as a follow-up step after K1. In K1 the doc
    - `@EventTrigger` chaining fires when the coroutine completes successfully.
    - `suspend` combined with an explicit `async = false` is a compile-time error.
 
-   The publisher never blocks a thread waiting for a coroutine. That pattern defeats the point
-   of coroutines. The backpressure guarantee stays: it moves from the queue of the async
-   executor to the count of `suspend` handlers in flight.
+   The publisher never waits for a coroutine to finish. That pattern defeats the point of
+   coroutines. Backpressure moves from the queue of the async executor to the count of
+   `suspend` handlers in flight (owner's decisions, 2026-11-19): the limit is `queueCapacity`,
+   and a publish that meets it gets the `OverflowPolicy`. `CALLER_RUNS` runs the handler on the
+   publisher's thread up to its first suspension, which slows the publisher and does not cap
+   the count; `BLOCK` holds the publisher until a handler completes, which caps it; `DROP`,
+   `THROW` and `ROUTE_TO_DLQ` are as for an async handler.
 
    *Why the executor changed.* The first version of this spec launched a `suspend` handler on a
    dispatcher backed by the async executor. Measured on 2026-11-18 (kotlinx-coroutines 1.11.0),
