@@ -1,9 +1,7 @@
 package io.tiko.coroutines
 
 import io.tiko.Container
-import io.tiko.Event
 import io.tiko.EventQueueOverflowException
-import io.tiko.runtime.CarriedUnit
 import io.tiko.runtime.ContainerWork
 import io.tiko.runtime.EventChainContext
 import io.tiko.runtime.OverflowPolicy
@@ -13,7 +11,8 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
-import java.util.function.Supplier
+import kotlin.time.Duration.Companion.nanoseconds
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -24,6 +23,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * The coroutines one booted container runs (#678): a scope of its own, created the first time
@@ -87,6 +87,9 @@ internal class ContainerCoroutines(private val work: ContainerWork) : ContainerW
     @Volatile
     private var stopping = false
 
+    /** Completed when `close()` begins its wait for the pending deliveries. */
+    private val closing = CompletableDeferred<Unit>()
+
     /**
      * Asks for a place for one more `suspend` handler in flight. With none free, the container's
      * `OverflowPolicy` decides, as it does for an async handler whose queue is full.
@@ -142,42 +145,23 @@ internal class ContainerCoroutines(private val work: ContainerWork) : ContainerW
         carrier: UnitCarrier,
         onFailure: (Throwable) -> Unit,
         block: suspend CoroutineScope.() -> Unit,
-    ): Job =
+    ): Job {
         // Read here, on the caller's thread: the unit is opened later, on a thread of its own.
-        launchInUnit(EventChainContext.carriedUnitOpener(carrier), onFailure, Start.UNCOUNTED, block)
-
-    /**
-     * As above, with the unit opened by [openUnit]: a handler's unit descends from the event it handles.
-     *
-     * @param start what [admit] answered for this handler
-     */
-    fun launchInUnit(
-        openUnit: Supplier<CarriedUnit>,
-        onFailure: (Throwable) -> Unit,
-        start: Start,
-        block: suspend CoroutineScope.() -> Unit,
-    ): Job = launchCounted(onFailure, start) {
+        val openUnit = EventChainContext.carriedUnitOpener(carrier)
         // withContext returns once the unit has closed, so this coroutine, and with it the
         // delivery, ends after the unit's teardown and never before it.
-        withContext(UnitOfWorkElement(openUnit), block)
+        return launch(onFailure, Start.UNCOUNTED) { withContext(UnitOfWorkElement(openUnit), block) }
     }
 
     /**
-     * Launches [block] with no unit of work, for a handler of a framework lifecycle event: such an
-     * event is a signal about units and opens none. Events [block] publishes descend from [origin].
+     * Launches [block] as one pending delivery of the container. A handler's delivery opens the
+     * unit of work of each of its attempts itself, with `withContext`, as the first thing it does.
+     *
+     * @param onFailure receives what [block] threw, once; a cancellation is not a failure
+     * @param start what [admit] answered for this delivery
+     * @return the coroutine's job; already cancelled, with [block] never run, once [stop] has begun
      */
-    fun launchWithoutUnit(
-        origin: Event<*>?,
-        onFailure: (Throwable) -> Unit,
-        start: Start,
-        block: suspend CoroutineScope.() -> Unit,
-    ): Job = launchCounted(onFailure, start) { withContext(OriginElement(origin), block) }
-
-    private fun launchCounted(
-        onFailure: (Throwable) -> Unit,
-        start: Start,
-        block: suspend CoroutineScope.() -> Unit,
-    ): Job {
+    fun launch(onFailure: (Throwable) -> Unit, start: Start, block: suspend CoroutineScope.() -> Unit): Job {
         val release = work.retainDelivery()
         // Undispatched, the coroutine runs here, on the caller's thread, until it first suspends,
         // and resumes on a thread of the container. A scope that has been stopped runs nothing of
@@ -191,6 +175,23 @@ internal class ContainerCoroutines(private val work: ContainerWork) : ContainerW
             release.run()
         }
         return job
+    }
+
+    /**
+     * Suspends for the backoff before a handler's next attempt (#680), holding no thread.
+     *
+     * @return `false` when `close()` began before or during the wait: the retry is dropped then,
+     *   as an async handler's is, and `close()` does not wait for a backoff
+     */
+    suspend fun backoff(delayNanos: Long): Boolean {
+        if (closing.isCompleted) {
+            return false
+        }
+        return delayNanos <= 0 || withTimeoutOrNull(delayNanos.nanoseconds) { closing.await() } == null
+    }
+
+    override fun closeBegan() {
+        closing.complete(Unit)
     }
 
     /**
