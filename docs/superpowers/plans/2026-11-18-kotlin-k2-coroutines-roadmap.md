@@ -66,7 +66,8 @@ piece waits for a decision.
 | 2 | merged 2026-11-18 | PR #836; plan `2026-11-18-k2-piece-2-carried-unit.md` |
 | 3 | merged 2026-11-18 | PR #838; plan `2026-11-18-k2-piece-3-tiko-coroutines.md` |
 | 4 + 5 | merged 2026-11-18 | PR #839; plan `2026-11-18-k2-piece-4-5-child-coroutines-ktor.md`; #683's acceptance names the Ktor cookbook of #682, so the two closed together |
-| 6 | in review | plan `2026-11-18-k2-piece-6-coroutine-scope.md` |
+| 6 | merged 2026-11-18 | PR #840; plan `2026-11-18-k2-piece-6-coroutine-scope.md` |
+| 7 | in review | plan `2026-11-18-k2-piece-7-suspend-handlers.md` |
 
 Decided for piece 3 (owner, 2026-11-18): D2 `tiko-coroutines`, D3 accepted with the kotlinx
 version left out of the BOM, D4 `inEventScope`.

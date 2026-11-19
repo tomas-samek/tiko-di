@@ -25,6 +25,7 @@ import io.tiko.test.RecordingEventBus
 import io.tiko.test.TikoTest
 import io.tiko.test.TikoTestOptions
 import java.net.Socket
+import java.time.Duration
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -66,6 +67,8 @@ class TicketApiTest {
         assertThat(client.get("/tickets/${ticket.id}").body<Ticket>()).isEqualTo(ticket)
         bus.assertPublished(TicketOpened::class.java)
             .withPayload { e: TicketOpened -> e.ticket == ticket && e.requestId == requestId }
+        // The notification comes from a suspend handler: it runs off the request, so wait for it.
+        bus.awaitAsyncDispatch(Duration.ofSeconds(10))
         assertThat((notifier as RecordingNotifier).sent).singleElement().asString().contains(ticket.id, "alice")
     }
 

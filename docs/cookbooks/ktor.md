@@ -169,6 +169,24 @@ get("/tickets/summary") {
 - **Events published from a child descend from the same origin** as events
   published from the request, so a handler's `Event<?>` chain reads the same.
 
+## Handlers of what a request publishes
+
+`TicketService.open` publishes `TicketOpened`, and `TicketNotifications` handles it with a
+`suspend fun`:
+
+```kotlin
+@EventHandler
+suspend fun onOpened(event: TicketOpened) {
+    notifier.send("ticket ${event.ticket.id} opened by ${event.ticket.reporter} (request ${event.requestId})")
+}
+```
+
+A `suspend` handler always runs as a coroutine of the container, off the request and in a unit
+of work of its own, so the response does not wait for the notification. The handler is handed
+what it needs in the event: `TicketOpened` carries the request's id, because the handler's own
+`RequestId` would be another one. See
+[`suspend` handlers](../events.md#suspend-handlers-kotlin).
+
 ## Testing
 
 `TicketApiTest` runs the real routes in Ktor's `testApplication` against a
@@ -184,6 +202,9 @@ class TicketApiTest {
     }
 }
 ```
+
+A `suspend` handler runs after the route has answered, so a test that asserts on what it did
+waits first: `bus.awaitAsyncDispatch(Duration.ofSeconds(10))`.
 
 The recording bus also sees the unit lifecycle events
 (`EventStartedEvent` / `EventEndingEvent`), which is how the tests tell one

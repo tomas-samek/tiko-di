@@ -290,6 +290,30 @@ dispatch (per retry attempt) on the shared bus. A module compiled with Tiko befo
 part once it is recompiled: until then its async handlers open their unit in that module alone,
 and its EVENT-scoped components are out of reach of the other modules' async handlers.
 
+### `suspend` handlers (Kotlin)
+
+A Kotlin handler can be a `suspend fun`. It needs the `tiko-coroutines` module
+(`io.github.tomas-samek:tiko-coroutines`) next to `tiko-runtime`:
+
+```kotlin
+@Component(scope = Scope.SINGLETON)
+class TicketNotifications(private val notifier: Notifier) {
+
+    @EventHandler
+    suspend fun onOpened(event: TicketOpened) {
+        notifier.send("ticket ${event.ticket.id} opened")   // a suspending call
+    }
+}
+```
+
+- **Always async.** Tiko runs each delivery as a coroutine of the container, off the publisher's thread; `publish` returns without waiting. `async = true` is implied, and `@EventHandler(async = false)` on a `suspend fun` is a compile error.
+- **Its own unit of work**, as an async handler has: the EVENT-scoped instances are the same before and after every suspension, and are torn down when the coroutine completes, fails or is cancelled. A `launch` or `async` inside the handler is a unit of its own (see [A unit of work in Kotlin coroutines](./di-and-scopes.md#a-unit-of-work-in-kotlin-coroutines)). A handler of a framework lifecycle event (`io.tiko.events.*`) runs without a unit.
+- **Where it runs.** On virtual threads the container creates (`tiko-coroutine-N`), one for every resume, not on the async event executor: `TikoOptions.eventExecutor(...)` and `eventExecutorMetrics()` are about `async = true` handlers. Blocking code in a `suspend` handler blocks its virtual thread only. On JDK 21 to 23, blocking inside a `synchronized` block also holds a carrier thread; JDK 24 and later do not.
+- **Failures** reach the `ErrorHandler` as an `EventHandlerError`, with the exception as thrown; an `Error` is logged, as for async handlers.
+- **`@EventTrigger`** fires after the handler has completed, with the value it returned; a handler that fails triggers nothing.
+- **Pending deliveries.** A `suspend` handler counts in `pendingAsyncDeliveries()` from the publish until its unit has closed, also while it is suspended and holds no thread. `RecordingEventBus.awaitAsyncDispatch(...)` waits for it.
+- **Timeouts and retries.** `timeout`, `retries` and `backoff` on a `suspend` handler are a compile error; they are tracked in [#680](https://github.com/tomas-samek/tiko-di/issues/680). The limit on handlers in flight is [#679](https://github.com/tomas-samek/tiko-di/issues/679).
+
 ## Graceful shutdown drain
 
 `Container.shutdown()` (and `close()`) finishes the async work the container has taken on
@@ -298,14 +322,17 @@ before it tears anything down. In order:
 1. **Transports stop taking work in.** Kafka consumers stop; the producer stays open.
 2. **`ApplicationEndingEvent` is published.**
 3. **The container waits for its async handlers**, queued and running, for at most
-   `shutdownTimeout`. Events published during the wait, by a handler that is finishing or by an
-   `ApplicationEndingEvent` handler, are still delivered and waited for, and a `@KafkaSink` still
-   sends them. A retry that is waiting out its backoff is dropped with a `WARNING`: `close()` does
-   not wait for a backoff.
-4. **The container stops delivering events** and refuses `get()`.
-5. **Transports close**: the Kafka producer.
-6. **`@PreDestroy` / `close()` of the singletons** runs.
-7. **The framework's event executor is shut down.** A handler still running after
+   `shutdownTimeout`. That includes `suspend` handlers, also the ones that are suspended. Events
+   published during the wait, by a handler that is finishing or by an `ApplicationEndingEvent`
+   handler, are still delivered and waited for, and a `@KafkaSink` still sends them. A retry that
+   is waiting out its backoff is dropped with a `WARNING`: `close()` does not wait for a backoff.
+4. **`suspend` handlers that are still running are cancelled.** They get what is left of
+   `shutdownTimeout`, and at least one second, to run their `finally` blocks, and their units of
+   work close. One that is blocked in code cancellation does not reach is interrupted after that.
+5. **The container stops delivering events** and refuses `get()`.
+6. **Transports close**: the Kafka producer.
+7. **`@PreDestroy` / `close()` of the singletons** runs.
+8. **The framework's event executor is shut down.** An `async = true` handler still running after
    `shutdownTimeout` is interrupted here.
 
 So a handler that was queued or running when `close()` began sees live singletons and can still
@@ -313,7 +340,7 @@ publish, and a consume → async handler → `@KafkaSink` pipeline sends what it
 handler that outruns the budget keeps running while the singletons are torn down and is then
 interrupted: size `shutdownTimeout` to your slowest handler.
 
-Events published *after* step 4 are dropped rather than dispatched — running handlers against
+Events published *after* step 5 are dropped rather than dispatched — running handlers against
 singletons that have already been torn down would be worse — but the drop is **observable, never
 silent**: each dropped delivery logs a `WARNING` on `io.tiko.events` (#346). The one residual edge
 is a task still queued when the budget expires and `shutdownNow()` cancels it — that is the
