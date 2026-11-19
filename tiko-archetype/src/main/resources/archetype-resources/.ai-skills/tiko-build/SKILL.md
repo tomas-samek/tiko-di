@@ -21,7 +21,7 @@ When a user says *"I need X"*, classify X into one of three buckets:
 | Bucket | What it means | What to do |
 |---|---|---|
 | **Core** | container, scopes, event bus, compile-time wiring, lifecycle | Use a tiko primitive directly. |
-| **Plug in** | any integration with an external system (HTTP, DB, cache, templating, scheduling, retry, observability, security, SDK clients) | Bring the library; expose it as a `@Produces` value; consume as a constructor parameter. |
+| **Plug in** | any integration with an external system (HTTP, DB, cache, templating, scheduling, retry, observability, security, SDK clients) | Bring the library; expose it as a `@Produces` value; consume as a constructor parameter. A server that receives the application's requests (HTTP) is a `@Component` the container starts instead; see the cookbook table. |
 | **Open** | extending the event model itself (a new delivery mode, scheduling-as-event, units of work that nest) | File an issue. Don't invent. |
 
 **Default if uncertain: Plug in.** Never search for "tiko's equivalent of
@@ -98,52 +98,69 @@ service/
 │   ├── <Thing>Repository.java         # raw library API
 │   ├── <Thing>Created.java            # domain event record
 │   ├── <Thing>Auditor.java            # @EventHandler(<Thing>Created)
-│   ├── <Thing>Routes.java             # @Component: register(RoutesConfig) + handler methods
-│   └── Main.java                      # Tiko.create + start
+│   ├── <Thing>Routes.java             # @Component: register(RoutesConfig), each handler in a unit of work
+│   ├── HttpServer.java                # @Component: owns Javalin; @PostConstruct start, stop on ApplicationEndingEvent
+│   └── Main.java                      # Tiko.daemon(...).awaitShutdown()
 ├── src/main/resources/
 │   ├── application.yml                # typed-config binding
 │   └── schema.sql                     # if applicable
 └── src/test/java/...
 ```
 
-Bootstrap pattern (`Main.java`) — routes are already registered by the
-`@Produces Javalin` factory, so `Main` only starts the server:
+Bootstrap pattern (`Main.java`) — the container starts and stops the server,
+so `Main` only boots it and waits:
 ```java
-Container container = Tiko.create(ConfigSources.classpath("application.yml"));
-Runtime.getRuntime().addShutdownHook(new Thread(container::shutdown));
-container.get(Javalin.class).start(container.get(AppConfig.class).server().port());
+Tiko.daemon(ConfigSources.classpath("application.yml")).awaitShutdown();
 ```
 
 HTTP routes (Javalin 7 accepts them only inside `Javalin.create(config -> ...)`):
-each route group is a `@Component` with a `register(RoutesConfig)` method, and
-the factory takes it as a parameter.
+each route group is a `@Component` with a `register(RoutesConfig)` method that
+runs every handler in a unit of work of its own through the injected
+`UnitOfWork`. The server is a `@Component` that takes the route groups, binds
+its port in `@PostConstruct` (a port in use fails boot) and stops on
+`ApplicationEndingEvent`. Nothing produces or resolves `Javalin`.
 ```java
 @Component(scope = Scope.SINGLETON)
 public class ThingRoutes {
     @Inject
-    public ThingRoutes(ThingRepository repo, EventBus eventBus) { /* store */ }
+    public ThingRoutes(UnitOfWork unitOfWork, ThingRepository repo, EventBus eventBus) { /* store */ }
 
     public void register(RoutesConfig routes) {
-        routes.post("/things", this::handleCreate);
+        routes.post("/things", inUnit(unitOfWork, this::handleCreate));   // one unit per request
     }
 
     public void handleCreate(Context ctx) { /* ... */ }
 }
 
 @Component(scope = Scope.SINGLETON)
-public class JavalinFactory {
-    private Javalin app;
+public class HttpServer {
+    private final AppConfig config;
+    private final ThingRoutes things;
+    private volatile Javalin app;
 
-    @Produces(scope = Scope.SINGLETON)
-    public Javalin javalin(ThingRoutes things) {
-        this.app = Javalin.create(cfg -> things.register(cfg.routes));
-        return app;
+    @Inject
+    public HttpServer(AppConfig config, ThingRoutes things) { /* store */ }
+
+    @PostConstruct
+    public void start() {
+        app = Javalin.create(cfg -> {
+                    cfg.jetty.modifyServer(server -> server.setStopTimeout(5_000)); // in-flight requests get their response
+                    things.register(cfg.routes);
+                })
+                .start(config.server().port());
     }
 
+    @EventHandler
+    public void onApplicationEnding(ApplicationEndingEvent event) { stop(); }
+
     @PreDestroy
-    public void shutdown() { if (app != null) app.stop(); }
+    public void stop() { /* app.stop() once */ }
 }
 ```
+
+`inUnit(UnitOfWork, Handler)` is a five-line helper of yours that calls
+`unitOfWork.runInEventScope(...)` around the handler. The
+[HTTP cookbook](https://github.com/tomas-samek/tiko-di/blob/main/docs/cookbooks/http.md) has it and explains the lifecycle.
 
 Reference shape:
 [`tiko-examples/15_quickstart`](https://github.com/tomas-samek/tiko-di/tree/main/tiko-examples/15_quickstart).
@@ -167,10 +184,10 @@ Every recipe = one factory class. Construction shape + lifecycle is enough.
 | Need | Library | Recipe |
 |---|---|---|
 | Connection pool | HikariCP | `@Produces DataSource` returning `HikariDataSource` (AutoCloseable — no `@PreDestroy`). |
-| Schema migrations | Flyway | `@EventHandler(ApplicationStartedEvent)` calling `Flyway.configure().dataSource(ds).load().migrate()`. |
+| Schema migrations | Flyway | In the `DataSource` producer, before it returns the pool: `Flyway.configure().dataSource(ds).load().migrate()`. Everything that takes the `DataSource` sees the schema, and a failed migration fails boot. |
 | Typed query DSL | jOOQ | `@Produces DSLContext` via `DSL.using(ds, dialect)`. No lifecycle. |
 | In-process cache | Caffeine | `@Produces Cache<K,V>` via `Caffeine.newBuilder()...build()`. Named for qualifier. |
-| HTTP layer | Javalin | `@Produces Javalin` taking each route-group `@Component` as a parameter: `Javalin.create(cfg -> things.register(cfg.routes))` + `@PreDestroy app.stop()`. |
+| HTTP layer | Javalin | An `HttpServer` `@Component` taking each route-group `@Component`: `Javalin.create(cfg -> things.register(cfg.routes))` started in `@PostConstruct`, stopped on `ApplicationEndingEvent`; one unit of work per request through `UnitOfWork`. See the [HTTP cookbook](https://github.com/tomas-samek/tiko-di/blob/main/docs/cookbooks/http.md). |
 | Templates | FreeMarker | `@Produces freemarker.template.Configuration`. No lifecycle. |
 | SDK client | any | `@Produces ClientType`. Add `@PreDestroy` if not `AutoCloseable`. |
 | Messaging (Kafka) | tiko-kafka | `@KafkaSource`/`@KafkaSink` bridges — **not** a `@Produces` recipe. Write the shape in [`reference/kafka.md`](reference/kafka.md), not a "void consumer". |
@@ -186,7 +203,7 @@ shrug — name the tiko-native primitive.
 
 | Spring reflex | Tiko-native primitive |
 |---|---|
-| `@RestController` | `@Produces Javalin` + plain route methods |
+| `@RestController` | An `HttpServer` `@Component` owning Javalin + plain route methods, each in a unit of work |
 | `@Transactional` | Explicit transaction demarcation (EVENT-scoped Connection or auto-commit per call) |
 | `@TransactionalEventListener` | `eventBus.publish(...)` after the write completes |
 | `@Scheduled` (+ ShedLock) | `@EventHandler` on a `Tick` event published by a small scheduler thread |

@@ -53,14 +53,13 @@ my-service/
 ├── pom.xml                            (tiko-api, tiko-processor, tiko-runtime, tiko-config + your libs)
 ├── src/main/java/com/example/svc/
 │   ├── AppConfig.java                 (@Configuration root record)
-│   ├── DataSourceFactory.java         (@Produces DataSource)
-│   ├── SchemaInitializer.java         (@EventHandler(ApplicationStartedEvent))
+│   ├── DataSourceFactory.java         (@Produces DataSource; creates the schema before it returns)
 │   ├── ThingRepository.java           (raw library API behind an interface)
 │   ├── ThingCreated.java              (domain event record)
 │   ├── ThingAuditor.java              (@EventHandler(ThingCreated))
-│   ├── JavalinFactory.java            (@Produces Javalin; route groups register in create)
-│   ├── ThingRoutes.java               (@Component: register(RoutesConfig) + handler methods)
-│   └── Main.java                      (Tiko.create + start)
+│   ├── HttpServer.java                (@Component: owns Javalin; route groups register in create)
+│   ├── ThingRoutes.java               (@Component: register(RoutesConfig), each handler in a unit of work)
+│   └── Main.java                      (Tiko.daemon(...).awaitShutdown())
 └── src/main/resources/
     ├── application.yml                (typed-config binding)
     └── schema.sql                     (or Flyway migrations)
@@ -138,27 +137,32 @@ are visible code.
 **When:** you need declarative schema migrations applied before the service
 serves traffic.
 
+Migrate in the `DataSource` producer, before it returns the pool:
+
 ```java
 @Component(scope = Scope.SINGLETON)
-public class FlywayMigrator {
-    private final DataSource ds;
-
-    @Inject
-    public FlywayMigrator(DataSource ds) { this.ds = ds; }
-
-    @EventHandler
-    public void onApplicationStarted(ApplicationStartedEvent ev) {
-        Flyway.configure().dataSource(ds).load().migrate();
+public class DataSourceFactory {
+    @Produces(scope = Scope.SINGLETON)
+    public DataSource dataSource(DbConfig config) {
+        var ds = new HikariDataSource(toHikari(config));
+        try {
+            Flyway.configure().dataSource(ds).load().migrate();
+            return ds;
+        } catch (RuntimeException e) {
+            ds.close();
+            throw e;
+        }
     }
 }
 ```
 
-`ApplicationStartedEvent` fires synchronously during `Tiko.create(...)` after
-all `SINGLETON`s are wired and before the call returns. Migrations therefore
-complete before `Main` starts the HTTP server.
+Everything that takes the `DataSource` sees the migrated schema, the HTTP
+server included: the container starts the server while it builds the
+SINGLETONs (§3.5), before `ApplicationStartedEvent`. A failed migration fails
+`Tiko.daemon(...)`, and the container shuts down what it had started.
 
 The same shape works for ad-hoc DDL — see
-[`SchemaInitializer.java`](../tiko-examples/15_quickstart/src/main/java/io/tiko/examples/quickstart/SchemaInitializer.java),
+[`DataSourceFactory.java`](../tiko-examples/15_quickstart/src/main/java/io/tiko/examples/quickstart/DataSourceFactory.java),
 which runs `schema.sql` instead of calling Flyway.
 
 ### 3.3 jOOQ `DSLContext`
@@ -209,41 +213,59 @@ endpoint (see §6).
 
 **When:** you need an HTTP layer.
 
-Javalin (7+) accepts routes only inside `Javalin.create(config -> ...)`, so
-each route group is a `@Component` that registers its own paths, and the
-producer takes it as a parameter:
+A server is where the application's requests come in, not a value other
+components take, so it is a `@Component` the container starts rather than a
+`@Produces` value. Javalin (7+) accepts routes only inside
+`Javalin.create(config -> ...)`, so each route group is a `@Component` that
+registers its own paths, and the server takes it as a parameter:
 
 ```java
 @Component(scope = Scope.SINGLETON)
-public class JavalinFactory {
-    private Javalin app;
+public class HttpServer {
+    private final ServerConfig config;
+    private final NoteRoutes notes;
+    private volatile Javalin app;
 
-    @Produces(scope = Scope.SINGLETON)
-    public Javalin javalin(NoteRoutes notes) {
-        this.app = Javalin.create(cfg -> notes.register(cfg.routes));
-        return app;
+    @Inject
+    public HttpServer(AppConfig config, NoteRoutes notes) {
+        this.config = config.server();
+        this.notes = notes;
+    }
+
+    @PostConstruct
+    public void start() {
+        app = Javalin.create(cfg -> notes.register(cfg.routes)).start(config.port());
+    }
+
+    @EventHandler
+    public void onApplicationEnding(ApplicationEndingEvent event) {
+        stop();
     }
 
     @PreDestroy
-    public void shutdown() {
-        if (app != null) app.stop();
+    public void stop() {
+        Javalin running = app;
+        app = null;
+        if (running != null) running.stop();
     }
 }
 
 @Component(scope = Scope.SINGLETON)
 public class NoteRoutes {
+    private final UnitOfWork unitOfWork;
     private final NoteRepository repo;
     private final EventBus eventBus;
 
     @Inject
-    public NoteRoutes(NoteRepository repo, EventBus eventBus) {
+    public NoteRoutes(UnitOfWork unitOfWork, NoteRepository repo, EventBus eventBus) {
+        this.unitOfWork = unitOfWork;
         this.repo = repo;
         this.eventBus = eventBus;
     }
 
     public void register(RoutesConfig routes) {
-        routes.post("/notes", this::handleCreate);
-        routes.get("/notes/{id}", this::handleGet);
+        routes.post("/notes", inUnit(unitOfWork, this::handleCreate));
+        routes.get("/notes/{id}", inUnit(unitOfWork, this::handleGet));
     }
 
     public void handleCreate(Context ctx) { /* ... */ }
@@ -252,14 +274,22 @@ public class NoteRoutes {
 }
 ```
 
-A second route group is one more producer parameter and one more
-`register(cfg.routes)` call. `Main` only starts the server:
-`container.get(Javalin.class).start(port)` — see
-[`Main.java`](../tiko-examples/15_quickstart/src/main/java/io/tiko/examples/quickstart/Main.java),
-[`JavalinFactory.java`](../tiko-examples/15_quickstart/src/main/java/io/tiko/examples/quickstart/JavalinFactory.java)
-and [`NoteRoutes.java`](../tiko-examples/15_quickstart/src/main/java/io/tiko/examples/quickstart/NoteRoutes.java).
+- **One unit of work per request.** `inUnit` runs the handler inside
+  `unitOfWork.runInEventScope(...)`, so each request gets its own EVENT-scoped
+  components.
+- **The container owns the server.** It builds `HttpServer` when it starts;
+  a port already in use fails `Tiko.daemon(...)`. `close()` stops the server
+  first, on `ApplicationEndingEvent`, then drains async work.
+- **`Main` only boots and waits:** `Tiko.daemon(...).awaitShutdown()`.
 
-#### Redirect: `@RestController` → register the HTTP layer via `@Produces`
+A second route group is one more constructor parameter and one more
+`register(cfg.routes)` call. See
+[`HttpServer.java`](../tiko-examples/15_quickstart/src/main/java/io/tiko/examples/quickstart/HttpServer.java),
+[`NoteRoutes.java`](../tiko-examples/15_quickstart/src/main/java/io/tiko/examples/quickstart/NoteRoutes.java)
+and the [HTTP cookbook](cookbooks/http.md), which covers stopping with
+requests in flight, testing, and multi-module applications.
+
+#### Redirect: `@RestController` → a route group and a server component
 
 There is no annotation-driven dispatch. Routes are plain methods a route
 group wires to URL patterns in its `register(RoutesConfig)`. No reflection,

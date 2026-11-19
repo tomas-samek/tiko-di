@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
+import io.javalin.util.JavalinBindException;
 import io.tiko.runtime.Tiko;
+import java.net.BindException;
 import java.net.ServerSocket;
 import java.time.Duration;
 import java.util.List;
@@ -27,7 +29,9 @@ class TakenPortIT {
             assertThatThrownBy(() -> Tiko.create(QuickstartIT.onPort(taken.getLocalPort())
                             .onThreadsOutlivingClose(outlivingClose::addAll)
                             .build()))
-                    .hasStackTraceContaining("Port already in use");
+                    .isInstanceOf(JavalinBindException.class)
+                    .hasMessageContaining("Port already in use")
+                    .hasRootCauseInstanceOf(BindException.class);
 
             assertThat(outlivingClose).as("threads the container started").isEmpty();
             // A closed pool's threads end shortly after close() returns. Javalin 7.2.3 starts a thread

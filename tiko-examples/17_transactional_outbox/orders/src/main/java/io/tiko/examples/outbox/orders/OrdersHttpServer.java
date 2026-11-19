@@ -17,6 +17,7 @@ import io.tiko.events.ApplicationEndingEvent;
 import io.tiko.examples.outbox.Messages.OrderPlaced;
 import io.tiko.examples.outbox.OutboxRelay;
 import java.sql.SQLException;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -41,6 +42,7 @@ public class OrdersHttpServer {
     @Inject
     public OrdersHttpServer(UnitOfWork unitOfWork, OrderStore orders, Settings settings, OutboxRelay relay) {
         // The relay is taken only so that it runs from boot: it relays what the routes commit.
+        Objects.requireNonNull(relay, "relay");
         this.unitOfWork = unitOfWork;
         this.orders = orders;
         this.settings = settings;

@@ -51,9 +51,9 @@ Lookup-table answer to "does tiko support X?":
 
 | Need | Pattern | Recipe in |
 |---|---|---|
-| HTTP layer | `@Produces Javalin` (or your choice) + plain route methods | `tiko-build` skill, example `15_quickstart` |
+| HTTP layer | A server `@Component` owning Javalin (or your choice) + plain route methods, one unit of work per request | [`docs/cookbooks/http.md`](./docs/cookbooks/http.md), example `15_quickstart` |
 | Postgres / MySQL | `@Produces DataSource` returning `HikariDataSource` | `tiko-build` skill, example `15_quickstart` |
-| Schema migrations | `@EventHandler(ApplicationStartedEvent)` calling `Flyway.migrate()` | `tiko-build` skill, example `15_quickstart` |
+| Schema migrations | `Flyway.migrate()` in the `DataSource` producer, before it returns the pool | `tiko-build` skill, example `15_quickstart` |
 | Kafka | `@KafkaSource` / `@KafkaSink` — tiko-native module with compile-time validation | `tiko-kafka`, example `08_kafka_order_warehouse` |
 | In-process cache | `@Produces Cache<K,V>` (Caffeine) | `tiko-build` skill |
 | Templates | `@Produces freemarker.template.Configuration` (or Pebble, Mustache) | `tiko-build` skill |
@@ -237,7 +237,7 @@ Worked examples ship under [`tiko-examples/`](./tiko-examples/README.md), each a
 | 06 | [`06_config_multi_module`](./tiko-examples/06_config_multi_module)  | Module-baked `META-INF/tiko/defaults.yaml` discovery + user override                                    |
 | 07 | [`07_async_start`](./tiko-examples/07_async_start)                  | `@EventHandler(async = true)` on `ApplicationStartedEvent` — keep slow warmup off the critical path     |
 | 08 | [`08_kafka_order_warehouse`](./tiko-examples/08_kafka_order_warehouse) | Cross-JVM Kafka demo — `@KafkaSource` / `@KafkaSink`, shared event class, Testcontainers e2e         |
-| 09 | [`09_http_javalin`](./tiko-examples/09_http_javalin)                | `TikoJavalin.scoped` middleware opens an EVENT scope per route; sync request→response independent of the bus |
+| 09 | [`09_http_javalin`](./tiko-examples/09_http_javalin)                | `TikoJavalin.scoped` opens a unit of work per request through `UnitOfWork`, in a server the container starts and stops; sync request→response independent of the bus |
 | 10 | [`10_persistence_jdbc`](./tiko-examples/10_persistence_jdbc)        | Persistence cookbook — EVENT-scoped JDBC transactions across HTTP and batch flows ([docs](./docs/cookbooks/persistence.md)) |
 | 11 | [`11_custom_logger`](./tiko-examples/11_custom_logger)              | Routing framework logs through slf4j + logback via `System.LoggerFinder`                                |
 | 12 | [`12_testing`](./tiko-examples/12_testing)                          | `@TikoTest` JUnit 5 extension — parameter resolution, `RecordingEventBus` assertions, scope helpers, `awaitAsyncDispatch` |

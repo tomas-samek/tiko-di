@@ -23,6 +23,8 @@ import java.util.UUID
  * only so that the relay runs from boot, and it stops on [ApplicationEndingEvent], before the
  * container closes the relay.
  */
+private const val STOP_TIMEOUT_MS = 5_000L
+
 @Component(scope = Scope.SINGLETON)
 class OrdersHttpServer(
     private val unitOfWork: UnitOfWork,
@@ -36,6 +38,9 @@ class OrdersHttpServer(
     @PostConstruct
     fun start() {
         val server = Javalin.create { config ->
+            // Lets a request in flight at stop() finish and get its response; without it, Javalin
+            // 7.2.3 runs the handler to its end but closes the connection before the response.
+            config.jetty.modifyServer { it.stopTimeout = STOP_TIMEOUT_MS }
             config.routes.put("/orders/{id}", inUnit { ctx -> place(orders, ctx) })
             config.routes.get("/orders/{id}", inUnit { ctx ->
                 ctx.json(orders.find(orderId(ctx)) ?: throw NotFoundResponse())
