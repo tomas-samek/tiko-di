@@ -16,6 +16,11 @@ import io.tiko.kafka.KafkaSerializer;
  * @param serializerClass    KafkaSerializer.Default.class means "use named YAML default"
  * @param wantsKafkaContext  true if the bridge declares the optional 2nd KafkaContext parameter
  * @param dispatcher         invokes the bridge method; returns the local event payload to publish
+ * @param opensItsUnit       true if the dispatcher opens the record's unit of work itself, publishes
+ *                           the bridge's event inside it and returns {@code null}: a Kotlin
+ *                           {@code suspend} bridge, whose unit travels with its coroutine (#681).
+ *                           The runner then opens none, and cancels a dispatcher that outlasts the
+ *                           shutdown timeout by interrupting the consumer thread.
  */
 public record GeneratedSourceDescriptor(
         String topic,
@@ -24,7 +29,20 @@ public record GeneratedSourceDescriptor(
         Class<?> payloadType,
         Class<? extends KafkaSerializer> serializerClass,
         boolean wantsKafkaContext,
-        SourceDispatcher dispatcher) {
+        SourceDispatcher dispatcher,
+        boolean opensItsUnit) {
+
+    /** A source whose record's unit of work the runner opens: every bridge that is not {@code suspend}. */
+    public GeneratedSourceDescriptor(
+            String topic,
+            String consumerGroup,
+            String eventName,
+            Class<?> payloadType,
+            Class<? extends KafkaSerializer> serializerClass,
+            boolean wantsKafkaContext,
+            SourceDispatcher dispatcher) {
+        this(topic, consumerGroup, eventName, payloadType, serializerClass, wantsKafkaContext, dispatcher, false);
+    }
 
     @FunctionalInterface
     public interface SourceDispatcher {
