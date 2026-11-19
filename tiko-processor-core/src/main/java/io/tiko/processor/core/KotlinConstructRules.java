@@ -222,13 +222,6 @@ public final class KotlinConstructRules {
                                     + " always runs as a coroutine of its own, off the publisher's thread.",
                             "Remove async = false, or drop the suspend modifier to handle the event on the publisher's thread"));
         }
-        var timeout = handler.string("timeout");
-        if (timeout != null && !timeout.isBlank()) {
-            return Optional.of(suspendHandlerResilience(method, name, "timeout"));
-        }
-        if (handler.integer("retries") > 0) {
-            return Optional.of(suspendHandlerResilience(method, name, "retries"));
-        }
         if (!coroutinesOnClasspath) {
             return Optional.of(new Violation(
                     method.location(),
@@ -237,14 +230,6 @@ public final class KotlinConstructRules {
                     "Add the dependency io.github.tomas-samek:tiko-coroutines, or drop the suspend modifier"));
         }
         return Optional.empty();
-    }
-
-    private static Violation suspendHandlerResilience(MethodDecl method, String name, String member) {
-        return new Violation(
-                method.location(),
-                "@EventHandler " + member + " on " + name + ", which is a suspend fun: " + member
-                        + " applies to regular async handlers.",
-                "Remove " + member + ", or drop the suspend modifier and set async = true");
     }
 
     /** A {@code suspend} function generated Java calls directly, outside any coroutine. */

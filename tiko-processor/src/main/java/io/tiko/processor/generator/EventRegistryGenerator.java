@@ -284,15 +284,30 @@ public final class EventRegistryGenerator {
             typeWitness = CodeBlock.of(
                     "<$T>", handler.getMethod().returnType().javaPoet().box());
         }
+        // The handler's timeout and retries (#680); the runtime applies them to each attempt.
+        CodeBlock policy = handler.hasRetries() || handler.hasTimeout() ? retryPolicy(handler) : CodeBlock.of("null");
         // Not addStatement: the trigger lambda holds statements of its own, as an async body does.
         method.addCode(
-                "$T.$L$L(container, __asyncWrapper, __continuation -> $L, $L, __err, HANDLER_INFO_$L, event);\n",
+                "$T.$L$L(container, __asyncWrapper, __continuation -> $L, $L, __err, HANDLER_INFO_$L, $L);\n",
                 SUSPEND_HANDLERS,
                 typeWitness,
                 plan.detachedUnit() ? "launch" : "launchWithoutUnit",
                 call,
                 onSuccess,
-                index);
+                index,
+                policy);
+    }
+
+    /** {@code new RetryPolicy(retries, backoffNanos, strategy, timeoutNanos)} for a handler's attributes. */
+    private static CodeBlock retryPolicy(EventHandlerModel handler) {
+        return CodeBlock.of(
+                "new $T($L, $LL, $T.$L, $LL)",
+                ClassName.get(RUNTIME_PACKAGE, "RetryPolicy"),
+                handler.getRetries(),
+                handler.getBackoffNanos(),
+                ClassName.get("io.tiko.annotations", "BackoffStrategy"),
+                handler.getBackoffStrategy().name(),
+                handler.getTimeoutNanos());
     }
 
     /**
@@ -375,15 +390,10 @@ public final class EventRegistryGenerator {
             // count once the budget is exhausted. Composes the #107 timeout per attempt.
             method.addCode(CodeBlock.builder()
                     .add(
-                            "$T.runAsyncWithRetry(() -> {\n$L}, new $T($L, $LL, $T.$L, $LL), __exec, __err, HANDLER_INFO_$L, event);\n",
+                            "$T.runAsyncWithRetry(() -> {\n$L}, $L, __exec, __err, HANDLER_INFO_$L, event);\n",
                             CHAIN_CONTEXT,
                             asyncBody,
-                            ClassName.get(RUNTIME_PACKAGE, "RetryPolicy"),
-                            handler.getRetries(),
-                            handler.getBackoffNanos(),
-                            ClassName.get("io.tiko.annotations", "BackoffStrategy"),
-                            handler.getBackoffStrategy().name(),
-                            handler.getTimeoutNanos(),
+                            retryPolicy(handler),
                             index)
                     .build());
         } else if (handler.hasTimeout()) {

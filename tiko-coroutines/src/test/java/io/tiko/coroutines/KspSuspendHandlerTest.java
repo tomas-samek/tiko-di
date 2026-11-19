@@ -32,6 +32,7 @@ class KspSuspendHandlerTest {
             import io.tiko.EventQueueOverflowException
             import io.tiko.NoActiveEventScopeException
             import io.tiko.Scope
+            import io.tiko.annotations.BackoffStrategy
             import io.tiko.annotations.Component
             import io.tiko.annotations.EventHandler
             import io.tiko.annotations.EventTrigger
@@ -45,6 +46,7 @@ class KspSuspendHandlerTest {
             import java.util.concurrent.CopyOnWriteArrayList
             import java.util.concurrent.CountDownLatch
             import java.util.concurrent.TimeUnit
+            import java.util.concurrent.atomic.AtomicInteger
             import kotlinx.coroutines.CompletableDeferred
             import kotlinx.coroutines.currentCoroutineContext
             import kotlinx.coroutines.delay
@@ -52,6 +54,7 @@ class KspSuspendHandlerTest {
 
             object Seen {
                 @JvmField val log = CopyOnWriteArrayList<String>()
+                @JvmField val units = CopyOnWriteArrayList<String>()
                 @JvmField val errors = CopyOnWriteArrayList<String>()
                 @JvmField val release = CompletableDeferred<Unit>()
                 @JvmField val holding = CountDownLatch(1)
@@ -79,6 +82,8 @@ class KspSuspendHandlerTest {
             class Hold
             data class Slow(val millis: Long)
             data class Both(val n: Int)
+            data class Flaky(val failures: Int)
+            data class Stuck(val text: String)
 
             @Component(scope = Scope.SINGLETON)
             class Handlers(private val requestId: RequestId, private val bus: EventBus, private val lifetime: Lifetime) {
@@ -143,6 +148,22 @@ class KspSuspendHandlerTest {
                 @EventHandler
                 fun onBothSync(both: Both) {
                     Seen.log += "sync handler got ${both.n}"
+                }
+
+                private val flakyAttempts = AtomicInteger()
+
+                @EventHandler(timeout = "PT0.2S", retries = 2, backoff = "PT0.05S", backoffStrategy = BackoffStrategy.EXPONENTIAL)
+                suspend fun onFlaky(flaky: Flaky) {
+                    val n = flakyAttempts.incrementAndGet()
+                    val id = requestId.value()
+                    Seen.log += "flaky attempt $n in a new unit=${Seen.units.add(id)}"
+                    if (n == 1) delay(30_000)
+                    check(n > flaky.failures) { "attempt $n failed" }
+                }
+
+                @EventHandler(timeout = "PT0.1S")
+                suspend fun onStuck(stuck: Stuck) {
+                    delay(30_000)
                 }
 
                 @EventHandler
@@ -293,6 +314,32 @@ class KspSuspendHandlerTest {
                     return report()
                 }
 
+                /** #680: the first attempt times out, the second fails, and the third is past [failures] or not. */
+                private fun flaky(failures: Int): List<String> {
+                    boot().use { container ->
+                        Seen.log.clear()
+                        container.eventBus.publish(Flaky(failures))
+                        settle(container)
+                    }
+                    return report()
+                }
+
+                @JvmStatic
+                fun timeoutThenRetry(): List<String> = flaky(failures = 2)
+
+                @JvmStatic
+                fun exhausted(): List<String> = flaky(failures = 3)
+
+                @JvmStatic
+                fun timeoutAlone(): List<String> {
+                    boot().use { container ->
+                        Seen.log.clear()
+                        container.eventBus.publish(Stuck("x"))
+                        settle(container)
+                    }
+                    return report()
+                }
+
                 @JvmStatic
                 fun throwAtTheLimit(): List<String> = secondEventAtTheLimit(OverflowPolicy.THROW)
 
@@ -342,6 +389,14 @@ class KspSuspendHandlerTest {
                         .contains(
                                 "SuspendHandlers.<Stepped>launch(container, __asyncWrapper, "
                                         + "__continuation -> container.getHandlers().onStep(event, __continuation), __result -> {")
+                        .as("a handler with neither a timeout nor retries has no policy")
+                        .containsPattern(
+                                "onPing\\(event, __asyncWrapper, __continuation\\), null, __err, HANDLER_INFO_\\d+, null\\);")
+                        .as("#680: the handler's timeout, retries and backoff travel as its RetryPolicy")
+                        .containsPattern("onFlaky\\(event, __continuation\\), null, __err, HANDLER_INFO_\\d+, "
+                                + "new RetryPolicy\\(2, 50000000L, BackoffStrategy.EXPONENTIAL, 200000000L\\)\\);")
+                        .containsPattern("onStuck\\(event, __continuation\\), null, __err, HANDLER_INFO_\\d+, "
+                                + "new RetryPolicy\\(0, 0L, BackoffStrategy.FIXED, 100000000L\\)\\);")
                         .as("a handler of a framework lifecycle event runs without a unit of work")
                         .contains("SuspendHandlers.launchWithoutUnit(container, __asyncWrapper, "
                                 + "__continuation -> __handler.onStarted(event, __continuation), null"));
@@ -413,6 +468,64 @@ class KspSuspendHandlerTest {
                         "hold ended, cancelled=true",
                         "singleton destroyed",
                         "close took under 3 s=true");
+    }
+
+    /** #680: a timed-out attempt and a failed one are retried, each in a unit of its own, until one succeeds. */
+    @Test
+    void aTimeoutAndAFailureAreRetriedUntilAnAttemptSucceeds() {
+        assertThat(run("timeoutThenRetry"))
+                .containsSubsequence(
+                        "flaky attempt 1 in a new unit=true",
+                        "flaky attempt 2 in a new unit=true",
+                        "flaky attempt 3 in a new unit=true")
+                .as("three units closed, nothing reported")
+                .containsOnlyOnce("singleton destroyed")
+                .noneMatch(line -> line.startsWith("ERROR"))
+                .filteredOn("unit closed"::equals)
+                .hasSize(3);
+    }
+
+    /** #680: a suspend handler needs no async = true for a timeout, and its timeout is checked like any other. */
+    @Test
+    void aSuspendHandlersTimeoutMustBeADuration() {
+        var result = KspCompiler.compile(new TikoSymbolProcessorProvider(), KspCompiler.kotlin("Bad.kt", """
+                        package bad
+
+                        import io.tiko.Scope
+                        import io.tiko.annotations.Component
+                        import io.tiko.annotations.EventHandler
+
+                        class Ping
+
+                        @Component(scope = Scope.SINGLETON)
+                        class Listener {
+                            @EventHandler(timeout = "5s", retries = 2)
+                            suspend fun onPing(ping: Ping) {}
+                        }
+                        """));
+
+        assertThat(result.exitCode()).as(result.messages()).isEqualTo(KotlinCompilation.ExitCode.COMPILATION_ERROR);
+        assertThat(result.messages())
+                .contains("@EventHandler timeout '5s' is not a valid ISO-8601 Duration")
+                .doesNotContain("requires async = true");
+    }
+
+    @Test
+    void anExhaustedRetryBudgetIsReportedOnceWithItsAttempts() {
+        assertThat(run("exhausted"))
+                .filteredOn(line -> line.startsWith("ERROR"))
+                .containsExactly("ERROR EventHandlerError Handlers.onFlaky async=true"
+                        + " cause=IllegalStateException: attempt 3 failed attempts=3 kind=EXHAUSTED");
+    }
+
+    @Test
+    void aTimeoutAloneIsReportedAsATimeout() {
+        assertThat(run("timeoutAlone"))
+                .filteredOn(line -> line.startsWith("ERROR"))
+                .singleElement()
+                .asString()
+                .startsWith("ERROR EventHandlerError Handlers.onStuck async=true cause=TimeoutException:")
+                .endsWith("attempts=1 kind=TIMEOUT");
     }
 
     /** #679, #714: the publisher is told, after the event's other handlers got it. */

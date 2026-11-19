@@ -226,6 +226,15 @@ public final class EventHandlerCollector {
     }
 
     /**
+     * Whether the handler is a synchronous one. A Kotlin {@code suspend} handler never is: it runs
+     * as a coroutine of the container whatever its {@code async} attribute says, so it may have a
+     * {@code timeout} and {@code retries} without {@code async = true} (#680).
+     */
+    private static boolean runsOnThePublishersThread(MethodDecl method, AnnotationRef annotation) {
+        return !annotation.bool(ASYNC) && !method.isSuspend();
+    }
+
+    /**
      * Validates {@code @EventHandler(retries = ...)} (#108): retries are async-only (they wait for
      * the backoff between attempts, which would block the publisher's thread) and the count cannot
      * be negative. Returns {@code false} (and reports a compile error) when invalid.
@@ -242,7 +251,7 @@ public final class EventHandlerCollector {
                     "Use a non-negative retry count, e.g. retries = 3");
             return false;
         }
-        if (!annotation.bool(ASYNC)) {
+        if (runsOnThePublishersThread(method, annotation)) {
             errors.error(
                     method.location(),
                     "@EventHandler retries requires async = true: retrying with backoff on the"
@@ -296,7 +305,7 @@ public final class EventHandlerCollector {
         if (timeout == null || timeout.isBlank()) {
             return 0L;
         }
-        if (!annotation.bool(ASYNC)) {
+        if (runsOnThePublishersThread(method, annotation)) {
             errors.error(
                     method.location(),
                     "@EventHandler timeout requires async = true: a sync handler runs on the publisher's"
