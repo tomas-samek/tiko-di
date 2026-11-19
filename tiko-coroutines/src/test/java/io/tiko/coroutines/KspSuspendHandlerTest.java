@@ -27,7 +27,9 @@ class KspSuspendHandlerTest {
             import io.tiko.ErrorContext
             import io.tiko.Event
             import io.tiko.EventBus
+            import io.tiko.EventDispatchRejected
             import io.tiko.EventHandlerError
+            import io.tiko.EventQueueOverflowException
             import io.tiko.NoActiveEventScopeException
             import io.tiko.Scope
             import io.tiko.annotations.Component
@@ -35,6 +37,7 @@ class KspSuspendHandlerTest {
             import io.tiko.annotations.EventTrigger
             import io.tiko.annotations.PreDestroy
             import io.tiko.events.ApplicationStartedEvent
+            import io.tiko.runtime.OverflowPolicy
             import io.tiko.runtime.Tiko
             import io.tiko.runtime.TikoOptions
             import java.time.Duration
@@ -75,6 +78,7 @@ class KspSuspendHandlerTest {
             data class Stepped(val name: String)
             class Hold
             data class Slow(val millis: Long)
+            data class Both(val n: Int)
 
             @Component(scope = Scope.SINGLETON)
             class Handlers(private val requestId: RequestId, private val bus: EventBus, private val lifetime: Lifetime) {
@@ -131,6 +135,17 @@ class KspSuspendHandlerTest {
                 }
 
                 @EventHandler
+                suspend fun onBothSuspending(both: Both) {
+                    Seen.log += "suspend handler got ${both.n}"
+                    Seen.release.await()
+                }
+
+                @EventHandler
+                fun onBothSync(both: Both) {
+                    Seen.log += "sync handler got ${both.n}"
+                }
+
+                @EventHandler
                 suspend fun onSlow(slow: Slow) {
                     delay(slow.millis)
                     Seen.log += "slow finished"
@@ -150,10 +165,16 @@ class KspSuspendHandlerTest {
 
             object Scenarios {
 
-                private fun boot(shutdownTimeout: Duration = Duration.ofSeconds(5)): Container =
+                private fun boot(
+                    shutdownTimeout: Duration = Duration.ofSeconds(5),
+                    onOverflow: OverflowPolicy = OverflowPolicy.CALLER_RUNS,
+                    queueCapacity: Int = 1024,
+                ): Container =
                     Tiko.create(
                         TikoOptions.builder()
                             .shutdownTimeout(shutdownTimeout)
+                            .onOverflow(onOverflow)
+                            .queueCapacity(queueCapacity)
                             .errorHandler { context -> Seen.errors += describe(context) }
                             .build(),
                     ).also { settle(it) }
@@ -162,7 +183,8 @@ class KspSuspendHandlerTest {
                     is EventHandlerError ->
                         "EventHandlerError ${context.handler().declaringClass().simpleName}.${context.handler().methodName()}" +
                             " async=${context.handler().async()} cause=${context.cause().javaClass.simpleName}:" +
-                            " ${context.cause().message} attempts=${context.attempts()}"
+                            " ${context.cause().message} attempts=${context.attempts()} kind=${context.kind()}"
+                    is EventDispatchRejected -> "EventDispatchRejected ${context.event()}"
                     else -> context.javaClass.simpleName
                 }
 
@@ -254,6 +276,29 @@ class KspSuspendHandlerTest {
                     return report()
                 }
 
+                /** #679: one place, and a second event that finds it taken. */
+                private fun secondEventAtTheLimit(onOverflow: OverflowPolicy): List<String> {
+                    boot(onOverflow = onOverflow, queueCapacity = 1).use { container ->
+                        Seen.log.clear()
+                        container.eventBus.publish(Both(1))
+                        Seen.log += try {
+                            container.eventBus.publish(Both(2))
+                            "publish returned"
+                        } catch (e: EventQueueOverflowException) {
+                            "publish threw ${e.javaClass.simpleName}"
+                        }
+                        Seen.release.complete(Unit)
+                        settle(container)
+                    }
+                    return report()
+                }
+
+                @JvmStatic
+                fun throwAtTheLimit(): List<String> = secondEventAtTheLimit(OverflowPolicy.THROW)
+
+                @JvmStatic
+                fun deadLetterAtTheLimit(): List<String> = secondEventAtTheLimit(OverflowPolicy.ROUTE_TO_DLQ)
+
                 @JvmStatic
                 fun publishAfterClose(): List<String> {
                     val container = boot()
@@ -336,7 +381,7 @@ class KspSuspendHandlerTest {
                 .containsExactly(
                         "singleton destroyed",
                         "ERROR EventHandlerError Handlers.onBoom async=true"
-                                + " cause=IllegalStateException: boom after a suspension attempts=1");
+                                + " cause=IllegalStateException: boom after a suspension attempts=1 kind=EXCEPTION");
     }
 
     @Test
@@ -346,7 +391,7 @@ class KspSuspendHandlerTest {
                         "stepped ok",
                         "singleton destroyed",
                         "ERROR EventHandlerError Handlers.onStep async=true"
-                                + " cause=IllegalStateException: step bad failed attempts=1");
+                                + " cause=IllegalStateException: step bad failed attempts=1 kind=EXCEPTION");
     }
 
     @Test
@@ -368,6 +413,31 @@ class KspSuspendHandlerTest {
                         "hold ended, cancelled=true",
                         "singleton destroyed",
                         "close took under 3 s=true");
+    }
+
+    /** #679, #714: the publisher is told, after the event's other handlers got it. */
+    @Test
+    void underThrowThePublisherGetsTheOverflowAfterTheOtherHandlersGotTheEvent() {
+        assertThat(run("throwAtTheLimit"))
+                .containsExactlyInAnyOrder(
+                        "suspend handler got 1",
+                        "sync handler got 1",
+                        "publish threw EventQueueOverflowException",
+                        "sync handler got 2",
+                        "singleton destroyed");
+    }
+
+    /** #679, #111: the event that found no place goes to the ErrorHandler; its other handlers still get it. */
+    @Test
+    void underRouteToDlqAnEventAtTheLimitIsDeadLettered() {
+        assertThat(run("deadLetterAtTheLimit"))
+                .containsExactlyInAnyOrder(
+                        "suspend handler got 1",
+                        "sync handler got 1",
+                        "publish returned",
+                        "sync handler got 2",
+                        "singleton destroyed",
+                        "ERROR EventDispatchRejected Both(n=2)");
     }
 
     @Test
