@@ -1,7 +1,7 @@
 package io.tiko.examples.http;
 
 import io.javalin.http.Handler;
-import io.tiko.Container;
+import io.tiko.UnitOfWork;
 
 /**
  * Tiny middleware bridge: wraps a Javalin {@link Handler} so each invocation
@@ -12,12 +12,11 @@ import io.tiko.Container;
  * <p>Why a helper instead of opening the scope inside each handler: ergonomics.
  * Every route would otherwise need an identical {@code runInEventScope}
  * wrapper, which is exactly the kind of boilerplate middleware exists to
- * eliminate.
+ * eliminate. Javalin 7 has no handler that wraps a request, so the route
+ * group applies it when it registers its paths.
  *
- * <p>This class is part of the example module, not framework code. If
- * something this thin proves valuable enough to live in a shared library,
- * it gets promoted to a {@code tiko-http-bridge} module in a follow-up — but
- * not before real users hit ergonomic friction.
+ * <p>It takes {@link UnitOfWork}, which a component gets injected; the container is a
+ * {@code UnitOfWork} too. This class is part of the example module, not framework code.
  */
 public final class TikoJavalin {
 
@@ -26,16 +25,17 @@ public final class TikoJavalin {
     /**
      * Returns a new {@link Handler} that opens one unit of work around
      * the delegate's {@link Handler#handle(io.javalin.http.Context)}.
-     * Javalin's checked-exception declaration is wrapped in a
-     * {@link RuntimeException}; Javalin's own exception mapper unwraps it on
-     * its side and applies the user's configured exception handlers.
+     * Javalin's own responses ({@code BadRequestResponse}, ...) pass as they are;
+     * a checked exception is wrapped in an {@link IllegalStateException}.
      */
-    public static Handler scoped(Container container, Handler delegate) {
-        return ctx -> container.runInEventScope(() -> {
+    public static Handler scoped(UnitOfWork unitOfWork, Handler delegate) {
+        return ctx -> unitOfWork.runInEventScope(() -> {
             try {
                 delegate.handle(ctx);
+            } catch (RuntimeException e) {
+                throw e;
             } catch (Exception e) {
-                throw new RuntimeException(e);
+                throw new IllegalStateException("Request failed", e);
             }
         });
     }

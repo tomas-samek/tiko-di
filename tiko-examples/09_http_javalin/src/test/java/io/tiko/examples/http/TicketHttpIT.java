@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.javalin.Javalin;
 import io.tiko.Container;
 import io.tiko.runtime.Tiko;
 import java.net.URI;
@@ -19,34 +18,26 @@ import org.junit.jupiter.api.Test;
 
 /**
  * End-to-end integration test: real Tiko container + real Javalin server on a
- * random port + real HTTP via {@link HttpClient}. Each test sets up and tears
- * down per-test for isolation.
+ * random port + real HTTP via {@link HttpClient}. The container starts the
+ * server ({@link TicketHttpServer}) on a port the OS picks. Each test sets up and tears down per-test for isolation.
  */
 class TicketHttpIT {
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private Container container;
-    private Javalin app;
     private int port;
     private HttpClient client;
 
     @BeforeEach
     void setUp() {
-        container = Tiko.create();
-        var routes = new TicketHttpRoutes(container.get(TicketService.class), container.getEventBus(), container);
-        app = Javalin.create(cfg -> {
-            cfg.routes.post("/tickets", TikoJavalin.scoped(container, routes::handleCreate));
-            cfg.routes.get("/tickets/{id}", TikoJavalin.scoped(container, routes::handleGet));
-        });
-        app.start(0); // 0 = OS picks a free port
-        port = app.port();
+        container = Tiko.create(OnAFreePort.options().build());
+        port = container.get(TicketHttpServer.class).port();
         client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
     }
 
     @AfterEach
     void tearDown() {
-        if (app != null) app.stop();
         if (container != null) container.shutdown();
     }
 

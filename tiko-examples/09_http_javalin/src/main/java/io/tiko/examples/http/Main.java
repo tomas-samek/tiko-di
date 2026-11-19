@@ -1,6 +1,5 @@
 package io.tiko.examples.http;
 
-import io.javalin.Javalin;
 import io.tiko.Container;
 import io.tiko.config.ConfigSources;
 import io.tiko.runtime.Tiko;
@@ -16,15 +15,17 @@ import java.net.http.HttpResponse;
  * demonstrates the YAML-config path introduced by #48. (The equivalent
  * programmatic form is {@code TikoOptions.builder().shutdownTimeout(Duration.ofSeconds(5))}.)
  *
- * <p>Runs Javalin, fires a ticket-creation request that triggers a 2-second
- * async audit handler, then stops Javalin while the audit is still in flight.
- * The container's {@code close()} (via try-with-resources) waits for the
- * in-flight async work to drain before tearing the executor down.
+ * <p>The container starts the HTTP server ({@link TicketHttpServer}). This demo fires a
+ * ticket-creation request that triggers a 2-second async audit handler, then closes the
+ * container while the audit is still in flight. {@code close()} (via try-with-resources) stops
+ * the HTTP server first, then waits for the in-flight async work to drain before tearing the
+ * executor down. A long-running service would call {@code Tiko.daemon(opts).awaitShutdown()}
+ * instead, and the same happens on {@code Ctrl+C} / {@code SIGTERM}.
  *
- * <p>Expected console output:
+ * <p>Expected console output (the first two lines come in either order):
  *
  * <pre>{@code
- * [main] Stopping HTTP server (async work still running)...
+ * [main] Closing the container (async work still running)...
  * [async] slow audit work starting for ticket <uuid>
  * [async] slow audit work complete for ticket <uuid>
  * [main] Container closed cleanly.
@@ -47,16 +48,7 @@ public final class Main {
                 .build();
 
         try (Container container = Tiko.create(opts)) {
-            TicketHttpRoutes routes =
-                    new TicketHttpRoutes(container.get(TicketService.class), container.getEventBus(), container);
-
-            Javalin app = Javalin.create(cfg -> {
-                cfg.routes.post("/tickets", TikoJavalin.scoped(container, routes::handleCreate));
-                cfg.routes.get("/tickets/{id}", TikoJavalin.scoped(container, routes::handleGet));
-            });
-
-            int port = portFromEnv();
-            app.start(port);
+            int port = container.get(TicketHttpServer.class).port();
 
             // Arm the slow audit handler so this one event takes the 2s sleep path —
             // gives container.close() something to drain. Other handlers are unaffected.
@@ -66,10 +58,9 @@ public final class Main {
             // resulting event asynchronously and sleeps ~2s.
             fireCreateTicketRequest(port);
 
-            // Stop the HTTP layer while async audit is still in flight.
-            System.out.println("[main] Stopping HTTP server (async work still running)...");
-            app.stop();
-        } // container.close() drains the in-flight slow handler before returning.
+            // Close while the async audit is still in flight: the server stops first.
+            System.out.println("[main] Closing the container (async work still running)...");
+        } // container.close() stops the server, then drains the in-flight slow handler before returning.
 
         System.out.println("[main] Container closed cleanly.");
     }
@@ -88,11 +79,5 @@ public final class Main {
         if (response.statusCode() != 201) {
             throw new IllegalStateException("Unexpected status " + response.statusCode() + ": " + response.body());
         }
-    }
-
-    private static int portFromEnv() {
-        String value = System.getenv("TIKO_HTTP_PORT");
-        if (value == null || value.isBlank()) return 8080;
-        return Integer.parseInt(value.trim());
     }
 }
