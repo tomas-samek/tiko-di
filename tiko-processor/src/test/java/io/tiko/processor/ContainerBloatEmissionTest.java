@@ -111,6 +111,36 @@ class ContainerBloatEmissionTest {
     }
 
     /**
+     * #845: a produced value is closed when it is AutoCloseable at run time. A final declared type
+     * that is not AutoCloseable cannot be, so its producer gets no teardown in either scope.
+     */
+    @Test
+    void aProducedFinalTypeThatIsNotAutoCloseableGetsNoTeardown() throws IOException {
+        String source = generateContainerSource(
+                JavaFileObjects.forSourceLines(
+                        "demo.Greeting", "package demo;", "public record Greeting(String text) {}"),
+                JavaFileObjects.forSourceLines(
+                        "demo.Greetings",
+                        "package demo;",
+                        "import io.tiko.Scope;",
+                        "import io.tiko.annotations.Component;",
+                        "import io.tiko.annotations.Produces;",
+                        "@Component(scope = Scope.SINGLETON)",
+                        "public class Greetings {",
+                        "  @Produces(scope = Scope.SINGLETON, name = \"app\")",
+                        "  public Greeting app() { return new Greeting(\"hello\"); }",
+                        "  @Produces(scope = Scope.EVENT, name = \"request\")",
+                        "  public Greeting request() { return new Greeting(\"hi\"); }",
+                        "}"));
+
+        assertThat(source)
+                .as("no close() walk for a value that cannot be AutoCloseable")
+                .doesNotContain("__factory_")
+                .doesNotContain("__toDestroy")
+                .doesNotContain("inShutdownThread.set(Boolean.TRUE)");
+    }
+
+    /**
      * #710: each component teardown hook runs through {@code __inTeardown}, which turns the lookup
      * bypass on for whichever thread runs the hook: the shutdown thread, or a teardown thread
      * under a {@code teardownTimeout}.

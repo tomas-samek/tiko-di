@@ -4,6 +4,7 @@ import demo.Clock;
 import demo.Producers;
 import demo.RequestId;
 import demo.Service;
+import io.tiko.AutoCloseFailure;
 import io.tiko.Container;
 import io.tiko.ContainerShutDownException;
 import io.tiko.ErrorHandler;
@@ -18,6 +19,7 @@ import io.tiko.events.ApplicationEndingEvent;
 import io.tiko.events.ApplicationStartedEvent;
 import io.tiko.events.EventEndingEvent;
 import io.tiko.events.EventStartedEvent;
+import io.tiko.runtime.BoundedExecution;
 import io.tiko.runtime.CarriedUnit;
 import io.tiko.runtime.DetachedUnitFrame;
 import io.tiko.runtime.EventChainContext;
@@ -25,6 +27,7 @@ import io.tiko.runtime.TikoOptions;
 import io.tiko.runtime.Unchecked;
 import io.tiko.runtime.UnitCarrier;
 import io.tiko.runtime.UnitFrame;
+import java.lang.AutoCloseable;
 import java.lang.Boolean;
 import java.lang.Class;
 import java.lang.Exception;
@@ -269,6 +272,21 @@ public final class TikoContainerImpl_4ae99f55 implements Container, DetachedUnit
 
   private void __closeEventScope() {
     try {
+      List<Object> __toDestroy = new ArrayList<>(eventScoped.get().values());
+      for (int __i = __toDestroy.size() - 1; __i >= 0; __i--) {
+        Object __inst = __toDestroy.get(__i);
+        if (__inst instanceof AutoCloseable __ac) {
+          try {
+            __ac.close();
+          } catch (Throwable __t) {
+            try {
+              errorHandler.onError(new AutoCloseFailure(__ac.getClass(), __t));
+            } catch (Exception __inner) {
+              EventChainContext.logErrorHandlerFailure(__inner);
+            }
+          }
+        }
+      }
     } finally {
       eventScoped.get().clear();
       __unitFrameOpen.set(Boolean.FALSE);
@@ -369,6 +387,16 @@ public final class TikoContainerImpl_4ae99f55 implements Container, DetachedUnit
     if (publishLifecycleEvents) {
       this.options.closeTransports();
     }
+    // Phase 4: @PreDestroy on SINGLETON components, reverse-creation (LIFO) order. Thread-local bypass so they can call get(). Each hook is isolated so one failure does not skip the rest.
+    var __teardownErrors = new BoundedExecution.TeardownErrors(errorHandler, __startupFailure);
+    inShutdownThread.set(Boolean.TRUE);
+    try {
+      if (singletons.get("demo.Clock") instanceof AutoCloseable __factory_Producers_clock) {
+        BoundedExecution.run(() -> __factory_Producers_clock.close(), this.options.teardownTimeout(), __teardownErrors, __t -> new AutoCloseFailure(__factory_Producers_clock.getClass(), __t));
+      }
+    } finally {
+      inShutdownThread.remove();
+    }
     // Phase 5: shut down framework-owned event executor (#43); user-supplied executors are not touched
     if (this.ownsEventExecutor) {
       this.eventExecutor.shutdown();
@@ -381,6 +409,10 @@ public final class TikoContainerImpl_4ae99f55 implements Container, DetachedUnit
         Thread.currentThread().interrupt();
         this.eventExecutor.shutdownNow();
       }
+    }
+    if (__startupFailure == null) {
+      // Only the aggregator can finish cleanup of peer modules and the shared executor.
+      __teardownErrors.rethrowIfFailed(!publishLifecycleEvents);
     }
   }
 

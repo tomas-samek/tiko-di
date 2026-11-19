@@ -1586,7 +1586,7 @@ public final class ContainerGenerator {
         }
         boolean hasFactoryAutoCloseable = false;
         for (FactoryMethodModel f : context.getActiveFactoryMethods()) {
-            if (f.getScope() == scope && f.isAutoCloseable()) {
+            if (f.getScope() == scope && f.mayBeAutoCloseable()) {
                 hasFactoryAutoCloseable = true;
                 break;
             }
@@ -1636,7 +1636,8 @@ public final class ContainerGenerator {
             method.endControlFlow(); // try/catch
         }
 
-        // Catch-all for factory-produced AutoCloseable beans living in this scope. Components
+        // Catch-all for factory-produced beans that are AutoCloseable at run time, whatever type
+        // their producer declares (#845), living in this scope. Components
         // already handled by the cases above never reach this branch (if/else-if).
         if (hasFactoryAutoCloseable) {
             if (first) {
@@ -1812,7 +1813,7 @@ public final class ContainerGenerator {
         // get(), and an empty try/finally pair is dead weight in every hook-less module (#308).
         boolean hasDestroyWork = shutdownTargets.stream().anyMatch(target -> switch (target) {
             case ShutdownTarget.Component(var component) -> component.hasDestroyHook();
-            case ShutdownTarget.Factory(var factory) -> factory.isAutoCloseable();
+            case ShutdownTarget.Factory(var factory) -> factory.mayBeAutoCloseable();
         });
 
         if (hasDestroyWork) {
@@ -1834,7 +1835,7 @@ public final class ContainerGenerator {
                         }
                     }
                     case ShutdownTarget.Factory(var factory) -> {
-                        if (factory.isAutoCloseable()) {
+                        if (factory.mayBeAutoCloseable()) {
                             emitFactoryDestroy(method, factory);
                         }
                     }
@@ -2553,30 +2554,22 @@ public final class ContainerGenerator {
     }
 
     /**
-     * Emits {@code close()} for one factory-produced SINGLETON {@code AutoCloseable}, including
-     * the null guard, try/catch, and ErrorHandler routing. Covers third-party closeables
-     * (data sources, HTTP clients, Kafka producers) returned by {@code @Produces} methods.
+     * Emits {@code close()} for one factory-produced SINGLETON that is {@code AutoCloseable} at run
+     * time, including the instance check, try/catch, and ErrorHandler routing. Covers third-party
+     * closeables (data sources, HTTP clients, Kafka producers) returned by {@code @Produces}
+     * methods, also when the method declares a type that is not {@code AutoCloseable} (#845).
      */
     private void emitFactoryDestroy(MethodSpec.Builder method, FactoryMethodModel factory) {
         String factoryKey = factory.getComponentKey();
         String variableName = "__factory_" + factory.getFactoryIdentifier();
 
-        if (isNullable(factory)) {
-            // Its slot may hold the NULL_INSTANCE sentinel, which a cast would reject.
-            method.beginControlFlow(
-                    "if (singletons.get($S) instanceof $T $L)",
-                    factoryKey,
-                    ClassName.get(AutoCloseable.class),
-                    variableName);
-        } else {
-            method.addStatement(
-                    "$T $L = ($T) singletons.get($S)",
-                    ClassName.get(AutoCloseable.class),
-                    variableName,
-                    ClassName.get(AutoCloseable.class),
-                    factoryKey);
-            method.beginControlFlow("if ($L != null)", variableName);
-        }
+        // A run-time check: the value may be AutoCloseable although the declared type is not
+        // (#845), and a nullable slot may hold the NULL_INSTANCE sentinel.
+        method.beginControlFlow(
+                "if (singletons.get($S) instanceof $T $L)",
+                factoryKey,
+                ClassName.get(AutoCloseable.class),
+                variableName);
         // Bounded by options.teardownTimeout() (#106), same as component @PreDestroy; failures route
         // solely through ErrorHandler (#116).
         method.addStatement(

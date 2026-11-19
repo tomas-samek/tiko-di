@@ -24,6 +24,7 @@ public final class FactoryMethodModel {
     private final List<DependencyModel> dependencies;
     private final boolean isStatic;
     private final boolean autoCloseable;
+    private final boolean mayBeAutoCloseable;
     private final boolean requiresProxy;
 
     private FactoryMethodModel(Builder builder) {
@@ -38,6 +39,7 @@ public final class FactoryMethodModel {
         this.dependencies = List.copyOf(builder.dependencies);
         this.isStatic = builder.isStatic;
         this.autoCloseable = builder.autoCloseable;
+        this.mayBeAutoCloseable = builder.autoCloseable || builder.mayBeAutoCloseable;
         this.requiresProxy = builder.requiresProxy;
     }
 
@@ -100,6 +102,16 @@ public final class FactoryMethodModel {
      */
     public boolean isAutoCloseable() {
         return autoCloseable;
+    }
+
+    /**
+     * True when the produced value can be {@link AutoCloseable} at run time: its declared type is,
+     * or the declared type is not final, so the value may be a subtype that is (#845). A
+     * {@code DataSource} producer that returns a {@code HikariDataSource} is the usual case. The
+     * container's teardown closes such a value when it is {@code AutoCloseable}.
+     */
+    public boolean mayBeAutoCloseable() {
+        return mayBeAutoCloseable;
     }
 
     /**
@@ -166,6 +178,7 @@ public final class FactoryMethodModel {
         private List<DependencyModel> dependencies = new ArrayList<>();
         private boolean isStatic = false;
         private boolean autoCloseable = false;
+        private boolean mayBeAutoCloseable = false;
         private boolean requiresProxy = false;
 
         private Builder() {}
@@ -223,6 +236,12 @@ public final class FactoryMethodModel {
 
         public Builder isStatic(boolean isStatic) {
             this.isStatic = isStatic;
+            return this;
+        }
+
+        /** Whether the declared type is not final, so the value may be an {@link AutoCloseable} subtype. */
+        public Builder mayBeAutoCloseable(boolean mayBeAutoCloseable) {
+            this.mayBeAutoCloseable = mayBeAutoCloseable;
             return this;
         }
 
