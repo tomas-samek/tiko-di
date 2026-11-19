@@ -6,38 +6,58 @@ import io.javalin.http.ConflictResponse
 import io.javalin.http.Context
 import io.javalin.http.Handler
 import io.javalin.http.NotFoundResponse
-import io.tiko.Container
-import io.tiko.Provider
 import io.tiko.Scope
+import io.tiko.UnitOfWork
 import io.tiko.annotations.Component
+import io.tiko.annotations.EventHandler
+import io.tiko.annotations.PostConstruct
+import io.tiko.annotations.PreDestroy
+import io.tiko.events.ApplicationEndingEvent
 import io.tiko.examples.kotlin.outbox.OrderPlaced
 import io.tiko.examples.kotlin.outbox.OutboxRelay
 import java.util.UUID
 
+/**
+ * The orders HTTP API, owned by the container. The container builds it when it starts, and [start]
+ * binds the port then: a port already in use fails `Tiko.daemon(...)`. It takes the [OutboxRelay]
+ * only so that the relay runs from boot, and it stops on [ApplicationEndingEvent], before the
+ * container closes the relay.
+ */
 @Component(scope = Scope.SINGLETON)
 class OrdersHttpServer(
+    private val unitOfWork: UnitOfWork,
     private val orders: OrderStore,
     private val settings: Settings,
-    private val relay: Provider<OutboxRelay>,
-) : AutoCloseable {
+    @Suppress("UNUSED_PARAMETER") relay: OutboxRelay,
+) {
     @Volatile
     private var app: Javalin? = null
 
-    fun start(container: Container) {
-        // Start the relay after the order store has initialized the schema.
-        relay.get()
+    @PostConstruct
+    fun start() {
         val server = Javalin.create { config ->
-            config.routes.put("/orders/{id}", scoped(container) { ctx -> place(orders, ctx) })
-            config.routes.get("/orders/{id}", scoped(container) { ctx ->
+            config.routes.put("/orders/{id}", inUnit { ctx -> place(orders, ctx) })
+            config.routes.get("/orders/{id}", inUnit { ctx ->
                 ctx.json(orders.find(orderId(ctx)) ?: throw NotFoundResponse())
             })
-        }
-        app = server.start(settings.httpHost, settings.httpPort)
+        }.start(settings.httpHost, settings.httpPort)
+        app = server
         println("outbox-orders HTTP port " + server.port())
     }
 
-    override fun close() {
-        app?.stop()
+    @EventHandler
+    fun onApplicationEnding(@Suppress("UNUSED_PARAMETER") event: ApplicationEndingEvent) = stop()
+
+    @PreDestroy
+    fun stop() {
+        val running = app
+        app = null
+        running?.stop()
+    }
+
+    /** One unit of work per request. */
+    private fun inUnit(handle: (Context) -> Unit): Handler = Handler { ctx ->
+        unitOfWork.runInEventScope { handle(ctx) }
     }
 }
 
@@ -56,10 +76,6 @@ private fun orderId(ctx: Context): UUID = try {
     UUID.fromString(ctx.pathParam("id"))
 } catch (_: IllegalArgumentException) {
     throw BadRequestResponse("Order ID must be a UUID")
-}
-
-private fun scoped(container: Container, handle: (Context) -> Unit): Handler = Handler { ctx ->
-    container.runInEventScope(Runnable { handle(ctx) })
 }
 
 @JvmRecord

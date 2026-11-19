@@ -11,6 +11,11 @@ are Kotlin `@JvmRecord` data classes. Kafka ingress commits the business transac
 `@KafkaSource`, so a failure can reach the Kafka runner before it commits the offset. The orders bridge logs and skips
 results for missing orders or conflicting decisions so those messages cannot block later results.
 
+In orders the container starts everything: the database producer creates the schema,
+`OrdersHttpServer` binds its port and takes the relay, so the relay runs from boot, and `main` is
+`Tiko.daemon(...).awaitShutdown()`. The [HTTP cookbook](../../docs/cookbooks/http.md) explains the
+shape.
+
 ## Run with Docker Compose
 
 From this directory:
