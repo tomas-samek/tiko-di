@@ -351,7 +351,7 @@ concurrent child is an asynchronous hop, and ARCH-15's rule for one applies to i
 where a unit is open throws (ARCH-5).
 
 **The container's own coroutines (#678).** A coroutine the container launches, a `suspend`
-`@EventHandler` (#677, through `SuspendHandlers.launch`, which generated registry code calls),
+`@EventHandler` (#677, through `SuspendHandlers`, which generated registry code calls),
 runs in the container's scope (`ContainerCoroutines`) in a unit of its own, and
 is a pending delivery until it has completed and that unit has closed. `close()` waits for it as
 for any delivery. What still runs after the wait is cancelled before the container stops

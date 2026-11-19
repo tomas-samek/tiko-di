@@ -291,14 +291,14 @@ class KspSuspendHandlerTest {
 
         assertThat(registry)
                 .hasValueSatisfying(source -> assertThat(source)
-                        .contains("SuspendHandlers.launch(container, __asyncWrapper, true, "
+                        .contains("SuspendHandlers.launch(container, __asyncWrapper, "
                                 + "__continuation -> container.getHandlers().onPing(event, __asyncWrapper, __continuation), "
                                 + "null, __err, HANDLER_INFO_")
                         .contains(
-                                "SuspendHandlers.<Stepped>launch(container, __asyncWrapper, true, "
+                                "SuspendHandlers.<Stepped>launch(container, __asyncWrapper, "
                                         + "__continuation -> container.getHandlers().onStep(event, __continuation), __result -> {")
                         .as("a handler of a framework lifecycle event runs without a unit of work")
-                        .contains("SuspendHandlers.launch(container, __asyncWrapper, false, "
+                        .contains("SuspendHandlers.launchWithoutUnit(container, __asyncWrapper, "
                                 + "__continuation -> __handler.onStarted(event, __continuation), null"));
     }
 

@@ -37,6 +37,9 @@ running when `close()` starts). Roadmap:
   Kotlin program with KSP and runs its scenarios through a new helper in the shared KSP test
   support, `KspProgram.run`. The program boots its own container, so it can set an
   `ErrorHandler` and a shutdown timeout.
+- **The launcher is two functions, not one with an `inUnit` flag**: `SuspendHandlers.launch` and
+  `SuspendHandlers.launchWithoutUnit`, each with seven parameters. Generated code picks the one
+  for a lifecycle-event handler by name.
 - **The example's `Notifier.send` is a `suspend fun`**, which is what gives the handler a reason
   to suspend.
 
