@@ -16,11 +16,17 @@ One HTTP service backed by an in-memory H2 database:
 
 | Verb | Path | Behaviour |
 |---|---|---|
-| `POST` | `/notes` | Body `{"text":"…"}`. Inserts a row, publishes `NoteCreated`, returns `201` + the stored note. |
+| `POST` | `/notes` | Body `{"text":"…"}`. Inserts a row, publishes `NoteCreated`, returns `201` + the stored note and the request's `X-Request-Id`. |
 | `GET`  | `/notes/{id}` | Returns the row, or `404`. |
 
-A `NoteAuditor` `@EventHandler(NoteCreated)` increments a counter every time
-the bus delivers — the integration test asserts on it to prove the chain.
+Every request runs in a unit of work of its own, so it gets its own EVENT-scoped
+`RequestId`. A `NoteAuditor` `@EventHandler(NoteCreated)` records the request id of
+every note the bus delivers. It runs inside the request's unit, so it reads the id
+the route read; the integration test asserts on that to prove the chain.
+
+The container owns the server. It builds `HttpServer` when it starts, and the server
+binds its port then: with the port already in use, `main` fails and the process
+exits. Closing the container stops the server first.
 
 ## Run it
 
@@ -44,13 +50,14 @@ the skill changes, the corresponding file here changes too, and vice versa.
 | File | Skill recipe |
 |---|---|
 | [`AppConfig.java`](src/main/java/io/tiko/examples/quickstart/AppConfig.java) + [`ServerConfig.java`](src/main/java/io/tiko/examples/quickstart/ServerConfig.java) + [`DbConfig.java`](src/main/java/io/tiko/examples/quickstart/DbConfig.java) | Typed `@Configuration` records (replaces `@Value` magic binding) |
-| [`DataSourceFactory.java`](src/main/java/io/tiko/examples/quickstart/DataSourceFactory.java) | HikariCP `DataSource` via `@Produces` |
-| [`SchemaInitializer.java`](src/main/java/io/tiko/examples/quickstart/SchemaInitializer.java) | Flyway-style migration via `@EventHandler(ApplicationStartedEvent)` |
+| [`DataSourceFactory.java`](src/main/java/io/tiko/examples/quickstart/DataSourceFactory.java) | HikariCP `DataSource` via `@Produces`; the producer creates the schema before it returns the pool (Flyway-style migration) |
 | [`NoteRepository.java`](src/main/java/io/tiko/examples/quickstart/NoteRepository.java) | Raw JDBC against an injected `DataSource` — no wrapper |
-| [`JavalinFactory.java`](src/main/java/io/tiko/examples/quickstart/JavalinFactory.java) | HTTP layer via `@Produces` (replaces `@RestController`); route groups register inside `Javalin.create`; `@PreDestroy` lifecycle |
-| [`NoteRoutes.java`](src/main/java/io/tiko/examples/quickstart/NoteRoutes.java) | Route group as a `@Component`: paths in `register(RoutesConfig)`, plain handler methods, no annotation-driven dispatch |
+| [`HttpServer.java`](src/main/java/io/tiko/examples/quickstart/HttpServer.java) | HTTP server the container owns: route groups register inside `Javalin.create`; starts in `@PostConstruct`, stops on `ApplicationEndingEvent` |
+| [`NoteRoutes.java`](src/main/java/io/tiko/examples/quickstart/NoteRoutes.java) | Route group as a `@Component`: paths in `register(RoutesConfig)`, plain handler methods, each in a unit of work of its own, no annotation-driven dispatch |
+| [`RequestUnits.java`](src/main/java/io/tiko/examples/quickstart/RequestUnits.java) | One unit of work per request through the injected `UnitOfWork` |
+| [`RequestId.java`](src/main/java/io/tiko/examples/quickstart/RequestId.java) + [`RandomRequestId.java`](src/main/java/io/tiko/examples/quickstart/RandomRequestId.java) | An EVENT-scoped component, one instance per request |
 | [`NoteAuditor.java`](src/main/java/io/tiko/examples/quickstart/NoteAuditor.java) | Event-driven workflow via `@EventHandler` (replaces `@TransactionalEventListener` / `@Async`) |
-| [`Main.java`](src/main/java/io/tiko/examples/quickstart/Main.java) | Bootstrap shape: `Tiko.create(ConfigSources.classpath(...))` |
+| [`Main.java`](src/main/java/io/tiko/examples/quickstart/Main.java) | Bootstrap shape: `Tiko.daemon(ConfigSources.classpath(...)).awaitShutdown()` |
 
 ## What this module is not
 

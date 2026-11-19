@@ -31,10 +31,12 @@ class TakenPortIT {
 
             assertThat(outlivingClose).as("threads the container started").isEmpty();
             // A closed pool's threads end shortly after close() returns, so the check waits a little.
-            await().atMost(Duration.ofSeconds(5))
+            await().pollInSameThread()
+                    .atMost(Duration.ofSeconds(5))
                     .untilAsserted(() -> assertThat(Thread.getAllStackTraces().keySet())
                             .as("threads started by the failed boot, Javalin's and Jetty's included")
                             .filteredOn(thread -> !before.contains(thread) && thread.isAlive())
+                            .extracting(Thread::getName)
                             .isEmpty());
         }
     }
