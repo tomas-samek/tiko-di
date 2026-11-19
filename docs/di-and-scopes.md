@@ -220,7 +220,7 @@ The generated wiring lives in the package `io.tiko.generated` and holds a compon
 
 ## Lifecycle hooks
 
-The recommended cleanup pattern is `AutoCloseable`. A component (or `@Produces`-returned type) that implements `AutoCloseable` and declares no explicit `@PreDestroy` gets `close()` called automatically at scope teardown — no annotation required. This lets `@Produces` factories return third-party closeables (data sources, HTTP clients, Kafka producers) without writing a wrapper.
+The recommended cleanup pattern is `AutoCloseable`. A component that implements `AutoCloseable` and declares no explicit `@PreDestroy` gets `close()` called automatically at scope teardown — no annotation required. So does a SINGLETON or EVENT value a `@Produces` method returned, when the value is `AutoCloseable`, whatever type the method declares: a method declared as `DataSource` that returns a `HikariDataSource` gets its pool closed. This lets `@Produces` factories return third-party closeables (data sources, HTTP clients, Kafka producers) without writing a wrapper. That holds after a failed boot too, for the values produced before the failure. The container does not track PROTOTYPE values, so it closes none of them.
 
 ```java
 @Component(scope = Scope.SINGLETON)

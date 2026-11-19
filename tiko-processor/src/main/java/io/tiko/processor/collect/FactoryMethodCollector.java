@@ -4,6 +4,7 @@ import io.tiko.Scope;
 import io.tiko.annotations.Component;
 import io.tiko.annotations.Produces;
 import io.tiko.processor.core.ProcessingEnv;
+import io.tiko.processor.core.model.ClassDecl;
 import io.tiko.processor.core.model.DeclKind;
 import io.tiko.processor.core.model.MethodDecl;
 import io.tiko.processor.model.FactoryMethodModel;
@@ -78,6 +79,10 @@ public final class FactoryMethodCollector {
         // covering the common case of @Produces returning third-party types (HikariDataSource,
         // HttpClient, KafkaProducer, etc.).
         boolean factoryAutoCloseable = typeUtil.isAssignableTo(returnType, "java.lang.AutoCloseable");
+        // The value itself may be AutoCloseable when the declared type is not (#845): a producer
+        // declared as DataSource returns a HikariDataSource. Only a final declared type rules it out.
+        boolean declaredTypeIsFinal =
+                TypeRefs.declared(returnType).filter(ClassDecl::isFinal).isPresent();
 
         // Auto-proxy: when an EVENT-scoped factory produces an interface, a longer-lived
         // consumer (SINGLETON injecting an EVENT-scoped Connection, for example) needs a proxy
@@ -101,6 +106,7 @@ public final class FactoryMethodCollector {
                 .profiles(annotation.strings("profiles"))
                 .dependencies(dependencies.get())
                 .autoCloseable(factoryAutoCloseable)
+                .mayBeAutoCloseable(!declaredTypeIsFinal)
                 .requiresProxy(requiresProxy)
                 .build();
     }
