@@ -178,22 +178,29 @@ public final class KotlinConstructRules {
                 "Drop the receiver: declare a regular fun that takes the receiver as a parameter"));
     }
 
+    /** The class a generated transport bootstrap calls to run a {@code suspend} bridge; it is in {@code tiko-coroutines}. */
+    public static final String SUSPEND_BRIDGES_TYPE = "io.tiko.coroutines.SuspendBridges";
+
+    private static final String ADD_TIKO_COROUTINES =
+            "Add the dependency io.github.tomas-samek:tiko-coroutines, or drop the suspend modifier";
+
     /**
-     * A {@code suspend} function that coroutine support (K2) will accept: until then it is
-     * rejected with a pointer to K2.
+     * What a {@code suspend} source bridge (#681) needs: {@code tiko-coroutines}, which runs it as
+     * a coroutine on the consumer thread, in a unit of work of its own for every record.
      *
-     * @param plural what K2 brings, as in "handlers"
+     * @param coroutinesOnClasspath whether {@link #SUSPEND_BRIDGES_TYPE} resolves
      */
-    public static Optional<Violation> suspendUntilK2(MethodDecl method, String annotationFqn, String plural) {
-        if (!method.isSuspend()) {
+    public static Optional<Violation> suspendSource(
+            MethodDecl method, String annotationFqn, boolean coroutinesOnClasspath) {
+        if (!method.isSuspend() || coroutinesOnClasspath) {
             return Optional.empty();
         }
         return Optional.of(new Violation(
                 method.location(),
-                "suspend " + label(annotationFqn) + " is not supported yet: '" + qualifiedMethodName(method)
-                        + "' is a suspend fun, and suspend " + plural + " arrive with Tiko's coroutine support"
-                        + " (K2).",
-                "Drop the suspend modifier: make it a regular fun, or wait for coroutine support (K2)"));
+                "suspend " + label(annotationFqn) + " '" + qualifiedMethodName(method) + "' runs as a coroutine, and"
+                        + " tiko-coroutines is not on the classpath: the generated transport bootstrap calls "
+                        + SUSPEND_BRIDGES_TYPE + ".",
+                ADD_TIKO_COROUTINES));
     }
 
     /** The class generated code calls to run a {@code suspend} handler; it is in {@code tiko-coroutines}. */
@@ -227,7 +234,7 @@ public final class KotlinConstructRules {
                     method.location(),
                     "suspend @EventHandler " + name + " runs as a coroutine, and tiko-coroutines is not on the"
                             + " classpath: the generated event registry calls " + SUSPEND_HANDLERS_TYPE + ".",
-                    "Add the dependency io.github.tomas-samek:tiko-coroutines, or drop the suspend modifier"));
+                    ADD_TIKO_COROUTINES));
         }
         return Optional.empty();
     }

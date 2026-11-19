@@ -148,8 +148,10 @@ public final class KafkaTransportBootstrapGenerator {
                 "$T<$T> list = new $T<>()", java.util.List.class, KAFKA_SOURCE_DESCRIPTOR, java.util.ArrayList.class);
         for (int i = 0; i < sources.size(); i++) {
             KafkaSourceDescriptor s = sources.get(i);
+            // A suspend bridge opens the unit of each record itself (#681), which the runner is
+            // told by one more argument; any other source keeps the constructor it always had.
             b.addStatement(
-                    "list.add(new $T($S, $S, $S, $T.class, $T.class, $L, this::source$L))",
+                    "list.add(new $T($S, $S, $S, $T.class, $T.class, $L, this::source$L$L))",
                     KAFKA_SOURCE_DESCRIPTOR,
                     s.topic(),
                     s.consumerGroup(),
@@ -157,7 +159,8 @@ public final class KafkaTransportBootstrapGenerator {
                     s.payloadType().javaPoet(),
                     s.serializerClass().javaPoet(),
                     s.wantsKafkaContext(),
-                    i);
+                    i,
+                    s.method().isSuspend() ? ", true" : "");
         }
         b.addStatement("return list");
         return b.build();
@@ -206,6 +209,9 @@ public final class KafkaTransportBootstrapGenerator {
         return b.build();
     }
 
+    /** In {@code tiko-coroutines}; referenced only by an application that has a {@code suspend} source (#681). */
+    private static final ClassName SUSPEND_BRIDGES = ClassName.get("io.tiko.coroutines", "SuspendBridges");
+
     private MethodSpec buildSourceDispatcher(KafkaSourceDescriptor s, int index) {
         ClassName bridgeClass = s.enclosingClass().className();
         TypeName payloadName = s.payloadType().javaPoet();
@@ -217,6 +223,21 @@ public final class KafkaTransportBootstrapGenerator {
                 .addParameter(Object.class, "payload")
                 .addParameter(ClassName.get("io.tiko.kafka", "KafkaContext"), "ctx");
 
+        if (s.method().isSuspend()) {
+            // A Kotlin suspend bridge (#681): tiko-coroutines runs it as a coroutine on this,
+            // the consumer thread, in a unit of work of its own, and publishes what it returns
+            // inside that unit. A suspend function is a function of its Continuation on the JVM,
+            // so the call is a Java lambda that passes the continuation on.
+            b.addStatement(
+                    "$T.run(container, __continuation -> container.get($T.class).$L(($T) payload$L, __continuation))",
+                    SUSPEND_BRIDGES,
+                    bridgeClass,
+                    s.method().jvmName(),
+                    payloadName,
+                    s.wantsKafkaContext() ? ", ctx" : "");
+            b.addStatement("return null");
+            return b.build();
+        }
         b.addStatement("$T bridge = container.get($T.class)", bridgeClass, bridgeClass);
         if (s.wantsKafkaContext()) {
             b.addStatement("return bridge.$L(($T) payload, ctx)", s.method().jvmName(), payloadName);

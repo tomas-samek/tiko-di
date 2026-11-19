@@ -44,7 +44,7 @@ public final class KotlinBridgeValidator {
                 if (rejected.contains(method)) {
                     continue;
                 }
-                firstViolation(method, annotation).ifPresent(violation -> {
+                firstViolation(method, annotation, env).ifPresent(violation -> {
                     env.diagnostics().error(violation.location(), violation.message());
                     rejected.add(method);
                 });
@@ -53,11 +53,16 @@ public final class KotlinBridgeValidator {
         return Set.copyOf(rejected);
     }
 
-    private static Optional<Violation> firstViolation(MethodDecl method, String annotation) {
+    /** A suspend source runs through {@code tiko-coroutines} (#681), which the application must have. */
+    private static boolean coroutinesOnClasspath(ProcessingEnv env) {
+        return env.types().findClass(KotlinConstructRules.SUSPEND_BRIDGES_TYPE).isPresent();
+    }
+
+    private static Optional<Violation> firstViolation(MethodDecl method, String annotation, ProcessingEnv env) {
         return KotlinConstructRules.needsComponentInstance(method, annotation)
                 .or(() -> KotlinConstructRules.extension(method, annotation, BOOTSTRAP))
                 .or(() -> annotation.equals(KAFKA_SOURCE)
-                        ? KotlinConstructRules.suspendUntilK2(method, annotation, "bridges")
+                        ? KotlinConstructRules.suspendSource(method, annotation, coroutinesOnClasspath(env))
                         : KotlinConstructRules.suspendCalledDirectly(method, annotation, BOOTSTRAP))
                 .or(() -> KotlinConstructRules.valueClassInSignature(method, annotation, BOOTSTRAP))
                 .or(() -> KotlinConstructRules.uncallableJvmName(method, annotation, BOOTSTRAP));

@@ -50,6 +50,19 @@
             <artifactId>tiko-processor</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Test-only: a suspend @KafkaSource bridge is compiled with KSP in the test and run
+             against FakeKafkaBroker (#681). Neither module depends on this one. -->
+        <dependency>
+            <groupId>io.github.tomas-samek</groupId>
+            <artifactId>tiko-kafka</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.github.tomas-samek</groupId>
+            <artifactId>tiko-kafka-processor</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.jetbrains.kotlinx</groupId>
             <artifactId>kotlinx-coroutines-test</artifactId>
