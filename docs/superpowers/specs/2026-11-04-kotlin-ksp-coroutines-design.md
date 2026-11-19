@@ -182,7 +182,10 @@ Owner's decision: Kotlin needs this, as a follow-up step after K1. In K1 the doc
 
 5. **The resiliency features carry over.** `@EventHandler` timeouts (#107) and retries with
    backoff (#108) work on suspend handlers, with suspend-native waiting: cancellation-based
-   timeout and non-blocking backoff.
+   timeout and non-blocking backoff. A timeout therefore takes effect at the handler's next
+   suspension point and does not interrupt a thread the handler blocks. Decided on 2026-11-19:
+   a retry that waits out its backoff is dropped when `close()` begins, as an async handler's
+   is, and a handler keeps its place under `queueCapacity` through its backoffs.
 
 6. **Ktor and Kafka.**
    - **Ktor:** a cookbook page plus a numbered Kotlin example that opens one unit per request.
