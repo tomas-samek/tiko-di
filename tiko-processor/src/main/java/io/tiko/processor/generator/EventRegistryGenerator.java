@@ -37,6 +37,9 @@ public final class EventRegistryGenerator {
     private static final String RUNTIME_PACKAGE = "io.tiko.runtime";
     private static final ClassName CHAIN_CONTEXT = ClassName.get(RUNTIME_PACKAGE, "EventChainContext");
 
+    private static final ClassName ERROR_HANDLER = ClassName.get("io.tiko", "ErrorHandler");
+    private static final String DECLARE_ERROR_HANDLER = "$T __err = container.getErrorHandler()";
+
     /** In {@code tiko-coroutines}; referenced only by a module that has a {@code suspend} handler (#677). */
     private static final ClassName SUSPEND_HANDLERS = ClassName.get("io.tiko.coroutines", "SuspendHandlers");
 
@@ -262,20 +265,8 @@ public final class EventRegistryGenerator {
      */
     private void emitSuspendDispatch(
             MethodSpec.Builder method, EventHandlerModel handler, int index, DispatchPlan plan) {
-        ClassName errorHandler = ClassName.get("io.tiko", "ErrorHandler");
-        method.addStatement("$T __err = container.getErrorHandler()", errorHandler);
-        String target = "container." + plan.getterName() + "()";
-        if (!plan.detachedUnit()) {
-            method.addStatement("final $T __handler", plan.declaringClass());
-            method.beginControlFlow("try");
-            method.addStatement("__handler = container.$L()", plan.getterName());
-            method.nextControlFlow("catch ($T __t)", Exception.class);
-            emitRouteToErrorHandler(method, "__err", index);
-            method.addStatement("return");
-            method.endControlFlow();
-            target = "__handler";
-        }
-        method.addStatement("final $T<?> __asyncWrapper = __wrapper", Event.class);
+        emitErrorHandlerAndWrapper(method, plan, index);
+        String target = plan.detachedUnit() ? "container." + plan.getterName() + "()" : "__handler";
 
         String call = target + "." + handler.getMethod().jvmName()
                 + (handler.hasEventWrapper() ? "(event, __asyncWrapper, __continuation)" : "(event, __continuation)");
@@ -304,24 +295,17 @@ public final class EventRegistryGenerator {
     }
 
     /**
-     * Emits the async dispatch body: submit the handler invocation to the container's event
-     * executor and route exceptional completion to the {@link io.tiko.ErrorHandler}. A detached
-     * unit ({@code @EventHandler(async = true)} on a non-lifecycle event) wraps the invocation in
-     * {@code runInDetachedEventScope} so it owns a fresh EVENT unit (#220). Retry (#108) and
-     * timeout (#107) variants time-box each attempt; the plain path routes through
-     * {@code runAsyncWithTimeout} with a zero budget so all three share overflow handling and
-     * Error-vs-Exception routing (#111).
+     * Emits what a dispatch off the publisher's thread starts with, async or {@code suspend}: the
+     * {@code ErrorHandler}, the handler when it is resolved on the publishing thread, and the
+     * wrapper under the name the dispatched body captures it by.
+     *
+     * <p>A handler that runs in a unit of its own is resolved inside that unit. Any other, a
+     * handler of a framework lifecycle event, is resolved here: a component that cannot be
+     * resolved is a failed delivery, routed like a failure inside the handler (#731).
      */
-    private void emitAsyncDispatch(MethodSpec.Builder method, EventHandlerModel handler, int index, DispatchPlan plan) {
-        ClassName errorHandler = ClassName.get("io.tiko", "ErrorHandler");
-        ClassName executorServiceClass = ClassName.get(ExecutorService.class);
-        TypeRef returnType = handler.getMethod().returnType();
-
-        method.addStatement("$T __exec = container.getEventExecutor()", executorServiceClass);
-        method.addStatement("$T __err = container.getErrorHandler()", errorHandler);
+    private static void emitErrorHandlerAndWrapper(MethodSpec.Builder method, DispatchPlan plan, int index) {
+        method.addStatement(DECLARE_ERROR_HANDLER, ERROR_HANDLER);
         if (!plan.detachedUnit()) {
-            // The handler is resolved here, on the publishing thread. A component that cannot be
-            // resolved is a failed delivery: route it like a failure inside the handler (#731).
             method.addStatement("final $T __handler", plan.declaringClass());
             method.beginControlFlow("try");
             method.addStatement("__handler = container.$L()", plan.getterName());
@@ -331,6 +315,23 @@ public final class EventRegistryGenerator {
             method.endControlFlow();
         }
         method.addStatement("final $T<?> __asyncWrapper = __wrapper", Event.class);
+    }
+
+    /**
+     * Emits the async dispatch body: submit the handler invocation to the container's event
+     * executor and route exceptional completion to the {@link io.tiko.ErrorHandler}. A detached
+     * unit ({@code @EventHandler(async = true)} on a non-lifecycle event) wraps the invocation in
+     * {@code runInDetachedEventScope} so it owns a fresh EVENT unit (#220). Retry (#108) and
+     * timeout (#107) variants time-box each attempt; the plain path routes through
+     * {@code runAsyncWithTimeout} with a zero budget so all three share overflow handling and
+     * Error-vs-Exception routing (#111).
+     */
+    private void emitAsyncDispatch(MethodSpec.Builder method, EventHandlerModel handler, int index, DispatchPlan plan) {
+        ClassName executorServiceClass = ClassName.get(ExecutorService.class);
+        TypeRef returnType = handler.getMethod().returnType();
+
+        method.addStatement("$T __exec = container.getEventExecutor()", executorServiceClass);
+        emitErrorHandlerAndWrapper(method, plan, index);
 
         // Build the runAsync body
         CodeBlock.Builder runBody = CodeBlock.builder();
@@ -421,7 +422,6 @@ public final class EventRegistryGenerator {
      * ErrorHandler that itself throws.
      */
     private void emitSyncDispatch(MethodSpec.Builder method, EventHandlerModel handler, int index, DispatchPlan plan) {
-        ClassName errorHandler = ClassName.get("io.tiko", "ErrorHandler");
         TypeRef returnType = handler.getMethod().returnType();
 
         method.beginControlFlow("try");
@@ -437,7 +437,7 @@ public final class EventRegistryGenerator {
             method.addStatement("$L", plan.invocation());
         }
         method.nextControlFlow("catch ($T __t)", Exception.class);
-        method.addStatement("$T __err = container.getErrorHandler()", errorHandler);
+        method.addStatement(DECLARE_ERROR_HANDLER, ERROR_HANDLER);
         emitRouteToErrorHandler(method, "__err", index);
         method.endControlFlow();
     }
