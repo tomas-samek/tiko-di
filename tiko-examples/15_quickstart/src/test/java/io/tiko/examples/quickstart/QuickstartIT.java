@@ -49,6 +49,8 @@ class QuickstartIT {
 
     @AfterEach
     void tearDown() throws SQLException {
+        // The client's idle keep-alive connections would hold the server's graceful stop for about a second.
+        if (client != null) client.close();
         if (container != null) container.shutdown();
         try (Connection c = DriverManager.getConnection(JDBC_URL, "sa", "");
                 Statement st = c.createStatement()) {

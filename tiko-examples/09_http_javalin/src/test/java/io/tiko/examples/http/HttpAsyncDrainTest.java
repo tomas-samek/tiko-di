@@ -44,8 +44,12 @@ class HttpAsyncDrainTest {
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(JSON.writeValueAsString(new CreateTicketRequest("drain"))))
                 .build();
-        HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
-        assertThat(response.statusCode()).isEqualTo(201);
+        // The client closes its connection first: an idle keep-alive connection would add about a
+        // second to the server's graceful stop, which is not what this test times.
+        try (var client = HttpClient.newHttpClient()) {
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            assertThat(response.statusCode()).isEqualTo(201);
+        }
 
         long startNanos = System.nanoTime();
         container.close();
@@ -75,8 +79,12 @@ class HttpAsyncDrainTest {
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(JSON.writeValueAsString(new CreateTicketRequest("force"))))
                 .build();
-        HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
-        assertThat(response.statusCode()).isEqualTo(201);
+        // The client closes its connection first: an idle keep-alive connection would add about a
+        // second to the server's graceful stop, which is not what this test times.
+        try (var client = HttpClient.newHttpClient()) {
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            assertThat(response.statusCode()).isEqualTo(201);
+        }
 
         long startNanos = System.nanoTime();
         container.close();
