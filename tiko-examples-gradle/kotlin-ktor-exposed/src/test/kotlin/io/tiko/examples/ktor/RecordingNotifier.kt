@@ -12,7 +12,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 class RecordingNotifier : Notifier {
     val sent = CopyOnWriteArrayList<String>()
 
-    override fun send(message: String) {
+    override suspend fun send(message: String) {
         sent.add(message)
     }
 }

@@ -51,8 +51,10 @@ curl localhost:8080/tickets
 ./gradlew run --args=--smoke      # opens and lists one ticket over HTTP, then exits
 ```
 
-The pattern is written up in the [Ktor cookbook](../docs/cookbooks/ktor.md). Event handlers in
-this example are regular functions; the routes are where the suspending code is.
+- `TicketNotifications.onOpened` is a `suspend` `@EventHandler`: Tiko runs it as a coroutine of
+  the container, off the request, and `close()` waits for it.
+
+The pattern is written up in the [Ktor cookbook](../docs/cookbooks/ktor.md).
 
 ## kotlin-kafka-consumer &nbsp;<sub>[`kotlin-kafka-consumer/`](./kotlin-kafka-consumer)</sub>
 
