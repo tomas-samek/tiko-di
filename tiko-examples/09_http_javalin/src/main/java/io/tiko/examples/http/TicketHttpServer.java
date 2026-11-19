@@ -20,6 +20,12 @@ import io.tiko.events.ApplicationEndingEvent;
 @Component(scope = Scope.SINGLETON)
 public class TicketHttpServer {
 
+    /**
+     * How long {@code stop()} lets a request in flight finish and get its response. Without it,
+     * Javalin 7.2.3 lets the handler run to its end but closes the connection before the response.
+     */
+    private static final long STOP_TIMEOUT_MS = 5_000;
+
     private final HttpSettings settings;
     private final TicketHttpRoutes tickets;
     private volatile Javalin app;
@@ -32,7 +38,11 @@ public class TicketHttpServer {
 
     @PostConstruct
     public void start() {
-        app = Javalin.create(cfg -> tickets.register(cfg.routes)).start(settings.port());
+        app = Javalin.create(cfg -> {
+                    cfg.jetty.modifyServer(server -> server.setStopTimeout(STOP_TIMEOUT_MS));
+                    tickets.register(cfg.routes);
+                })
+                .start(settings.port());
     }
 
     @EventHandler

@@ -27,6 +27,12 @@ import java.util.UUID;
  */
 @Component(scope = Scope.SINGLETON)
 public class OrdersHttpServer {
+    /**
+     * How long {@code stop()} lets a request in flight finish and get its response. Without it,
+     * Javalin 7.2.3 lets the handler run to its end but closes the connection before the response.
+     */
+    private static final long STOP_TIMEOUT_MS = 5_000;
+
     private final UnitOfWork unitOfWork;
     private final OrderStore orders;
     private final Settings settings;
@@ -43,6 +49,7 @@ public class OrdersHttpServer {
     @PostConstruct
     public void start() {
         app = Javalin.create(config -> {
+                    config.jetty.modifyServer(server -> server.setStopTimeout(STOP_TIMEOUT_MS));
                     config.routes.put("/orders/{id}", inUnit(this::place));
                     config.routes.get(
                             "/orders/{id}",
