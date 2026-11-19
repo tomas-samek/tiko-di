@@ -31,6 +31,13 @@ public object SuspendHandlers {
      * - What the handler, or [onSuccess], throws goes to [errorHandler] as an `EventHandlerError`.
      * - Once the container has begun to close, the delivery is dropped, with the `WARNING` every
      *   delivery dropped at shutdown gets.
+     * - With as many `suspend` handlers in flight as `TikoOptions.queueCapacity` allows, the
+     *   container's `OverflowPolicy` decides (#679): `CALLER_RUNS` starts the handler on the calling
+     *   thread, which runs it up to its first suspension; `BLOCK` holds the calling thread until one
+     *   completes; `DROP` logs a `WARNING`; `ROUTE_TO_DLQ` gives [errorHandler] an
+     *   `EventDispatchRejected`.
+     *
+     * @throws io.tiko.EventQueueOverflowException at that limit under `OverflowPolicy.THROW`
      *
      * @param handler the call of the handler method; generated Java passes a lambda that takes
      *   the continuation, which is what a `suspend () -> T` is on the JVM
@@ -46,8 +53,9 @@ public object SuspendHandlers {
         event: Any,
     ) {
         val reporter = Reporter(errorHandler, info, event)
-        deliver(container, event, handler, onSuccess, reporter) { coroutines, onFailure, delivery ->
-            coroutines.launchInUnit({ (container as UnitCarrier).openCarriedUnit(origin) }, onFailure, delivery)
+        deliver(container, event, handler, onSuccess, reporter) { coroutines, start, delivery ->
+            val openUnit = { (container as UnitCarrier).openCarriedUnit(origin) }
+            coroutines.launchInUnit(openUnit, reporter::report, start, delivery)
         }
     }
 
@@ -66,8 +74,8 @@ public object SuspendHandlers {
         event: Any,
     ) {
         val reporter = Reporter(errorHandler, info, event)
-        deliver(container, event, handler, onSuccess, reporter) { coroutines, onFailure, delivery ->
-            coroutines.launchWithoutUnit(origin, onFailure, delivery)
+        deliver(container, event, handler, onSuccess, reporter) { coroutines, start, delivery ->
+            coroutines.launchWithoutUnit(origin, reporter::report, start, delivery)
         }
     }
 
@@ -75,6 +83,20 @@ public object SuspendHandlers {
     private class Reporter(val errorHandler: ErrorHandler, val info: EventHandlerInfo, val event: Any) {
         fun report(failure: Throwable) {
             EventChainContext.routeHandlerFailure(failure, errorHandler, info, event)
+        }
+
+        /** The event met the limit of handlers in flight (#679), or the container is closing. */
+        fun notDelivered(admission: ContainerCoroutines.Admission) {
+            when (admission) {
+                ContainerCoroutines.Admission.DEAD_LETTER -> EventChainContext.routeDispatchRejected(event, errorHandler)
+                ContainerCoroutines.Admission.DROPPED ->
+                    EventChainContext.logDroppedAtTheLimit(event, "the overflow policy is DROP.")
+                ContainerCoroutines.Admission.INTERRUPTED -> EventChainContext.logDroppedAtTheLimit(
+                    event,
+                    "its publisher was interrupted while it waited for a place (overflow policy = BLOCK).",
+                )
+                else -> EventChainContext.logDroppedDuringShutdown(event)
+            }
         }
     }
 
@@ -84,14 +106,20 @@ public object SuspendHandlers {
         handler: suspend () -> T,
         onSuccess: Consumer<T>?,
         reporter: Reporter,
-        start: (ContainerCoroutines, (Throwable) -> Unit, suspend CoroutineScope.() -> Unit) -> Job,
+        launch: (ContainerCoroutines, ContainerCoroutines.Start, suspend CoroutineScope.() -> Unit) -> Job,
     ) {
         val coroutines = ContainerCoroutines.of(container)
         if (coroutines == null) {
             EventChainContext.logDroppedDuringShutdown(event)
             return
         }
-        val job = start(coroutines, reporter::report) {
+        val admission = coroutines.admit()
+        val start = admission.start
+        if (start == null) {
+            reporter.notDelivered(admission)
+            return
+        }
+        val job = launch(coroutines, start) {
             val result = handler()
             onSuccess?.accept(result)
         }

@@ -88,17 +88,17 @@ public final class EventChainContext {
 
     /**
      * Records an event that was not delivered to a {@code suspend} handler because as many of them
-     * were in flight as {@code queueCapacity} allows and the overflow policy is {@code DROP} (#679).
-     * For {@code tiko-coroutines}.
+     * were in flight as {@code queueCapacity} allows (#679). For {@code tiko-coroutines}.
      *
      * @param event the event that was dropped
+     * @param why what made it a drop, ending the sentence: the policy, or an interrupted wait
      */
-    public static void logDroppedAtTheLimit(Object event) {
+    public static void logDroppedAtTheLimit(Object event, String why) {
         String type = event == null ? "null" : event.getClass().getName();
         LoggerHolder.LOG.log(
                 System.Logger.Level.WARNING,
-                "Event of type " + type + " was dropped: the limit of suspend handlers in flight is reached "
-                        + "(overflow policy = DROP).");
+                "Event of type " + type + " was dropped: the limit of suspend handlers in flight is reached and "
+                        + why);
     }
 
     /**
