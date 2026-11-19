@@ -19,8 +19,9 @@ data class Settings(
 
 @Component(scope = Scope.SINGLETON)
 class Resources {
+    /** The database, with its schema: everything that takes it, the relay included, sees the tables. */
     @Produces(scope = Scope.SINGLETON)
-    fun database(settings: Settings): DataSource = Database.open(settings.dbUrl)
+    fun database(settings: Settings): DataSource = Database.open(settings.dbUrl).also(OrderStore::createSchema)
 
     @Produces(scope = Scope.SINGLETON)
     fun relay(database: DataSource, settings: Settings): OutboxRelay = OutboxRelay(database, settings.kafkaBootstrap)

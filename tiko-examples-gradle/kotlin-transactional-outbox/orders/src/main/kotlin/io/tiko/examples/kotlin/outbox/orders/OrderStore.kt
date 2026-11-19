@@ -2,7 +2,6 @@ package io.tiko.examples.kotlin.outbox.orders
 
 import io.tiko.Scope
 import io.tiko.annotations.Component
-import io.tiko.annotations.PostConstruct
 import io.tiko.examples.kotlin.outbox.Database
 import io.tiko.examples.kotlin.outbox.JdbcOutbox
 import io.tiko.examples.kotlin.outbox.ORDERS
@@ -15,16 +14,17 @@ import javax.sql.DataSource
 
 @Component(scope = Scope.SINGLETON)
 class OrderStore(private val database: DataSource) {
-    @PostConstruct
-    @Throws(SQLException::class)
-    fun initialize() = Database.initialize(database, JdbcOutbox.SCHEMA, """
-        CREATE TABLE IF NOT EXISTS orders (
-            order_id UUID PRIMARY KEY,
-            sku VARCHAR(40) NOT NULL,
-            quantity INTEGER NOT NULL CHECK (quantity > 0),
-            status VARCHAR(12) NOT NULL
-        )
-    """.trimIndent())
+    companion object {
+        /** Creates the orders and outbox tables; the database producer calls it before it returns. */
+        fun createSchema(database: DataSource) = Database.initialize(database, JdbcOutbox.SCHEMA, """
+            CREATE TABLE IF NOT EXISTS orders (
+                order_id UUID PRIMARY KEY,
+                sku VARCHAR(40) NOT NULL,
+                quantity INTEGER NOT NULL CHECK (quantity > 0),
+                status VARCHAR(12) NOT NULL
+            )
+        """.trimIndent())
+    }
 
     fun place(order: OrderPlaced): Order? = try {
         Database.transaction(database) { transaction ->

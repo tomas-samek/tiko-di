@@ -9,6 +9,7 @@ import io.tiko.examples.outbox.Database;
 import io.tiko.examples.outbox.JdbcOutbox;
 import io.tiko.examples.outbox.Messages;
 import io.tiko.examples.outbox.Messages.OrderPlaced;
+import io.tiko.examples.outbox.OutboxRelay;
 import io.tiko.kafka.KafkaTransport;
 import io.tiko.kafka.serializer.JsonKafkaSerializer;
 import io.tiko.kafka.test.FakeKafkaBroker;
@@ -23,6 +24,9 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.apache.kafka.clients.producer.MockProducer;
+import org.apache.kafka.common.serialization.ByteArraySerializer;
+import org.apache.kafka.common.serialization.StringSerializer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -32,15 +36,22 @@ class OrderOutboxTest {
     void generatedKafkaBridgeSkipsInvalidResultsAndAppliesValidOnes() throws Exception {
         String url = "jdbc:h2:file:" + directory.resolve("orders");
         var broker = new FakeKafkaBroker();
+        var relayed = new MockProducer<>(true, new StringSerializer(), new ByteArraySerializer());
         var options = TikoOptions.builder()
                 .configSource(ConfigSources.fromMap(Map.of("outbox", Map.of("dbUrl", url, "httpPort", 0))))
                 .replaceTransport(KafkaTransport.class, transport -> FakeKafkaTransport.over(transport, broker))
+                .override(OutboxRelay.class, () -> new OutboxRelay(Database.open(url), relayed))
                 .build();
 
         try (var container = Tiko.create(options)) {
             var orders = container.get(OrderStore.class);
             var order = new OrderPlaced(UUID.randomUUID(), "widget", 2);
             orders.place(order);
+            // The relay started with the container: nothing here resolves it.
+            await().atMost(Duration.ofSeconds(5))
+                    .untilAsserted(() -> assertThat(relayed.history())
+                            .extracting(record -> record.key())
+                            .containsExactly(order.orderId().toString()));
             var result = new Messages.ReservationDecided(order.orderId(), Messages.Decision.RESERVED);
             byte[] payload = new JsonKafkaSerializer().serialize(result);
             var delivered = new AtomicInteger();
@@ -70,8 +81,9 @@ class OrderOutboxTest {
     @Test
     void committedOrderIsPublishedAfterRestartAndFailedAcknowledgement() throws Exception {
         String url = "jdbc:h2:file:" + directory.resolve("orders").toAbsolutePath() + ";WRITE_DELAY=0";
-        var orders = new OrderStore(Database.open(url));
-        orders.initialize();
+        var database = Database.open(url);
+        OrderStore.createSchema(database);
+        var orders = new OrderStore(database);
         var order = new OrderPlaced(UUID.randomUUID(), "widget", 2);
 
         assertThat(orders.place(order)).isPresent();
@@ -101,8 +113,8 @@ class OrderOutboxTest {
     @Test
     void missingOutboxTableRollsBackOrderInsert() throws Exception {
         var database = Database.open("jdbc:h2:file:" + directory.resolve("orders"));
+        OrderStore.createSchema(database);
         var orders = new OrderStore(database);
-        orders.initialize();
         Database.initialize(database, "DROP TABLE outbox");
         var order = new OrderPlaced(UUID.randomUUID(), "widget", 2);
 

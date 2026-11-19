@@ -9,6 +9,11 @@ Each process has its own file-backed H2 database and one relay. Both use Tiko fo
 injection, configuration, lifecycle, and Kafka ingress. The relay calls the Kafka producer directly
 and waits for broker acknowledgement before deleting the pending row.
 
+In orders the container starts everything: the database producer creates the schema,
+`OrdersHttpServer` binds its port and takes the relay, so the relay runs from boot, and `Main` is
+`Tiko.daemon(...).awaitShutdown()`. A port already in use stops the service at boot. The
+[HTTP cookbook](../../docs/cookbooks/http.md) explains the shape.
+
 ## Run the stack with Docker Compose
 
 From the repository root:

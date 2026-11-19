@@ -2,7 +2,6 @@ package io.tiko.examples.outbox.orders;
 
 import io.tiko.Scope;
 import io.tiko.annotations.Component;
-import io.tiko.annotations.PostConstruct;
 import io.tiko.examples.outbox.Database;
 import io.tiko.examples.outbox.JdbcOutbox;
 import io.tiko.examples.outbox.Messages;
@@ -22,8 +21,8 @@ public class OrderStore {
         this.database = database;
     }
 
-    @PostConstruct
-    public void initialize() throws SQLException {
+    /** Creates the orders and outbox tables; the database producer calls it before it returns. */
+    public static void createSchema(DataSource database) throws SQLException {
         Database.initialize(database, JdbcOutbox.SCHEMA, """
                 CREATE TABLE IF NOT EXISTS orders (
                     order_id UUID PRIMARY KEY,
