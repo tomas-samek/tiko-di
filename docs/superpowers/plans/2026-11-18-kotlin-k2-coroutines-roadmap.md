@@ -70,7 +70,8 @@ piece waits for a decision.
 | 7 | merged 2026-11-19 | PR #841; plan `2026-11-18-k2-piece-7-suspend-handlers.md` |
 | 8 | merged 2026-11-19 | PR #842; plan `2026-11-19-k2-piece-8-suspend-backpressure.md` |
 | 9 | merged 2026-11-19 | PR #843; plan `2026-11-19-k2-piece-9-suspend-timeouts-retries.md` |
-| 10 | in review | plan `2026-11-19-k2-piece-10-suspend-kafka-source.md` |
+| 10 | merged 2026-11-19 | PR #844; plan `2026-11-19-k2-piece-10-suspend-kafka-source.md` |
+| 11 | in review | plan `2026-11-19-k2-piece-11-http-cookbook.md`; built on #845 (PR #846), found while writing it |
 
 Decided for piece 3 (owner, 2026-11-18): D2 `tiko-coroutines`, D3 accepted with the kotlinx
 version left out of the BOM, D4 `inEventScope`.
@@ -262,6 +263,8 @@ owner can answer with a word.
 | D11 | 9 | A `suspend` handler waits out a backoff when `close()` begins. | **Decided 2026-11-19, as recommended.** Its retry is dropped at once with a `WARNING`, as an async handler's is; `close()` does not wait for a backoff. |
 | D12 | 9 | Whether a handler that waits out a backoff keeps its place under the limit of #679. | **Decided 2026-11-19, as recommended.** Yes: it is in flight, and a pending delivery, from the publish until its last attempt has finished. |
 | D13 | 10 | `close()` begins while a `suspend` bridge is suspended. | **Decided 2026-11-19, as recommended.** It gets `tiko.kafka.shutdown-timeout` to finish, then is cancelled by interrupting the consumer thread; its record stays uncommitted. |
+| D14 | 11 | What replaces `@Produces Javalin` in the skill and the docs. | **Decided 2026-11-19, as recommended.** A server `@Component` that owns Javalin: it takes the route groups and `UnitOfWork`, starts in `@PostConstruct` and stops on `ApplicationEndingEvent`. |
+| D15 | 11 | Where schema migrations run, once the server starts while the container starts. | **Decided 2026-11-19, as recommended.** In the `DataSource` producer, before it returns the pool. |
 
 ## What stays out of K2
 

@@ -26,7 +26,8 @@ the route read; the integration test asserts on that to prove the chain.
 
 The container owns the server. It builds `HttpServer` when it starts, and the server
 binds its port then: with the port already in use, `main` fails and the process
-exits. Closing the container stops the server first.
+exits. Closing the container stops the server first. The
+[HTTP cookbook](../../docs/cookbooks/http.md) explains the shape.
 
 ## Run it
 

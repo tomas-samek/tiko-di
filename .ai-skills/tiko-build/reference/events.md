@@ -86,15 +86,18 @@ public ValidationResult onOrderCreated(OrderCreated event) {
 
 ```java
 @Component(scope = Scope.SINGLETON)
-public class HttpServer implements AutoCloseable {
+public class ReportScheduler implements AutoCloseable {
 
-    private Server server;
+    private ScheduledExecutorService scheduler;
 
     @PostConstruct
-    public void start() { server = new Server(8080); server.start(); }
+    public void start() {
+        scheduler = Executors.newSingleThreadScheduledExecutor();
+        scheduler.scheduleAtFixedRate(this::report, 1, 1, TimeUnit.MINUTES);
+    }
 
     @Override
-    public void close() { if (server != null) server.stop(); }
+    public void close() { if (scheduler != null) scheduler.shutdown(); }
     // No explicit @PreDestroy needed — AutoCloseable.close() runs at shutdown.
 }
 ```
@@ -115,7 +118,7 @@ public static void main(String[] args) {
 }
 ```
 
-An app that runs its own non-daemon foreground server (e.g. Javalin `app.start()`)
-does not need `awaitShutdown()` — that server thread already keeps the JVM up; use
-`Tiko.create(...)` with try-with-resources or a shutdown hook, as in the bootstrap
-pattern in [`SKILL.md`](../SKILL.md).
+An HTTP service uses the same idiom: its server is a `@Component` the container starts
+in `@PostConstruct` and stops on `ApplicationEndingEvent`, so `main` is only
+`Tiko.daemon(...).awaitShutdown()`, as in the bootstrap pattern in [`SKILL.md`](../SKILL.md)
+and the [HTTP cookbook](../../../docs/cookbooks/http.md).

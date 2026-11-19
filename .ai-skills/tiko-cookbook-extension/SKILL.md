@@ -146,25 +146,36 @@ public class DataSourceFactory {
 
 ```java
 @Component(scope = Scope.SINGLETON)
-public class JavalinFactory {
-    private Javalin app;
+public class HttpServer {
+    private final ServerConfig config;
+    private final NoteRoutes notes;
+    private volatile Javalin app;
 
-    @Produces(scope = Scope.SINGLETON)
-    public Javalin javalin(NoteRoutes notes) {
-        this.app = Javalin.create(cfg -> notes.register(cfg.routes));
-        return app;
+    @Inject
+    public HttpServer(AppConfig config, NoteRoutes notes) {
+        this.config = config.server();
+        this.notes = notes;
     }
 
+    @PostConstruct
+    public void start() { app = Javalin.create(cfg -> notes.register(cfg.routes)).start(config.port()); }
+
+    @EventHandler
+    public void onApplicationEnding(ApplicationEndingEvent event) { stop(); }
+
     @PreDestroy
-    public void shutdown() { if (app != null) app.stop(); }
+    public void stop() { /* app.stop() once */ }
 }
 ```
 
-Javalin isn't AutoCloseable in current versions → explicit `@PreDestroy`.
-Javalin 7 accepts routes only inside `Javalin.create(...)`, so each route group
-is a `@Component` with a `register(RoutesConfig)` method, passed in as a producer
-parameter. Reference:
-[`JavalinFactory.java`](../../tiko-examples/15_quickstart/src/main/java/io/tiko/examples/quickstart/JavalinFactory.java).
+A server is where requests come in, not a value other components take, so it is
+a `@Component` the container starts, not a `@Produces` value: a port in use fails
+boot, and it stops on `ApplicationEndingEvent`, before the container drains async
+work. Javalin 7 accepts routes only inside `Javalin.create(...)`, so each route
+group is a `@Component` with a `register(RoutesConfig)` method that runs each
+handler in a unit of work through the injected `UnitOfWork`. Reference:
+[`HttpServer.java`](../../tiko-examples/15_quickstart/src/main/java/io/tiko/examples/quickstart/HttpServer.java)
+and the [HTTP cookbook](../../docs/cookbooks/http.md).
 
 ### Worked example 3 — Caffeine cache (canonical, see `docs/orchestrator-model.md` §3.4)
 

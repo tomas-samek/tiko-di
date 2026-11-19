@@ -208,6 +208,29 @@ Settings carry the port, and tests set it to `0` with
 - [ ] Commit `docs: HTTP service cookbook, and the skill teaches the server the container owns (#686)`,
   push, open the PR, post the choices comment, and watch CI and Sonar.
 
+## What changed while implementing
+
+- **A produced pool was never closed (#845).** The quickstart's taken-port test found the
+  `HikariDataSource` still running after the failed boot. A value a `@Produces` method returned
+  was closed only when the method's declared type was `AutoCloseable`, and `DataSource` is not.
+  That was fixed first, in its own PR (#846), and this piece builds on it.
+- **Javalin starts a thread of its own with every instance.** It sleeps 5 s, warns when the
+  server never started, and ends. The taken-port test waits up to 10 s for the threads the failed
+  boot started, and the cookbook states what this does to a failed process.
+- **A request in flight at `stop()` loses its response with Javalin's defaults**, measured on
+  7.2.3: the handler runs to its end, but the connection is closed first. With
+  `server.setStopTimeout(...)` the client gets the response, and an idle keep-alive connection
+  adds about a second to `stop()`. All four servers set it. The tests close their `HttpClient`
+  before the container, and the cookbook has the table. No test pins it: that would need a slow
+  route in an example.
+- **The orders tests now see the relay start at boot.** `OrderOutboxTest` overrides
+  `OutboxRelay` with one over a `MockProducer`, and an order placed through `OrderStore` reaches
+  it without the test resolving the relay.
+- **`09`'s port is `http.port` in `config.yaml`** (`HttpSettings`). A section is required even
+  when all its fields have defaults, so the tests pass port `0` through `OnAFreePort`.
+- **The skill's lifecycle sample in `reference/events.md` was an HTTP server** stopped in
+  `close()`. It is now a scheduler, so the HTTP shape is taught in one place.
+
 ## Out of scope
 
 - An HTTP integration module, or a shared `inUnit` helper in a Tiko artifact (#686).
