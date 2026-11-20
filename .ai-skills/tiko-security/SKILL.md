@@ -48,17 +48,21 @@ gh api --paginate "repos/tomas-samek/tiko-di/code-scanning/alerts?state=open&ref
   --jq '.[] | "\(.rule.security_severity_level) \(.rule.id) \(.most_recent_instance.location.path)"'
 # Bundled jars (SEC-9 cross-check): Dependabot sees them through the dependency-submission
 # workflow (#476, #492). This queries what tiko-kafka shades and tiko-mcp bundles, at the
-# resolved versions — they differ (e.g. jackson-annotations 2.22 vs jackson-core 2.22.3).
+# resolved versions — they differ (e.g. jackson-annotations 2.22 vs jackson-core 2.22.3) —
+# and the Kotlin runtime tiko-coroutines brings (kotlin-stdlib, kotlinx-coroutines). The BOM
+# does not pin kotlinx-coroutines, so an application may run a newer one: this checks the
+# version Tiko builds and tests against.
 mvn -q -pl tiko-kafka dependency:list -DoutputFile=bundled-deps.txt \
   -DincludeGroupIds=com.fasterxml.jackson.core,com.fasterxml.jackson.datatype
 mvn -q -pl tiko-mcp dependency:list -DincludeScope=runtime -DoutputFile=bundled-deps.txt
-cat tiko-kafka/bundled-deps.txt tiko-mcp/bundled-deps.txt \
+mvn -q -pl tiko-coroutines dependency:list -DincludeScope=runtime -DoutputFile=bundled-deps.txt
+cat tiko-kafka/bundled-deps.txt tiko-mcp/bundled-deps.txt tiko-coroutines/bundled-deps.txt \
   | grep -oE '[a-zA-Z0-9.-]+:[a-zA-Z0-9.-]+:jar:[^:]+' | grep -v '^io\.github\.tomas-samek:' \
   | sed -E 's/:jar:/@/' | sort -u | while read -r coord; do
       gh api --paginate "/advisories?ecosystem=maven&affects=$coord&per_page=100" \
         --jq '.[] | "\(.severity) \(.ghsa_id) \(.summary)"' | sed "s|^|$coord |"
     done
-rm tiko-kafka/bundled-deps.txt tiko-mcp/bundled-deps.txt
+rm tiko-kafka/bundled-deps.txt tiko-mcp/bundled-deps.txt tiko-coroutines/bundled-deps.txt
 ```
 
 | Verdict | When |
