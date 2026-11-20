@@ -108,6 +108,12 @@ public final class CarriedUnit {
      * Puts the unit on the calling thread: its frame becomes each module's EVENT frame, and its
      * origin the current one. The first install publishes {@code EventStartedEvent}.
      *
+     * <p>It does not check whether another unit is open on the thread: it displaces whatever the
+     * thread had, which a detached start relies on (a {@code suspend} handler that the publisher's
+     * thread starts under {@code CALLER_RUNS} runs there in a unit of its own). The single-frame rule
+     * is kept where a unit is opened: whoever opens one for a caller asks
+     * {@link UnitCarrier#hasUnitOpen()} first, as {@code inEventScope} does.
+     *
      * @return what the thread had, to hand to {@link #restore} on the same thread
      * @throws IllegalStateException if the unit is closed
      */
