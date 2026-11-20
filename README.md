@@ -225,7 +225,7 @@ Scopes: `SINGLETON` > `EVENT` > `PROTOTYPE` (longest to shortest lifetime). An `
 
 ## Runnable examples
 
-Worked examples ship under [`tiko-examples/`](./tiko-examples/README.md), each a Maven module of this repository's build: it inherits the repository's parent and builds against its current snapshot, so run `mvn install -DskipTests` from the root first.
+Worked examples ship under [`tiko-examples/`](./tiko-examples/README.md), each a Maven module of this repository's build: it builds against the repository's current snapshot, so run `mvn install -DskipTests` from the root first. [`15_quickstart`](./tiko-examples/15_quickstart) is a standalone project as well: copy it out of a [release tag](https://github.com/tomas-samek/tiko-di/tags), 0.8.0 or later, and it builds against that release from Maven Central. So do the Gradle builds under [`tiko-examples-gradle/`](./tiko-examples-gradle).
 
 | #  | Module                                                              | Demonstrates                                                                                            |
 |----|---------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------|
