@@ -3,6 +3,7 @@ package io.tiko.coroutines;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.tschuchort.compiletesting.KotlinCompilation;
+import io.tiko.kafka.processor.generator.KafkaTransportBootstrapGenerator;
 import io.tiko.kafka.processor.ksp.KafkaSymbolProcessorProvider;
 import io.tiko.processor.core.ksp.KspCompiler;
 import io.tiko.processor.core.ksp.KspCompiler.KspResult;
@@ -196,7 +197,8 @@ class KspSuspendKafkaSourceTest {
     /** Generated code stays Java: the bridge call is a lambda that passes its continuation on. */
     @Test
     void theBootstrapRunsTheBridgeThroughSuspendBridges() {
-        assertThat(program.generatedJava("io.tiko.generated.KafkaTransportBootstrap"))
+        assertThat(program.generatedJava(
+                        "io.tiko.generated." + KafkaTransportBootstrapGenerator.className(List.of("app.Payments"))))
                 .hasValueSatisfying(source -> assertThat(source)
                         .contains("SuspendBridges.run(container, __continuation -> "
                                 + "container.get(Payments.class).onPayment((Payment) payload, ctx, __continuation));")

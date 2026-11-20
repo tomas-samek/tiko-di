@@ -32,7 +32,7 @@ import java.util.function.Predicate;
 /**
  * The Kafka processor's logic, independent of the compiler frontend: it collects the
  * {@code @KafkaSource} / {@code @KafkaSink} bridge methods, validates them, and emits
- * {@code io.tiko.generated.KafkaTransportBootstrap}, its
+ * {@code io.tiko.generated.KafkaTransportBootstrap_<hash>}, its
  * {@code META-INF/services/io.tiko.TransportBootstrap} entry and the
  * {@code META-INF/tiko/topology-kafka.json} fragment.
  *

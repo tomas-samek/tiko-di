@@ -6,6 +6,7 @@ import com.google.testing.compile.Compilation;
 import com.google.testing.compile.CompilationSubject;
 import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
+import io.tiko.kafka.processor.generator.KafkaTransportBootstrapGenerator;
 import io.tiko.processor.TikoAnnotationProcessor;
 import java.util.List;
 import javax.annotation.processing.Processor;
@@ -44,7 +45,9 @@ class AnnotationClaimTest {
                 List.of("-Xlint:processing", "-Werror"), new TikoAnnotationProcessor(), new KafkaAnnotationProcessor());
 
         CompilationSubject.assertThat(compilation).succeeded();
-        CompilationSubject.assertThat(compilation).generatedSourceFile("io.tiko.generated.KafkaTransportBootstrap");
+        CompilationSubject.assertThat(compilation)
+                .generatedSourceFile("io.tiko.generated."
+                        + KafkaTransportBootstrapGenerator.className(List.of("demo.OrderPublisher")));
     }
 
     @Test

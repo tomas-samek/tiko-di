@@ -6,7 +6,9 @@ import com.google.testing.compile.Compilation;
 import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
 import io.tiko.kafka.processor.KafkaAnnotationProcessor;
+import io.tiko.kafka.processor.generator.KafkaTransportBootstrapGenerator;
 import io.tiko.processor.TikoAnnotationProcessor;
+import java.util.List;
 import javax.tools.JavaFileObject;
 import org.junit.jupiter.api.Test;
 
@@ -77,7 +79,8 @@ class BridgeEdgeCaseTest {
 
         assertThat(compilation).succeeded();
         assertThat(compilation)
-                .generatedSourceFile("io.tiko.generated.KafkaTransportBootstrap")
+                .generatedSourceFile(
+                        "io.tiko.generated." + KafkaTransportBootstrapGenerator.className(List.of("demo.OrderBridge")))
                 .contentsAsUtf8String()
                 .contains("bridge.fromKafka((OrderPlaced) payload, ctx)");
     }

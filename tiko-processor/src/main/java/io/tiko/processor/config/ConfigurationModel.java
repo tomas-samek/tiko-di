@@ -2,6 +2,7 @@
 package io.tiko.processor.config;
 
 import io.tiko.processor.core.model.ClassDecl;
+import io.tiko.processor.util.GeneratedNames;
 import java.util.List;
 
 /**
@@ -15,7 +16,7 @@ public record ConfigurationModel(
         String prefix, // @Configuration#prefix
         List<ConfigFieldModel> fields) {
     public String binderSimpleName() {
-        return simpleName + "Binder";
+        return GeneratedNames.configBinderClass(simpleName, qualifiedName);
     }
 
     public String binderQualifiedName() {

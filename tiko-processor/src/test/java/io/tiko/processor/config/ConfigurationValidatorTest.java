@@ -6,6 +6,7 @@ import com.google.testing.compile.Compilation;
 import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
 import io.tiko.processor.TikoAnnotationProcessor;
+import io.tiko.processor.util.GeneratedNames;
 import java.util.stream.Stream;
 import javax.tools.JavaFileObject;
 import org.junit.jupiter.api.Test;
@@ -145,7 +146,9 @@ class ConfigurationValidatorTest {
                 Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(outer, inner);
         assertThat(c).succeeded();
         // Both the top-level binder and a NestedCoercer for Inner must be generated.
-        assertThat(c).generatedSourceFile("io.tiko.generated.config.OuterBinder");
+        assertThat(c)
+                .generatedSourceFile(
+                        "io.tiko.generated.config." + GeneratedNames.configBinderClass("Outer", "io.example.Outer"));
         boolean hasInnerCoercer =
                 c.generatedSourceFiles().stream().anyMatch(f -> f.getName().contains("InnerNestedCoercer_"));
         assert hasInnerCoercer : "expected InnerNestedCoercer_<hash> to be generated";
@@ -165,7 +168,9 @@ class ConfigurationValidatorTest {
         Compilation c =
                 Compiler.javac().withProcessors(new TikoAnnotationProcessor()).compile(outer, inner);
         assertThat(c).succeeded();
-        assertThat(c).generatedSourceFile("io.tiko.generated.config.OuterBinder");
+        assertThat(c)
+                .generatedSourceFile(
+                        "io.tiko.generated.config." + GeneratedNames.configBinderClass("Outer", "io.example.Outer"));
         boolean hasInnerCoercer =
                 c.generatedSourceFiles().stream().anyMatch(f -> f.getName().contains("InnerNestedCoercer_"));
         assert hasInnerCoercer : "expected InnerNestedCoercer_<hash> to be generated";

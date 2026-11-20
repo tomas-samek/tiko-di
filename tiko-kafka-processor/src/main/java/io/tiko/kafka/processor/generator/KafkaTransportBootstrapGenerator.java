@@ -12,12 +12,16 @@ import io.tiko.processor.core.CodeOutput;
 import io.tiko.processor.core.GeneratorAnnotations;
 import io.tiko.processor.core.model.ClassDecl;
 import java.io.IOException;
+import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 import javax.lang.model.element.Modifier;
 
 /**
- * Emits one {@code io.tiko.generated.KafkaTransportBootstrap} class per compilation unit
- * plus the matching {@code META-INF/services/io.tiko.TransportBootstrap} entry.
+ * Emits one {@code io.tiko.generated.KafkaTransportBootstrap_<hash>} class per compilation unit
+ * plus the matching {@code META-INF/services/io.tiko.TransportBootstrap} entry. Every module
+ * generates into {@code io.tiko.generated}, so the name carries a hash of the module's bridge
+ * classes: two modules with bridges put two bootstraps on the class path, and both run (#869).
  *
  * <p>The generated class implements {@link io.tiko.kafka.KafkaTransport} (which extends
  * {@link io.tiko.TransportBootstrap}). {@code start(Container)} resolves bridge components via
@@ -29,7 +33,7 @@ import javax.lang.model.element.Modifier;
 public final class KafkaTransportBootstrapGenerator {
 
     private static final String GENERATED_PACKAGE = "io.tiko.generated";
-    private static final String CLASS_NAME = "KafkaTransportBootstrap";
+    private static final String CLASS_PREFIX = "KafkaTransportBootstrap_";
 
     private static final ClassName KAFKA_TRANSPORT = ClassName.get("io.tiko.kafka", "KafkaTransport");
     private static final ClassName CONTAINER = ClassName.get("io.tiko", "Container");
@@ -57,7 +61,9 @@ public final class KafkaTransportBootstrapGenerator {
             throws IOException {
         if (sources.isEmpty() && sinks.isEmpty()) return;
 
-        TypeSpec.Builder cls = TypeSpec.classBuilder(CLASS_NAME)
+        var className =
+                className(originating.stream().map(ClassDecl::qualifiedName).toList());
+        TypeSpec.Builder cls = TypeSpec.classBuilder(className)
                 .addAnnotation(GeneratorAnnotations.generatedBy(KafkaTransportBootstrapGenerator.class))
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                 .addSuperinterface(KAFKA_TRANSPORT)
@@ -69,7 +75,7 @@ public final class KafkaTransportBootstrapGenerator {
         cls.addMethod(buildShutdownMethod());
 
         cls.addMethod(buildSourcesProvider(sources));
-        cls.addMethod(buildSinksProvider(sinks));
+        cls.addMethod(buildSinksProvider(sinks, className));
 
         // Per-source dispatcher method: takes the resolved component + payload + ctx; invokes the bridge.
         for (int i = 0; i < sources.size(); i++) {
@@ -89,7 +95,16 @@ public final class KafkaTransportBootstrapGenerator {
 
         output.writeJava(JavaFile.builder(GENERATED_PACKAGE, cls.build()).build(), originating, true);
 
-        output.writeResource(SERVICE_FILE, GENERATED_PACKAGE + "." + CLASS_NAME + "\n", originating);
+        output.writeResource(SERVICE_FILE, GENERATED_PACKAGE + "." + className + "\n", originating);
+    }
+
+    /**
+     * {@code KafkaTransportBootstrap_<hash>}, the simple name of the bootstrap of a module whose bridges
+     * are declared in {@code bridgeClasses} (qualified names, in any order).
+     */
+    public static String className(Collection<String> bridgeClasses) {
+        int hash = Objects.hash(bridgeClasses.stream().distinct().sorted().toArray());
+        return CLASS_PREFIX + Integer.toHexString(hash & 0x7FFFFFFF);
     }
 
     private MethodSpec buildStartMethod(List<KafkaSourceDescriptor> sources, List<KafkaSinkDescriptor> sinks) {
@@ -166,7 +181,7 @@ public final class KafkaTransportBootstrapGenerator {
         return b.build();
     }
 
-    private MethodSpec buildSinksProvider(List<KafkaSinkDescriptor> sinks) {
+    private MethodSpec buildSinksProvider(List<KafkaSinkDescriptor> sinks, String className) {
         TypeName listOfDescriptors =
                 ParameterizedTypeName.get(ClassName.get(java.util.List.class), KAFKA_SINK_DESCRIPTOR);
         MethodSpec.Builder b = MethodSpec.methodBuilder("sinks")
@@ -201,7 +216,7 @@ public final class KafkaTransportBootstrapGenerator {
                         s.eventType().javaPoet(),
                         s.serializerClass().javaPoet(),
                         i,
-                        CLASS_NAME,
+                        className,
                         i);
             }
         }

@@ -153,7 +153,7 @@ pinned by each module's `FrontendBoundaryTest`.
 
 The local in-memory bus is the default. The Kafka transport is opt-in via the
 `tiko-kafka` + `tiko-kafka-processor` modules: `@KafkaSource` / `@KafkaSink` annotations
-generate a `KafkaTransportBootstrap` that `Tiko.create()` discovers through the
+generate a `KafkaTransportBootstrap_<hash>` that `Tiko.create()` discovers through the
 `TransportBootstrap` ServiceLoader SPI. There is **no** `tiko.event.bus` property —
 transport selection is dependency + annotation driven, not a config switch. Broker
 settings live under `tiko.kafka.*` (see `tiko-kafka`'s `defaults.yaml`).
