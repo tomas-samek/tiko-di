@@ -133,7 +133,10 @@ name, `location()`, cause), or without `at {1}` when the location is empty. Kafk
 `location()` is `topic-partition@offset` (the topic alone for a poll failure or egress), built
 from coordinates only (`KafkaErrorLocationTest`). Egress is different: `KafkaEgressError(topic, Object event, cause)` carries the
 outbound event. `DefaultErrorHandler` doesn't render it, but the record's `toString()`
-includes it.
+includes it. A `suspend` `@KafkaSource` bridge that fails takes the same `KafkaIngestError` path
+(`KafkaSourceOwnUnitTest.aFailureTakesTheIngestErrorPath`). One that the runner interrupts at
+shutdown is neither reported nor committed (`ThreadPerTopicRunner`, `interruptedByStop`): the
+record is delivered again.
 
 **Status.** Holds. Fixed in #494: the `cause` in that WARNING used to be Jackson's exception,
 which quoted the offending field value in full (`from String "SSN-123-45-6789"`) on every
@@ -237,7 +240,9 @@ pattern.
 **Rule.** `TikoLog.log` patterns are constants; external values go only into arguments.
 
 **Enforced by.** Code: `TikoLog.log(logger, level, pattern, args…)` formats with
-`MessageFormat` only when arguments exist; every call site passes a literal pattern.
+`MessageFormat` only when arguments exist; every call site passes a literal pattern. The last
+one built by concatenation, `Tiko`'s transport failure (`"failed to " + what`), passes the step
+as an argument since #874.
 Messages built by concatenation (e.g. `ThreadPerTopicRunner.seekSafely`) use framework
 values (topic-partition, offset) and the non-formatting `System.Logger.log(Level, String,
 Throwable)`.
@@ -337,6 +342,13 @@ gate's global-advisory query cross-checks the bundled coordinates of both module
 runtime tree (MCP SDK, `reactor-core`, `json-schema-validator`, `jackson-dataformat-yaml`, …)
 the graph didn't list.
 
+**Not covered.** The Gradle builds under `tiko-examples-gradle` (Kotlin and KSP plugins,
+`junit`, `assertj`) are not submitted to the dependency graph, and Dependabot watches only
+GitHub Actions: they ship nothing, and their versions follow the root pins. Maven build plugins
+have no advisory feed; the release job runs them while signing and Central secrets are present
+(`dokka-maven-plugin` downloads its own engine). A plugin bump is reviewed like a dependency
+bump. Recorded at the 0.8.0 gate (#874).
+
 **Violation looks like.** A new shaded or transitive dependency with no advisory coverage, or
 the dependency-submission workflow disabled, failing on `main`, or excluding a module.
 
@@ -368,7 +380,11 @@ test fails the build of a change that replaces a jar; it does not stop the `kotl
 of that same run, which holds no release secret.
 
 **Status.** Holds (fixed in #477; before it, actions were referenced by movable tags such as
-`@v4`).
+`@v4`). Two residuals, recorded at the 0.8.0 gate (#874): Gradle publishes no checksum for the
+`gradlew` / `gradlew.bat` scripts, so nothing compares them; the five examples' copies are
+identical, and the job that runs them holds no secret. `release.yml` interpolates
+`${{ inputs.* }}` into the script that validates those inputs; only someone with write access
+can dispatch it, and the check rejects anything but a version.
 
 **Violation looks like.** A release secret in another workflow, `permissions: write-all`,
 an unpinned/new third-party action, or a checked-in jar or script that a workflow runs and no
@@ -378,7 +394,8 @@ test compares with its upstream checksum.
 
 ### SEC-11 — failures can't run away
 
-**Surface.** `tiko-runtime` async dispatch; `tiko-kafka` ingest loop.
+**Surface.** `tiko-runtime` async dispatch; `tiko-kafka` ingest loop; `tiko-coroutines`
+(`suspend` handlers and bridges).
 
 **Threat.** Resource exhaustion — unbounded queues, or a tight retry loop flooding logs and
 CPU.
@@ -390,7 +407,15 @@ an unbounded tight loop.
 `ThreadPerTopicRunner.seekWithBackoff` pauses only the failing partition after a `SEEK` for
 `tiko.kafka.seek-backoff` (default `PT0.5S`), doubling per consecutive failure up to
 `seek-backoff-max` (default `PT30S`); pinned by `KafkaSeekBackoffTest` and
-`SeekBackoffDelayTest`.
+`SeekBackoffDelayTest`. A `suspend` handler holds one of `queueCapacity` places until its
+coroutine completes, and a publish that finds none free gets the `OverflowPolicy`
+(`ContainerCoroutines.admit`, `SuspendHandlerOverflowTest`); its retries are bounded by
+`retries` and a backoff waiting at `close()` is dropped (`SuspendHandlers`,
+`SuspendHandlerResilienceTest`). `close()` stops ingest, waits for deliveries, then stops the
+container's coroutines (`ShutdownOrderTest`). A `suspend` bridge still running after
+`tiko.kafka.shutdown-timeout` is interrupted, once, and the runner waits `CANCEL_GRACE` (1 s)
+for it (`ThreadPerTopicRunner.cancelSuspendedBridge`); a bridge that ignores the interrupt
+leaves its thread to the report of threads outliving `close()` (ARCH-19).
 
 **Status.** Holds. #478 fixed the defaults: a poison record that redelivered ~37,000 times per
 second now redelivers at the backoff pace, and `seek-backoff: PT0S` still opts back into
@@ -406,6 +431,10 @@ startup. `KafkaTimingValidationTest` pins each case.
 **Surface.** `tiko-runtime` test mode (`Tiko.create` detecting
 `META-INF/tiko/test-container.properties`; `AggregatingContainer` shadow overrides from
 `test-shadows.properties`) and the `tiko-processor` output that writes those files.
+`@Configuration` binders are found through `ServiceLoader` (`ConfigBinding`), which the opt-in
+below does not gate: a binder from a test-fixtures jar on a production classpath binds its own
+record type. Since #848 a record no module lists goes to every module of an aggregate, as a
+single-module container takes every bound record. It replaces no component.
 
 **Threat.** A container in production silently resolving test doubles (fakes that skip
 checks, in-memory stores) because a test-component jar landed on the classpath.
@@ -456,7 +485,10 @@ adds `mavenLocal()` only while its `tikoVersion` is a `-SNAPSHOT`, so a release 
 from Central only (`GeneratedProjectsStartSafeTest`, which also pins each `.mcp.json` to an exact
 `X.Y.Z`).
 
-**Status.** Holds (2026-10-07 audit).
+**Status.** Holds (2026-10-07 audit). The `tiko-kotlin-starter` template repository is created
+from the release tag (`git archive v<X.Y.Z>`) by a step of the `tiko-release` skill; nothing
+checks that the step was followed, and the template repository's own settings (Dependabot,
+branch protection) are outside this registry. Recorded at the 0.8.0 gate (#874).
 
 **Violation looks like.** A `LATEST`/range/SNAPSHOT coordinate or a non-Central repository in
 the template, a credential or token in any template file, or an agent-instruction file edited
@@ -512,8 +544,18 @@ place is given back however a handler ends), and `SuspendHandlerResilienceTest` 
 of each attempt closes once, also when its timeout cancels it, and a retry that waits out its
 backoff is dropped when `close()` begins). A `suspend` `@KafkaSource` bridge runs in a unit of its
 own on the consumer thread and closes it before returning, also when it is cancelled at
-shutdown: `SuspendBridgesTest`, `KafkaSourceOwnUnitTest` (`tiko-kafka`) and
-`KspSuspendKafkaSourceTest`.
+shutdown: `SuspendBridgesTest` (also while the bridge is suspended on another dispatcher,
+#874), `KafkaSourceOwnUnitTest` (`tiko-kafka`) and `KspSuspendKafkaSourceTest`. The bridge's
+close on an interrupt relies on kotlinx-coroutines' `runBlocking` waiting for the cancelled
+coroutine; those tests pin it across kotlinx upgrades.
+
+**Residuals.** `emitGuardedOnError` catches `Exception`: an `Error` thrown by the application's
+`ErrorHandler` skips the unit's remaining destroy hooks, while the scope clear and the frame
+reset still run, so the rule holds. A coroutine stuck in blocking code that ignores interrupts
+never closes its unit; its thread is reported as outliving `close()`. Since #845 a produced
+value that is `AutoCloseable` is closed when its scope ends: an EVENT `@Produces` method that
+returns a shared instance gets it closed at the end of every unit (`docs/di-and-scopes.md`).
+Recorded at the 0.8.0 gate (#874).
 
 **Status.** Holds since 0.6.0. Containers generated by `tiko-processor` 0.1.0 – 0.5.0 were
 affected: [GHSA-cmc8-pq39-74rh](https://github.com/tomas-samek/tiko-di/security/advisories/GHSA-cmc8-pq39-74rh)
