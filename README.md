@@ -233,7 +233,7 @@ Worked examples ship under [`tiko-examples/`](./tiko-examples/README.md), each a
 | `tiko-runtime`          | Minimal runtime container. Zero dependencies beyond `tiko-api`. Ships the in-memory `LocalEventBus`.                                               |
 | `tiko-config`           | YAML-backed configuration injection. The only module that depends on SnakeYAML. Required when your project uses `@Configuration`; not pulled otherwise. |
 | `tiko-test`             | JUnit 5 extension + compile-time `@TestComponent` overrides + runtime `TikoOptions.override(...)` + `RecordingEventBus` spy. Test-scope dependency only. |
-| `tiko-coroutines`       | Kotlin coroutine support: `inEventScope` runs suspending code in one unit of work across suspension points and dispatcher changes. Opt-in; depends on `kotlinx-coroutines-core`. |
+| `tiko-coroutines`       | Kotlin coroutine support: `inEventScope` runs suspending code in one unit of work across suspension points and dispatcher changes, and it runs `suspend` `@EventHandler`s and `suspend` `@KafkaSource` bridges, which need it on the classpath. Opt-in; depends on `kotlinx-coroutines-core`. |
 | `tiko-kafka` + `tiko-kafka-processor` | Kafka transport via the universal `TransportBootstrap` SPI — `@KafkaSource` / `@KafkaSink`, JSON serializer, per-record commit + seek-back. Opt-in. |
 | `tiko-archetype`        | Maven archetype that scaffolds a runnable single-module Tiko project in seconds.                                                                   |
 | `tiko-bom`              | Bill-of-materials for version-aligned dependency management.                                                                                       |
