@@ -92,7 +92,7 @@ How Tiko lives behind an existing HTTP server. `TikoJavalin.scoped` middleware o
 
 ## 10 — Persistence (raw JDBC + HikariCP) &nbsp;<sub>[`10_persistence_jdbc/`](./10_persistence_jdbc)</sub>
 
-Persistence cookbook as a **test-only example** — no `Main` to `exec:java`; the pattern is exercised by `BatchEntryIT` and `HttpEntryIT` under `src/test/java`. One JDBC transaction per unit of work (EVENT scope) wraps both an HTTP entry point and a batch flow; the same `OrderRepository` is reused across both. Demonstrates the auto-proxy mechanism on a JDK interface (`java.sql.Connection`). Run via `mvn -pl tiko-examples/10_persistence_jdbc verify`. See [docs/cookbooks/persistence.md](../docs/cookbooks/persistence.md).
+Persistence cookbook as a **test-only example** — no `Main` to `exec:java`; the pattern is exercised by `BatchEntryIT` and `OrderRepositoryTest` under `src/test/java`. One JDBC transaction per unit of work (EVENT scope) wraps a batch loop, all-or-none. A transaction per HTTP request, in a server the container owns, is in [`15_quickstart`](./15_quickstart). Demonstrates the auto-proxy mechanism on a JDK interface (`java.sql.Connection`). Run via `mvn -pl tiko-examples/10_persistence_jdbc verify`. See [docs/cookbooks/persistence.md](../docs/cookbooks/persistence.md).
 
 ## 11 — Custom logger &nbsp;<sub>[`11_custom_logger/`](./11_custom_logger)</sub>
 

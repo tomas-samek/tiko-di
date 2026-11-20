@@ -118,15 +118,16 @@ Reference: [`DataSourceFactory.java`](../tiko-examples/15_quickstart/src/main/ja
 Tiko has no AOP layer, so there is no annotation that wraps a method in a
 transaction. Pick the shape that matches the unit-of-work boundary:
 
-- **One transaction per HTTP request / unit of work.** Open an EVENT-scoped
-  `Connection` provider, route every repository through it, and commit /
-  rollback at the scope boundary. See
-  [`tiko-examples/10_persistence_jdbc/.../TransactionalScope.java`](../tiko-examples/10_persistence_jdbc/src/main/java/io/tiko/examples/persistence/infra/TransactionalScope.java)
-  for the canonical pattern.
+- **One transaction per HTTP request / unit of work.** Produce an EVENT-scoped
+  `Connection`, route every repository through it, and commit /
+  rollback at the unit's boundary. See
+  [`RequestTransactions.java`](../tiko-examples/15_quickstart/src/main/java/io/tiko/examples/quickstart/RequestTransactions.java)
+  and [`TransactionContext.java`](../tiko-examples/15_quickstart/src/main/java/io/tiko/examples/quickstart/TransactionContext.java)
+  for a request, and
+  [`TransactionalScope.java`](../tiko-examples/10_persistence_jdbc/src/main/java/io/tiko/examples/persistence/infra/TransactionalScope.java)
+  for a batch loop.
 - **Auto-commit per repository call.** Each repository method opens a
-  connection from the pool and closes it. Fine for single-statement work and
-  the simplest reference shape — see
-  [`NoteRepository.java`](../tiko-examples/15_quickstart/src/main/java/io/tiko/examples/quickstart/NoteRepository.java).
+  connection from the pool and closes it. Fine for single-statement work.
 
 Hiding commit / rollback under an annotation is exactly the kind of
 invisible control flow tiko deliberately doesn't do. Transaction boundaries

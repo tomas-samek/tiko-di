@@ -27,7 +27,7 @@ class HttpRecipeTaughtForJavalin7Test {
                         "tiko-cookbook-extension SKILL.md",
                         ArchetypeDocSync.canonicalDir("tiko-cookbook-extension").resolve("SKILL.md")),
                 Arguments.of("orchestrator-model.md", Path.of("..", "docs", "orchestrator-model.md")),
-                Arguments.of("cookbooks/persistence.md", Path.of("..", "docs", "cookbooks", "persistence.md")));
+                Arguments.of("cookbooks/http.md", Path.of("..", "docs", "cookbooks", "http.md")));
     }
 
     @ParameterizedTest(name = "{0}")

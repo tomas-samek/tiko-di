@@ -16,12 +16,11 @@ public class OrderApi {
 }
 ```
 
-`Container` itself is **not** injectable (injecting it is service location). If you
-genuinely need the container — e.g. plain route handlers that aren't components — pass
-it into a hand-constructed class after bootstrap, as `OrderHttpRoutes` does in
-[`tiko-examples/10_persistence_jdbc`](https://github.com/tomas-samek/tiko-di/tree/main/tiko-examples/10_persistence_jdbc)
-(`HttpEntry` builds it with `new OrderHttpRoutes(container)`). Prefer injecting
-`EventBus`, `UnitOfWork` (or the specific collaborators) over reaching for `Container`.
+`Container` itself is **not** injectable (injecting it is service location). Code that
+holds the container already — a batch job's `main`, a test — uses it there, as `BatchEntry`
+does in [`tiko-examples/10_persistence_jdbc`](https://github.com/tomas-samek/tiko-di/tree/main/tiko-examples/10_persistence_jdbc). A
+component injects `EventBus`, `UnitOfWork` (or the specific collaborators) instead: route
+groups take `UnitOfWork`, as in [`tiko-examples/15_quickstart`](https://github.com/tomas-samek/tiko-di/tree/main/tiko-examples/15_quickstart).
 
 ## Opening a unit of work from a component
 

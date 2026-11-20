@@ -238,7 +238,7 @@ Worked examples ship under [`tiko-examples/`](./tiko-examples/README.md), each a
 | 07 | [`07_async_start`](./tiko-examples/07_async_start)                  | `@EventHandler(async = true)` on `ApplicationStartedEvent` — keep slow warmup off the critical path     |
 | 08 | [`08_kafka_order_warehouse`](./tiko-examples/08_kafka_order_warehouse) | Cross-JVM Kafka demo — `@KafkaSource` / `@KafkaSink`, shared event class, Testcontainers e2e         |
 | 09 | [`09_http_javalin`](./tiko-examples/09_http_javalin)                | `TikoJavalin.scoped` opens a unit of work per request through `UnitOfWork`, in a server the container starts and stops; sync request→response independent of the bus |
-| 10 | [`10_persistence_jdbc`](./tiko-examples/10_persistence_jdbc)        | Persistence cookbook — EVENT-scoped JDBC transactions across HTTP and batch flows ([docs](./docs/cookbooks/persistence.md)) |
+| 10 | [`10_persistence_jdbc`](./tiko-examples/10_persistence_jdbc)        | Persistence cookbook — an EVENT-scoped JDBC transaction across a batch loop ([docs](./docs/cookbooks/persistence.md)) |
 | 11 | [`11_custom_logger`](./tiko-examples/11_custom_logger)              | Routing framework logs through slf4j + logback via `System.LoggerFinder`                                |
 | 12 | [`12_testing`](./tiko-examples/12_testing)                          | `@TikoTest` JUnit 5 extension — parameter resolution, `RecordingEventBus` assertions, scope helpers, `awaitAsyncDispatch` |
 | 13 | [`13_mcp_introspection`](./tiko-examples/13_mcp_introspection)      | Runnable demo of the `tiko-mcp` topology server reading a built project's `META-INF/tiko/` artifacts |

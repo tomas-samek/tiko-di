@@ -34,7 +34,8 @@ libraries layer on top of the same scaffolding.
    connection on every method call.
 4. **Transaction decorator pattern.** A single helper
    (`TransactionalScope.run(...)`) opens the scope, commits on success,
-   rolls back on exception. Both HTTP and batch entries use it.
+   rolls back on exception. The batch entry uses it; an HTTP route group
+   has its own wrapper over the same `TransactionContext`.
 
 ## Library choice
 
@@ -190,26 +191,20 @@ public final class TransactionalScope {
 }
 ```
 
-Why a utility instead of a Javalin-specific decorator: this generalises
-across transports. The batch entry uses the same `run(...)`.
+`TransactionalScope.run(...)` takes the container, so it belongs to code
+that holds the container already: a batch job's `main`, a test.
 
 ## HTTP single-request flow
 
-> This example builds Javalin in `main` and hands it the container. For a server the container
-> starts at boot and stops at shutdown, with one unit of work per request through the injected
-> `UnitOfWork`, see the [HTTP cookbook](http.md).
-
-```java
-Javalin app = Javalin.create(cfg -> cfg.routes.post("/orders", ctx -> TransactionalScope.run(container, () -> {
-    routes.handleCreate(ctx);
-    return null;
-})));
-```
-
-One HTTP request = one EVENT scope = one transaction — one operation
-per request. The route handler does its work via
-auto-proxied repositories; commit happens on success, rollback on any
-thrown exception.
+One HTTP request = one unit of work = one transaction. A route group
+receives requests itself, so it takes `UnitOfWork` rather than the
+container, and wraps each handler: the unit opens, the handler runs,
+the transaction commits, or rolls back when the handler throws. The
+[HTTP cookbook](http.md#a-transaction-per-request) shows the wrapper, in
+a server the container starts and stops, and
+[`tiko-examples/15_quickstart`](../../tiko-examples/15_quickstart) runs
+it, with a test that a request failing after its first write leaves
+nothing behind.
 
 ## Batch flow — one unit of work, one transaction, a loop
 

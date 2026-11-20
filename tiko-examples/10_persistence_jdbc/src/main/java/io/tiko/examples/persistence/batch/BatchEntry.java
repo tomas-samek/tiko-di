@@ -23,8 +23,8 @@ import java.util.UUID;
  * need to be retryable or distributed each own their own unit and txn;
  * cross-event consistency is a saga / outbox concern above the DI layer.
  *
- * <p>Run with {@code java -cp <jar> io.tiko.examples.persistence.batch.BatchEntry}
- * (the shaded jar's default main class is {@code HttpEntry}).
+ * <p>Run with {@code java -jar <shaded jar>}. A transaction per HTTP request, in a server the
+ * container starts and stops, is in {@code tiko-examples/15_quickstart}.
  */
 public final class BatchEntry {
 

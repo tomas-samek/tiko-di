@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
 import java.sql.SQLException;
 import javax.sql.DataSource;
 
@@ -22,6 +23,10 @@ import javax.sql.DataSource;
  * takes the {@code DataSource}, the HTTP server included, sees it, and a failed
  * migration fails boot. With Flyway, the same place calls
  * {@code Flyway.configure().dataSource(ds).load().migrate()}.
+ *
+ * <p>{@link #connection} gives every unit of work a connection of its own, without auto-commit,
+ * which {@link TransactionContext} commits or rolls back. It is {@link AutoCloseable}, so the
+ * container closes it when the unit ends, and the pool takes it back.
  */
 @Component(scope = Scope.SINGLETON)
 public class DataSourceFactory {
@@ -48,6 +53,14 @@ public class DataSourceFactory {
             ds.close();
             throw e instanceof RuntimeException failure ? failure : new IllegalStateException("Schema failed", e);
         }
+    }
+
+    /** The unit of work's connection, without auto-commit: one transaction per unit. */
+    @Produces(scope = Scope.EVENT)
+    public Connection connection(DataSource ds) throws SQLException {
+        var connection = ds.getConnection();
+        connection.setAutoCommit(false);
+        return connection;
     }
 
     private static void createSchema(DataSource ds) throws SQLException, IOException {

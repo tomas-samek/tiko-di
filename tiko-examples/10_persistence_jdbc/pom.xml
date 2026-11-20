@@ -14,7 +14,7 @@
     <artifactId>10_persistence_jdbc</artifactId>
     <packaging>jar</packaging>
     <name>10 - Persistence (raw JDBC + HikariCP)</name>
-    <description>One JDBC transaction per unit of work (EVENT scope), wrapping HTTP and batch entry points. Paired with docs/cookbooks/persistence.md.</description>
+    <description>One JDBC transaction per unit of work (EVENT scope) across a batch loop. Paired with docs/cookbooks/persistence.md.</description>
 
     <dependencies>
         <dependency>
@@ -49,14 +49,6 @@
         </dependency>
 
         <dependency>
-            <groupId>io.javalin</groupId>
-            <artifactId>javalin</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.fasterxml.jackson.datatype</groupId>
-            <artifactId>jackson-datatype-jsr310</artifactId>
-        </dependency>
-        <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>
         </dependency>
@@ -69,11 +61,6 @@
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -93,7 +80,7 @@
                         <configuration>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>io.tiko.examples.persistence.http.HttpEntry</mainClass>
+                                    <mainClass>io.tiko.examples.persistence.batch.BatchEntry</mainClass>
                                 </transformer>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                             </transformers>
