@@ -143,7 +143,7 @@ public final class ContainerGenerator {
         writeContainerDescriptor(root + "container.properties", containerClassName);
         generateComponentsListFile(components, root + "components.txt");
 
-        String moduleClassName = "TikoModule_" + containerClassName.substring(containerClassName.lastIndexOf('_') + 1);
+        String moduleClassName = GeneratedNames.moduleClass(containerClassName);
         TypeSpec module = TypeSpec.classBuilder(moduleClassName)
                 .addAnnotation(GeneratorAnnotations.generatedBy(ContainerGenerator.class))
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)

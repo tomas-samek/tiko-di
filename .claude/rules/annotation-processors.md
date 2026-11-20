@@ -13,6 +13,8 @@ All code is generated in the `io.tiko.generated` package:
 - `TikoContainerImpl_<hash>` - Main container implementation
 - `<ComponentName>Factory_<hash>` - Factory for each component, `<ComponentName>Proxy_<hash>` its proxy
 - `EventRegistry_<hash>` - Event handler wiring
+- `KafkaTransportBootstrap_<hash>` - Kafka bridges (`tiko-kafka-processor`; the hash is of the module's bridge classes)
+- `io.tiko.generated.config.<Record>Binder_<hash>` - a `@Configuration` binder (the hash is of the record's qualified name)
 
 `<hash>` is the module's hash. Every module generates into this one package, so every generated class
 name carries it (#726); build such names with `GeneratedNames`, never by hand.

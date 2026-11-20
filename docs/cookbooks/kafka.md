@@ -28,7 +28,7 @@ edge (`@KafkaSource` in, `@KafkaSink` out) changes.
 ## 1. Enable the modules
 
 Add both the runtime and the annotation processor (the processor generates the
-`KafkaTransportBootstrap` that `Tiko.create()` / `Tiko.daemon()` discovers via the
+`KafkaTransportBootstrap_<hash>` that `Tiko.create()` / `Tiko.daemon()` discovers via the
 `TransportBootstrap` ServiceLoader SPI):
 
 ```xml

@@ -9,6 +9,7 @@ import io.tiko.kafka.processor.KafkaAnnotationProcessor;
 import io.tiko.processor.TikoAnnotationProcessor;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import javax.tools.JavaFileObject;
 import javax.tools.StandardLocation;
 import org.junit.jupiter.api.Test;
@@ -48,7 +49,10 @@ class KafkaTransportBootstrapGeneratorTest {
                                 """));
 
         assertThat(compilation).succeeded();
-        assertThat(compilation).generatedSourceFile("io.tiko.generated.KafkaTransportBootstrap");
+        assertThat(compilation)
+                .generatedSourceFile("io.tiko.generated."
+                        + KafkaTransportBootstrapGenerator.className(
+                                List.of("demo.OrderConsumer", "demo.OrderPublisher")));
         assertThat(compilation)
                 .generatedFile(StandardLocation.CLASS_OUTPUT, "META-INF/services/io.tiko.TransportBootstrap");
     }
@@ -71,7 +75,7 @@ class KafkaTransportBootstrapGeneratorTest {
         String normalized = bootstrapSource(compilation).replaceAll("\\s", "");
         org.assertj.core.api.Assertions.assertThat(normalized)
                 .as("keyed sink resolves the partition key via a generated static method")
-                .contains("KafkaTransportBootstrap::key0")
+                .contains(KafkaTransportBootstrapGenerator.className(List.of("demo.OrderPublisher")) + "::key0")
                 .contains("privatestaticStringkey0(Objectp)")
                 .contains("Objectv=((OrderPlaced)p).orderId()")
                 .contains("returnv==null?null:String.valueOf(v)");
@@ -173,7 +177,8 @@ class KafkaTransportBootstrapGeneratorTest {
         org.assertj.core.api.Assertions.assertThat(normalized)
                 .contains("this::sink0,p->null")
                 .doesNotContain("key0(")
-                .contains("this::sink1,KafkaTransportBootstrap::key1")
+                .contains("this::sink1," + KafkaTransportBootstrapGenerator.className(List.of("demo.OrderPublisher"))
+                        + "::key1")
                 .contains("privatestaticStringkey1(Objectp)");
     }
 

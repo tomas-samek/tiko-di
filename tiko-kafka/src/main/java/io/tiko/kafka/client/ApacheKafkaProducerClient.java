@@ -13,8 +13,9 @@ import org.apache.kafka.common.serialization.StringSerializer;
 
 /**
  * Production {@link KafkaProducerClient} backed by {@link KafkaProducer}. Constructed
- * once per container by {@link io.tiko.kafka.runtime.KafkaTransportBootstrap} and shared
- * across every {@code @KafkaSink} subscription.
+ * once per generated {@code KafkaTransportBootstrap_<hash>} (one per module with Kafka
+ * bridges) by {@link io.tiko.kafka.runtime.KafkaBootstrapSupport}, and shared across that
+ * module's {@code @KafkaSink} subscriptions.
  *
  * <p>Tiko-owned settings ({@code bootstrap.servers}, {@code key.serializer},
  * {@code value.serializer}) win over user-supplied {@code producer-properties} on

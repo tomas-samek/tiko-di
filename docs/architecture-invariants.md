@@ -441,14 +441,19 @@ a check implemented in a frontend entry class instead of the pipeline.
 
 **Statement.** Every class a processor generates into `io.tiko.generated` for a module ends in
 that module's `_<hash>` suffix: `TikoContainerImpl_<hash>`, `EventRegistry_<hash>`,
-`TikoModule_<hash>`, and the factories and proxies named through `GeneratedNames`.
+`TikoModule_<hash>`, and the factories and proxies named through `GeneratedNames`. The Kafka
+processor, which does not see the DI container's name, names its bootstrap
+`KafkaTransportBootstrap_<hash>` after the module's bridge classes. A `@Configuration` binder in
+`io.tiko.generated.config` is `<Record>Binder_<hash>`, the hash of the record's qualified name.
 
 **Rationale.** Every module generates into the same package. Without the suffix, two modules of
 one application that each have a component `Health` both generate `HealthFactory`, and the
-classpath keeps one of them (#726).
+classpath keeps one of them (#726). Two modules with Kafka bridges, or two records named
+`Settings`, lost the second one the same way (#869).
 
-**Anchor.** `GeneratedNames` (`tiko-processor`); `.claude/rules/annotation-processors.md`
-"Code Generation Strategy". Recorded at the 0.7.0 gate.
+**Anchor.** `GeneratedNames` (`tiko-processor`), `KafkaTransportBootstrapGenerator.className`
+(`tiko-kafka-processor`); `TwoModulesWithKafkaBridgesTest`, `SameNamedConfigInTwoModulesTest`;
+`.claude/rules/annotation-processors.md` "Code Generation Strategy". Recorded at the 0.7.0 gate.
 
 **Violation looks like.** A generator that composes a class name in `io.tiko.generated` by hand,
 without the module's suffix.

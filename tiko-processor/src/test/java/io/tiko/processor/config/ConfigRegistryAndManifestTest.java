@@ -7,6 +7,7 @@ import com.google.testing.compile.Compilation;
 import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
 import io.tiko.processor.TikoAnnotationProcessor;
+import io.tiko.processor.util.GeneratedNames;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -40,7 +41,9 @@ class ConfigRegistryAndManifestTest {
         var services = c.generatedFile(StandardLocation.CLASS_OUTPUT, "META-INF/services/io.tiko.config.ConfigBinder");
         assertThat(services).isPresent();
         assertThat(read(services.get()).lines())
-                .contains("io.tiko.generated.config.ABinder", "io.tiko.generated.config.BBinder");
+                .contains(
+                        "io.tiko.generated.config." + GeneratedNames.configBinderClass("A", "io.example.A"),
+                        "io.tiko.generated.config." + GeneratedNames.configBinderClass("B", "io.example.B"));
         assertThat(c.generatedSourceFiles()).noneMatch(f -> f.getName().contains("ConfigBinderRegistry_"));
     }
 

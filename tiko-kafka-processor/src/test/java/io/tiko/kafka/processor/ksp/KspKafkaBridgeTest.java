@@ -3,6 +3,7 @@ package io.tiko.kafka.processor.ksp;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.tschuchort.compiletesting.KotlinCompilation;
+import io.tiko.kafka.processor.generator.KafkaTransportBootstrapGenerator;
 import io.tiko.processor.core.ksp.KspCompiler;
 import io.tiko.processor.core.ksp.RecordingCodeGenerator;
 import io.tiko.processor.core.ksp.RoundWatcher;
@@ -19,6 +20,15 @@ import org.junit.jupiter.params.provider.MethodSource;
 /** The Kafka processor runs on KSP2 over a Kotlin bridge, next to the DI processor. */
 class KspKafkaBridgeTest {
 
+    /** The generated Kafka bootstrap, found by its prefix: its name ends in the module's hash (#869). */
+    private static java.util.Optional<String> bootstrapOf(KspCompiler.KspResult result) {
+        var bootstraps = result.generatedJavaNames().stream()
+                .filter(name -> name.startsWith("io.tiko.generated.KafkaTransportBootstrap_"))
+                .toList();
+        assertThat(bootstraps).as("generated Kafka bootstraps").hasSizeLessThanOrEqualTo(1);
+        return bootstraps.stream().findFirst().flatMap(result::generatedJava);
+    }
+
     @Test
     void kotlinKafkaSourceGeneratesBootstrap() {
         var source = bridge();
@@ -27,11 +37,12 @@ class KspKafkaBridgeTest {
                 List.of(new TikoSymbolProcessorProvider(), new KafkaSymbolProcessorProvider()), Map.of(), source);
 
         assertThat(result.exitCode()).as(result.messages()).isEqualTo(KotlinCompilation.ExitCode.OK);
-        assertThat(result.generatedJava("io.tiko.generated.KafkaTransportBootstrap"))
+        assertThat(bootstrapOf(result))
                 .hasValueSatisfying(bootstrap ->
                         assertThat(bootstrap).contains("\"orders\"").contains("fromKafka"));
         assertThat(result.generatedResource("META-INF/services/io.tiko.TransportBootstrap"))
-                .hasValue("io.tiko.generated.KafkaTransportBootstrap\n");
+                .hasValue("io.tiko.generated."
+                        + KafkaTransportBootstrapGenerator.className(List.of("demo.OrderConsumer")) + "\n");
     }
 
     /** #692: a bridge may return null to consume a record without publishing, so a nullable return type is valid. */
@@ -59,7 +70,7 @@ class KspKafkaBridgeTest {
                 List.of(new TikoSymbolProcessorProvider(), new KafkaSymbolProcessorProvider()), Map.of(), source);
 
         assertThat(result.exitCode()).as(result.messages()).isEqualTo(KotlinCompilation.ExitCode.OK);
-        assertThat(result.generatedJava("io.tiko.generated.KafkaTransportBootstrap"))
+        assertThat(bootstrapOf(result))
                 .hasValueSatisfying(bootstrap -> assertThat(bootstrap).contains("fromKafka"));
     }
 
@@ -85,7 +96,8 @@ class KspKafkaBridgeTest {
 
         assertThat(result.exitCode()).as(result.messages()).isEqualTo(KotlinCompilation.ExitCode.OK);
         assertThat(watcher.newFilesPerRound()).as("new files per round").hasSizeGreaterThanOrEqualTo(3);
-        assertThat(watcher.newFilesPerRound().get(2)).contains("KafkaTransportBootstrap.java");
+        assertThat(watcher.newFilesPerRound().get(2))
+                .contains(KafkaTransportBootstrapGenerator.className(List.of("demo.OrderConsumer")) + ".java");
     }
 
     /**
@@ -115,8 +127,7 @@ class KspKafkaBridgeTest {
         assertThat(result.messages())
                 .as("the DI processor's collection error")
                 .contains("must have an @Inject-annotated constructor or a single public constructor");
-        assertThat(result.generatedJava("io.tiko.generated.KafkaTransportBootstrap"))
-                .isPresent();
+        assertThat(bootstrapOf(result)).isPresent();
     }
 
     /** Every Kafka output (bootstrap, service entry, topology) names each bridge's file, and only those. */
@@ -155,7 +166,10 @@ class KspKafkaBridgeTest {
         assertThat(result.exitCode()).as(result.messages()).isEqualTo(KotlinCompilation.ExitCode.OK);
         assertThat(requests)
                 .extracting(RecordingCodeGenerator.Request::path)
-                .anyMatch(path -> path.endsWith("KafkaTransportBootstrap.java"))
+                .contains("io/tiko/generated/"
+                        + KafkaTransportBootstrapGenerator.className(
+                                List.of("demo.OrderConsumer", "demo.OrderPublisher"))
+                        + ".java")
                 .contains("META-INF/services/io.tiko.TransportBootstrap");
         assertThat(requests).hasSizeGreaterThanOrEqualTo(3).allSatisfy(request -> {
             assertThat(request.aggregating()).as(request.path()).isTrue();
@@ -195,9 +209,8 @@ class KspKafkaBridgeTest {
                 .contains(fragments)
                 .contains("Suggested fixes:")
                 .doesNotContain("INTERNAL_ERROR")
-                .doesNotContain("KafkaTransportBootstrap.java");
-        assertThat(result.generatedJava("io.tiko.generated.KafkaTransportBootstrap"))
-                .isEmpty();
+                .doesNotContain("KafkaTransportBootstrap_");
+        assertThat(bootstrapOf(result)).isEmpty();
     }
 
     static Stream<Arguments> unsupportedBridges() {
@@ -385,7 +398,7 @@ class KspKafkaBridgeTest {
                 jvmRecordSink("orderId"));
 
         assertThat(result.exitCode()).as(result.messages()).isEqualTo(KotlinCompilation.ExitCode.OK);
-        assertThat(result.generatedJava("io.tiko.generated.KafkaTransportBootstrap"))
+        assertThat(bootstrapOf(result))
                 .hasValueSatisfying(bootstrap -> assertThat(bootstrap).contains("p).orderId()"));
     }
 
@@ -403,7 +416,7 @@ class KspKafkaBridgeTest {
                 .contains("Sinks.kt:")
                 .contains(
                         "@KafkaSink partitionKey 'getOrderId' does not resolve to a zero-arg method on demo.OrderPlaced")
-                .doesNotContain("KafkaTransportBootstrap.java");
+                .doesNotContain("KafkaTransportBootstrap_");
     }
 
     /**
@@ -438,7 +451,7 @@ class KspKafkaBridgeTest {
                 .as("located Tiko error")
                 .contains("Sinks.kt:")
                 .contains("@KafkaSink partitionKey 'order id' is not a name Java can call")
-                .doesNotContain("KafkaTransportBootstrap.java");
+                .doesNotContain("KafkaTransportBootstrap_");
     }
 
     private static com.tschuchort.compiletesting.SourceFile jvmRecordSink(String partitionKey) {
