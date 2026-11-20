@@ -796,26 +796,32 @@ public final class AggregatingContainer implements Container, UnitCarrier {
     }
 
     /**
-     * Distributes bound configuration records to the module containers that own them.
+     * Distributes bound configuration records to the module containers. A record a module lists in
+     * its {@code configs.txt} goes to that module. A record no module lists goes to every module
+     * (#848): a library binds its own, as {@code tiko-kafka} does {@code KafkaConfig}, and a
+     * single-module container takes every bound record too.
      *
      * @param configs map from config record class to bound instance
-     * @throws IllegalStateException if a config type is not owned by any known module
      */
     public void injectConfigs(java.util.Map<Class<?>, Object> configs) {
         for (java.util.Map.Entry<Class<?>, Object> e : configs.entrySet()) {
-            Container target = configToContainer.get(e.getKey());
-            if (target == null) {
-                throw new ContainerInitializationException("No module owns config type "
-                        + e.getKey().getName() + ". Discovered config types: " + configToContainer.keySet());
+            Container owner = configToContainer.get(e.getKey());
+            var config = java.util.Map.<Class<?>, Object>of(e.getKey(), e.getValue());
+            if (owner != null) {
+                injectConfig(owner, e.getKey(), config);
+            } else {
+                for (Container moduleContainer : moduleContainers) {
+                    injectConfig(moduleContainer, e.getKey(), config);
+                }
             }
-            try {
-                target.getClass()
-                        .getMethod("injectConfigs", java.util.Map.class)
-                        .invoke(target, java.util.Map.of(e.getKey(), e.getValue()));
-            } catch (Exception ex) {
-                throw new ContainerInitializationException(
-                        "Failed to inject config " + e.getKey().getName(), ex);
-            }
+        }
+    }
+
+    private static void injectConfig(Container target, Class<?> type, java.util.Map<Class<?>, Object> config) {
+        try {
+            target.getClass().getMethod("injectConfigs", java.util.Map.class).invoke(target, config);
+        } catch (Exception ex) {
+            throw new ContainerInitializationException("Failed to inject config " + type.getName(), ex);
         }
     }
 

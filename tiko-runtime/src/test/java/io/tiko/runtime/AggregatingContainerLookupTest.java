@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
-import io.tiko.ContainerInitializationException;
 import io.tiko.NoSuchComponentException;
 import java.time.Duration;
 import java.util.Map;
@@ -12,8 +11,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Pins the typed framework exceptions (#98) on {@link AggregatingContainer}'s multi-module dispatch:
- * a lookup miss surfaces as {@link NoSuchComponentException} (with structured fields), and discovery
- * / config-ownership failures surface as {@link ContainerInitializationException}. Backed by the
+ * a lookup miss surfaces as {@link NoSuchComponentException} (with structured fields), and a config
+ * record no module owns reaches every module. Backed by the
  * {@link StubContainer} registered via {@code src/test/resources/META-INF/tiko/container.properties},
  * which registers no components — so every lookup is a miss.
  */
@@ -52,12 +51,17 @@ class AggregatingContainerLookupTest {
         }
     }
 
+    /**
+     * #848: a record no module lists in its {@code configs.txt}, such as {@code tiko-kafka}'s
+     * {@code KafkaConfig}, goes to every module, as a single-module container takes every bound record.
+     */
     @Test
-    void injectConfigsForUnownedTypeThrowsContainerInitialization() {
+    void injectConfigsHandsATypeNoModuleOwnsToEveryModule() {
+        StubContainer.INJECTED_CONFIG_TYPES.clear();
         try (AggregatingContainer c = newContainer()) {
-            assertThatThrownBy(() -> c.injectConfigs(Map.of(String.class, "x")))
-                    .isInstanceOf(ContainerInitializationException.class)
-                    .hasMessageContaining("No module owns config type");
+            c.injectConfigs(Map.of(String.class, "x"));
+
+            assertThat(StubContainer.INJECTED_CONFIG_TYPES).containsExactly(String.class);
         }
     }
 }

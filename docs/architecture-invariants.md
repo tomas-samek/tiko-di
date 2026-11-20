@@ -391,7 +391,9 @@ jars ship is not a discovery mechanism the runtime relies on to find every modul
 needs it for `TransportBootstrap`. #531: an app's own `configs.txt` replaced `tiko-kafka`'s in a
 fat jar and startup failed on "unknown key 'tiko.kafka'"; binders moved to
 `META-INF/services/io.tiko.config.ConfigBinder`. `ServiceLoader` also replaces a reflective
-registry lookup (ARCH-7).
+registry lookup (ARCH-7). A binder found this way need not belong to a module: `tiko-kafka` binds
+`KafkaConfig`, which no module lists in its `configs.txt`, and an aggregate container hands such a
+record to every module, as a single-module container takes every bound record (#848).
 
 **Anchor.** `ConfigBinding#bind` javadoc (`tiko-runtime`); `ConfigBinderServicesWriter`
 (`tiko-processor`); the `TransportBootstrap` and `TikoModule` SPIs (`tiko-api`);
