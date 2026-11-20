@@ -195,6 +195,10 @@ across transports. The batch entry uses the same `run(...)`.
 
 ## HTTP single-request flow
 
+> This example builds Javalin in `main` and hands it the container. For a server the container
+> starts at boot and stops at shutdown, with one unit of work per request through the injected
+> `UnitOfWork`, see the [HTTP cookbook](http.md).
+
 ```java
 Javalin app = Javalin.create(cfg -> cfg.routes.post("/orders", ctx -> TransactionalScope.run(container, () -> {
     routes.handleCreate(ctx);

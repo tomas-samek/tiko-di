@@ -11,6 +11,9 @@ import io.tiko.runtime.Tiko;
  * so one HTTP request = one DB transaction. The shutdown hook stops
  * Javalin before {@code container.shutdown()} so in-flight requests
  * drain before {@code @PreDestroy} runs.
+ *
+ * <p>This entry builds Javalin in {@code main}. For a server the container starts at boot and
+ * stops at shutdown, see {@code docs/cookbooks/http.md} and {@code tiko-examples/15_quickstart}.
  */
 public final class HttpEntry {
 

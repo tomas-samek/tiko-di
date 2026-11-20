@@ -253,9 +253,9 @@ public class DataSources {
 
 A compile-time leak check warns when a `@Component` holds an `AutoCloseable`-typed field but has neither a `@PreDestroy` nor implements `AutoCloseable` itself. Suppress with `@SuppressWarnings("resource")` on the field or class when the resource is owned elsewhere.
 
-### `@PostConstruct` and `@PreDestroy` (legacy form)
+### `@PostConstruct` and `@PreDestroy`
 
-Supported for compatibility and migration ease. **Prefer the constructor + `AutoCloseable` form** — single source of truth, no risk of multiple `@PreDestroy` methods on one class.
+**Prefer the constructor + `AutoCloseable` form** for a component that acquires something and releases it — single source of truth, no risk of multiple `@PreDestroy` methods on one class. The hooks fit work that starts once the component is built, such as a server that binds its port in `@PostConstruct` so a taken port fails boot, and a stop that a lifecycle event handler shares (see the [HTTP cookbook](cookbooks/http.md)).
 
 - `@PostConstruct` runs after dependency injection completes. With constructor injection there's rarely a need: deps are already wired by the time the constructor body executes, so init logic belongs in the constructor.
 - `@PreDestroy` runs at scope teardown (`SINGLETON`: on `container.shutdown()`; `EVENT`: on scope exit). Hooks fire in reverse-creation (LIFO) order — a bean's dependencies are still available during its cleanup, including a SINGLETON it reaches through a PROTOTYPE component. The corresponding `Ending` lifecycle event is published before any `@PreDestroy` runs.
@@ -488,7 +488,7 @@ public class Database {
     }
 
     @Produces(scope = Scope.SINGLETON)
-    public static Database create(ConfigProvider config) {
+    public static Database create(ConfigProvider config) throws SQLException {
         if (config.getUrl() == null || config.getUrl().isEmpty()) {
             throw new IllegalArgumentException("Database URL is required");
         }

@@ -95,7 +95,8 @@
                 <version>3.16.0</version>
                 <configuration>
                     <release>21</release>
-                    <!-- Required for JDK 23+: annotation processing is silently skipped without it. -->
+                    <!-- An explicit opt-in. On JDK 23+ <annotationProcessorPaths> below already enables processing
+                         (maven-compiler-plugin >= 3.13.0); see docs/jdk-23-setup.md. -->
                     <proc>full</proc>
                     <annotationProcessorPaths>
                         <path>

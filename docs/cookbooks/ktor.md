@@ -29,6 +29,7 @@ configure.
 dependencies {
     implementation("io.github.tomas-samek:tiko-api:<version>")
     implementation("io.github.tomas-samek:tiko-runtime:<version>")
+    implementation("io.github.tomas-samek:tiko-config:<version>")       // ConfigSources, application.yaml
     implementation("io.github.tomas-samek:tiko-coroutines:<version>")   // inEventScope
     ksp("io.github.tomas-samek:tiko-processor:<version>")
 

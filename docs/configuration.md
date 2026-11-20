@@ -30,7 +30,7 @@ public class UserRepository {
 
 ```yaml
 db:
-  url: ${DB_URL:jdbc:postgres://localhost/example}
+  url: ${DB_URL:jdbc:postgresql://localhost/example}
   maxConnections: 20
   connectTimeout: PT5S
 ```
