@@ -9,9 +9,10 @@ group = "com.example"
 val tikoVersion = providers.gradleProperty("tikoVersion").get()
 
 repositories {
-    // Only needed to build against a Tiko snapshot installed with `mvn install`; a release
-    // resolves from Maven Central.
-    mavenLocal()
+    // A Tiko snapshot comes from `mvn install`; a release resolves from Maven Central only.
+    if (tikoVersion.endsWith("-SNAPSHOT")) {
+        mavenLocal()
+    }
     mavenCentral()
 }
 

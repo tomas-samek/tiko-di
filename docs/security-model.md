@@ -435,10 +435,11 @@ seam reachable through configuration.
 
 ### SEC-13 — generated projects start safe
 
-**Surface.** `tiko-archetype` output: the project template, the `.mcp.json` (which runs
-`jbang run io.github.tomas-samek:tiko-mcp:<version>` when an agent opens the project), and the
-agent-instruction files it copies (`.ai-skills`, `CLAUDE.md`, `AGENTS.md`, `.cursor`,
-`.junie`, `.github`).
+**Surface.** `tiko-archetype` output, and the Kotlin starter (`tiko-examples-gradle/kotlin-starter`,
+the source of the `tiko-kotlin-starter` template repository): the project template, the
+`.mcp.json` (which runs `jbang run io.github.tomas-samek:tiko-mcp:<version>` when an agent opens
+the project), and the agent-instruction files it copies (`.ai-skills`, `CLAUDE.md`, `AGENTS.md`,
+`.cursor`, `.junie`, `.github`).
 
 **Threat.** Every project created from the archetype inheriting an unpinned or unexpected
 executable, a secret, a permissive default, or agent instructions that don't come from the
@@ -448,9 +449,12 @@ canonical repository sources.
 contains no secrets or permissive defaults. The agent-instruction files are copies of the
 repository's canonical sources.
 
-**Enforced by.** `release.yml` bumps the `tiko-mcp` coordinate in `.mcp.json` to the released
-version. `ArchetypeBundledSkillsInSyncTest` keeps the bundled skills identical to the
-repository's. The template declares no repositories besides Central.
+**Enforced by.** `release.yml` bumps the `tiko-mcp` coordinate in both `.mcp.json` files to the
+released version. `ArchetypeBundledSkillsInSyncTest` keeps the bundled skills identical to the
+repository's. The archetype template declares no repositories besides Central; the Kotlin starter
+adds `mavenLocal()` only while its `tikoVersion` is a `-SNAPSHOT`, so a release of it resolves
+from Central only (`GeneratedProjectsStartSafeTest`, which also pins each `.mcp.json` to an exact
+`X.Y.Z`).
 
 **Status.** Holds (2026-10-07 audit).
 
