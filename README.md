@@ -27,7 +27,7 @@ A **compile-time orchestrator** with an integrated event model and full compile-
 
 The container, the scopes, the event bus, and the wiring graph ship as the framework. HTTP servers, databases, caches, template engines, security libraries, and any other library — you bring directly, and tiko orchestrates the seam via `@Produces`. Nothing is wrapped or rewritten on the library side; nothing is re-invented on the framework side.
 
-For the longer pitch — design principles, three-layer architecture, event-pipeline trade-offs — see [docs/VISION.md](./docs/VISION.md).
+For the design principles behind it — three-layer architecture, event-pipeline trade-offs, and the direction it is headed — see [docs/VISION.md](./docs/VISION.md).
 
 ## The three buckets
 
@@ -113,7 +113,7 @@ public class Main {
 
 The annotation processor validates all dependencies at compile-time and generates the wiring code — plain Java you can read and step through. No reflection, no classpath scanning in your wiring.
 
-**Lifecycle & imperative publish.** `Tiko.create(...)` returns an `AutoCloseable` container you manage (try-with-resources above). For a long-lived headless process — a Kafka consumer or scheduler with no foreground server — use `Tiko.daemon(...)` (it installs a graceful-shutdown hook so `@PreDestroy` runs on `Ctrl+C` / `SIGTERM`) and keep the process alive with the one canonical idiom `daemon.awaitShutdown()`. To publish events imperatively from inside a component, inject `EventBus` as a constructor dependency — it is built-in, no plain-class workaround. Details: the [`tiko-build`](./.ai-skills/tiko-build/SKILL.md) skill and [events.md](./docs/events.md).
+**Lifecycle & imperative publish.** `Tiko.create(...)` returns an `AutoCloseable` container you manage (try-with-resources above). For a long-lived process — an HTTP service, a Kafka consumer, a scheduler — use `Tiko.daemon(...)` (it installs a graceful-shutdown hook so `@PreDestroy` runs on `Ctrl+C` / `SIGTERM`) and keep the process alive with the one canonical idiom `daemon.awaitShutdown()`; an HTTP server is a component the container starts and stops ([HTTP cookbook](./docs/cookbooks/http.md)). To publish events imperatively from inside a component, inject `EventBus` as a constructor dependency — it is built-in, no plain-class workaround. Details: the [`tiko-build`](./.ai-skills/tiko-build/SKILL.md) skill and [events.md](./docs/events.md).
 
 ## Installation
 
@@ -308,7 +308,7 @@ policy — a different layer than framework logging.
 
 | Document                                              | What's in it                                                                                |
 |-------------------------------------------------------|---------------------------------------------------------------------------------------------|
-| [docs/VISION.md](./docs/VISION.md)                    | Long-form pitch, design principles, three-layer architecture, event-pipeline trade-offs.    |
+| [docs/VISION.md](./docs/VISION.md)                    | Design principles, three-layer architecture, event-pipeline trade-offs, and direction.      |
 | [docs/di-and-scopes.md](./docs/di-and-scopes.md)      | Full DI reference — scopes, cross-scope proxies, lifecycle hooks, qualifiers, `@Produces`.  |
 | [docs/configuration.md](./docs/configuration.md)      | `@Configuration` deep-dive — nested records, layered sources, module-baked defaults.        |
 | [docs/events.md](./docs/events.md)                    | Event bus, error handling, async executor, lifecycle events, `@EventTrigger` chains.        |
@@ -319,7 +319,6 @@ policy — a different layer than framework logging.
 | [docs/qa-playbook.md](./docs/qa-playbook.md)          | Structured QA passes over the framework + examples; issue body template; rules for what to file and what not to. |
 | [docs/issue-fix-playbook.md](./docs/issue-fix-playbook.md) | Counterpart to the QA playbook — how to work a filed issue without anchoring on its framing. Four-phase fix workflow + common traps. |
 | [comparisons/README.md](./comparisons/README.md)      | Side-by-side cold-start benchmarks across 8 DI frameworks.                                  |
-| [docs/superpowers/specs/2026-05-12-kafka-event-bus-design.md](./docs/superpowers/specs/2026-05-12-kafka-event-bus-design.md) | Kafka event bus design — universal transport adapter pattern. |
 
 ## Roadmap (summary)
 
@@ -361,13 +360,8 @@ Requires Java 21+ and Maven 3.8+. CI builds on JDK 21, 25, 26 and 27. On JDK 27 
 
 ## Contributing
 
-Contributions are welcome. Open issues or pull requests on GitHub.
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes
-4. Push to the branch
-5. Open a Pull Request
+Contributions are welcome. [CONTRIBUTING.md](./CONTRIBUTING.md) covers building from source, the
+module layout, code style, tests and how a change becomes a pull request.
 
 Bug reports should include Java version, Maven version, and a minimal reproducer. State symptoms and observable facts only — no "probable cause" or "suggested fix" sections, those bias whoever picks the issue up. The full format and rationale are in [docs/qa-playbook.md](./docs/qa-playbook.md); the counterpart workflow for working a filed issue is [docs/issue-fix-playbook.md](./docs/issue-fix-playbook.md).
 

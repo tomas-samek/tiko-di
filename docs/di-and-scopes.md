@@ -223,13 +223,16 @@ The generated wiring lives in the package `io.tiko.generated` and holds a compon
 The recommended cleanup pattern is `AutoCloseable`. A component that implements `AutoCloseable` and declares no explicit `@PreDestroy` gets `close()` called automatically at scope teardown — no annotation required. So does a SINGLETON or EVENT value a `@Produces` method returned, when the value is `AutoCloseable`, whatever type the method declares: a method declared as `DataSource` that returns a `HikariDataSource` gets its pool closed. This lets `@Produces` factories return third-party closeables (data sources, HTTP clients, Kafka producers) without writing a wrapper. That holds after a failed boot too, for the values produced before the failure. The container does not track PROTOTYPE values, so it closes none of them.
 
 ```java
+@Configuration(prefix = "db")
+public record DbConfig(String url, String user, String password) {}
+
 @Component(scope = Scope.SINGLETON)
 public class DatabaseConnection implements AutoCloseable {
     private final Connection connection;
 
     @Inject
-    public DatabaseConnection(ConfigProvider config) throws SQLException {
-        this.connection = DriverManager.getConnection(config.dbUrl());
+    public DatabaseConnection(DbConfig config) throws SQLException {
+        this.connection = DriverManager.getConnection(config.url(), config.user(), config.password());
     }
 
     public Connection get() { return connection; }
@@ -245,7 +248,7 @@ public class DatabaseConnection implements AutoCloseable {
 @Component
 public class DataSources {
     @Produces(scope = Scope.SINGLETON, name = "primary")
-    public DataSource primary(ConfigProvider cfg) {
+    public DataSource primary(DbConfig cfg) {
         return new HikariDataSource(toHikari(cfg));   // close() auto-called at shutdown
     }
 }
@@ -436,29 +439,36 @@ A `@Produces` method may declare checked exceptions. What it throws reaches the 
 
 ```java
 // Instance factory with injected dependencies
+public record Endpoint(String url, String user, String password) {}
+
+@Configuration(prefix = "databases")
+public record DatabasesConfig(Endpoint mysql, Endpoint postgres) {}
+
 @Component(scope = Scope.SINGLETON)
 public class DatabaseConfiguration {
 
-    private final ConfigProvider config;
+    private final DatabasesConfig config;
 
     @Inject
-    public DatabaseConfiguration(ConfigProvider config) {
+    public DatabaseConfiguration(DatabasesConfig config) {
         this.config = config;
     }
 
     @Produces(scope = Scope.SINGLETON, name = "mysql")
     public DataSource mysqlDataSource() {
-        HikariConfig hikariConfig = new HikariConfig();
-        hikariConfig.setJdbcUrl(config.getMysqlUrl());
-        hikariConfig.setUsername(config.getMysqlUsername());
-        hikariConfig.setPassword(config.getMysqlPassword());
-        return new HikariDataSource(hikariConfig);
+        return pool(config.mysql());
     }
 
     @Produces(scope = Scope.SINGLETON, name = "postgres")
     public DataSource postgresDataSource() {
+        return pool(config.postgres());
+    }
+
+    private static DataSource pool(Endpoint endpoint) {
         HikariConfig hikariConfig = new HikariConfig();
-        hikariConfig.setJdbcUrl(config.getPostgresUrl());
+        hikariConfig.setJdbcUrl(endpoint.url());
+        hikariConfig.setUsername(endpoint.user());
+        hikariConfig.setPassword(endpoint.password());
         return new HikariDataSource(hikariConfig);
     }
 }
@@ -488,15 +498,12 @@ public class Database {
     }
 
     @Produces(scope = Scope.SINGLETON)
-    public static Database create(ConfigProvider config) throws SQLException {
-        if (config.getUrl() == null || config.getUrl().isEmpty()) {
+    public static Database create(DbConfig config) throws SQLException {
+        if (config.url().isBlank()) {
             throw new IllegalArgumentException("Database URL is required");
         }
 
-        Connection conn = DriverManager.getConnection(
-                config.getUrl(),
-                config.getUsername(),
-                config.getPassword());
+        Connection conn = DriverManager.getConnection(config.url(), config.user(), config.password());
         conn.setAutoCommit(false);
 
         return new Database(conn);
