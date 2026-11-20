@@ -304,7 +304,7 @@ public final class KotlinConstructRules {
                 method.location(),
                 "Proxied interface member '" + qualifiedMethodName(method) + "' is a suspend fun, which is not"
                         + " supported: " + caller.generated() + " calls it directly, outside any coroutine.",
-                DROP_SUSPEND + ", or wait for coroutine support (K2)"));
+                DROP_SUSPEND));
     }
 
     /**

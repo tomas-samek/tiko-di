@@ -51,6 +51,8 @@ class KotlinConstructRulesTest {
             assertThat(String.join("\n", result.javaSources().values())).contains(fragments);
         } else {
             WiringErrorsJson.assertRejected(result, expectedKind, fragments);
+            // #870: a rejection says what to do now, never to wait for a milestone (K2 shipped in 0.8.0).
+            assertThat(result.messages()).as("the fix a rejection suggests").doesNotContain("wait for", "K2");
         }
     }
 
