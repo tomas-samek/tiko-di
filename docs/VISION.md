@@ -1,6 +1,8 @@
 # Tiko — Vision & Design Notes
 
-> Working document. Raw material for README, not README itself.
+> Design notes: the principles behind Tiko and the direction it is headed. Some passages describe
+> that direction rather than what ships today; the [README](../README.md) and the pages under
+> [`docs/`](./) describe what ships.
 
 ---
 
@@ -27,7 +29,8 @@ cookbook for building on top.
 ## What Tiko is not
 
 - Not a "better Spring". Spring is fine. Tiko is a different trade-off.
-- Not a runtime DI container. There's no `ApplicationContext` to query at runtime.
+- Not a reflective runtime container. Nothing is scanned or wired at startup: the container is
+  generated at build time, and `container.get(...)` looks up what the build wired.
 - Not a microservices framework. Tiko orchestrates services **within a single
   JVM process**. For multi-process orchestration, use a service mesh.
 - Not opinionated about your business logic. Tiko touches the boundary of your
@@ -47,8 +50,8 @@ If a service requires a dependency nobody provides, the build fails.
 If you rename an event class, every publisher and handler fails compilation
 until you fix them.
 
-There is no `ApplicationContext` to query, no classpath scan at startup, no
-"bean not found" surprises in production.
+There is no context assembled at startup, no classpath scan, no "bean not found"
+surprises in production.
 
 The trade-off: no dynamic registration at runtime. If you need that, Tiko is
 not the right tool. That's a feature, not an oversight.

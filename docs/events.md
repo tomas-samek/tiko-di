@@ -48,7 +48,7 @@ A handler method is public and takes the event, optionally followed by its `Even
 
 An event is routed by its exact class: `publish(new Circle())` reaches the handlers subscribed to `Circle`, and no handler subscribed to a supertype such as `Shape`. A handler subscribes to its parameter's type, or to the class named in `@EventHandler(eventType = Circle.class)` when the parameter is a supertype. A handler whose event type is an interface or an abstract class could never be invoked, so it is a compile error; to handle several classes, write one handler method per class.
 
-The same handler code works against any `EventBus` implementation. The in-memory bus (`LocalEventBus` in `tiko-runtime`) ships in core. The Kafka transport (`tiko-kafka` + `tiko-kafka-processor`) is a separate module that bridges via `@KafkaSource` / `@KafkaSink` — see [`tiko-examples/08_kafka_order_warehouse`](../tiko-examples/08_kafka_order_warehouse) for a runnable cross-JVM demo. The universal transport-adapter pattern documented in [`docs/superpowers/specs/2026-05-12-kafka-event-bus-design.md`](./superpowers/specs/2026-05-12-kafka-event-bus-design.md) generalises to HTTP / scheduler / file / gRPC.
+The same handler code works against any `EventBus` implementation. The in-memory bus (`LocalEventBus` in `tiko-runtime`) ships in core. The Kafka transport (`tiko-kafka` + `tiko-kafka-processor`) is a separate module that bridges via `@KafkaSource` / `@KafkaSink` — see [`tiko-examples/08_kafka_order_warehouse`](../tiko-examples/08_kafka_order_warehouse) for a runnable cross-JVM demo. The bridge shape, a source that turns an inbound record into a local event and a sink that sends one out, is described in the [Kafka cookbook](./cookbooks/kafka.md).
 
 ## Trade-off positions
 
