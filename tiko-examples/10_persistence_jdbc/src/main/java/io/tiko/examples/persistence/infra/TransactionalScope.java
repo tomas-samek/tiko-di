@@ -7,12 +7,12 @@ import java.util.function.Supplier;
 /**
  * Opens a Tiko EVENT scope (unit of work), resolves the {@link TransactionContext},
  * runs the user's work, and commits on success or rolls back on
- * exception. Both the HTTP and batch entry points use this helper — it
- * generalises across transports.
+ * exception. The batch entry point uses it, and the tests do. A route group that receives
+ * requests itself takes {@code UnitOfWork} instead: see {@code tiko-examples/15_quickstart}.
  *
  * <p>Not a {@code @Component}: it depends on {@link Container} (not
- * DI-injectable) and is invoked at the framework boundary (route
- * registration, batch loop).
+ * DI-injectable) and is invoked at the framework boundary (the
+ * batch loop and the tests).
  */
 public final class TransactionalScope {
 

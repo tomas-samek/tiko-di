@@ -1,12 +1,10 @@
 package io.tiko.examples.quickstart;
 
-import static io.tiko.examples.quickstart.RequestUnits.inUnit;
-
 import io.javalin.config.RoutesConfig;
+import io.javalin.http.BadRequestResponse;
 import io.javalin.http.Context;
 import io.tiko.EventBus;
 import io.tiko.Scope;
-import io.tiko.UnitOfWork;
 import io.tiko.annotations.Component;
 import io.tiko.annotations.Inject;
 import java.sql.SQLException;
@@ -17,29 +15,31 @@ import java.util.UUID;
  * Bridge between Javalin and the persistence + event-bus layers. A plain
  * component: its paths live next to their handlers in {@link #register}, which
  * {@link HttpServer} calls inside {@code Javalin.create(...)} — Javalin 7
- * accepts routes only there. Each handler runs in a unit of work of its own,
- * so every request gets its own {@link RequestId}.
+ * accepts routes only there. Each handler runs in a unit of work and a database
+ * transaction of its own ({@link RequestTransactions}), so every request gets
+ * its own {@link RequestId}, and its writes are committed or rolled back together.
  */
 @Component(scope = Scope.SINGLETON)
 public class NoteRoutes {
 
-    private final UnitOfWork unitOfWork;
+    private final RequestTransactions transactions;
     private final NoteRepository repo;
     private final EventBus eventBus;
     private final RequestId requestId;
 
     @Inject
-    public NoteRoutes(UnitOfWork unitOfWork, NoteRepository repo, EventBus eventBus, RequestId requestId) {
-        this.unitOfWork = unitOfWork;
+    public NoteRoutes(
+            RequestTransactions transactions, NoteRepository repo, EventBus eventBus, RequestId requestId) {
+        this.transactions = transactions;
         this.repo = repo;
         this.eventBus = eventBus;
         this.requestId = requestId;
     }
 
-    /** Registers this group's paths, each handler in a unit of work of its own. */
+    /** Registers this group's paths, each handler in a unit of work and a transaction of its own. */
     public void register(RoutesConfig routes) {
-        routes.post("/notes", inUnit(unitOfWork, this::handleCreate));
-        routes.get("/notes/{id}", inUnit(unitOfWork, this::handleGet));
+        routes.post("/notes", transactions.inTransaction(this::handleCreate));
+        routes.get("/notes/{id}", transactions.inTransaction(this::handleGet));
     }
 
     public void handleCreate(Context ctx) {
@@ -49,11 +49,17 @@ public class NoteRoutes {
             ctx.status(400).json(java.util.Map.of("error", "text must not be blank"));
             return;
         }
-        var note = new Note(UUID.randomUUID(), req.text(), Instant.now());
+        var note = new Note(UUID.randomUUID(), req.text(), Instant.now(), req.tags());
         try {
+            // The note row goes in first, then each tag: a blank tag fails the request after a
+            // write, and the request's transaction rolls the note back with it.
             repo.insert(note);
+            for (String tag : note.tags()) {
+                if (tag == null || tag.isBlank()) throw new BadRequestResponse("tags must not be blank");
+                repo.insertTag(note.id(), tag);
+            }
         } catch (SQLException e) {
-            throw new RuntimeException(e);
+            throw new IllegalStateException("Note not stored", e);
         }
         eventBus.publish(new NoteCreated(note.id(), note.createdAt()));
         ctx.status(201).json(note);

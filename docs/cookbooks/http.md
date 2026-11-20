@@ -47,7 +47,8 @@ as for any Tiko module.
 A unit of work is what `Scope.EVENT` components live for. A route group takes `UnitOfWork`, a
 built-in dependency like `EventBus`, and wraps each handler so that it runs in a unit of its own.
 Javalin 7 has no handler that wraps a request, so the route group applies a small helper of its
-own when it registers its paths:
+own when it registers its paths. `09_http_javalin` has it as `TikoJavalin.scoped`; the quickstart's
+version also opens a database transaction ([below](#a-transaction-per-request)):
 
 ```java
 final class RequestUnits {
@@ -99,6 +100,74 @@ public class NoteRoutes {
 
 The container is a `UnitOfWork` too. Code that already holds the container, such as a test, can
 pass it wherever the interface is expected. Components take the interface.
+
+## A transaction per request
+
+A request that writes to a database usually wants its writes committed together, or none of
+them. The quickstart runs every request in one unit of work **and one transaction**, three small
+pieces on top of the shape above:
+
+```java
+// DataSourceFactory: every unit of work gets a connection of its own, without auto-commit.
+// It is AutoCloseable, so the container closes it when the unit ends, back into the pool.
+@Produces(scope = Scope.EVENT)
+public Connection connection(DataSource ds) throws SQLException {
+    var connection = ds.getConnection();
+    connection.setAutoCommit(false);
+    return connection;
+}
+
+// The unit's transaction. If nothing ended it, close() rolls it back when the unit ends.
+@Component(scope = Scope.EVENT)
+public class TransactionContext implements AutoCloseable {
+    @Inject public TransactionContext(Connection connection) { /* ... */ }
+    public void commit() throws SQLException { /* connection.commit() */ }
+    public void rollback() throws SQLException { /* connection.rollback() */ }
+    @Override public void close() throws SQLException { /* roll back if neither ran */ }
+}
+
+// The route wrapper: one unit, one transaction, per request.
+@Component(scope = Scope.SINGLETON)
+public class RequestTransactions {
+    @Inject
+    public RequestTransactions(UnitOfWork unitOfWork, Provider<TransactionContext> transaction) { /* ... */ }
+
+    public Handler inTransaction(Handler handler) {
+        return ctx -> unitOfWork.runInEventScope(() -> {
+            var tx = transaction.get();
+            try {
+                handler.handle(ctx);
+                tx.commit();
+            } catch (RuntimeException failure) {
+                rollback(tx, failure);
+                throw failure; // BadRequestResponse and its kind still become Javalin's response
+            } catch (Exception failure) {
+                rollback(tx, failure);
+                throw new IllegalStateException("Request failed", failure);
+            }
+        });
+    }
+}
+```
+
+The route group registers `transactions.inTransaction(this::handleCreate)` where it registered
+`inUnit(...)` before.
+
+- **Repositories stay SINGLETONs.** `NoteRepository` takes `Connection`; it is EVENT-scoped and an
+  interface, so the repository gets a generated proxy that resolves the current unit's
+  connection on every call. Every statement of a request runs on one connection.
+- **`TransactionContext` has no interface to proxy**, so the SINGLETON wrapper takes it as a
+  `Provider` and resolves it inside the unit.
+- **Destroy order.** `TransactionContext` takes the connection, so the unit destroys it first: its
+  safety-net rollback runs while the connection is still open.
+- **What the tests show.** A note and its tags commit together
+  (`QuickstartIT.aRequestCommitsEveryWriteItMade`). A blank tag fails the request after the note
+  row was inserted, and the response is `400` with nothing left in either table
+  (`aRequestThatFailsAfterAWriteRollsEveryWriteBack`).
+
+A batch job takes the same three pieces without the route wrapper: its `main` opens one unit and
+one transaction around the whole loop. The [persistence cookbook](persistence.md#batch-flow--one-unit-of-work-one-transaction-a-loop)
+shows it.
 
 ## The server is a component
 
@@ -288,5 +357,5 @@ this shape end to end. Its orders service:
 - receives the warehouse's decision through a `@KafkaSource` bridge.
 
 Its end-to-end test runs both services as processes against a real broker. The
-[persistence cookbook](persistence.md) covers a transaction bound to the unit of work, and the
-[Kafka cookbook](kafka.md) covers the bridges.
+[persistence cookbook](persistence.md) covers the JDBC side (the pool, the unit's connection, a
+batch in one transaction), and the [Kafka cookbook](kafka.md) covers the bridges.

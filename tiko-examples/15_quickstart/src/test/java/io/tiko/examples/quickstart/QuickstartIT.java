@@ -54,6 +54,7 @@ class QuickstartIT {
         if (container != null) container.shutdown();
         try (Connection c = DriverManager.getConnection(JDBC_URL, "sa", "");
                 Statement st = c.createStatement()) {
+            st.execute("DELETE FROM note_tags");
             st.execute("DELETE FROM notes");
         }
     }
@@ -83,6 +84,53 @@ class QuickstartIT {
         // EventBus.publish on a non-async handler delivers synchronously, so the
         // auditor count is already incremented by the time POST returns 201.
         assertThat(container.get(NoteAuditor.class).count()).isEqualTo(1);
+    }
+
+    /** One request, one transaction: the note and its tags are committed together. */
+    @Test
+    void aRequestCommitsEveryWriteItMade() throws Exception {
+        HttpResponse<String> resp = post("{\"text\":\"tagged\",\"tags\":[\"work\",\"urgent\"]}");
+
+        assertThat(resp.statusCode()).isEqualTo(201);
+        UUID id = UUID.fromString(JSON.readTree(resp.body()).get("id").asText());
+        assertThat(count("SELECT COUNT(*) FROM notes WHERE id = ?", id)).isEqualTo(1);
+        assertThat(count("SELECT COUNT(*) FROM note_tags WHERE note_id = ?", id)).isEqualTo(2);
+
+        HttpResponse<String> get = client.send(
+                HttpRequest.newBuilder()
+                        .uri(URI.create("http://localhost:" + port + "/notes/" + id))
+                        .GET()
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertThat(JSON.readTree(get.body()).get("tags"))
+                .extracting(JsonNode::asText)
+                .containsExactly("urgent", "work");
+    }
+
+    /**
+     * A request that fails after its first write rolls every write back: the note row is inserted
+     * before the blank tag is found, and neither the note nor its first tag stays.
+     */
+    @Test
+    void aRequestThatFailsAfterAWriteRollsEveryWriteBack() throws Exception {
+        HttpResponse<String> resp = post("{\"text\":\"half done\",\"tags\":[\"work\",\" \"]}");
+
+        assertThat(resp.statusCode()).isEqualTo(400);
+        try (Connection c = DriverManager.getConnection(JDBC_URL, "sa", "");
+                var st = c.createStatement();
+                var rs = st.executeQuery("SELECT (SELECT COUNT(*) FROM notes) + (SELECT COUNT(*) FROM note_tags)")) {
+            assertThat(rs.next()).isTrue();
+            assertThat(rs.getInt(1)).as("rows left by the failed request").isZero();
+        }
+    }
+
+    private static int count(String sql, Object id) throws SQLException {
+        try (Connection c = DriverManager.getConnection(JDBC_URL, "sa", "");
+                var st = selectById(c, sql, id);
+                var rs = st.executeQuery()) {
+            rs.next();
+            return rs.getInt(1);
+        }
     }
 
     @Test

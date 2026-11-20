@@ -7,7 +7,7 @@ example proves it compiles, runs, and stays green under CI.
 
 ## Available
 
-- [Persistence (raw JDBC + HikariCP)](persistence.md) — `tiko-examples/10_persistence_jdbc/`. One JDBC transaction per unit of work (EVENT scope), wrapping both an HTTP entry point and a batch flow with shared repositories. Demonstrates the auto-proxy mechanism on a JDK interface (`java.sql.Connection`).
+- [Persistence (raw JDBC + HikariCP)](persistence.md) — `tiko-examples/10_persistence_jdbc/`. One JDBC transaction per unit of work (EVENT scope) across a batch loop, with shared repos; the HTTP request's transaction is in `15_quickstart` ([HTTP cookbook](http.md#a-transaction-per-request))itories. Demonstrates the auto-proxy mechanism on a JDK interface (`java.sql.Connection`).
 - [HTTP service (a server the container owns)](http.md) — `tiko-examples/15_quickstart/`, with `09_http_javalin/` and `17_transactional_outbox/`. Javalin routes with one unit of work per request through the injected `UnitOfWork`, a server `@Component` the container starts at boot and stops before it drains async work, a resource that runs from boot, `main` as `Tiko.daemon(...).awaitShutdown()`, what a taken port and a request in flight at shutdown do, and testing on a free port.
 - [Kafka transport](kafka.md) — `tiko-examples/08_kafka_order_warehouse/`. The `tiko-kafka` source/sink bridges: a topic in via a non-void source + sibling event trigger, an event out via a sink keyed by a payload accessor, broker config under `tiko.kafka.*`, and the poison-record story.
 
