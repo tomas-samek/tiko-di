@@ -196,6 +196,9 @@ Wait in the test, not at its end: a `@TikoTest` container does not wait for asyn
 
 ## `@EventScopeTest` — scope helper
 
+`@EventScopeTest` runs the test in a unit of work, the EVENT scope; it has nothing to do with bus
+events (see [Two meanings of "event"](./di-and-scopes.md#two-meanings-of-event)).
+
 When a test needs an `EVENT`-scoped bean to be resolvable in the test body, annotate the test method. It works on a `@Test`, on each invocation of a `@RepeatedTest` or `@ParameterizedTest`, and on a `@TestFactory`, where each dynamic test runs in its own unit:
 
 ```java

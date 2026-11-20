@@ -7,7 +7,8 @@ package io.tiko;
  * <ol>
  *   <li><strong>SINGLETON</strong> - Application lifetime</li>
  *   <li><strong>EVENT</strong> - One unit of work (HTTP request, consumed message,
- *       scheduled job, async dispatch); the generic unit-of-work primitive</li>
+ *       scheduled job, async dispatch); the generic unit-of-work primitive. The name is the
+ *       scope's, not the event bus's: publishing an event opens no unit of work.</li>
  *   <li><strong>PROTOTYPE</strong> - Per injection (shortest, default)</li>
  * </ol>
  *

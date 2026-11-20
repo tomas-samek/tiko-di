@@ -2,7 +2,7 @@ package io.tiko;
 
 /**
  * Thrown when an EVENT-scoped bean is resolved while no unit of work is open on the current
- * thread. EVENT beans live for exactly one unit of work — an open
+ * thread. "Event scope" in its name is the unit of work, not a bus event. EVENT beans live for exactly one unit of work — an open
  * {@link Container#runInEventScope(Runnable)} / {@link Container#supplyInEventScope} frame —
  * and their teardown ({@code @PreDestroy} / {@code AutoCloseable.close()}) runs when that frame
  * exits. Materializing one outside a frame would orphan the instance: it would never be drained,

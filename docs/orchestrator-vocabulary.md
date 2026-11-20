@@ -33,6 +33,14 @@ buckets. Public-facing docs are organised around this axis.
   the orchestration shape isn't settled. Honest scope note, not a deferral
   promise.
 
+## Unit of work, not "event scope"
+
+Prose says **unit of work** for the EVENT scope (an HTTP request, a consumed record, a job), and
+**event** only for what the bus delivers. The API keeps the scope's names (`Scope.EVENT`,
+`runInEventScope`, `EventStartedEvent`); where prose names one of them, it says that it is about
+the unit of work. [`docs/di-and-scopes.md`](./di-and-scopes.md#two-meanings-of-event) has the
+table.
+
 ## Banned vocabulary
 
 Each banned token concedes the migration frame — it implicitly compares tiko

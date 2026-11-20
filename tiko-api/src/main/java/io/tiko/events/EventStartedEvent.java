@@ -3,24 +3,26 @@ package io.tiko.events;
 import java.time.Instant;
 
 /**
- * Lifecycle event published when entering an event scope.
+ * Lifecycle event published when a unit of work starts: the EVENT scope, not a bus event.
  *
- * <p>This event is automatically published when {@code container.runInEventScope()}
- * is called, before any event-scoped beans are created.</p>
+ * <p>Published once per unit, before any EVENT-scoped bean is created: for every
+ * {@code runInEventScope} / {@code supplyInEventScope} (an HTTP request a route group opens a unit
+ * for, a {@code 404} included), every consumed Kafka record and every attempt of an async handler.
+ * Publishing a bus event does not publish it.</p>
  *
  * <p>Example usage:</p>
  * <pre>{@code
  * @Component(scope = Scope.SINGLETON)
- * public class EventTracer {
+ * public class UnitTracer {
  *     @EventHandler
- *     public void onEventStarted(EventStartedEvent event) {
- *         logger.trace("Event {} started", event.eventId());
+ *     public void onUnitStarted(EventStartedEvent event) {
+ *         logger.trace("Unit of work {} started", event.eventId());
  *         tracer.startSpan(event.eventId());
  *     }
  * }
  * }</pre>
  *
- * @param eventId   unique identifier for this event scope
- * @param timestamp the instant when the event scope was entered
+ * @param eventId   unique identifier of this unit of work
+ * @param timestamp the instant when the unit of work started
  */
 public record EventStartedEvent(String eventId, Instant timestamp) {}
