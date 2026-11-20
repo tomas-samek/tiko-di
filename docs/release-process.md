@@ -1,5 +1,10 @@
 # tiko-di release process
 
+> **Superseded.** This checklist was written for v0.1.0, before Maven Central publication.
+> Releases now follow [`releasing.md`](./releasing.md) (what is published and how) and the
+> [`tiko-release` skill](../.ai-skills/tiko-release/SKILL.md) (the procedure). The page is kept as a
+> record of the first release.
+
 **Origin:** Written for v0.1.0. Subsequent releases reuse this checklist — substitute the version number throughout. The workflow is the same; the content of the release notes is not. Version-specific release notes live in [`RELEASE-NOTES.md`](../RELEASE-NOTES.md) at the repo root — this doc is the *workflow*, not the *content*.
 
 **Scope:** Cut a versioned tag, push it, create the corresponding GitHub release. Until Maven Central publication lands (Phase 5), every release is a tagged GitHub-only release: no binary attachments, no central distribution, no publication automation.

@@ -39,7 +39,7 @@ DI container, scopes (`SINGLETON` / `EVENT` / `PROTOTYPE`), event bus, `@EventHa
 
 ### Plug in — you bring the library; tiko orchestrates the seam
 
-HTTP (Javalin, Jetty, Spark, Vert.x), DataSource (HikariCP, Agroal), schema migrations (Flyway, Liquibase), caching (Caffeine), templates (FreeMarker, Pebble), security (JWT / OAuth via the library of your choice), schedulers, retries, any SDK client. Pattern: declare a factory method annotated `@Produces`, return the library's value, consume as a constructor parameter. No wrapper, no adapter layer, no annotation-driven dispatch.
+HTTP (Javalin, Jetty, Spark, Vert.x), DataSource (HikariCP, Agroal), schema migrations (Flyway, Liquibase), caching (Caffeine), templates (FreeMarker, Pebble), security (JWT / OAuth via the library of your choice), schedulers, retries, any SDK client. Pattern: declare a factory method annotated `@Produces`, return the library's value, consume as a constructor parameter. A server that receives the application's requests is a `@Component` the container starts and stops instead ([HTTP cookbook](./docs/cookbooks/http.md)). No wrapper, no adapter layer, no annotation-driven dispatch.
 
 ### Open design questions
 
@@ -225,7 +225,7 @@ Scopes: `SINGLETON` > `EVENT` > `PROTOTYPE` (longest to shortest lifetime). An `
 
 ## Runnable examples
 
-Worked examples ship under [`tiko-examples/`](./tiko-examples/README.md), each a self-contained Maven project:
+Worked examples ship under [`tiko-examples/`](./tiko-examples/README.md), each a Maven module of this repository's build: it inherits the repository's parent and builds against its current snapshot, so run `mvn install -DskipTests` from the root first.
 
 | #  | Module                                                              | Demonstrates                                                                                            |
 |----|---------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------|
@@ -315,7 +315,7 @@ policy — a different layer than framework logging.
 | [docs/testing.md](./docs/testing.md)                  | `tiko-test` JUnit 5 extension — `@TikoTest`, parameter resolution, `RecordingEventBus`, scope helpers, boundary notes. |
 | [docs/jdk-23-setup.md](./docs/jdk-23-setup.md)        | Annotation processing on JDK 23+ — Maven / Gradle / plain `javac`.                          |
 | [docs/roadmap.md](./docs/roadmap.md)                  | What ships today and what's planned per phase.                                              |
-| [docs/release-process.md](./docs/release-process.md)  | Release engineering notes (maintainers).                                                    |
+| [docs/releasing.md](./docs/releasing.md)              | Release engineering reference (maintainers): what is published and how it is wired.          |
 | [docs/qa-playbook.md](./docs/qa-playbook.md)          | Structured QA passes over the framework + examples; issue body template; rules for what to file and what not to. |
 | [docs/issue-fix-playbook.md](./docs/issue-fix-playbook.md) | Counterpart to the QA playbook — how to work a filed issue without anchoring on its framing. Four-phase fix workflow + common traps. |
 | [comparisons/README.md](./comparisons/README.md)      | Side-by-side cold-start benchmarks across 8 DI frameworks.                                  |

@@ -71,9 +71,9 @@ Conventions:
   the root unreadable.
 - `@Produces` factories live next to the code that consumes them. There is
   no `infra` ceremony unless the module is big enough that scrolling hurts.
-- `Main.java` calls `Tiko.create(ConfigSources.classpath("application.yml"))`,
-  resolves the produced server (its routes are already registered) and calls `.start(port)`.
-  Shutdown hook calls `container.shutdown()`.
+- `Main.java` is `Tiko.daemon(ConfigSources.classpath("application.yml")).awaitShutdown()`.
+  The container starts `HttpServer` while it starts and stops it on shutdown (§3.5); the daemon's
+  JVM hook closes the container on `Ctrl+C` / `SIGTERM`.
 
 ---
 

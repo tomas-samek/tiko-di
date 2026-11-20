@@ -1,6 +1,6 @@
 # Events
 
-Tiko's event system is a first-class part of the container. Handler code is the same shape whether the event was published locally or — when a distributed transport ships — arrives from a remote source. This page is the full reference: publish/subscribe, async, error handling, lifecycle events, and the declarative `@EventTrigger` chains.
+Tiko's event system is a first-class part of the container. Handler code is the same shape whether the event was published locally or arrives through a transport such as Kafka. This page is the full reference: publish/subscribe, async, error handling, lifecycle events, and the declarative `@EventTrigger` chains.
 
 For a runnable example, see [`tiko-examples/03_events`](../tiko-examples/03_events).
 
@@ -55,7 +55,7 @@ The same handler code works against any `EventBus` implementation. The in-memory
 These are explicit, not accidents of implementation. A handler that depends on different semantics will be wrong on at least one transport.
 
 - **Delivery semantics — at-least-once to the bus, at-most-once per handler execution.** Delivery is at-least-once: a transport failure before the event reaches the bus (deserialize, bridge dispatch, publish) is redelivered, so handlers must be idempotent — a handler that breaks under redelivery is buggy regardless of transport. Handler *outcome* is not part of the acknowledgment: once an event is on the bus, the transport's job is done (Kafka commits the offset), and a failing handler routes to the `ErrorHandler` without triggering redelivery — see [Error handling](#error-handling).
-- **Ordering — per-source FIFO only, no cross-source merge.** Local events preserve publisher order. Future distributed transports preserve their own intra-partition order. A handler subscribed to both sees them in arrival order at the handler — there is no synthesized global ordering.
+- **Ordering — per-source FIFO only, no cross-source merge.** Local events preserve publisher order. A transport preserves its own order, as Kafka does within a partition. A handler subscribed to both sees them in arrival order at the handler — there is no synthesized global ordering.
 - **Backpressure — the executor's policy governs async dispatch.** Handlers are synchronous by default. With `async = true`, Tiko submits the work to the event executor. When the default executor is saturated, `CALLER_RUNS` runs the handler on the publisher's thread and `BLOCK` waits for queue space. A custom executor uses its own rejection policy. See [Tuning the default executor's backpressure](#tuning-the-default-executors-backpressure).
 - **Transactional semantics — no buffering: publish after the write, outbox for crash safety.** `publish` delivers at once, inside `runInEventScope` as well as outside it: a synchronous handler has run before `publish` returns, and an async one is already submitted. A unit that publishes and then throws has already delivered the event; nothing is held back until the unit ends and nothing is dropped when it fails. So publish after the write has completed — see [`docs/orchestrator-model.md` §4.1](./orchestrator-model.md). A persistence-backed outbox (for an event that must survive a crash between the write and the publish) is the consumer's responsibility — Tiko does not own a database; [`tiko-examples/17_transactional_outbox`](../tiko-examples/17_transactional_outbox) shows one.
 - **Error handling — log + isolate by default, per-handler policy configurable.** A throwing handler does not propagate to the publisher and does not break sibling handlers. See [Error handling](#error-handling) below.
@@ -488,10 +488,9 @@ public class HttpServerLifecycle {
     }
 }
 
-// Long-lived server — the JVM hook shuts the container down on exit:
-TikoDaemon daemon = Tiko.daemon(opts);
-var routes = daemon.container().get(TicketRoutes.class);
-// ... start serving ...
+// Long-lived server: the container starts it, and the JVM hook shuts the container down on exit
+// (docs/cookbooks/http.md has the whole shape):
+Tiko.daemon(opts).awaitShutdown();
 ```
 
 ### Example — metrics collection

@@ -71,7 +71,7 @@ piece waits for a decision.
 | 8 | merged 2026-11-19 | PR #842; plan `2026-11-19-k2-piece-8-suspend-backpressure.md` |
 | 9 | merged 2026-11-19 | PR #843; plan `2026-11-19-k2-piece-9-suspend-timeouts-retries.md` |
 | 10 | merged 2026-11-19 | PR #844; plan `2026-11-19-k2-piece-10-suspend-kafka-source.md` |
-| 11 | in review | plan `2026-11-19-k2-piece-11-http-cookbook.md`; built on #845 (PR #846), found while writing it |
+| 11 | merged 2026-11-20 | PR #847; plan `2026-11-19-k2-piece-11-http-cookbook.md`; built on #845 (PR #846), found while writing it |
 
 Decided for piece 3 (owner, 2026-11-18): D2 `tiko-coroutines`, D3 accepted with the kotlinx
 version left out of the BOM, D4 `inEventScope`.
