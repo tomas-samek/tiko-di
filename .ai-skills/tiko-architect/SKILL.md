@@ -19,7 +19,7 @@ NO-GO is a hard, specific stop.
 | `tiko-release` pre-flight | release mechanics — BOM entries, secrets, NOTICE, version inputs |
 | **`tiko-architect`** | **architecture** — abstraction coherence, invariant/VISION upholding, public-surface consistency, doc coherence |
 
-The invariants registry is `docs/architecture-invariants.md` (ARCH-1 … ARCH-19). This skill
+The invariants registry is `docs/architecture-invariants.md` (ARCH-1 … ARCH-21). This skill
 never duplicates invariant content — it references invariants by ID and directs agents to read
 their entry from the registry.
 
@@ -51,6 +51,13 @@ A single cheap pass: map the delta to the subset of invariants in `docs/architec
 that the delta plausibly touches, based on file area, package, keyword, and which boundaries
 the delta crosses (e.g. a change in `tiko-api/pom.xml` touches ARCH-1; a new `@Retention`
 touches ARCH-2; new logging code touches ARCH-9; new generated type touches ARCH-11).
+
+Kotlin adds three boundaries. A change in `tiko-processor`, `tiko-processor-core` or
+`tiko-kafka-processor` touches ARCH-17 and ARCH-21: its agent checks that every new check and
+generated output is tested on javac **and** on KSP (the paired `*Test` / `Ksp*Test`), and that a
+construct KSP cannot express is a located error with a fix. A change to any `pom.xml` touches
+ARCH-20: no Kotlin dependency of compile or runtime scope outside `tiko-coroutines`. A change in
+`tiko-coroutines` touches ARCH-5, ARCH-15 and ARCH-19.
 
 Output:
 
