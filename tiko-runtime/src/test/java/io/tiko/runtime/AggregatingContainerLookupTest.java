@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 import io.tiko.NoSuchComponentException;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -61,7 +62,8 @@ class AggregatingContainerLookupTest {
         try (AggregatingContainer c = newContainer()) {
             c.injectConfigs(Map.of(String.class, "x"));
 
-            assertThat(StubContainer.INJECTED_CONFIG_TYPES).containsExactly(String.class);
+            var injected = List.copyOf(StubContainer.INJECTED_CONFIG_TYPES);
+            assertThat(injected).containsExactly(String.class);
         }
     }
 }
