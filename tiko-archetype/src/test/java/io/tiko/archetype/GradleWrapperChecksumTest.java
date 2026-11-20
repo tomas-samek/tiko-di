@@ -44,7 +44,7 @@ class GradleWrapperChecksumTest {
     void everyGradleExampleIsChecked() throws IOException {
         assertThat(wrapperDirectories())
                 .as("a Gradle example outside this walk would run an unchecked wrapper")
-                .hasSize(4);
+                .hasSize(5); // four examples and the Kotlin starter (#860)
     }
 
     @ParameterizedTest(name = "{0}")

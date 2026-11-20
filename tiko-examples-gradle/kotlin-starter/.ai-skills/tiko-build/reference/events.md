@@ -1,0 +1,123 @@
+# tiko-build reference — events, lifecycle & process lifetime
+
+> Read this when: publishing/subscribing to events, declaring lifecycle hooks, or writing a headless/daemon main.
+
+## Imperative publish
+
+**To publish events from inside a component, inject `EventBus`** — it is a built-in
+dependency, resolved by the container like any bean. No plain-class workaround:
+
+```java
+@Component(scope = Scope.SINGLETON)
+public class OrderApi {
+    private final EventBus events;
+    @Inject public OrderApi(EventBus events) { this.events = events; }
+    public void place(Order o) { events.publish(new OrderPlaced(o.id())); }
+}
+```
+
+`Container` itself is **not** injectable (injecting it is service location). Code that
+holds the container already — a batch job's `main`, a test — uses it there, as `BatchEntry`
+does in [`tiko-examples/10_persistence_jdbc`](https://github.com/tomas-samek/tiko-di/tree/main/tiko-examples/10_persistence_jdbc). A
+component injects `EventBus`, `UnitOfWork` (or the specific collaborators) instead: route
+groups take `UnitOfWork`, as in [`tiko-examples/15_quickstart`](https://github.com/tomas-samek/tiko-di/tree/main/tiko-examples/15_quickstart).
+
+## Opening a unit of work from a component
+
+**To open a unit of work from inside a component, inject `UnitOfWork`** — the other built-in
+dependency. A component that takes requests or runs jobs itself (an HTTP route, a scheduler)
+opens one unit per piece of work:
+
+```java
+@Component(scope = Scope.SINGLETON)
+public class OrderRoutes {
+    private final UnitOfWork unitOfWork;
+    private final OrderService orders;
+    @Inject public OrderRoutes(UnitOfWork unitOfWork, OrderService orders) {
+        this.unitOfWork = unitOfWork;
+        this.orders = orders;
+    }
+    public Receipt place(OrderRequest r) {
+        return unitOfWork.supplyInEventScope(() -> orders.place(r));
+    }
+}
+```
+
+It has `runInEventScope(Runnable)` and `supplyInEventScope(Supplier<T>)` only, with the
+container's contract: a call inside an open unit throws `IllegalStateException`. `Container`
+extends it, so `main` and tests can pass the container where a `UnitOfWork` is expected.
+
+## Subscribing with `@EventHandler`
+
+```java
+public record OrderPlaced(String orderId, long amountCents) {}
+
+@Component(scope = Scope.SINGLETON)
+public class OrderListener {
+    @EventHandler
+    public void onOrderPlaced(OrderPlaced event) {
+        // Synchronous by default.
+    }
+
+    @EventHandler(async = true)
+    public void notifyAsync(OrderPlaced event) {
+        // Off the publisher thread, bounded executor.
+    }
+}
+```
+
+Async handlers own their unit: an `@EventHandler(async = true)` runs in a fresh EVENT
+unit per invocation (per attempt with retries) — EVENT-scoped beans resolve inside it and
+tear down when it completes, and each invocation publishes its own
+`EventStartedEvent`/`EventEndingEvent` pair.
+
+## Declarative chains with `@EventTrigger`
+
+```java
+@EventHandler
+@EventTrigger(eventName = "OrderValidated")
+public ValidationResult onOrderCreated(OrderCreated event) {
+    return validate(event);  // return value becomes the next event's payload
+}
+```
+
+## Lifecycle hooks
+
+```java
+@Component(scope = Scope.SINGLETON)
+public class ReportScheduler implements AutoCloseable {
+
+    private ScheduledExecutorService scheduler;
+
+    @PostConstruct
+    public void start() {
+        scheduler = Executors.newSingleThreadScheduledExecutor();
+        scheduler.scheduleAtFixedRate(this::report, 1, 1, TimeUnit.MINUTES);
+    }
+
+    @Override
+    public void close() { if (scheduler != null) scheduler.shutdown(); }
+    // No explicit @PreDestroy needed — AutoCloseable.close() runs at shutdown.
+}
+```
+
+## Keeping the process alive
+
+**Keep a headless process alive with one idiom: `Tiko.daemon(...).awaitShutdown()`.**
+`daemon(...)` installs a JVM shutdown hook (graceful `@PreDestroy` on `Ctrl+C` /
+`SIGTERM`) and auto-starts discovered `TransportBootstrap` services (Kafka consumers,
+etc.) via `ServiceLoader`; `awaitShutdown()` blocks `main` until then. Do **not**
+improvise `Thread.join()` / `CountDownLatch`.
+
+```java
+public static void main(String[] args) {
+    TikoDaemon daemon = Tiko.daemon(ConfigSources.classpath("application.yml"));
+    // resolve beans / start consumers via daemon.container() ...
+    daemon.awaitShutdown();   // canonical keep-alive
+}
+```
+
+An HTTP service uses the same idiom: its server is a `@Component` the container starts
+in `@PostConstruct` and stops on `ApplicationEndingEvent`, so `main` is only
+`Tiko.daemon(...).awaitShutdown()`, as in the bootstrap pattern in [`SKILL.md`](../SKILL.md)
+and the [HTTP cookbook](https://github.com/tomas-samek/tiko-di/blob/main/docs/cookbooks/http.md).

@@ -61,6 +61,20 @@ public final class ArchetypeDocSync {
         return Path.of("src", "main", "resources", "archetype-resources", ".ai-skills", skill);
     }
 
+    /**
+     * The Kotlin starter's bundled skill directory (#860), relative to the {@code tiko-archetype}
+     * module directory. The starter is the source of the {@code tiko-kotlin-starter} template
+     * repository and ships the same copy as the archetype.
+     */
+    public static Path starterBundledDir(String skill) {
+        return Path.of("..", "tiko-examples-gradle", "kotlin-starter", ".ai-skills", skill);
+    }
+
+    /** Every bundled copy of {@code skill}: the archetype's, then the Kotlin starter's. */
+    public static List<Path> bundledDirs(String skill) {
+        return List.of(bundledDir(skill), starterBundledDir(skill));
+    }
+
     /** Every markdown file under {@code root}, as sorted paths relative to {@code root}. */
     public static List<Path> markdownFiles(Path root) throws IOException {
         try (var stream = Files.walk(root)) {
@@ -74,21 +88,27 @@ public final class ArchetypeDocSync {
     /** Regenerates every bundled skill directory from its canonical source. Run from {@code tiko-archetype}. */
     public static void main(String[] args) throws IOException {
         for (String skill : SYNCED_SKILLS) {
-            Path from = canonicalDir(skill);
-            Path to = bundledDir(skill);
-            // Remove bundled markdown with no canonical counterpart (renames/deletions propagate).
-            for (Path stale : markdownFiles(to)) {
-                if (!Files.exists(from.resolve(stale))) {
-                    Files.delete(to.resolve(stale));
-                    System.out.println("deleted stale " + to.resolve(stale));
-                }
+            for (Path to : bundledDirs(skill)) {
+                regenerate(canonicalDir(skill), to);
             }
-            for (Path rel : markdownFiles(from)) {
-                Path target = to.resolve(rel);
-                Files.createDirectories(target.getParent());
-                Files.writeString(target, forArchetype(Files.readString(from.resolve(rel))));
-                System.out.println("regenerated " + target);
+        }
+    }
+
+    /** Rewrites one bundled copy {@code to} from its canonical directory {@code from}. */
+    private static void regenerate(Path from, Path to) throws IOException {
+        Files.createDirectories(to);
+        // Remove bundled markdown with no canonical counterpart (renames/deletions propagate).
+        for (Path stale : markdownFiles(to)) {
+            if (!Files.exists(from.resolve(stale))) {
+                Files.delete(to.resolve(stale));
+                System.out.println("deleted stale " + to.resolve(stale));
             }
+        }
+        for (Path rel : markdownFiles(from)) {
+            Path target = to.resolve(rel);
+            Files.createDirectories(target.getParent());
+            Files.writeString(target, forArchetype(Files.readString(from.resolve(rel))));
+            System.out.println("regenerated " + target);
         }
     }
 }

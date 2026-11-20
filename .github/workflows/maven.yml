@@ -158,6 +158,16 @@ jobs:
             sleep 15
           done
           exit 1
+      # The source of the tiko-kotlin-starter template repository (#860): `run` prints the greeting.
+      - name: Build, test and run the Kotlin starter
+        working-directory: tiko-examples-gradle/kotlin-starter
+        run: |
+          for attempt in 1 2 3; do
+            ./gradlew build run && exit 0
+            echo "gradle attempt $attempt failed" >&2
+            sleep 15
+          done
+          exit 1
       - name: Verify transactional outbox crash recovery in Kotlin
         working-directory: tiko-examples-gradle/kotlin-transactional-outbox
         run: |

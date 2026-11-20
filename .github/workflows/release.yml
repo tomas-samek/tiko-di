@@ -111,8 +111,8 @@ jobs:
         # reactor SNAPSHOT (unlike .mcp.json below). Example 13's .mcp.json runs the locally built
         # tiko-mcp jar, so its jar name follows the reactor version at both steps too.
         #
-        # The archetype's .mcp.json template also carries a tiko-mcp coordinate that
-        # must match the released version (it's the version users of the scaffolded
+        # The archetype's .mcp.json template, and the Kotlin starter's (#860), also carry a
+        # tiko-mcp coordinate that must match the released version (it's the version users of the scaffolded
         # project download from Central). Bumped here on release; deliberately NOT
         # bumped in the next-snapshot step below — SNAPSHOTS aren't on Central, so
         # the .mcp.json stays pinned to the most recent released version between
@@ -126,7 +126,8 @@ jobs:
           sed -i "s|^tikoVersion=.*|tikoVersion=${{ inputs.release_version }}|" \
               tiko-examples-gradle/*/gradle.properties
           sed -i "s|tiko-mcp:[0-9]\+\.[0-9]\+\.[0-9]\+|tiko-mcp:${{ inputs.release_version }}|g" \
-              tiko-archetype/src/main/resources/archetype-resources/.mcp.json
+              tiko-archetype/src/main/resources/archetype-resources/.mcp.json \
+              tiko-examples-gradle/kotlin-starter/.mcp.json
           sed -i "s|tiko-mcp-[^\"]*\.jar|tiko-mcp-${{ inputs.release_version }}.jar|" \
               tiko-examples/13_mcp_introspection/.mcp.json
 
