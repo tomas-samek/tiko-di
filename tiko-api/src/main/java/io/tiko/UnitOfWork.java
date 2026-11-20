@@ -30,6 +30,11 @@ package io.tiko;
  *
  * <p>In an application of several modules the unit is the application's: the EVENT-scoped
  * components of every module live in it.
+ *
+ * <p>Kotlin's {@code inEventScope} ({@code tiko-coroutines}) keeps a unit across suspension only
+ * for a {@code UnitOfWork} a Tiko container hands out: the one a component is handed, or the
+ * container itself. It throws {@link IllegalStateException} for any other implementation of this
+ * interface, a test double included.
  */
 public interface UnitOfWork {
 

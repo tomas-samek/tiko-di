@@ -11,11 +11,16 @@ import org.junit.jupiter.api.Test;
 
 /**
  * The Kafka validation and generation logic runs on the frontend-neutral processor model, so it
- * can serve javac and KSP alike. Only the javac entry class may touch javac's processing API.
+ * can serve javac and KSP alike. Only the javac entry class may touch javac's processing API, and
+ * only the KSP entry class the KSP API.
  */
 class FrontendBoundaryTest {
 
     private static final String JAVAC_ENTRY = "io/tiko/kafka/processor/KafkaAnnotationProcessor.java";
+
+    private static final String KSP_ENTRY = "io/tiko/kafka/processor/ksp/KafkaSymbolProcessorProvider.java";
+
+    private static final String KSP_PACKAGE = "com.google.devtools.ksp";
 
     private static final List<String> JAVAC_PACKAGES = List.of("javax.lang.model", "javax.annotation.processing");
 
@@ -41,6 +46,34 @@ class FrontendBoundaryTest {
                     .toList();
 
             assertThat(offenders).as("main sources importing javac types").isEmpty();
+        }
+    }
+
+    /**
+     * #871: the KSP API stays in the KSP entry, as javac's stays in the javac entry. A source names it
+     * by import or by its qualified name; either counts.
+     */
+    @Test
+    void mainSourcesUseNoKspTypesOutsideKspEntry() throws IOException {
+        var mainSources = Path.of(System.getProperty("user.dir"), "src", "main", "java");
+
+        try (var files = Files.walk(mainSources)) {
+            var offenders = files.filter(path -> path.toString().endsWith(".java"))
+                    .map(path -> mainSources.relativize(path).toString().replace('\\', '/'))
+                    .filter(source -> !source.equals(KSP_ENTRY))
+                    .filter(source -> namesKspTypes(mainSources, source))
+                    .sorted()
+                    .toList();
+
+            assertThat(offenders).as("main sources using the KSP API").isEmpty();
+        }
+    }
+
+    private static boolean namesKspTypes(Path mainSources, String source) {
+        try {
+            return Files.readString(mainSources.resolve(source)).contains(KSP_PACKAGE);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 
