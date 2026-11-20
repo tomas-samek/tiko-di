@@ -5,7 +5,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.stream.Stream;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 /**
@@ -17,15 +19,16 @@ import org.junit.jupiter.params.provider.MethodSource;
  */
 class ArchetypeBundledSkillsInSyncTest {
 
-    static List<String> syncedSkills() {
-        return ArchetypeDocSync.SYNCED_SKILLS;
+    /** Every bundled copy (the archetype's and the Kotlin starter's, #860) of every synced skill. */
+    static Stream<Arguments> bundledCopies() {
+        return ArchetypeDocSync.SYNCED_SKILLS.stream()
+                .flatMap(skill -> ArchetypeDocSync.bundledDirs(skill).stream().map(dir -> Arguments.of(skill, dir)));
     }
 
-    @ParameterizedTest(name = "{0}")
-    @MethodSource("syncedSkills")
-    void bundledSkillDirectoryIsInSyncWithCanonical(String skill) throws Exception {
+    @ParameterizedTest(name = "{0} in {1}")
+    @MethodSource("bundledCopies")
+    void bundledSkillDirectoryIsInSyncWithCanonical(String skill, Path bundledDir) throws Exception {
         Path canonicalDir = ArchetypeDocSync.canonicalDir(skill);
-        Path bundledDir = ArchetypeDocSync.bundledDir(skill);
         List<Path> canonicalFiles = ArchetypeDocSync.markdownFiles(canonicalDir);
         List<Path> bundledFiles = ArchetypeDocSync.markdownFiles(bundledDir);
 

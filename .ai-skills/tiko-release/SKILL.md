@@ -361,6 +361,36 @@ gh workflow run deploy.yml -R tomas-samek/tomas-samek.github.io --ref main
 curl -s https://tomas-samek.github.io/projects/tiko-di/ | grep -c "<prior X.Y.Z>"
 ```
 
+### Update the Kotlin starter (`tomas-samek/tiko-kotlin-starter`)
+
+The [`tiko-kotlin-starter`](https://github.com/tomas-samek/tiko-kotlin-starter) template
+repository is a copy of `tiko-examples-gradle/kotlin-starter` at the release tag (#860). In the
+tag its `tikoVersion` and `.mcp.json` already name the release (`release.yml`), so the copy needs
+no edit. Once Central is live (Step 5), copy it from the tag, never from `main`, where it names
+the next snapshot:
+
+```bash
+git -C <tiko-di checkout> fetch --tags
+rm -rf /tmp/starter && mkdir /tmp/starter
+git -C <tiko-di checkout> archive v<X.Y.Z> tiko-examples-gradle/kotlin-starter \
+    | tar -x -C /tmp/starter --strip-components=2
+cd /tmp/starter && ./gradlew build run    # expect: Hello, world!
+```
+
+- **The first time (0.8.0):** create the repository, push the copy, and mark it a template:
+
+  ```bash
+  git init -b main && git add -A && git commit -m "Tiko Kotlin starter <X.Y.Z>"
+  gh repo create tomas-samek/tiko-kotlin-starter --public --source . --push \
+      --description "Start a Kotlin + Gradle + KSP project on Tiko DI"
+  gh api -X PATCH repos/tomas-samek/tiko-kotlin-starter -F is_template=true
+  ```
+
+  Then name it in the README's "Scaffold a new project" section, next to the Maven archetype,
+  in the pin PR of Step 6.
+- **Every release after:** clone the starter, replace its files with the copy (keep `.git`),
+  commit `chore: Tiko <X.Y.Z>` and push. Check on GitHub that "Use this template" still shows.
+
 ## Step 7 — GitHub Release notes
 
 Once Central is live, draft the release notes:

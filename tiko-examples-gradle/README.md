@@ -19,6 +19,18 @@ Central:
 
 Setup, construct rules and nullability rules: [`reference/kotlin.md`](../.ai-skills/tiko-build/reference/kotlin.md).
 
+## kotlin-starter &nbsp;<sub>[`kotlin-starter/`](./kotlin-starter)</sub>
+
+The starting point for a Kotlin service, as `tiko-archetype` is for a Maven one: one component, a
+`main`, a `@TikoTest`, and the agent context the archetype generates (`CLAUDE.md`, the build
+skill with its Kotlin reference, `.mcp.json`, …). It is the source of the
+[`tiko-kotlin-starter`](https://github.com/tomas-samek/tiko-kotlin-starter) template repository.
+
+```
+cd tiko-examples-gradle/kotlin-starter
+./gradlew build run
+```
+
 ## kotlin-quickstart &nbsp;<sub>[`kotlin-quickstart/`](./kotlin-quickstart)</sub>
 
 The smallest Kotlin service: constructor injection between Kotlin classes, `internal` components,

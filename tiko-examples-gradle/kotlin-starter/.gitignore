@@ -1,0 +1,15 @@
+build/
+.gradle/
+.kotlin/
+.idea/
+*.iml
+.vscode/
+.DS_Store
+*.log
+
+# Optional: ignore AI assistant local config if you don't want to commit it.
+# By default, committing it lets the team share the agent context.
+#
+# .ai-skills/
+# .cursor/
+# CLAUDE.md
