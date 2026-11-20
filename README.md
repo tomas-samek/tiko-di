@@ -29,54 +29,6 @@ The container, the scopes, the event bus, and the wiring graph ship as the frame
 
 For the design principles behind it — three-layer architecture, event-pipeline trade-offs, and the direction it is headed — see [docs/VISION.md](./docs/VISION.md).
 
-## The three buckets
-
-Every concern in a tiko-built service lands in exactly one bucket. Classify, then write code.
-
-### Core — what tiko ships
-
-DI container, scopes (`SINGLETON` / `EVENT` / `PROTOTYPE`), event bus, `@EventHandler` + `@EventTrigger`, compile-time validation, lifecycle hooks (`@PostConstruct`, `@PreDestroy`, `ApplicationStartedEvent`, `ApplicationEndingEvent`), `@Configuration` typed records.
-
-### Plug in — you bring the library; tiko orchestrates the seam
-
-HTTP (Javalin, Jetty, Spark, Vert.x), DataSource (HikariCP, Agroal), schema migrations (Flyway, Liquibase), caching (Caffeine), templates (FreeMarker, Pebble), security (JWT / OAuth via the library of your choice), schedulers, retries, any SDK client. Pattern: declare a factory method annotated `@Produces`, return the library's value, consume as a constructor parameter. A server that receives the application's requests is a `@Component` the container starts and stops instead ([HTTP cookbook](./docs/cookbooks/http.md)). No wrapper, no adapter layer, no annotation-driven dispatch.
-
-### Open design questions
-
-Scheduling-as-tick-event, units of work that nest — the small set of unresolved questions about extending the event model itself. An honest scope note, not a deferral promise.
-
-## What you plug in
-
-Lookup-table answer to "does tiko support X?":
-
-| Need | Pattern | Recipe in |
-|---|---|---|
-| HTTP layer | A server `@Component` owning Javalin (or your choice) + plain route methods, one unit of work per request | [`docs/cookbooks/http.md`](./docs/cookbooks/http.md), example `15_quickstart` |
-| Postgres / MySQL | `@Produces DataSource` returning `HikariDataSource` | `tiko-build` skill, example `15_quickstart` |
-| Schema migrations | `Flyway.migrate()` in the `DataSource` producer, before it returns the pool | `tiko-build` skill, example `15_quickstart` |
-| Kafka | `@KafkaSource` / `@KafkaSink` — tiko-native module with compile-time validation | `tiko-kafka`, example `08_kafka_order_warehouse` |
-| In-process cache | `@Produces Cache<K,V>` (Caffeine) | `tiko-build` skill |
-| Templates | `@Produces freemarker.template.Configuration` (or Pebble, Mustache) | `tiko-build` skill |
-| Security | Javalin `before` handler + `Context` attributes (open-design caveat in the model doc §6) | [`docs/orchestrator-model.md`](./docs/orchestrator-model.md) §6 |
-| Scheduling | `@EventHandler` on a `Tick` event published by a small scheduler thread | [`docs/orchestrator-model.md`](./docs/orchestrator-model.md) §4.2 |
-| Async work | `@EventHandler(async = true)` for event-shaped work; `CompletableFuture` / virtual threads for ad-hoc | [`docs/orchestrator-model.md`](./docs/orchestrator-model.md) §4.3 |
-| Retry | Small utility wrapper — visible code, no AOP | [`docs/orchestrator-model.md`](./docs/orchestrator-model.md) §4.4 |
-| Configuration | Typed `@Configuration` records | `tiko-config`, example `02_config` |
-| Metrics / tracing | Plug in your library; expose via routes on your HTTP layer | — |
-
-## Benchmarked for AI-friendliness
-
-[llm-framework-benchmark](https://github.com/tomas-samek/llm-framework-benchmark): on an external-oracle-graded build task (a Kafka → H2 → merged-notification service), run across three models (Claude Sonnet 4.6 / Fable 5 / Opus 4.8, n=5). tiko — *absent from the models' training data* — reaches **86–100% median compliance**, on par with Spring on versions the models know, and clears the brand-new Spring Boot 4.0.6 wall that broke Sonnet 4.6 (median 0%). See the benchmark for the full picture, per-build token cost, and caveats.
-
-## Start building
-
-- **New service?** Read [`.ai-skills/tiko-build/SKILL.md`](./.ai-skills/tiko-build/SKILL.md) — decision tree, `@Produces` cookbook, anti-pattern redirect table so an agent reaches for the tiko-native primitive.
-- **Long-form prose?** [`docs/orchestrator-model.md`](./docs/orchestrator-model.md).
-- **Reference shape?** [`tiko-examples/15_quickstart`](./tiko-examples/15_quickstart) — the canonical small service the skill cites.
-- **Scaffold a fresh project?** Maven archetype — see [Scaffold a new project](#scaffold-a-new-project-archetype) below.
-- **Kotlin?** Gradle + KSP is supported — setup, construct rules and nullability rules are in [`reference/kotlin.md`](./.ai-skills/tiko-build/reference/kotlin.md); runnable builds: [`tiko-examples-gradle/`](./tiko-examples-gradle) (quickstart, Ktor + Exposed REST API, Kafka consumer, transactional outbox). Coroutines are the next Kotlin milestone: `suspend` handlers and bridges ([Kotlin K2](https://github.com/tomas-samek/tiko-di/milestone/20)).
-- **Library not in the cookbook?** Read [`.ai-skills/tiko-cookbook-extension/SKILL.md`](./.ai-skills/tiko-cookbook-extension/SKILL.md) — the procedural skill for adding a new recipe. Load-bearing rule: **ask, don't fabricate.**
-
 ## Quick example
 
 ```java
@@ -190,23 +142,48 @@ mvn compile exec:java   # prints: Hello, world!
 
 The generated project ships with AI-context files for the major coding agents — `CLAUDE.md` (canonical), `AGENTS.md`, `.cursor/rules/tiko.md`, `.github/copilot-instructions.md`, `.junie/guidelines.md`, `.ai-skills/SKILL.md`, and `.ai-skills/tiko-build/SKILL.md` (the orchestrator-model skill — decision tree + `@Produces` cookbook + anti-pattern redirects). Each tool-specific file points at the canonical sources, so edit one file when conventions change.
 
-### AI-agent topology server (MCP)
+## Your first service
 
-Every Tiko build emits machine-readable topology + config schema to
-`META-INF/tiko/`. The `tiko-mcp` companion jar exposes them to any
-MCP-aware coding agent (Claude Code, Cursor, …):
+- **Step by step:** [docs/getting-started.md](./docs/getting-started.md) builds a small HTTP + database + event service with a test, one file at a time.
+- **Reference shape?** [`tiko-examples/15_quickstart`](./tiko-examples/15_quickstart) — the finished service from that page, and the canonical small service the skill cites. Copy it out of a [release tag](https://github.com/tomas-samek/tiko-di/tags), 0.8.0 or later, to start your own.
+- **Scaffold a fresh project?** Maven archetype — see [Scaffold a new project](#scaffold-a-new-project-archetype) above.
+- **Long-form prose?** [`docs/orchestrator-model.md`](./docs/orchestrator-model.md), the recipes behind the shape.
+- **Kotlin?** Gradle + KSP is supported — setup, construct rules and nullability rules are in [`reference/kotlin.md`](./.ai-skills/tiko-build/reference/kotlin.md); runnable builds: [`tiko-examples-gradle/`](./tiko-examples-gradle) (quickstart, Ktor + Exposed REST API, Kafka consumer, transactional outbox). Coroutines are the next Kotlin milestone: `suspend` handlers and bridges ([Kotlin K2](https://github.com/tomas-samek/tiko-di/milestone/20)).
 
-    java -jar tiko-mcp.jar /path/to/your/project
+## The three buckets
 
-The metadata ships inside the jar so MCP can also introspect Tiko
-dependencies you didn't build yourself. To suppress emission for a
-module (closed-source service, sensitive jars), add
-`-Atiko.topology.bundle=false` to the annotation processor args.
+Every concern in a tiko-built service lands in exactly one bucket. Classify, then write code.
 
-See [`tiko-examples/13_mcp_introspection`](./tiko-examples/13_mcp_introspection)
-for a runnable demo. Projects scaffolded from `tiko-archetype` ship a
-ready-to-use `.mcp.json` (jbang-resolved) — MCP-aware agents auto-connect
-on open with no setup beyond installing jbang.
+### Core — what tiko ships
+
+DI container, scopes (`SINGLETON` / `EVENT` / `PROTOTYPE`), event bus, `@EventHandler` + `@EventTrigger`, compile-time validation, lifecycle hooks (`@PostConstruct`, `@PreDestroy`, `ApplicationStartedEvent`, `ApplicationEndingEvent`), `@Configuration` typed records.
+
+### Plug in — you bring the library; tiko orchestrates the seam
+
+HTTP (Javalin, Jetty, Spark, Vert.x), DataSource (HikariCP, Agroal), schema migrations (Flyway, Liquibase), caching (Caffeine), templates (FreeMarker, Pebble), security (JWT / OAuth via the library of your choice), schedulers, retries, any SDK client. Pattern: declare a factory method annotated `@Produces`, return the library's value, consume as a constructor parameter. A server that receives the application's requests is a `@Component` the container starts and stops instead ([HTTP cookbook](./docs/cookbooks/http.md)). No wrapper, no adapter layer, no annotation-driven dispatch.
+
+### Open design questions
+
+Scheduling-as-tick-event, units of work that nest — the small set of unresolved questions about extending the event model itself. An honest scope note, not a deferral promise.
+
+## What you plug in
+
+Lookup-table answer to "does tiko support X?":
+
+| Need | Pattern | Recipe in |
+|---|---|---|
+| HTTP layer | A server `@Component` owning Javalin (or your choice) + plain route methods, one unit of work per request | [`docs/cookbooks/http.md`](./docs/cookbooks/http.md), example `15_quickstart` |
+| Postgres / MySQL | `@Produces DataSource` returning `HikariDataSource` | `tiko-build` skill, example `15_quickstart` |
+| Schema migrations | `Flyway.migrate()` in the `DataSource` producer, before it returns the pool | `tiko-build` skill, example `15_quickstart` |
+| Kafka | `@KafkaSource` / `@KafkaSink` — tiko-native module with compile-time validation | `tiko-kafka`, example `08_kafka_order_warehouse` |
+| In-process cache | `@Produces Cache<K,V>` (Caffeine) | `tiko-build` skill |
+| Templates | `@Produces freemarker.template.Configuration` (or Pebble, Mustache) | `tiko-build` skill |
+| Security | Javalin `before` handler + `Context` attributes (open-design caveat in the model doc §6) | [`docs/orchestrator-model.md`](./docs/orchestrator-model.md) §6 |
+| Scheduling | `@EventHandler` on a `Tick` event published by a small scheduler thread | [`docs/orchestrator-model.md`](./docs/orchestrator-model.md) §4.2 |
+| Async work | `@EventHandler(async = true)` for event-shaped work; `CompletableFuture` / virtual threads for ad-hoc | [`docs/orchestrator-model.md`](./docs/orchestrator-model.md) §4.3 |
+| Retry | Small utility wrapper — visible code, no AOP | [`docs/orchestrator-model.md`](./docs/orchestrator-model.md) §4.4 |
+| Configuration | Typed `@Configuration` records | `tiko-config`, example `02_config` |
+| Metrics / tracing | Plug in your library; expose via routes on your HTTP layer | — |
 
 ## Annotations at a glance
 
@@ -246,26 +223,6 @@ Worked examples ship under [`tiko-examples/`](./tiko-examples/README.md), each a
 | 15 | [`15_quickstart`](./tiko-examples/15_quickstart)                    | **Orchestrator-model reference app** — HikariCP + Javalin + event-driven handler the `tiko-build` skill cites |
 | 16 | [`16_async_scope`](./tiko-examples/16_async_scope) | Separate EVENT units for synchronous and asynchronous handlers |
 | 17 | [`17_transactional_outbox`](./tiko-examples/17_transactional_outbox) | HTTP to Kafka across two databases, transactional outbox, durable deduplication and crash recovery |
-
-## Measured cold-start
-
-The `comparisons/` directory holds eight self-contained, side-by-side implementations of the same four-singleton, two-module workload — plain Java (no DI), Tiko, Dagger 2, Avaje Inject, HK2, Guice, Spring, and Micronaut (`micronaut-inject` only). Median of 10 cold JVM invocations, default JVM, default GC, Java 21, on a development laptop. **These numbers move on different hardware** — re-run locally before drawing conclusions.
-
-| Framework                        | Wall-clock (ms) | `total_ns` (ms) | Style                      |
-|----------------------------------|----------------:|----------------:|----------------------------|
-| _jvm baseline (`java -version`)_ |             104 |               — | —                          |
-| plain (no DI)                    |             172 |              36 | floor reference            |
-| **dagger**                       |         **186** |          **44** | compile-time, lazy         |
-| **tiko**                         |         **202** |          **61** | compile-time, lazy         |
-| avaje                            |             228 |             105 | compile-time, eager        |
-| hk2                              |             307 |             159 | runtime, reflection, lazy  |
-| guice                            |             373 |             230 | runtime, reflection, lazy  |
-| micronaut (inject-only)          |             459 |             308 | compile-time, eager + AOP  |
-| spring                           |             529 |             368 | runtime, reflection, eager |
-
-The `total_ns` column sums the four phases the bench measures (`create + first_get_a + first_get_b + close`) and is the apples-to-apples comparison: it accounts for both eager (Avaje, Spring, Micronaut) and lazy (Tiko, Dagger, Guice, HK2) initialisation strategies. See [`comparisons/README.md`](./comparisons/README.md) for full per-phase tables, methodology, caveats, and reproduction.
-
-The honest reading: the dominant axis is **lazy vs eager init**, not "compile-time vs runtime." Four clusters emerge — lean compile-time-lazy (plain, Dagger, Tiko at 36–61 ms `total_ns`), compile-time-eager (Avaje at 105 ms), runtime-reflection-lazy (HK2, Guice at 159–230 ms), and eager-with-overhead (Micronaut, Spring at 308–368 ms). Within each laziness class the compile-time framework is cheaper (Tiko < Guice; Avaje < Spring), but Avaje (compile-time + eager) is slower than HK2 and Guice (runtime + lazy) — eagerness costs more than reflection saves at this scale.
 
 ## Modules
 
@@ -308,6 +265,8 @@ policy — a different layer than framework logging.
 
 | Document                                              | What's in it                                                                                |
 |-------------------------------------------------------|---------------------------------------------------------------------------------------------|
+| [docs/getting-started.md](./docs/getting-started.md)  | Your first service, step by step: HTTP, database, a transaction per request, an event, a test. |
+| [docs/cookbooks/](./docs/cookbooks/README.md)         | Recipes for what you plug in: persistence, HTTP, Kafka, Ktor.                               |
 | [docs/VISION.md](./docs/VISION.md)                    | Design principles, three-layer architecture, event-pipeline trade-offs, and direction.      |
 | [docs/di-and-scopes.md](./docs/di-and-scopes.md)      | Full DI reference — scopes, cross-scope proxies, lifecycle hooks, qualifiers, `@Produces`.  |
 | [docs/configuration.md](./docs/configuration.md)      | `@Configuration` deep-dive — nested records, layered sources, module-baked defaults.        |
@@ -319,6 +278,55 @@ policy — a different layer than framework logging.
 | [docs/qa-playbook.md](./docs/qa-playbook.md)          | Structured QA passes over the framework + examples; issue body template; rules for what to file and what not to. |
 | [docs/issue-fix-playbook.md](./docs/issue-fix-playbook.md) | Counterpart to the QA playbook — how to work a filed issue without anchoring on its framing. Four-phase fix workflow + common traps. |
 | [comparisons/README.md](./comparisons/README.md)      | Side-by-side cold-start benchmarks across 8 DI frameworks.                                  |
+
+## Measured cold-start
+
+The `comparisons/` directory holds eight self-contained, side-by-side implementations of the same four-singleton, two-module workload — plain Java (no DI), Tiko, Dagger 2, Avaje Inject, HK2, Guice, Spring, and Micronaut (`micronaut-inject` only). Median of 10 cold JVM invocations, default JVM, default GC, Java 21, on a development laptop. **These numbers move on different hardware** — re-run locally before drawing conclusions.
+
+| Framework                        | Wall-clock (ms) | `total_ns` (ms) | Style                      |
+|----------------------------------|----------------:|----------------:|----------------------------|
+| _jvm baseline (`java -version`)_ |             104 |               — | —                          |
+| plain (no DI)                    |             172 |              36 | floor reference            |
+| **dagger**                       |         **186** |          **44** | compile-time, lazy         |
+| **tiko**                         |         **202** |          **61** | compile-time, lazy         |
+| avaje                            |             228 |             105 | compile-time, eager        |
+| hk2                              |             307 |             159 | runtime, reflection, lazy  |
+| guice                            |             373 |             230 | runtime, reflection, lazy  |
+| micronaut (inject-only)          |             459 |             308 | compile-time, eager + AOP  |
+| spring                           |             529 |             368 | runtime, reflection, eager |
+
+The `total_ns` column sums the four phases the bench measures (`create + first_get_a + first_get_b + close`) and is the apples-to-apples comparison: it accounts for both eager (Avaje, Spring, Micronaut) and lazy (Tiko, Dagger, Guice, HK2) initialisation strategies. See [`comparisons/README.md`](./comparisons/README.md) for full per-phase tables, methodology, caveats, and reproduction.
+
+The honest reading: the dominant axis is **lazy vs eager init**, not "compile-time vs runtime." Four clusters emerge — lean compile-time-lazy (plain, Dagger, Tiko at 36–61 ms `total_ns`), compile-time-eager (Avaje at 105 ms), runtime-reflection-lazy (HK2, Guice at 159–230 ms), and eager-with-overhead (Micronaut, Spring at 308–368 ms). Within each laziness class the compile-time framework is cheaper (Tiko < Guice; Avaje < Spring), but Avaje (compile-time + eager) is slower than HK2 and Guice (runtime + lazy) — eagerness costs more than reflection saves at this scale.
+
+## Working with AI agents
+
+### Benchmarked for AI-friendliness
+
+[llm-framework-benchmark](https://github.com/tomas-samek/llm-framework-benchmark): on an external-oracle-graded build task (a Kafka → H2 → merged-notification service), run across three models (Claude Sonnet 4.6 / Fable 5 / Opus 4.8, n=5). tiko — *absent from the models' training data* — reaches **86–100% median compliance**, on par with Spring on versions the models know, and clears the brand-new Spring Boot 4.0.6 wall that broke Sonnet 4.6 (median 0%). See the benchmark for the full picture, per-build token cost, and caveats.
+
+### Agent skills
+
+- **New service?** Read [`.ai-skills/tiko-build/SKILL.md`](./.ai-skills/tiko-build/SKILL.md) — decision tree, `@Produces` cookbook, anti-pattern redirect table so an agent reaches for the tiko-native primitive.
+- **Library not in the cookbook?** Read [`.ai-skills/tiko-cookbook-extension/SKILL.md`](./.ai-skills/tiko-cookbook-extension/SKILL.md) — the procedural skill for adding a new recipe. Load-bearing rule: **ask, don't fabricate.**
+
+### AI-agent topology server (MCP)
+
+Every Tiko build emits machine-readable topology + config schema to
+`META-INF/tiko/`. The `tiko-mcp` companion jar exposes them to any
+MCP-aware coding agent (Claude Code, Cursor, …):
+
+    java -jar tiko-mcp.jar /path/to/your/project
+
+The metadata ships inside the jar so MCP can also introspect Tiko
+dependencies you didn't build yourself. To suppress emission for a
+module (closed-source service, sensitive jars), add
+`-Atiko.topology.bundle=false` to the annotation processor args.
+
+See [`tiko-examples/13_mcp_introspection`](./tiko-examples/13_mcp_introspection)
+for a runnable demo. Projects scaffolded from `tiko-archetype` ship a
+ready-to-use `.mcp.json` (jbang-resolved) — MCP-aware agents auto-connect
+on open with no setup beyond installing jbang.
 
 ## Roadmap (summary)
 

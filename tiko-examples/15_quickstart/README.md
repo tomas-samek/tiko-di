@@ -7,7 +7,8 @@ JSON POST, writes a row to a database, and reacts to the write."* Every
 named recipe in [`docs/orchestrator-model.md`](../../docs/orchestrator-model.md).
 
 The point is to **show**, not tell: the orchestrator model is a working app
-you can run, not a prose claim. Vocabulary follows
+you can run, not a prose claim. [docs/getting-started.md](../../docs/getting-started.md)
+builds it step by step. Vocabulary follows
 [`docs/orchestrator-vocabulary.md`](../../docs/orchestrator-vocabulary.md).
 
 ## What it does
