@@ -66,7 +66,7 @@ class TwoModulesWithKafkaBridgesTest {
         var sources = output.resolve("src/" + pkg);
         Files.createDirectories(sources);
         Files.createDirectories(output.resolve("generated"));
-        var record = Files.writeString(
+        var eventSource = Files.writeString(
                 sources.resolve(event + ".java"), "package " + pkg + "; public record " + event + "(String id) {}");
         var bridge = Files.writeString(sources.resolve("Bridge.java"), """
                 package %1$s;
@@ -103,7 +103,7 @@ class TwoModulesWithKafkaBridgesTest {
                         output.toString(),
                         "-s",
                         output.resolve("generated").toString(),
-                        record.toString(),
+                        eventSource.toString(),
                         bridge.toString());
         assertThat(status).as("javac exit status for module %s", pkg).isZero();
     }
