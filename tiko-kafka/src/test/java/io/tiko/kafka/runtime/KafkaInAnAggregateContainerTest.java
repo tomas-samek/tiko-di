@@ -76,8 +76,11 @@ class KafkaInAnAggregateContainerTest {
                 await().atMost(Duration.ofSeconds(3)).until(() -> !recorder.received.isEmpty());
                 assertThat(recorder.received).containsExactly(new OrderPlaced("o-1", 42));
 
+                // The sink sends every OrderPlaced: first the one the source published, on the
+                // consumer thread after the recorder's handler, then the one published here.
+                await().atMost(Duration.ofSeconds(3))
+                        .until(() -> broker.produced("orders-out").size() == 1);
                 container.getEventBus().publish(new OrderPlaced("o-5", 21));
-                // The sink sends every OrderPlaced: the one the source published, then this one.
                 assertThat(broker.produced("orders-out"))
                         .extracting(ProducerRecord::key)
                         .containsExactly("o-1", "o-5");
@@ -110,6 +113,9 @@ class KafkaInAnAggregateContainerTest {
                         "21",
                         "-classpath",
                         System.getProperty("java.class.path"),
+                        // Named: since JDK 23 javac runs no processor it only finds on the classpath.
+                        "-processor",
+                        "io.tiko.processor.TikoAnnotationProcessor",
                         "-d",
                         output.toString(),
                         "-s",
