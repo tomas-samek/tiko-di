@@ -16,10 +16,10 @@ import java.util.Set;
  * Rejects the Kotlin bridges the generated bootstrap can't call (the Kotlin construct rule, the
  * same {@link KotlinConstructRules} the DI processor applies): a top-level function or one inside
  * an {@code object} / {@code companion object} (no component instance to call it on), an
- * extension function (a receiver nothing passes), and a {@code suspend} function (called outside
- * any coroutine; {@code suspend} sources come with K2), a value class in its signature (passed as
- * its underlying value, under a mangled name), and a JVM name Java can't call. Each is a located
- * error in the Tiko format.
+ * extension function (a receiver nothing passes), a {@code suspend} sink (called outside any
+ * coroutine), a {@code suspend} source without {@code tiko-coroutines} on the classpath (#681), a
+ * value class in its signature (passed as its underlying value, under a mangled name), and a JVM
+ * name Java can't call. Each is a located error in the Tiko format.
  *
  * <p>It runs on each round's bridges <em>before</em> collection, which assumes what it rules out
  * (a bridge always has a declaring class). On javac none of these constructs occur, so it reports
