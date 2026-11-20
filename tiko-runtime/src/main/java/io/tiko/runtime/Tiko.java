@@ -766,8 +766,9 @@ public final class Tiko {
                     LoggerHolder.LOG,
                     System.Logger.Level.WARNING,
                     failure,
-                    "Transport {0} failed to " + what + ": {1}",
+                    "Transport {0} failed to {1}: {2}",
                     tb.getClass().getName(),
+                    what,
                     failure);
             if (failure instanceof Error error && !transportError.compareAndSet(null, error)) {
                 BoundedExecution.retainFailure(transportError.get(), error);
