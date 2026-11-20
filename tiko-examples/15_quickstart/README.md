@@ -31,6 +31,19 @@ exits. Closing the container stops the server first. The
 
 ## Run it
 
+The project has no parent: the Tiko version is `<tiko.version>` in its `pom.xml`, and the Tiko
+setup is the one in the [README's installation section](../../README.md#installation). In the
+repository it builds against the current snapshot. To start a service of your own from it, copy
+this directory out of a [release tag](https://github.com/tomas-samek/tiko-di/tags), 0.8.0 or later; there
+`<tiko.version>` is that release, and the copy builds against Maven Central on its own:
+
+```bash
+cp -r tiko-examples/15_quickstart ~/my-service && cd ~/my-service
+mvn verify
+```
+
+From the repository root:
+
 ```bash
 mvn -pl tiko-examples/15_quickstart verify   # tests on a random port
 mvn -pl tiko-examples/15_quickstart exec:java   # run straight from the classes

@@ -280,7 +280,8 @@ react when sync lands.
 
 The release workflow sets every **POM** to the new version, plus the
 archetype's `archetype-resources/pom.xml` `<tiko.version>` and its
-`.mcp.json` `tiko-mcp:X.Y.Z` coordinate, plus `tikoVersion` in
+`.mcp.json` `tiko-mcp:X.Y.Z` coordinate, plus the `<tiko.version>` of the standalone
+`tiko-examples/15_quickstart/pom.xml` (at both steps, like `tikoVersion`), plus `tikoVersion` in
 every `tiko-examples-gradle/*/gradle.properties` (`release.yml`, "Set release
 version in all poms" step) — those need no manual bump. `tikoVersion` is set at the
 release **and again** at the next-snapshot step, so it follows the reactor SNAPSHOT for

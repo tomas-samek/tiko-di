@@ -91,9 +91,10 @@ release → next-snapshot dance — you only supply two version strings.
    | `release_version`  | `0.2.0`          | Strips `-SNAPSHOT`, commits, tags `v0.2.0`.      |
    | `next_snapshot`    | `0.3.0-SNAPSHOT` | Post-deploy bump committed back to `main`.       |
 
-   The workflow runs `mvn versions:set` for both versions (and patches the two inline
-   `<tiko.version>` properties in `tiko-bom/pom.xml` and the archetype-resources
-   template that `versions:set` doesn't reach, plus `tikoVersion` in
+   The workflow runs `mvn versions:set` for both versions (and patches the three inline
+   `<tiko.version>` properties in `tiko-bom/pom.xml`, the archetype-resources
+   template and the standalone `tiko-examples/15_quickstart/pom.xml` that `versions:set`
+   doesn't reach, plus `tikoVersion` in
    every `tiko-examples-gradle/*/gradle.properties`),
    commits as `github-actions[bot]`,
    tags the release commit, and pushes both commits + the tag using

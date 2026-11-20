@@ -102,10 +102,10 @@ jobs:
 
       - name: Set release version in all poms
         # versions:set walks every module (reactor + sub-modules) but leaves inline
-        # <tiko.version> properties untouched. Two such properties exist in places
-        # that are not Maven modules (tiko-bom has no <parent>; the archetype's
-        # resource template isn't a reactor module) — sed those surgically so
-        # everything is in lockstep before we deploy. The Gradle example's
+        # <tiko.version> properties untouched. Three such properties exist in places versions:set
+        # does not reach (tiko-bom and 15_quickstart have no <parent>, #854; the
+        # archetype's resource template isn't a reactor module) — sed those surgically
+        # so everything is in lockstep before we deploy. The Gradle example's
         # `tikoVersion` (every tiko-examples-gradle/*/gradle.properties, also not reactor modules) follows suit, and
         # is bumped again in the next-snapshot step so the kotlin-gradle CI job tracks the
         # reactor SNAPSHOT (unlike .mcp.json below). Example 13's .mcp.json runs the locally built
@@ -121,7 +121,8 @@ jobs:
           mvn -B versions:set -DnewVersion=${{ inputs.release_version }} -DprocessAllModules=true -DgenerateBackupPoms=false
           sed -i "s|<tiko\.version>[^<]*</tiko\.version>|<tiko.version>${{ inputs.release_version }}</tiko.version>|g" \
               tiko-bom/pom.xml \
-              tiko-archetype/src/main/resources/archetype-resources/pom.xml
+              tiko-archetype/src/main/resources/archetype-resources/pom.xml \
+              tiko-examples/15_quickstart/pom.xml
           sed -i "s|^tikoVersion=.*|tikoVersion=${{ inputs.release_version }}|" \
               tiko-examples-gradle/*/gradle.properties
           sed -i "s|tiko-mcp:[0-9]\+\.[0-9]\+\.[0-9]\+|tiko-mcp:${{ inputs.release_version }}|g" \
@@ -160,7 +161,8 @@ jobs:
           mvn -B versions:set -DnewVersion=${{ inputs.next_snapshot }} -DprocessAllModules=true -DgenerateBackupPoms=false
           sed -i "s|<tiko\.version>[^<]*</tiko\.version>|<tiko.version>${{ inputs.next_snapshot }}</tiko.version>|g" \
               tiko-bom/pom.xml \
-              tiko-archetype/src/main/resources/archetype-resources/pom.xml
+              tiko-archetype/src/main/resources/archetype-resources/pom.xml \
+              tiko-examples/15_quickstart/pom.xml
           sed -i "s|^tikoVersion=.*|tikoVersion=${{ inputs.next_snapshot }}|" \
               tiko-examples-gradle/*/gradle.properties
           sed -i "s|tiko-mcp-[^\"]*\.jar|tiko-mcp-${{ inputs.next_snapshot }}.jar|" \

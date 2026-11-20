@@ -1,10 +1,20 @@
 # Tiko Kotlin examples (Gradle + KSP)
 
-Each directory is a standalone Gradle build with its own wrapper. The builds resolve Tiko
-from `mavenLocal()`, so install the framework once from the repo root first:
+Each directory is a standalone Gradle build with its own wrapper. In the repository the builds
+resolve Tiko's current snapshot from `mavenLocal()`, so install the framework once from the repo
+root first:
 
 ```
 mvn install -DskipTests
+```
+
+Against a release, no install is needed: copy a directory out of a
+[release tag](https://github.com/tomas-samek/tiko-di/tags), where `tikoVersion` in
+`gradle.properties` is that release, or pass the version, and the build resolves Tiko from Maven
+Central:
+
+```
+./gradlew build -PtikoVersion=<release>
 ```
 
 Setup, construct rules and nullability rules: [`reference/kotlin.md`](../.ai-skills/tiko-build/reference/kotlin.md).

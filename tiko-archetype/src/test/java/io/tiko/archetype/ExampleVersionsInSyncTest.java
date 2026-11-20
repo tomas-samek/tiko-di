@@ -15,7 +15,9 @@ import org.junit.jupiter.params.provider.MethodSource;
 /**
  * #691: no release step bumps the example READMEs, so a version written into one goes stale at the next
  * release or snapshot bump. Example 13's {@code .mcp.json} runs the locally built tiko-mcp jar; the release
- * workflow bumps its jar name at both steps, so it must name the reactor version.
+ * workflow bumps its jar name at both steps, so it must name the reactor version. {@code 15_quickstart} has no
+ * parent (#854), so a copy of it builds on its own; the release workflow sets its {@code <tiko.version>} at both
+ * steps, so it must name the reactor version too.
  */
 class ExampleVersionsInSyncTest {
 
@@ -23,6 +25,7 @@ class ExampleVersionsInSyncTest {
     private static final Path ROOT_POM = Path.of("..", "pom.xml");
 
     private static final Path MCP_EXAMPLE_CONFIG = Path.of("..", "tiko-examples", "13_mcp_introspection", ".mcp.json");
+    private static final Path STANDALONE_QUICKSTART = Path.of("..", "tiko-examples", "15_quickstart", "pom.xml");
     private static final Set<String> SKIPPED_DIRS = Set.of("target", "build", ".gradle", "node_modules");
 
     private static final Pattern REACTOR_VERSION =
@@ -30,6 +33,7 @@ class ExampleVersionsInSyncTest {
     private static final Pattern SNAPSHOT_VERSION = Pattern.compile("\\d+\\.\\d+\\.\\d+-SNAPSHOT");
     private static final Pattern VERSIONED_JAR = Pattern.compile("[\\w.-]+-\\d+\\.\\d+\\.\\d+(?:-SNAPSHOT)?\\.jar");
     private static final Pattern MCP_JAR = Pattern.compile("tiko-mcp-([^\"/]+)\\.jar");
+    private static final Pattern TIKO_VERSION = Pattern.compile("<tiko\\.version>([^<]+)</tiko\\.version>");
 
     static Stream<Path> exampleReadmes() {
         return Stream.of(Path.of("..", "tiko-examples"), Path.of("..", "tiko-examples-gradle"))
@@ -55,6 +59,19 @@ class ExampleVersionsInSyncTest {
 
         assertThat(firstGroup(MCP_JAR, Files.readString(MCP_EXAMPLE_CONFIG)))
                 .as("%s must run the tiko-mcp jar of the reactor version", MCP_EXAMPLE_CONFIG)
+                .isEqualTo(reactor);
+    }
+
+    @Test
+    void standaloneQuickstartBuildsAgainstTheReactorVersion() throws IOException {
+        var reactor = firstGroup(REACTOR_VERSION, Files.readString(ROOT_POM));
+        var quickstart = Files.readString(STANDALONE_QUICKSTART);
+
+        assertThat(quickstart)
+                .as("%s builds on its own when copied out of the repository", STANDALONE_QUICKSTART)
+                .doesNotContain("<parent>");
+        assertThat(firstGroup(TIKO_VERSION, quickstart))
+                .as("%s must build against the reactor version of Tiko", STANDALONE_QUICKSTART)
                 .isEqualTo(reactor);
     }
 

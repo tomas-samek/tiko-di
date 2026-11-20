@@ -5,87 +5,148 @@
                              http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <parent>
-        <groupId>io.github.tomas-samek.examples</groupId>
-        <artifactId>tiko-examples</artifactId>
-        <version>0.7.1-SNAPSHOT</version>
-    </parent>
-
+    <!--
+      A standalone project (#854): no parent, so a copy of this directory builds on its own against
+      the Tiko version below. The repository's build lists it as a module and builds it against the
+      current snapshot; the release workflow sets <tiko.version> to each release, so the copy in a
+      release tag builds against that release from Maven Central. The Tiko setup is the one in the
+      README's installation section: the BOM, and tiko-processor on the annotation-processor path.
+    -->
+    <groupId>io.github.tomas-samek.examples</groupId>
     <artifactId>15_quickstart</artifactId>
+    <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>15 - Quickstart (orchestrator-model reference app)</name>
     <description>Canonical output of the tiko-build skill: one HTTP endpoint, HikariCP-backed persistence, one event-driven handler. Cited by docs/orchestrator-model.md.</description>
+
+    <properties>
+        <tiko.version>0.7.1-SNAPSHOT</tiko.version>
+
+        <maven.compiler.release>21</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <hikari.version>6.2.1</hikari.version>
+        <h2.version>2.3.232</h2.version>
+        <javalin.version>7.2.3</javalin.version>
+        <jackson.version>2.22.3</jackson.version>
+        <slf4j.version>2.0.9</slf4j.version>
+        <awaitility.version>4.2.2</awaitility.version>
+
+        <!-- A demo, not a published artifact: nothing to deploy or publish, nothing for SonarCloud. -->
+        <maven.deploy.skip>true</maven.deploy.skip>
+        <skipPublishing>true</skipPublishing>
+        <sonar.skip>true</sonar.skip>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>io.github.tomas-samek</groupId>
+                <artifactId>tiko-bom</artifactId>
+                <version>${tiko.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
             <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-api</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.github.tomas-samek</groupId>
-            <artifactId>tiko-processor</artifactId>
-            <version>${project.version}</version>
-            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-runtime</artifactId>
-            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>io.github.tomas-samek</groupId>
             <artifactId>tiko-config</artifactId>
-            <version>${project.version}</version>
         </dependency>
 
         <dependency>
             <groupId>com.zaxxer</groupId>
             <artifactId>HikariCP</artifactId>
+            <version>${hikari.version}</version>
         </dependency>
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
+            <version>${h2.version}</version>
         </dependency>
 
         <dependency>
             <groupId>io.javalin</groupId>
             <artifactId>javalin</artifactId>
+            <version>${javalin.version}</version>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
+            <version>${jackson.version}</version>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>
+            <version>${slf4j.version}</version>
         </dependency>
 
+        <!-- Test scope comes from the BOM. -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
-            <scope>test</scope>
         </dependency>
-        <!-- Not BOM-managed; the same explicit version as 09_http_javalin. -->
         <dependency>
             <groupId>org.awaitility</groupId>
             <artifactId>awaitility</artifactId>
-            <version>4.2.2</version>
+            <version>${awaitility.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.16.0</version>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>io.github.tomas-samek</groupId>
+                            <artifactId>tiko-processor</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.6.1</version>
+            </plugin>
+            <!-- QuickstartIT and TakenPortIT start the real server: they run at verify. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.6.1</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
@@ -97,7 +158,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
-                <version>${maven-shade.version}</version>
+                <version>3.6.0</version>
                 <executions>
                     <execution>
                         <phase>package</phase>
