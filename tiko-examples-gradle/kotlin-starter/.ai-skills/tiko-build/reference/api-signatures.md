@@ -54,7 +54,9 @@ TikoOptions build()
 // Test options (io.tiko.test): a method of a @TikoTest class, run before each boot
 @TikoTestOptions void options(TikoOptions.Builder options)   // static for lifecycle = PER_CLASS
 
-// Unit of work (io.tiko.UnitOfWork): a built-in dependency like EventBus; Container extends it
+// Unit of work (io.tiko.UnitOfWork): a built-in dependency like EventBus; Container extends it.
+// "EventScope" in a name means the unit of work (Scope.EVENT), not a bus event; so do the
+// lifecycle events EventStartedEvent / EventEndingEvent, published once per unit.
 void runInEventScope(Runnable runnable)      // IllegalStateException inside an open unit
 <T> T supplyInEventScope(Supplier<T> supplier)
 

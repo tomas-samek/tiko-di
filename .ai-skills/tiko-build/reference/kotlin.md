@@ -106,8 +106,6 @@ suspend fun onOpened(event: TicketOpened) { notifier.send(...) }   // notifier.s
 - At shutdown a suspended bridge gets `tiko.kafka.shutdown-timeout`, then is cancelled; its
   record is delivered again.
 
-## What does not work on KSP
-
 ## Where KSP differs from javac
 
 - **Sources another processor generates in a later round.** On javac, Tiko generates the
