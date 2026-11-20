@@ -81,11 +81,11 @@ The proxy implements the bean's first interface by name and forwards every insta
 | `EVENT`                   | direct    | direct    | direct    |
 | `PROTOTYPE`               | direct    | direct    | direct    |
 
-The table states where a proxy is required. An EVENT component that implements an interface is handed to every consumer as its proxy, EVENT and PROTOTYPE consumers included; inside a unit the proxy resolves to that unit's instance, so those consumers see what a direct reference would give them. An EVENT `@Produces` value is proxied only for a consumer that outlives it.
+The table states where a proxy is required. An EVENT consumer of an EVENT component receives the unit's instance itself, so the dependency is created before the component that takes it and destroyed after it (see [Lifecycle hooks](#lifecycle-hooks)). A PROTOTYPE consumer of an EVENT component that implements an interface receives its proxy, because a PROTOTYPE may be built outside a unit; inside a unit the proxy resolves to that unit's instance. An EVENT `@Produces` value is proxied only for a consumer that outlives it.
 
 A SINGLETON keeps a PROTOTYPE it injects for its own lifetime, so the rule reaches through it: whatever that PROTOTYPE injects directly must be safe for the SINGLETON too. Two shapes are compile errors:
 
-- **A SINGLETON that injects a PROTOTYPE which injects an EVENT bean as the instance itself**: a concrete EVENT component, or an EVENT `@Produces` value (a PROTOTYPE receives the value, not its proxy). The SINGLETON would keep one unit's instance in every later unit. Take the PROTOTYPE, or the EVENT dependency inside it, as a `Provider<T>` and call `get()` on each use. An EVENT component that implements an interface is fine: every consumer receives its proxy.
+- **A SINGLETON that injects a PROTOTYPE which injects an EVENT bean as the instance itself**: a concrete EVENT component, or an EVENT `@Produces` value (a PROTOTYPE receives the value, not its proxy). The SINGLETON would keep one unit's instance in every later unit. Take the PROTOTYPE, or the EVENT dependency inside it, as a `Provider<T>` and call `get()` on each use. An EVENT component that implements an interface is fine: a PROTOTYPE receives its proxy.
 - **An instance `@Produces(scope = Scope.SINGLETON)` method on an EVENT component**: calling it needs an instance that exists only inside a unit. Make the method `static`, or declare it on a SINGLETON or PROTOTYPE component.
 
 A lookup follows the same split: `container.get(RequestContext.class)` returns the proxy, which a longer-lived caller may keep, and `container.get(RequestContextImpl.class)` returns the current unit's instance itself, so it needs an open unit.

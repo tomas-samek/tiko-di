@@ -116,6 +116,18 @@ public final class ComponentModel {
         return requiresProxy;
     }
 
+    /**
+     * The getter a consumer of {@code consumerScope} takes this component through. An EVENT
+     * consumer lives in one unit with it and takes the unit's instance itself, {@code getCurrentX()},
+     * so the instance is created before the consumer and destroyed after it (#837). Any other
+     * consumer of a proxied component takes the proxy, {@code getX()}: a SINGLETON outlives the
+     * unit, and a PROTOTYPE may be built outside one.
+     */
+    public String getterFor(Scope consumerScope) {
+        boolean ownInstance = requiresProxy && consumerScope == Scope.EVENT;
+        return (ownInstance ? "getCurrent" : "get") + getClassName();
+    }
+
     public Optional<MethodDecl> getStaticFactoryMethod() {
         return Optional.ofNullable(staticFactoryMethod);
     }

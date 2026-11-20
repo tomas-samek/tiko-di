@@ -916,7 +916,7 @@ public final class ContainerGenerator {
             if (pickedProvider instanceof FactoryMethodModel pickedFactory) {
                 pickedCall = factoryGetterName(pickedFactory) + "()";
             } else if (pickedProvider instanceof ComponentModel pickedComponent) {
-                pickedCall = "get" + pickedComponent.getClassName() + "()";
+                pickedCall = pickedComponent.getterFor(consumerScope) + "()";
             } else {
                 pickedCall = "get" + simpleClassName(pickedFqn) + "()";
             }
@@ -968,7 +968,7 @@ public final class ContainerGenerator {
             call = dependency
                     .getQualifier()
                     .map(q -> "get(" + typeName + ".class, \"" + CodeLiterals.javaString(q) + "\")")
-                    .orElse("get" + component.getClassName() + "()");
+                    .orElse(component.getterFor(consumerScope) + "()");
         } else if (provider instanceof io.tiko.processor.config.ConfigurationModel) {
             // @Configuration records are stored in configSingletons and retrieved via get(Class)
             call = "get(" + typeName + ".class)";

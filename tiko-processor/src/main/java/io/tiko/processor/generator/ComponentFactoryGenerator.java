@@ -277,7 +277,7 @@ public final class ComponentFactoryGenerator {
                 return String.format("container.produce_%s()", pickedFactory.getFactoryIdentifier());
             }
             String methodName = (pickedProvider instanceof ComponentModel pickedComponent)
-                    ? "get" + pickedComponent.getClassName()
+                    ? pickedComponent.getterFor(consumer.getScope())
                     : "get" + getSimpleClassName(pickedFqn);
             return String.format("container.%s()", methodName);
         }
@@ -295,7 +295,7 @@ public final class ComponentFactoryGenerator {
                         dependency.getQualifier().orElseThrow());
                 return String.format("container.get(%s.class, \"%s\")", typeName, qualifier);
             }
-            return String.format("container.get%s()", component.getClassName());
+            return String.format("container.%s()", component.getterFor(consumer.getScope()));
         } else if (provider instanceof io.tiko.processor.model.FactoryMethodModel factory) {
             // Factories are addressed by their unique produce_<id>() getter regardless
             // of qualifier — the qualifier already disambiguated which factory the
