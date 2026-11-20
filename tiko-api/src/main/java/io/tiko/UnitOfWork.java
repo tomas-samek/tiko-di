@@ -34,7 +34,8 @@ package io.tiko;
 public interface UnitOfWork {
 
     /**
-     * Executes the given runnable within an EVENT scope (one unit of work).
+     * Executes the given runnable within an EVENT scope (one unit of work). "Event scope" is the
+     * unit of work, not a bus event: publishing an event opens none.
      * <p>
      * EVENT-scoped beans created during execution are destroyed when the scope exits
      * (LIFO {@code @PreDestroy}). EVENT is single-frame in {@code 0.x.0}: calling this

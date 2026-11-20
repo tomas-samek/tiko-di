@@ -4,6 +4,12 @@ Tiko's event system is a first-class part of the container. Handler code is the 
 
 For a runnable example, see [`tiko-examples/03_events`](../tiko-examples/03_events).
 
+> **"Event" means two things in Tiko.** This page is about bus events: objects you publish and
+> handle. The EVENT *scope* is a unit of work: an HTTP request, a consumed record, a job. Names with
+> *EventScope* in them, and the lifecycle events `EventStartedEvent` / `EventEndingEvent`, are about
+> the unit of work. [Two meanings of "event"](./di-and-scopes.md#two-meanings-of-event) sets them
+> side by side.
+
 ## Publish / subscribe
 
 ```java
@@ -463,10 +469,15 @@ The container automatically publishes lifecycle events that you can subscribe to
 |-----------------------------|----------------------------------------|
 | `ApplicationStartedEvent`   | After container start                  |
 | `ApplicationEndingEvent`    | Before container shutdown              |
-| `EventStartedEvent`         | When entering a unit of work (EVENT scope)  |
-| `EventEndingEvent`          | Before exiting a unit of work (EVENT scope) |
+| `EventStartedEvent`         | When a unit of work (EVENT scope) starts    |
+| `EventEndingEvent`          | Before a unit of work (EVENT scope) ends    |
 
 All are Java records with timestamps and (where relevant) durations.
+
+`EventStartedEvent` and `EventEndingEvent` are about the **unit of work**, not about bus events:
+they fire once per unit, for every HTTP request a route group opens a unit for (a `404` too), every
+Kafka record and every attempt of an async handler. Publishing a bus event does not fire them. See
+[Two meanings of "event"](./di-and-scopes.md#two-meanings-of-event).
 
 ### Container lifecycle: caller-managed vs daemon
 

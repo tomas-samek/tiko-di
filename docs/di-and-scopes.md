@@ -16,6 +16,30 @@ Three scopes — longest to shortest lifetime:
 
 A **unit of work** is the synchronous reach of an inbound stimulus, bounded at every async / transport hop. EVENT is single-frame in `0.x.0` — calling `runInEventScope` while a unit is already open throws `IllegalStateException`. Nestability is a deferred-but-additive future change.
 
+### Two meanings of "event"
+
+The word *event* names two different things in Tiko, and the API uses it for both:
+
+| | A bus event | The EVENT scope: a unit of work |
+|---|---|---|
+| **What it is** | An object you publish on the `EventBus` | One inbound piece of work: an HTTP request, a consumed Kafka record, a scheduled job, one attempt of an async handler |
+| **Its API** | `EventBus.publish(...)`, `@EventHandler`, `@EventTrigger`, `Event<T>` | `Scope.EVENT`, `UnitOfWork.runInEventScope(...)` / `supplyInEventScope(...)`, `EventStartedEvent` / `EventEndingEvent`, `NoActiveEventScopeException`, `@EventScopeTest` |
+| **How long it lives** | Until its handlers have run | From the start of the work to its end; EVENT-scoped components live exactly that long |
+
+Every name with *EventScope* in it, and the lifecycle events `EventStartedEvent` and
+`EventEndingEvent`, are about the **unit of work**, not about bus events:
+
+- **`EventStartedEvent` is published when a unit of work starts, not when something is published on
+  the bus.** It fires once for every HTTP request a route group opens a unit for, a `404` included,
+  and for every Kafka record and every attempt of an async handler. Its `eventId` identifies that unit.
+- **Publishing a bus event opens no unit of work.** A synchronous handler runs inside the
+  publisher's unit; an async handler gets a unit of its own, with its own
+  `EventStartedEvent` / `EventEndingEvent` pair.
+- **`runInEventScope` means "run in a unit of work".** `NoActiveEventScopeException` means "no unit of
+  work is open on this thread", and `@EventScopeTest` runs a test in a unit of work.
+
+This documentation says *unit of work* for the scope and *event* for what the bus delivers.
+
 EVENT-scoped beans only resolve while a unit of work is open. Resolving the instance itself outside a frame — `container.get(...)` of its class, `getAll(...)`, or a method call on a proxy held by a SINGLETON — throws `NoActiveEventScopeException` instead of silently materializing an instance that no teardown would ever drain. A lookup by a proxied interface returns the proxy, which can be held outside a unit; see [Cross-scope injection](#cross-scope-injection).
 
 ### When singletons are constructed
