@@ -149,7 +149,9 @@ controls its own messages; the `EventSerializer.deserialize` contract asks it to
 values out of them. Since #516 the log line names the record (`orders-3@1042`) so an operator can find it.
 The field path in that message names declared fields and list indexes. A key of a `Map`-typed
 field comes from the payload, so the path says `[key]` for it (#810;
-`JsonKafkaSerializerPayloadLeakTest.mapKeyFromThePayloadIsNotNamedInThePath`).
+`JsonKafkaSerializerPayloadLeakTest.mapKeyFromThePayloadIsNotNamedInThePath`), and so does a
+property a `@JsonAnySetter` collects: the path names a property only when Jackson finds it
+declared on the type (#880; `anySetterPropertyFromThePayloadIsNotNamedInThePath`).
 
 **Violation looks like.** A payload/`byte[]` component added to `KafkaIngestError`, a log
 call that renders `record.value()` or a `KafkaEgressError` (its `toString()`), a `location()`

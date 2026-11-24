@@ -24,6 +24,17 @@ class JsonKafkaSerializerPayloadLeakTest {
 
     record Tagged(String id, java.util.Map<String, Integer> counts) {}
 
+    /** Collects the properties it does not declare, by name, as Jackson's any-setter does. */
+    static final class Open {
+        public String id;
+        final java.util.Map<String, Integer> extra = new java.util.HashMap<>();
+
+        @com.fasterxml.jackson.annotation.JsonAnySetter
+        void extra(String name, Integer value) {
+            extra.put(name, value);
+        }
+    }
+
     private static final String SECRET = "SSN-123-45-6789";
 
     static Stream<Arguments> rejectedPayloads() {
@@ -69,5 +80,22 @@ class JsonKafkaSerializerPayloadLeakTest {
         failure.printStackTrace(new PrintWriter(logged));
         assertThat(logged.toString()).contains("Tagged").doesNotContain(SECRET);
         assertThat(failure.getMessage()).contains("counts.[key]");
+    }
+
+    /**
+     * #880: a class with a {@code @JsonAnySetter} takes property names from the payload too, as a
+     * {@code Map} field takes its keys; the path says {@code [key]} for them as well.
+     */
+    @Test
+    void anySetterPropertyFromThePayloadIsNotNamedInThePath() {
+        var payload = "{\"id\":\"o1\",\"" + SECRET + "\":\"not a number\"}";
+
+        var failure = catchThrowable(
+                () -> new JsonKafkaSerializer().deserialize(payload.getBytes(StandardCharsets.UTF_8), Open.class));
+
+        var logged = new StringWriter();
+        failure.printStackTrace(new PrintWriter(logged));
+        assertThat(logged.toString()).contains("Open").doesNotContain(SECRET);
+        assertThat(failure.getMessage()).contains("at [key]");
     }
 }

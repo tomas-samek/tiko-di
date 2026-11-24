@@ -59,8 +59,9 @@ public final class JsonKafkaSerializer implements KafkaSerializer {
 
     /**
      * The kind of failure, the field path and the position in the document: everything about
-     * the failure except the input itself. A key of a {@code Map} field is input too, so the path
-     * says {@code [key]} for it.
+     * the failure except the input itself. A name the payload chose is input too, a key of a
+     * {@code Map} field or a property a {@code @JsonAnySetter} collects, so the path says
+     * {@code [key]} for it.
      */
     private static String describeWithoutValue(IOException e) {
         var description = new StringBuilder(e.getClass().getSimpleName());
@@ -82,13 +83,26 @@ public final class JsonKafkaSerializer implements KafkaSerializer {
         return description.toString();
     }
 
-    /** A declared field's name, an element's index, or {@code [key]} for an entry of a {@code Map}. */
+    /** A declared property's name, an element's index, or {@code [key]} for a name the payload chose. */
     private static String pathSegment(JsonMappingException.Reference ref) {
         if (ref.getFieldName() == null) {
             return "[" + ref.getIndex() + "]";
         }
-        Object from = ref.getFrom();
-        boolean mapEntry = from instanceof Map || (from instanceof Class<?> type && Map.class.isAssignableFrom(type));
-        return mapEntry ? "[key]" : ref.getFieldName();
+        return declaresProperty(ref.getFrom(), ref.getFieldName()) ? ref.getFieldName() : "[key]";
+    }
+
+    /**
+     * Whether {@code name} is a property the type declares, as Jackson names it: not a key of a
+     * {@code Map}, and not a property a {@code @JsonAnySetter} collects (#880). Anything it cannot
+     * tell counts as the payload's.
+     */
+    private static boolean declaresProperty(Object from, String name) {
+        Class<?> type = from instanceof Class<?> declared ? declared : from == null ? null : from.getClass();
+        if (type == null || Map.class.isAssignableFrom(type)) {
+            return false;
+        }
+        var description = MAPPER.getDeserializationConfig().introspect(MAPPER.constructType(type));
+        return description.findProperties().stream()
+                .anyMatch(property -> property.getName().equals(name));
     }
 }
