@@ -97,8 +97,11 @@ public final class JsonKafkaSerializer implements KafkaSerializer {
      * tell counts as the payload's.
      */
     private static boolean declaresProperty(Object from, String name) {
-        Class<?> type = from instanceof Class<?> declared ? declared : from == null ? null : from.getClass();
-        if (type == null || Map.class.isAssignableFrom(type)) {
+        if (from == null) {
+            return false;
+        }
+        Class<?> type = from instanceof Class<?> declared ? declared : from.getClass();
+        if (Map.class.isAssignableFrom(type)) {
             return false;
         }
         var description = MAPPER.getDeserializationConfig().introspect(MAPPER.constructType(type));
