@@ -27,7 +27,19 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
-          cache: maven
+      # The Maven repository is restored here and saved only by the JDK 21 integration-test job,
+      # which resolves everything the others do. A cache that the first job to finish saved
+      # lacked what the other jobs needed, and they downloaded it from Maven Central on every run
+      # (429 Too Many Requests).
+      - name: Restore the Maven repository
+        id: m2
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.m2/repository
+            !~/.m2/repository/io/github/tomas-samek
+          key: maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: maven-${{ runner.os }}-
       - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           languages: java-kotlin

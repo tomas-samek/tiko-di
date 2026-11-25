@@ -33,7 +33,19 @@ jobs:
         with:
           java-version: ${{ matrix.java }}
           distribution: 'temurin'
-          cache: maven
+      # The Maven repository is restored here and saved only by the JDK 21 integration-test job,
+      # which resolves everything the others do. A cache that the first job to finish saved
+      # lacked what the other jobs needed, and they downloaded it from Maven Central on every run
+      # (429 Too Many Requests).
+      - name: Restore the Maven repository
+        id: m2
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.m2/repository
+            !~/.m2/repository/io/github/tomas-samek
+          key: maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: maven-${{ runner.os }}-
       - name: Build with Maven
         run: mvn -B package --file pom.xml
 
@@ -58,7 +70,19 @@ jobs:
         with:
           java-version: ${{ matrix.java }}
           distribution: 'temurin'
-          cache: maven
+      # The Maven repository is restored here and saved only by the JDK 21 integration-test job,
+      # which resolves everything the others do. A cache that the first job to finish saved
+      # lacked what the other jobs needed, and they downloaded it from Maven Central on every run
+      # (429 Too Many Requests).
+      - name: Restore the Maven repository
+        id: m2
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.m2/repository
+            !~/.m2/repository/io/github/tomas-samek
+          key: maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: maven-${{ runner.os }}-
       # `install` (not `verify`) so the archetype IT — which spawns a sub-Maven
       # build that resolves `io.tiko:tiko-bom` from the local repo — sees the
       # parent BOM. With `verify` only, nothing is installed and the archetype IT
@@ -105,6 +129,16 @@ jobs:
             **/target/site/jacoco/jacoco.xml
             tiko-coverage/target/site/jacoco-aggregate/jacoco.xml
           if-no-files-found: warn
+      # The one job that saves the Maven repository: `install` with Spotless, the ITs and Sonar
+      # resolves every plugin and dependency the other jobs restore.
+      - name: Save the Maven repository
+        if: matrix.java == '21' && steps.m2.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.m2/repository
+            !~/.m2/repository/io/github/tomas-samek
+          key: ${{ steps.m2.outputs.cache-primary-key }}
 
   # Kotlin on KSP, end to end: a separate Gradle build (not a Maven module) that consumes the
   # reactor's artifacts from mavenLocal. A non-zero exit from `build` (incl. the test) or `run`
@@ -120,7 +154,19 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
-          cache: maven
+      # The Maven repository is restored here and saved only by the JDK 21 integration-test job,
+      # which resolves everything the others do. A cache that the first job to finish saved
+      # lacked what the other jobs needed, and they downloaded it from Maven Central on every run
+      # (429 Too Many Requests).
+      - name: Restore the Maven repository
+        id: m2
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.m2/repository
+            !~/.m2/repository/io/github/tomas-samek
+          key: maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: maven-${{ runner.os }}-
       - name: Install Tiko artifacts to the local Maven repository
         run: mvn -B install -DskipTests --file pom.xml
       - name: Build, test and run the Gradle example
